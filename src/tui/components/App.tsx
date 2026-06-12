@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Box, Text, Static } from 'ink';
 
 import type { QueryEngine } from '../../core/query-engine.js';
@@ -120,14 +120,16 @@ export function App({ config, engine }: AppProps) {
   const stats = useTokenStats(state.messages);
 
   const messages = state.messages;
-  const liveStart = getLiveStart(messages);
-  const historical = messages.slice(0, liveStart);
-  const live = messages.slice(liveStart);
-
-  const staticItems: StaticItem[] = [
-    { _type: 'header' },
-    ...historical.map((msg): StaticItem => ({ _type: 'message', msg })),
-  ];
+  const { historical, live, staticItems } = useMemo(() => {
+    const liveStart = getLiveStart(messages);
+    const historical = messages.slice(0, liveStart);
+    const live = messages.slice(liveStart);
+    const staticItems: StaticItem[] = [
+      { _type: 'header' as const },
+      ...historical.map((msg): StaticItem => ({ _type: 'message' as const, msg })),
+    ];
+    return { historical, live, staticItems };
+  }, [messages]);
 
   return (
     <Box flexDirection="column" height="100%" padding={1}>
@@ -140,7 +142,7 @@ export function App({ config, engine }: AppProps) {
       </Static>
 
       {/* ── Live zone: current turn + input ────────────────────── */}
-      <Box flexDirection="column" flexGrow={1} paddingX={1}>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
         {state.subAgentView ? (
           <SubAgentTranscriptView
             agentId={state.subAgentView.agentId}

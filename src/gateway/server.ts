@@ -139,7 +139,7 @@ function extractText(msg: AssistantMessage): string {
 // ── Main server loop ────────────────────────────────────────────────
 
 export async function startGateway(): Promise<void> {
-  let config;
+  let config: ReturnType<typeof loadConfig>;
   try { config = loadConfig(); } catch (err) { process.stderr.write(`Config error: ${(err as Error).message}\n`); process.exit(1); }
 
   const client = createClient(config);
@@ -150,6 +150,8 @@ export async function startGateway(): Promise<void> {
 
   const settings = loadSettings();
   const subAgentRegistry = new SubAgentRegistry();
+  const { setSubAgentRegistry } = await import('../subagents/agent-spawn/registry-ref.js');
+  setSubAgentRegistry(subAgentRegistry);
   const systemPromptAssembler = new SystemPromptAssembler();
 
   const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry, sessionManager, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler });

@@ -3,8 +3,13 @@ import { Box, Text } from 'ink';
 import type { ToolUseRenderer } from '../../tools/types.js';
 
 export const AgentReadRenderer: ToolUseRenderer = (props) => {
-  // Don't render a placeholder while the LLM is still streaming the input.
-  if (props.state === 'pending') return null;
+  if (props.state === 'pending') {
+    return React.createElement(
+      Box,
+      { flexDirection: 'column', borderStyle: 'round', borderColor: 'grey', paddingX: 1, width: '90%' },
+      React.createElement(Text, { dimColor: true }, `agent-read: ${props.input.list_all ? 'listing all' : `query ${props.input.agent_id ?? '?'}`}`),
+    );
+  }
 
   return React.createElement(
     Box,

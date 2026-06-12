@@ -117,7 +117,10 @@ async function main(): Promise<void> {
   const { SubAgentRegistry } = await import('../core/subagent-registry.js');
   const { SystemPromptAssembler } = await import('../core/system-prompt.js');
   const { QueryEngine } = await import('../core/query-engine.js');
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(loadSettings()), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler() });
+  const subAgentRegistry = new SubAgentRegistry();
+  const { setSubAgentRegistry } = await import('../subagents/agent-spawn/registry-ref.js');
+  setSubAgentRegistry(subAgentRegistry);
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(loadSettings()), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler() });
   await engine.init();
 
   const { render } = await import('ink');
