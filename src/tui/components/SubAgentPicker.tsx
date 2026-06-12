@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useState } from 'react';
-import { getSubAgentRegistry } from '../../subagents/agent-spawn/registry-ref.js';
+import { getSubAgentRegistry } from '../../agents/agent-spawn/registry-ref.js';
 
 const AGENT_ICONS: Record<string, string> = {
   explore: '🔍',

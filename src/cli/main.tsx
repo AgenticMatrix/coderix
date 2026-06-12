@@ -66,7 +66,9 @@ async function runPrintMode(queryText: string): Promise<void> {
   const { SystemPromptAssembler } = await import('../core/system-prompt.js');
   const { QueryEngine } = await import('../core/query-engine.js');
   const { PermissionMode } = await import('../core/types.js');
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(loadSettings()), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler() });
+  const { buildAgentRegistry } = await import('../agents/registry.js');
+  const agentRegistry = buildAgentRegistry();
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(loadSettings()), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler(), agentRegistry });
   await engine.init(); engine.setPermissionMode(PermissionMode.AUTO);
   let fullText = '';
   for await (const event of engine.submitMessage(queryText)) {
@@ -117,10 +119,12 @@ async function main(): Promise<void> {
   const { SubAgentRegistry } = await import('../core/subagent-registry.js');
   const { SystemPromptAssembler } = await import('../core/system-prompt.js');
   const { QueryEngine } = await import('../core/query-engine.js');
+  const { buildAgentRegistry: buildAgentReg } = await import('../agents/registry.js');
   const subAgentRegistry = new SubAgentRegistry();
-  const { setSubAgentRegistry } = await import('../subagents/agent-spawn/registry-ref.js');
+  const { setSubAgentRegistry } = await import('../agents/agent-spawn/registry-ref.js');
   setSubAgentRegistry(subAgentRegistry);
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(loadSettings()), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler() });
+  const agentRegistry = buildAgentReg();
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(loadSettings()), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry });
   await engine.init();
 
   const { render } = await import('ink');

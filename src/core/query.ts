@@ -32,6 +32,7 @@ import type { SystemPrompt } from './system-prompt.js';
 import type { SystemPromptAssembler } from './system-prompt.js';
 import type { HookManager } from './hooks.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
+import type { AgentRegistry } from './agent-registry.js';
 import { estimateTokens } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 
@@ -62,6 +63,8 @@ export interface QueryConfig {
   subAgentRegistry?: SubAgentRegistry;
   /** SystemPromptAssembler for assembling sub-agent prompts */
   systemPromptAssembler?: SystemPromptAssembler;
+  /** AgentRegistry for looking up agent type definitions */
+  agentRegistry?: AgentRegistry;
 }
 
 export interface CallModelParams {
@@ -103,13 +106,14 @@ interface ExecuteSingleToolOpts {
   callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
   subAgentRegistry?: SubAgentRegistry;
   systemPromptAssembler?: SystemPromptAssembler;
+  agentRegistry?: AgentRegistry;
 }
 
 async function executeSingleTool(
   toolBlock: ToolUseBlock,
   opts: ExecuteSingleToolOpts,
 ): Promise<ToolResultBlock> {
-  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler } = opts;
+  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry } = opts;
   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
 
   // PreToolUse hook
@@ -135,13 +139,14 @@ async function executeSingleTool(
     sessionId,
     cwd,
     signal: abortController.signal,
-    agentSpawn: subAgentRegistry && systemPromptAssembler ? {
+    agentSpawn: subAgentRegistry && systemPromptAssembler && agentRegistry ? {
       callModel,
       toolRegistry,
       sessionManager,
       subAgentRegistry,
       hookManager,
       systemPromptAssembler,
+      agentRegistry,
     } : undefined,
   };
   const toolStartTime = Date.now();
@@ -225,6 +230,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     maxToolConcurrency = 32,
     callModel,
     hookManager,
+    agentRegistry,
   } = config;
 
   let messages = [...config.messages];
@@ -300,6 +306,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       callModel,
       subAgentRegistry: config.subAgentRegistry,
       systemPromptAssembler: config.systemPromptAssembler,
+      agentRegistry: config.agentRegistry,
     };
 
     try {

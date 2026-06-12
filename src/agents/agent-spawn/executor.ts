@@ -1,17 +1,21 @@
 import type { ToolExecutor, ToolResult } from '../../tools/types.js';
 import type { Message, ContentBlock } from '../../core/types.js';
+import type { SystemPrompt } from '../../core/system-prompt.js';
 import { ToolRegistry } from '../../core/tool-registry.js';
 import { PermissionEngine } from '../../core/permission.js';
 import { PermissionMode } from '../../core/types.js';
 import { SessionManager } from '../../core/session.js';
 import { CheckpointManager } from '../../core/checkpoint.js';
-import { filterToolsForAgent, type SubagentType } from '../../subagents/tool-filtering.js';
-import { SystemPromptAssembler } from '../../core/system-prompt.js';
+import { filterToolsForAgent } from '../tool-filtering.js';
 import { query } from '../../core/query.js';
 
-const MAX_RESUME_TURNS = 15;
-const CONTEXT_BUDGET = 120_000;
-const MAX_CONCURRENCY = 8;
+const DEFAULT_MAX_TURNS = 20;
+const DEFAULT_CONTEXT_BUDGET = 120_000;
+const DEFAULT_MAX_CONCURRENCY = 8;
+
+function shortId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
 
 function compressTranscript(messages: Message[]): string {
   const parts: string[] = [];
@@ -34,45 +38,45 @@ function compressTranscript(messages: Message[]): string {
 export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
   const agentSpawn = options.agentSpawn;
   if (!agentSpawn) {
-    return { content: 'agent-message requires agentSpawn context.', isError: true };
-  }
-
-  const agentId = input.agent_id as string;
-  const message = input.message as string;
-
-  if (!agentId || !message) {
-    return { content: 'Both agent_id and message are required.', isError: true };
-  }
-
-  const registry = agentSpawn.subAgentRegistry;
-  const agent = registry.get(agentId);
-
-  if (!agent) {
     return {
-      content: `Sub-agent not found: ${agentId}. Use agent-read with list_all=true to see available agents.`,
+      content: 'agent-spawn requires agentSpawn context.',
       isError: true,
     };
   }
 
-  if (agent.status === 'running') {
+  const agentType = (input.agent_type as string) ?? 'general-purpose';
+  const prompt = input.prompt as string;
+  const modelOverride = input.model as string | undefined;
+
+  // Look up agent definition from the registry
+  const agentDef = agentSpawn.agentRegistry?.get(agentType);
+  if (!agentDef) {
+    const available = agentSpawn.agentRegistry?.list().map(a => a.agentType).join(', ') ?? 'none';
     return {
-      content: `Cannot message running agent ${agentId}. Wait for it to complete, or use agent-stop to cancel it first.`,
+      content: `Unknown agent type: ${agentType}. Available: ${available}`,
       isError: true,
     };
   }
 
-  const transcript = agent.transcript ?? [];
-  const agentType = agent.agentType as SubagentType;
+  const agentId = `sub-${shortId()}`;
+  const subAbortController = new AbortController();
 
-  // Build the resumed conversation: original transcript + new user message
-  const resumedMessages: Message[] = [
-    ...transcript,
-    { role: 'user', content: message },
-  ];
+  agentSpawn.subAgentRegistry.register({
+    id: agentId,
+    name: `${agentType}-${agentId}`,
+    agentType: agentType as 'explore' | 'plan' | 'general-purpose',
+    status: 'running',
+    prompt,
+    createdAt: Date.now(),
+    turnCount: 0,
+    messageCount: 0,
+    toolCount: 0,
+    abortController: subAbortController,
+  });
 
-  // Recreate sub-agent tooling (same as agent-spawn)
+  // Build filtered tool registry from the agent definition
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
-  const filteredDefs = filterToolsForAgent(parentDefs, agentType);
+  const filteredDefs = filterToolsForAgent(parentDefs, agentDef);
   const subToolRegistry = new ToolRegistry();
   for (const def of filteredDefs) {
     const registration = agentSpawn.toolRegistry.get(def.name);
@@ -84,47 +88,50 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const subPermissionEngine = new PermissionEngine(process.cwd());
   subPermissionEngine.setMode(PermissionMode.AUTO);
 
+  const effectiveModel = modelOverride ?? agentDef.model;
   const subSessionManager = new SessionManager();
   const subSession = subSessionManager.create({
-    title: `Sub-agent: ${agentType} (resumed)`,
+    title: `Sub-agent: ${agentType}`,
     cwd: process.cwd(),
+    model: effectiveModel,
   });
 
   const subCheckpointManager = new CheckpointManager();
 
-  const workerAssembler = new SystemPromptAssembler();
-  const workerPrompt = await workerAssembler.assemble({
-    cwd: process.cwd(),
-    permissionMode: 'auto',
-    agentRole: 'worker',
-  });
+  // Use agent definition's system prompt
+  const workerPrompt: SystemPrompt = {
+    prompt: agentDef.getSystemPrompt(),
+    parts: [{ name: `agent-${agentType}`, content: agentDef.getSystemPrompt(), priority: 0 }],
+  };
 
-  const subAbortController = new AbortController();
-  registry.update(agentId, {
-    status: 'running',
-    abortController: subAbortController,
-  });
+  const effectiveMaxTurns = agentDef.maxTurns ?? DEFAULT_MAX_TURNS;
+  const effectiveContextBudget = agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
+
+  const initialMessages: Message[] = [
+    { role: 'user', content: prompt },
+  ];
 
   const startTime = Date.now();
   let assistantTurnCount = 0;
+  let messageCount = 0;
   let toolCount = 0;
-  const newTranscript: Message[] = [];
+  const transcript: Message[] = [];
 
   try {
     const generator = query({
       sessionId: subSession.id,
       cwd: process.cwd(),
-      messages: resumedMessages,
+      messages: initialMessages,
       systemPrompt: workerPrompt,
       toolRegistry: subToolRegistry,
       permissionEngine: subPermissionEngine,
       sessionManager: subSessionManager,
       checkpointManager: subCheckpointManager,
       abortController: subAbortController,
-      maxTurns: MAX_RESUME_TURNS,
-      contextBudget: CONTEXT_BUDGET,
+      maxTurns: effectiveMaxTurns,
+      contextBudget: effectiveContextBudget,
       compactThreshold: 0.7,
-      maxToolConcurrency: MAX_CONCURRENCY,
+      maxToolConcurrency: DEFAULT_MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
       hookManager: agentSpawn.hookManager,
     });
@@ -136,64 +143,68 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         case 'assistant': {
           assistantTurnCount++;
           const assistantMsg = msg.message as unknown as Message;
-          newTranscript.push(assistantMsg);
+          transcript.push(assistantMsg);
           const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
           toolCount += blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
           break;
         }
         case 'user':
-          newTranscript.push(msg.message as unknown as Message);
+          transcript.push(msg.message as unknown as Message);
           break;
         case 'system':
           if (msg.subtype === 'progress') {
-            registry.update(agentId, {
-              turnCount: agent.turnCount + assistantTurnCount,
-              messageCount: transcript.length + newTranscript.length,
-              toolCount: agent.toolCount + toolCount,
+            agentSpawn.subAgentRegistry.update(agentId, {
+              turnCount: assistantTurnCount,
+              messageCount: transcript.length,
+              toolCount,
             });
           }
           break;
+        default:
+          break;
       }
+      messageCount++;
     }
 
-    const result = compressTranscript(newTranscript);
+    const result = compressTranscript(transcript);
 
-    registry.update(agentId, {
+    agentSpawn.subAgentRegistry.update(agentId, {
       status: subAbortController.signal.aborted ? 'stopped' : 'done',
       finishedAt: Date.now(),
-      turnCount: agent.turnCount + assistantTurnCount,
-      messageCount: transcript.length + newTranscript.length,
-      toolCount: agent.toolCount + toolCount,
+      turnCount: assistantTurnCount,
+      messageCount: transcript.length,
+      toolCount,
       result,
-      transcript: [...transcript, ...newTranscript],
+      transcript,
     });
 
     return {
-      content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${assistantTurnCount} LLM turns, +${toolCount} tools.\n\n${result}`,
+      content: `Sub-agent ${agentId} (${agentType}) completed. ${assistantTurnCount} LLM turns, ${toolCount} tools used.\n\n${result}`,
       isError: false,
       duration: Date.now() - startTime,
       metadata: {
         agentId,
         agentType,
-        resumed: true,
         turnCount: assistantTurnCount,
+        messageCount: transcript.length,
         toolCount,
-        totalTurns: agent.turnCount + assistantTurnCount,
         duration: Date.now() - startTime,
       },
     };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
 
-    registry.update(agentId, {
+    agentSpawn.subAgentRegistry.update(agentId, {
       status: 'error',
       finishedAt: Date.now(),
-      turnCount: agent.turnCount + assistantTurnCount,
+      turnCount: assistantTurnCount,
+      messageCount: transcript.length,
+      toolCount,
       error: errorMsg,
     });
 
     return {
-      content: `Sub-agent ${agentId} (${agentType}) resume error after ${assistantTurnCount} turns: ${errorMsg}`,
+      content: `Sub-agent ${agentId} (${agentType}) error after ${assistantTurnCount} turns: ${errorMsg}`,
       isError: true,
       duration: Date.now() - startTime,
       metadata: { agentId, agentType, error: errorMsg },

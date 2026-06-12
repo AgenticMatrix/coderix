@@ -25,6 +25,7 @@ import { SessionManager } from './session.js';
 import { CheckpointManager } from './checkpoint.js';
 import type { HookManager } from './hooks.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
+import type { AgentRegistry } from './agent-registry.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +51,8 @@ export interface QueryEngineConfig {
   subAgentRegistry?: SubAgentRegistry;
   /** SystemPromptAssembler for assembling worker/coordinator prompts */
   systemPromptAssembler?: SystemPromptAssembler;
+  /** AgentRegistry for agent type definitions */
+  agentRegistry?: AgentRegistry;
 }
 
 export interface QueryEngineEvent {
@@ -211,6 +214,7 @@ export class QueryEngine {
       hookManager: this.config.hookManager,
       subAgentRegistry: this.config.subAgentRegistry,
       systemPromptAssembler: this.config.systemPromptAssembler,
+      agentRegistry: this.config.agentRegistry,
     };
 
     try {

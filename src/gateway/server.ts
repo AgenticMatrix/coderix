@@ -150,11 +150,13 @@ export async function startGateway(): Promise<void> {
 
   const settings = loadSettings();
   const subAgentRegistry = new SubAgentRegistry();
-  const { setSubAgentRegistry } = await import('../subagents/agent-spawn/registry-ref.js');
+  const { setSubAgentRegistry } = await import('../agents/agent-spawn/registry-ref.js');
   setSubAgentRegistry(subAgentRegistry);
   const systemPromptAssembler = new SystemPromptAssembler();
+  const { buildAgentRegistry } = await import('../agents/registry.js');
+  const agentRegistry = buildAgentRegistry();
 
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry, sessionManager, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler });
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry, sessionManager, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler, agentRegistry });
 
   let currentSessionId = sessionManager.list()[0]?.id ?? '';
   let ready = false;

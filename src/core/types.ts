@@ -208,6 +208,44 @@ export enum RiskLevel {
   DESTRUCTIVE = 'destructive',
 }
 
+// ── Agent Definitions ─────────────────────────────────────────────────
+
+/** Describes which tools an agent type is allowed to use. */
+export type AgentToolFilter = string[] | '*';
+
+/** Base definition for a spawnable agent type. */
+export interface AgentDefinition {
+  agentType: string;
+  /** Description for the LLM — when to use this agent type. */
+  whenToUse: string;
+  /** Allowed tools. '*' means all tools (minus disallowedTools). */
+  tools?: AgentToolFilter;
+  /** Tools explicitly forbidden for this agent type. */
+  disallowedTools?: string[];
+  /** Optional model override. */
+  model?: string;
+  /** Permission mode override for the sub-agent. */
+  permissionMode?: string;
+  /** Maximum agentic turns before forced stop. */
+  maxTurns?: number;
+  /** Context budget in tokens (default: 120k). */
+  contextBudget?: number;
+  /** System prompt for this agent type. */
+  getSystemPrompt: () => string;
+}
+
+/** A built-in agent definition shipped with the application. */
+export interface BuiltInAgentDefinition extends AgentDefinition {
+  source: 'built-in';
+}
+
+/** The result returned by the agent definition loader. */
+export interface AgentDefinitionsResult {
+  activeAgents: AgentDefinition[];
+  allAgents: AgentDefinition[];
+  failedFiles?: Array<{ path: string; error: string }>;
+}
+
 // ── Tool ──────────────────────────────────────────────────────────────
 
 export interface AgentSpawnContext {
@@ -217,6 +255,7 @@ export interface AgentSpawnContext {
   subAgentRegistry: import('./subagent-registry.js').SubAgentRegistry;
   hookManager?: import('./hooks.js').HookManager;
   systemPromptAssembler: import('./system-prompt.js').SystemPromptAssembler;
+  agentRegistry: import('./agent-registry.js').AgentRegistry;
 }
 
 export interface ToolContext {
