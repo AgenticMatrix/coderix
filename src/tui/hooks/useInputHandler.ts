@@ -81,18 +81,20 @@ export function useInputHandler({
         }
         const registry = getSubAgentRegistry();
         if (registry) {
-          // Prefer last viewed agent, fall back to most recent done agent
+          const allAgents = registry.list();
+          if (allAgents.length === 0) return;
+
+          // Prefer last viewed agent if still in registry
           if (lastAgentViewId && registry.get(lastAgentViewId)) {
             dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId: lastAgentViewId });
             return;
           }
-          const doneAgents = registry.listByStatus('done');
-          if (doneAgents.length > 0) {
-            const latest = doneAgents.reduce((a, b) =>
-              (a.finishedAt ?? 0) > (b.finishedAt ?? 0) ? a : b,
-            );
-            dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId: latest.id });
-          }
+
+          // Default: most recently created agent in the full list
+          const latest = allAgents.reduce((a, b) =>
+            a.createdAt > b.createdAt ? a : b,
+          );
+          dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId: latest.id });
         }
         return;
       }
