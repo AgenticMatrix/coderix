@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { AppConfig } from '../types.js';
 
@@ -15,6 +16,7 @@ export interface ModelPrice {
   currency?: string;
   unit?: number;
   concurrency?: number;
+  max_context?: number;
 }
 
 export interface ModelItem {
@@ -62,8 +64,23 @@ export function inferProvider(model: string): string {
 }
 
 export function loadSettings(): CoderSettings {
+  const settingsDir = join(homedir(), '.coder');
+  const settingsPath = join(settingsDir, 'settings.json');
+
+  if (!existsSync(settingsPath)) {
+    // Copy default settings on first install
+    const defaultSettingsPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '..', '..', 'config', 'default_settings.json',
+    );
+    if (existsSync(defaultSettingsPath)) {
+      mkdirSync(settingsDir, { recursive: true });
+      copyFileSync(defaultSettingsPath, settingsPath);
+    }
+  }
+
   try {
-    const raw = readFileSync(join(homedir(), '.coder', 'settings.json'), 'utf-8');
+    const raw = readFileSync(settingsPath, 'utf-8');
     return JSON.parse(raw) as CoderSettings;
   } catch {
     return {};
@@ -96,6 +113,7 @@ function resolveModel(settings: CoderSettings): {
   inputPrice?: number;
   outputPrice?: number;
   cacheReadPrice?: number;
+  maxContext?: number;
 } {
   const parseDefault = (raw: string) => {
     const parts = raw.split('/');
@@ -126,6 +144,7 @@ function resolveModel(settings: CoderSettings): {
       inputPrice: price?.input,
       outputPrice: price?.output,
       cacheReadPrice: price?.cache_read_input,
+      maxContext: price?.max_context,
     };
   };
 
@@ -189,5 +208,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice, outputPrice: resolved.outputPrice, cacheReadPrice: resolved.cacheReadPrice };
+  return { baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice, outputPrice: resolved.outputPrice, cacheReadPrice: resolved.cacheReadPrice, maxContext: resolved.maxContext };
 }

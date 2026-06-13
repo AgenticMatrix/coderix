@@ -333,10 +333,6 @@ export async function runInteractiveModelSetup(
 
   // ── Persist to settings.json ────────────────────────────────────
   settings.default_model = `${selectedProvider.provider}/${selectedModel}`;
-  settings.env = settings.env ?? {};
-  settings.env.CODER_MODEL = selectedModel;
-  if (selectedProvider.base_url) settings.env.CODER_BASE_URL = selectedProvider.base_url;
-  if (selectedProvider.auth_token_env) settings.env.CODER_AUTH_TOKEN = selectedProvider.auth_token_env;
 
   settings.model_list = settings.model_list ?? [];
   const existingIdx = settings.model_list.findIndex(
@@ -403,11 +399,6 @@ export async function handleModelFlag(modelArg: string | undefined): Promise<voi
     }
 
     settings.default_model = `${providerEntry.provider}/${modelName}`;
-    settings.env = settings.env ?? {};
-    settings.env.CODER_MODEL = modelName;
-    if (providerEntry.base_url) settings.env.CODER_BASE_URL = providerEntry.base_url;
-    if (providerEntry.proxy) settings.env.CODER_PROXY = providerEntry.proxy;
-    if (providerEntry.auth_token_env) settings.env.CODER_AUTH_TOKEN = providerEntry.auth_token_env;
 
     const existingIdx = (settings.model_list ?? []).findIndex(m => m.provider === providerEntry.provider);
     if (existingIdx >= 0) {

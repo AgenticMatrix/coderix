@@ -209,6 +209,7 @@ export function App({ config, engine }: AppProps) {
           realUsage={stats.realUsage}
           accumulatedCost={stats.accumulatedCost}
           currency={config.currency}
+          maxContext={config.maxContext}
         />
       </Box>
     </Box>

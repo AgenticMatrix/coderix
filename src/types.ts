@@ -162,6 +162,8 @@ export interface AppConfig {
   outputPrice?: number;
   /** Price per 1M cache read/creation input tokens. */
   cacheReadPrice?: number;
+  /** Maximum context window size in tokens. */
+  maxContext?: number;
 }
 
 // ── Approval request ─────────────────────────────────────────────────

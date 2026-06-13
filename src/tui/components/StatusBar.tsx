@@ -19,6 +19,13 @@ interface StatusBarProps {
   accumulatedCost: number;
   /** Currency symbol (default: $). */
   currency?: string;
+  /** Maximum context window size in tokens (default: 131072). */
+  maxContext?: number;
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return Math.round(n / 1_000_000) + 'M';
+  return Math.round(n / 1000) + 'K';
 }
 
 /** Rough token estimate: ~4 characters per token. */
@@ -79,7 +86,7 @@ function ContextBar({ used, max }: { used: number; max: number }) {
  * ctx = cache_read + cache_creation + output + input (real API tokens).
  * Timers update every second in real-time.
  */
-export function StatusBar({ model, isStreaming, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency }: StatusBarProps) {
+export function StatusBar({ model, isStreaming, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
@@ -120,9 +127,7 @@ export function StatusBar({ model, isStreaming, error, totalChars, inputTokens, 
     realUsage.outputTokens +
     realUsage.inputTokens;
 
-  const maxTokens = 131072;
-  const usedK = (ctxTokens / 1024).toFixed(1);
-  const maxK = (maxTokens / 1024).toFixed(0);
+  const contextMax = maxContext ?? 131072;
 
   const Sep = () => <Text dimColor color="grey"> │ </Text>;
 
@@ -139,8 +144,8 @@ export function StatusBar({ model, isStreaming, error, totalChars, inputTokens, 
       <Sep />
 
       <Text dimColor>ctx </Text>
-      <ContextBar used={ctxTokens} max={maxTokens} />
-      <Text dimColor> {usedK}K/{maxK}K</Text>
+      <ContextBar used={ctxTokens} max={contextMax} />
+      <Text dimColor> {formatTokens(ctxTokens)}/{formatTokens(contextMax)}</Text>
 
       <Sep />
 
