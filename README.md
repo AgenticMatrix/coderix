@@ -107,11 +107,60 @@ Edit `~/.coder/settings.json`:
 {
   "model_list": [
     {
-      "model": ["deepseek-v4-pro"],
+      "model": [
+        {
+          "name": "deepseek-v4-pro",
+          "price": {
+            "input": 3,
+            "cache_read_input": 0.025,
+            "output": 6,
+            "currency": "CNY",
+            "unit": 1000000,
+            "concurrency": 500,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "deepseek-v4-flash",
+          "price": {
+            "input": 1,
+            "cache_read_input": 0.02,
+            "output": 2,
+            "currency": "CNY",
+            "unit": 1000000,
+            "concurrency": 2500,
+            "max_context": 1000000
+          }
+        }
+      ],
       "provider": "deepseek",
       "base_url": "https://api.deepseek.com/anthropic",
-      "auth_token_env": "sk-your-api-key",
-      "max_tokens": 32768
+      "auth_token_env": "YOUR_DEEPSEEK_API_KEY"
+    },
+    {
+      "model": [
+        "claude-sonnet-2025",
+        "opus-4.8"
+      ],
+      "provider": "anthropic",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "auth_token_env": "YOUR_ANTHROPIC_API_KEY",
+      "price": {
+        "input": 3,
+        "output": 15,
+        "currency": "USD",
+        "unit": "1M tokens"
+      }
+    },
+    {
+      "model": [
+        "glm-4-plus",
+        "glm-4-flash",
+        "glm-4-air"
+      ],
+      "provider": "glm",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "auth_token_env": "YOUR_ZHIPU_API_KEY"
     }
   ],
   "default_model": "deepseek/deepseek-v4-pro",
