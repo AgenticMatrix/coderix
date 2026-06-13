@@ -115,7 +115,7 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
       : displayContent;
 
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={1} backgroundColor="black">
         <Text>
           <Text color="cyan" bold>You:</Text>{' '}
           <Text color="white">{displayText}</Text>
