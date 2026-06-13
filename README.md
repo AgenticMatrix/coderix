@@ -80,48 +80,6 @@ coder -m "deepseek/deepseek-v4-pro"
 
 ---
 
-## Project Architecture
-
-<div align="center">
-
-![Architecture](./docs/architecture.svg)
-
-</div>
-
-```
-CoderAgent
-├── src/
-│   ├── cli/              # CLI entry point, config, model picker
-│   ├── core/             # Agent loop, tool queue, system prompt, permissions, session
-│   ├── api/              # Provider API client (Anthropic SDK bridge)
-│   ├── provider/         # Multi-provider: Anthropic, DeepSeek, OpenAI
-│   ├── tools/            # 15+ tools: read, write, edit, bash, grep, etc.
-│   │   ├── bash/         # Shell command execution
-│   │   ├── read/         # File reading
-│   │   ├── write/        # File creation / overwrite
-│   │   ├── edit/         # Exact string replacement
-│   │   ├── grep/         # Code search
-│   │   ├── glob/         # File pattern matching
-│   │   ├── web-fetch/    # URL content fetching
-│   │   ├── web-search/   # Web search
-│   │   ├── task-create/  # Task tracking
-│   │   ├── task-list/    # List tasks
-│   │   ├── task-get/     # Get task details
-│   │   ├── task-update/  # Update task status
-│   │   └── todo-write/   # Todo management
-│   ├── tui/              # Terminal UI (Ink + React)
-│   ├── commands/         # Slash command system
-│   ├── skills/           # Skill system (extensible plugins)
-│   └── types.ts          # Shared type definitions
-├── bin/
-│   └── coder.js          # CLI binary wrapper
-├── install.sh            # One-click installer
-├── package.json
-└── tsconfig.json
-```
-
----
-
 ## Features
 
 - **Beautiful TUI** — Built with [Ink](https://github.com/vadimdemedes/ink) + React 19, full terminal rendering
