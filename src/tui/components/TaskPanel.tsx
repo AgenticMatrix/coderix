@@ -116,8 +116,10 @@ export function TaskPanel({ dismissed, onDismissReset }: TaskPanelProps) {
       </Box>
 
       {display.map((task) => {
-        const icon = STATUS_ICON[task.status] ?? '?';
-        const color = STATUS_COLOR[task.status];
+        // in_progress without an owner = not actually claimed yet, show as pending
+        const effectiveStatus = task.status === 'in_progress' && !task.owner ? 'pending' : task.status;
+        const icon = STATUS_ICON[effectiveStatus] ?? '?';
+        const color = STATUS_COLOR[effectiveStatus];
 
         const ownerTag = task.owner ? ` [${task.owner}]` : '';
         const blockedByTag = task.blockedBy.length > 0

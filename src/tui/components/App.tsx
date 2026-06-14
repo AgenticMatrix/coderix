@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, Static } from 'ink';
 
 import type { QueryEngine } from '../../core/query-engine.js';
@@ -70,6 +70,9 @@ export function App({ config, engine }: AppProps) {
   messagesRef.current = state.messages;
 
   const { runAgentTurn } = useAgentBridge({ engine, dispatch });
+
+  const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);
+  const handleTeamDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TEAM_PANEL' }), [dispatch]);
 
   // Load history on mount
   useEffect(() => {
@@ -251,12 +254,12 @@ export function App({ config, engine }: AppProps) {
 
       <TaskPanel
         dismissed={state.taskPanelDismissed}
-        onDismissReset={() => dispatch({ type: 'TOGGLE_TASK_PANEL' })}
+        onDismissReset={handleTaskDismissReset}
       />
 
       <TeamPanel
         dismissed={state.teamPanelDismissed}
-        onDismissReset={() => dispatch({ type: 'TOGGLE_TEAM_PANEL' })}
+        onDismissReset={handleTeamDismissReset}
       />
 
       <InputBox
