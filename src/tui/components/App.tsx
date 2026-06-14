@@ -14,6 +14,7 @@ import { SubAgentPicker } from './SubAgentPicker.js';
 import { TaskPanel } from './TaskPanel.js';
 import { TeamPanel } from './TeamPanel.js';
 import { TeamAgentPicker } from './TeamAgentPicker.js';
+import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { useChatReducer } from '../hooks/useChatReducer.js';
 import { useAgentBridge } from '../hooks/useAgentBridge.js';
 import { useInputHandler } from '../hooks/useInputHandler.js';
@@ -32,8 +33,17 @@ function isToolResultOnly(m: Message): boolean {
   return m.role === 'user' && m.blocks.length > 0 && m.blocks.every((b) => b.type === 'tool_result');
 }
 
-/** Find the index where the live (current-turn) zone begins. */
-function getLiveStart(messages: Message[]): number {
+/** Find the index where the live (current-turn) zone begins.
+ *
+ *  During streaming we keep only the last 2 messages live (the currently-
+ *  streaming assistant + the preceding tool_result).  Everything else is
+ *  promoted to <Static>, minimizing the Ink output area that rewrites on
+ *  every text delta. */
+function getLiveStart(messages: Message[], isStreaming: boolean): number {
+  if (isStreaming) {
+    return Math.max(0, messages.length - 2);
+  }
+  // Not streaming: use turn boundary (last non-tool-result user message)
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'user' && !isToolResultOnly(messages[i])) {
       return i;
@@ -135,11 +145,10 @@ export function App({ config, engine }: AppProps) {
   if (!state.isFrozen) frozenRef.current = state.messages;
   const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
 
-  // liveStart only changes at turn boundaries (new user message), not during
-  // streaming deltas, tool calls, or tool results.  This keeps staticItems
-  // reference-stable for the entire turn, preventing Ink's <Static> from
-  // re-laying out and resetting the terminal scroll position.
-  const liveStart = getLiveStart(displayMessages);
+  // During streaming, liveStart advances as new messages arrive, promoting
+  // completed messages to <Static>.  This keeps the live zone to ≤2 messages
+  // so Ink only rewrites a minimal area on each text delta.
+  const liveStart = getLiveStart(displayMessages, state.isStreaming);
 
   const staticItems = useMemo<StaticItem[]>(() => {
     const historical = displayMessages.slice(0, liveStart);
@@ -166,14 +175,15 @@ export function App({ config, engine }: AppProps) {
         }}
       </Static>
 
-      {/* ── Freeze indicator ──────────────────────────────────── */}
+      {/* ── Freeze indicator (pre-allocated to avoid layout shift) ── */}
       {state.isFrozen && (
-        <Box flexShrink={0} paddingX={1}>
+        <Box flexShrink={0} height={1}>
           <Text color="yellow" dimColor>
             ⏸ Paused — {frozenNewCount > 0 ? `${frozenNewCount} new message(s) — ` : ''}PageDown / End to follow
           </Text>
         </Box>
       )}
+      {!state.isFrozen && <Box flexShrink={0} height={0} />}
 
       {/* ── Live zone: current turn + input ────────────────────── */}
       <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
@@ -197,9 +207,11 @@ export function App({ config, engine }: AppProps) {
               </Box>
             )}
 
-            {live.map((message) => (
-              <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} />
-            ))}
+            <OffscreenFreeze frozen={state.isFrozen}>
+              {live.map((message) => (
+                <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} />
+              ))}
+            </OffscreenFreeze>
 
             {state.approvalReq && (
               <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
