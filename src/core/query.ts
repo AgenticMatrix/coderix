@@ -710,7 +710,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       if (agentNotifications.length > 0) {
         const resultMsg = {
           role: 'user' as const,
-          content: '[Background agent results]\n' + agentNotifications.join('\n\n'),
+          content: [
+            {
+              type: 'text' as const,
+              text: '[Background agent results]\n' + agentNotifications.join('\n\n'),
+            },
+          ],
         };
         messages.push(resultMsg);
         yield { type: 'user' as const, message: resultMsg };

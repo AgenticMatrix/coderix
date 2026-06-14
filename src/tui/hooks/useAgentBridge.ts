@@ -261,7 +261,25 @@ export function useAgentBridge({ engine, dispatch }: AgentBridgeDeps) {
 
               // ── User message: tool results ──────────────────
               if (msg.type === 'user' && msg.message) {
-                const blocks = msg.message.content.map((b: Record<string, unknown>) => {
+                const rawContent = msg.message.content;
+                if (typeof rawContent === 'string') {
+                  // String content (e.g. background-agent notifications) — render as a single text block
+                  const toolResultMsg: Message = {
+                    id: nextMessageId(),
+                    role: 'user',
+                    content: rawContent,
+                    blocks: [
+                      {
+                        type: 'text',
+                        content: rawContent,
+                      } satisfies TextBlock,
+                    ],
+                    timestamp: Date.now(),
+                  };
+                  dispatch({ type: 'ADD_USER_MESSAGE', message: toolResultMsg });
+                  continue;
+                }
+                const blocks = rawContent.map((b: Record<string, unknown>) => {
                   const tuiBlock = mapCoreBlockToTui(b as Parameters<typeof mapCoreBlockToTui>[0]);
                   // Enrich tool_result with toolName from the streamed tool_use blocks
                   if (tuiBlock.type === 'tool_result' && tuiBlock.toolId) {
