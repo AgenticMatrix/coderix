@@ -400,9 +400,13 @@ export class SystemPromptAssembler {
       'Guidelines:',
       '- Identify independent subtasks and delegate them concurrently.',
       '- Use explore agents for codebase searches, plan agents for architecture.',
-      '- Use agent-read to monitor progress, agent-stop to cancel if needed.',
       '- Synthesize sub-agent results into a coherent response for the user.',
-      '- Do not duplicate work that a sub-agent is already handling.',
+      '',
+      'CRITICAL — after spawning background sub-agents, END YOUR TURN immediately.',
+      'Tell the user what you launched, then stop. DO NOT poll with agent-read.',
+      'Completed sub-agent results are delivered to you automatically as messages.',
+      'Only use agent-read if the user explicitly asks for a progress update,',
+      'or agent-stop if you need to cancel a sub-agent that went in the wrong direction.',
     ].join('\n');
   }
 

@@ -694,6 +694,21 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       yield { type: 'system', subtype: 'progress', data: pe };
     }
 
+    // === Inject completed background sub-agent results ===
+    // This lets the coordinator see agent completions automatically
+    // without needing to poll with agent-read.
+    if (config.subAgentRegistry) {
+      const agentNotifications = config.subAgentRegistry.drainNotifications();
+      if (agentNotifications.length > 0) {
+        const resultMsg = {
+          role: 'user' as const,
+          content: '[Background agent results]\n' + agentNotifications.join('\n\n'),
+        };
+        messages.push(resultMsg);
+        yield { type: 'user' as const, message: resultMsg };
+      }
+    }
+
     // Assemble results in original parse order
     const toolResults: ToolResultBlock[] = orderedBlocks.map((block) =>
       queue.getResult(block.id) ?? createToolErrorResult(block.id, 'Tool execution skipped'),
