@@ -686,10 +686,18 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       return;
     }
 
-    // === Wait for all queued tools to settle ===
-    await queue.waitForAll();
+    // === Wait for all queued tools to settle, draining progress as each completes ===
+    // Poll the queue so the TUI receives completion progress events and stops
+    // tool timers promptly, rather than waiting until every tool is done.
+    const POLL_INTERVAL = 200;
+    while (queue.runningCount > 0 || queue.pendingCount > 0) {
+      for (const pe of queue.drainProgress()) {
+        yield { type: 'system', subtype: 'progress', data: pe };
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+    }
 
-    // Drain final progress events
+    // Drain any final progress events
     for (const pe of queue.drainProgress()) {
       yield { type: 'system', subtype: 'progress', data: pe };
     }

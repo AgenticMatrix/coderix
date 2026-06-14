@@ -321,6 +321,15 @@ export function useAgentBridge({ engine, dispatch }: AgentBridgeDeps) {
                       toolId: progress.toolUseId,
                       state: 'executing',
                     });
+                  } else if (progress.status === 'completed') {
+                    // Tool finished — stop the timer immediately.
+                    // Full result (duration + content) arrives later via
+                    // the user message → SET_TOOL_USE_RESULT path.
+                    dispatch({
+                      type: 'UPDATE_BLOCK_STATE',
+                      toolId: progress.toolUseId,
+                      state: 'done',
+                    });
                   } else if (progress.status === 'started') {
                     // Keep in 'pending' state; the message describes what's happening
                   }
