@@ -1,13 +1,11 @@
 import { useRef } from 'react';
-import { Box } from 'ink';
-import type { DOMElement } from 'ink';
 
 interface OffscreenFreezeProps {
   /** When true, returns the cached element snapshot (frozen). */
   frozen: boolean;
   children: React.ReactNode;
   /** Callback ref to attach to the wrapper Box for height measurement. */
-  measureRef?: (el: DOMElement | null) => void;
+  measureRef?: (el: any) => void;
 }
 
 /**
@@ -17,13 +15,17 @@ interface OffscreenFreezeProps {
  * re-renders, producing zero diff for frozen content.
  *
  * When `frozen` is false, updates the cache and renders live children.
+ * No wrapper Box — children render inline to avoid extra Yoga nodes that
+ * would cause clear-redraw flicker on every render.
  */
-export function OffscreenFreeze({ frozen, children, measureRef }: OffscreenFreezeProps) {
+export function OffscreenFreeze({ frozen, children }: OffscreenFreezeProps) {
   const cached = useRef(children);
 
   if (!frozen) {
     cached.current = children;
   }
 
-  return <Box ref={measureRef} flexDirection="column">{cached.current}</Box>;
+  // Return children directly (no Box wrapper) to avoid extra Yoga layout
+  // node that causes flicker during streaming re-renders.
+  return cached.current;
 }
