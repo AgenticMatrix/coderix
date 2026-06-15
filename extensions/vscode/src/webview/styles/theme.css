@@ -665,6 +665,8 @@ body {
 
 .command-hint-name {
   font-weight: 600;
+  display: inline-block;
+  min-width: 160px;
 }
 
 .command-hint-help {

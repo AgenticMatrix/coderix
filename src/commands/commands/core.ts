@@ -1,4 +1,5 @@
 import type { SlashCommand } from '../types.js';
+import { findSlashCommand, listCommandNames } from '../registry.js';
 
 export const coreCommands: SlashCommand[] = [
   {
@@ -6,31 +7,25 @@ export const coreCommands: SlashCommand[] = [
     help: 'list available commands',
     name: 'help',
     run: (_arg, ctx) => {
-      const lines = [
-        'Available commands:',
-        '',
-        '  /help          List available commands',
-        '  /quit, /exit   Exit the application',
-        '  /clear, /new   Start a new conversation',
-        '  /model [name]  Show or change the model',
-        '  /compact       Trigger conversation compaction',
-        '  /status        Show session status',
-        '  /undo          Undo last exchange',
-        '  /retry         Retry last user message',
-        '  /verbose       Cycle verbose tool output mode',
-        '  /statusbar     Toggle status bar (top/off)',
-        '  /agent [id]    View sub-agent transcript',
-        '  /tasks [id]    List tasks or show task details',
-        '',
-        'Hotkeys:',
-        '  Enter          Send message',
-        '  Esc            Clear input',
-        '  Ctrl+E         Toggle thinking display',
-        '  Ctrl+T         View sub-agent transcript',
-        '  Ctrl+P         Toggle task panel',
-        '  ← → Home End   Cursor movement',
-        '  Backspace/Del  Delete character',
-      ];
+      const names = listCommandNames();
+      const lines = ['Available commands:', ''];
+      for (const name of names) {
+        const cmd = findSlashCommand(name);
+        const label = cmd?.aliases?.length
+          ? `/${name}, ` + cmd.aliases.join(', ')
+          : `/${name}`;
+        const help = cmd?.help ?? '';
+        lines.push(`  ${label.padEnd(24)}  ${help}`);
+      }
+      lines.push('');
+      lines.push('Hotkeys:');
+      lines.push('  Enter          Send message');
+      lines.push('  Esc            Clear input');
+      lines.push('  Ctrl+E         Toggle thinking display');
+      lines.push('  Ctrl+T         View sub-agent transcript');
+      lines.push('  Ctrl+P         Toggle task panel');
+      lines.push('  ← → Home End   Cursor movement');
+      lines.push('  Backspace/Del  Delete character');
       ctx.sys(lines.join('\n'));
     },
   },
