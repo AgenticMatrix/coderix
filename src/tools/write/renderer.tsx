@@ -87,7 +87,6 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
               }
               return <Text key={i}>{line}</Text>;
             })}
-            })}
             {tooLong ? (
               <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
             ) : null}
