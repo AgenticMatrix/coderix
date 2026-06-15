@@ -13,13 +13,14 @@ function truncatePath(fp: string): string {
 export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const fp = (props.input.file_path as string) || '';
   const truncatedPath = fp ? truncatePath(fp) : '';
+  const hasPath = !!fp;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
   const isError = props.state === 'error';
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+  const isActive = isExecuting && hasPath;
+  const { elapsedSecs, blinkOn } = useToolTimer(isActive);
 
   const meta = props.result?.metadata;
-  const displayPath = (meta?.filePath as string) || fp;
   const addedLines = meta?.addedLines as number | undefined;
   const removedLines = meta?.removedLines as number | undefined;
   const diffLines = meta?.diffLines as string[] | undefined;
@@ -45,68 +46,51 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
   const stats = parts.length > 0 ? parts.join(', ') : undefined;
 
-  // Error
-  if (isError) {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Text>
-          <Text color="red">❌ </Text>
-          <Text bold>Write</Text>
-          {truncatedPath ? <Text dimColor>({truncatedPath})</Text> : null}
-          <Text color="red"> failed</Text>
-        </Text>
-      </Box>
-    );
-  }
-
-  // Done
-  if (isDone) {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Text>
-          <Text color="green">● </Text>
-          <Text bold>Write</Text>
-          {truncatedPath ? <Text dimColor>({truncatedPath})</Text> : null}
-        </Text>
-        {stats ? (
-          <Box paddingLeft={2}>
-            <Text dimColor>{stats}</Text>
-          </Box>
-        ) : null}
-        {displayDiffLines && displayDiffLines.length > 0 ? (
-          <Box paddingLeft={2} flexDirection="column">
-            {displayDiffLines.map((line, i) => {
-              const trimmed = line.trimStart();
-              const isAdd = trimmed.startsWith('+');
-              const isRemove = trimmed.startsWith('-');
-              return (
-                <Box key={i} backgroundColor={isAdd ? 'rgb(105,219,124)' : isRemove ? 'rgb(255,168,180)' : undefined}>
-                  <Text color={isAdd || isRemove ? 'black' : undefined}>{line}</Text>
-                </Box>
-              );
-            })}
-            {tooLong ? (
-              <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
-            ) : null}
-          </Box>
-        ) : null}
-      </Box>
-    );
-  }
-
-  // Executing / pending
-  const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
+  const indicator = isError ? '❌' : isDone ? '●' : blinkOn ? '●' : '○';
+  const indicatorColor = isError ? 'red' : isDone ? 'green' : 'yellow';
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text>
-        <Text color="yellow">{indicator} </Text>
-        <Text bold>Write</Text>
-        {truncatedPath ? <Text dimColor>({truncatedPath})</Text> : null}
-        {isExecuting ? (
-          <Text dimColor color="yellow"> writing {elapsedSecs}s</Text>
-        ) : null}
-      </Text>
+      {hasPath ? (
+        <>
+          <Text>
+            <Text color={indicatorColor}>{indicator} </Text>
+            <Text bold color={indicatorColor}>Write</Text>
+            <Text dimColor>({truncatedPath})</Text>
+            {isError ? (
+              <Text color="red"> failed</Text>
+            ) : null}
+          </Text>
+          {isExecuting ? (
+            <Text dimColor color="yellow"> writing {elapsedSecs}s</Text>
+          ) : null}
+          {isDone && stats ? (
+            <Box paddingLeft={2}>
+              <Text dimColor>{stats}</Text>
+            </Box>
+          ) : null}
+          {isDone && displayDiffLines && displayDiffLines.length > 0 ? (
+            <Box paddingLeft={2} flexDirection="column">
+              {displayDiffLines.map((line, i) => {
+                // Git-style diff format: "NNNN +text" / "NNNN -text" / "NNNN  text" / "     ..."
+                // + is at position 5 (after 4-digit line number + space)
+                const isAdd = line[5] === '+';
+                const isRemove = line[5] === '-';
+                // GitHub-style diff colors: green for additions, vermilion for deletions
+                const bgColor = isAdd ? 'rgb(205,255,216)' : isRemove ? 'rgb(255,215,213)' : undefined;
+                return (
+                  <Box key={i} backgroundColor={bgColor}>
+                    <Text color={isAdd || isRemove ? 'black' : undefined}>{line}</Text>
+                  </Box>
+                );
+              })}
+              {tooLong ? (
+                <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+              ) : null}
+            </Box>
+          ) : null}
+        </>
+      ) : null}
     </Box>
   );
 }
