@@ -14,18 +14,24 @@ function getFilePath(input: Record<string, unknown>): string {
   const direct = input.file_path as string | undefined;
   if (direct) return direct;
 
+  // Try _partial (streaming JSON — may be incomplete)
   const partial = input._partial as string | undefined;
   if (partial) {
-    // Try full JSON parse first
     try {
       const parsed = JSON.parse(partial);
       const fp = parsed.file_path as string | undefined;
       if (fp) return fp;
     } catch {
-      // JSON incomplete during streaming — try regex extraction
       const m = partial.match(/"file_path"\s*:\s*"([^"]+)"/);
       if (m) return m[1];
     }
+  }
+
+  // Try _raw (STOP_BLOCK parse-failure fallback)
+  const raw = input._raw as string | undefined;
+  if (raw) {
+    const m = raw.match(/"file_path"\s*:\s*"([^"]+)"/);
+    if (m) return m[1];
   }
 
   return '';
