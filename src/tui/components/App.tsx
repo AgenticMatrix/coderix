@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, Static } from 'ink';
 
 import type { QueryEngine } from '../../core/query-engine.js';
@@ -194,10 +194,6 @@ export function App({ config, engine, store }: AppProps) {
   // Bump on contentExpanded toggle so <Static> remounts with new state.
   // Only the current round has expandable blocks (Edit/Write diffs),
   // so older messages render identically — no visual difference.
-  const [staticKey, setStaticKey] = useState(0);
-  useEffect(() => {
-    setStaticKey((k) => k + 1);
-  }, [state.contentExpanded]);
 
   const live = displayMessages.slice(liveStart);
 
@@ -209,7 +205,7 @@ export function App({ config, engine, store }: AppProps) {
   return (
     <Box flexDirection="column" height="100%" padding={1}>
       {/* ── Static zone: re-renders on Ctrl+D / Ctrl+E ────────────── */}
-      <Static key={`static-${staticKey}`} items={staticItems}>
+      <Static key={`static-${state.contentExpanded}`} items={staticItems}>
         {(item) => {
           if (item._type === 'header') return <HeaderLogo key="header" />;
           return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} />;
