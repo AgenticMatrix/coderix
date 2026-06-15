@@ -194,7 +194,8 @@ export function useAgentLoop({ config, getMessagesSnapshot, dispatch }: AgentLoo
           // Dispatch to TUI: exclude results for tools that show them inline
           const tuiBlocks = toolResultBlocks.filter(
             (tr) => tr.toolName !== 'read' && tr.toolName !== 'bash' &&
-                   tr.toolName !== 'glob' && tr.toolName !== 'grep',
+                   tr.toolName !== 'glob' && tr.toolName !== 'grep' &&
+                   tr.toolName !== 'web-search',
           );
           if (tuiBlocks.length > 0) {
             dispatch({
