@@ -2,12 +2,14 @@ import type { ToolPlugin } from '../types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
 import { GlobRenderer } from './renderer.js';
+import { GlobResultRenderer } from './result-renderer.js';
 
 const globPlugin: ToolPlugin = {
   name: 'glob',
   schema,
   executor: execute,
   useRenderer: GlobRenderer,
+  resultRenderer: GlobResultRenderer,
   paramSummary: (input) => {
     const p = input.pattern as string;
     if (!p) return undefined;

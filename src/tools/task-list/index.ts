@@ -2,6 +2,7 @@ import type { ToolPlugin } from '../types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
 import { TaskListRenderer } from './renderer.js';
+import { TaskListResultRenderer } from './result-renderer.js';
 import { isTodoV2Enabled } from '../../tasks/store.js';
 
 const taskListPlugin: ToolPlugin = {
@@ -9,6 +10,7 @@ const taskListPlugin: ToolPlugin = {
   schema,
   executor: execute,
   useRenderer: TaskListRenderer,
+  resultRenderer: TaskListResultRenderer,
   isEnabled: () => isTodoV2Enabled(),
   paramSummary: () => undefined,
 };

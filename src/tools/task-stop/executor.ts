@@ -16,6 +16,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
       return {
         content: `Task ${taskId} is not running (status: ${tracked.status})`,
         isError: true,
+        metadata: { taskId, taskType: tracked.type, description: tracked.description },
       };
     }
 
@@ -41,7 +42,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
     return {
       content: `Task ${taskId} (${tracked.type}) stopped.`,
       isError: false,
-      metadata: { task_id: taskId, task_type: tracked.type },
+      metadata: { taskId, taskType: tracked.type, description: tracked.description },
     };
   }
 
@@ -54,6 +55,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
       return {
         content: `Agent ${taskId} is not running (status: ${subAgent.status})`,
         isError: true,
+        metadata: { taskId, taskType: 'agent', description: subAgent.prompt.slice(0, 100) },
       };
     }
 
@@ -63,12 +65,13 @@ export const execute: ToolExecutor = async (input, _opts) => {
     return {
       content: `Sub-agent ${taskId} (${subAgent.agentType}) stopped.`,
       isError: false,
-      metadata: { task_id: taskId, task_type: 'agent' },
+      metadata: { taskId, taskType: 'agent', description: subAgent.prompt.slice(0, 100) },
     };
   }
 
   return {
     content: `No running task found with ID: ${taskId}`,
     isError: true,
+    metadata: { taskId },
   };
 };

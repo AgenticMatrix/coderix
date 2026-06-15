@@ -1,11 +1,15 @@
 import type { ToolPlugin } from '../types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
+import { TaskStopRenderer } from './renderer.js';
+import { TaskStopResultRenderer } from './result-renderer.js';
 
 const taskStopPlugin: ToolPlugin = {
   name: 'TaskStop',
   schema,
   executor: execute,
+  useRenderer: TaskStopRenderer,
+  resultRenderer: TaskStopResultRenderer,
   paramSummary: (input) => {
     const taskId = input.task_id as string;
     if (!taskId) return undefined;
