@@ -10,35 +10,8 @@ function truncatePath(fp: string): string {
   return fp.slice(0, 40) + '...' + fp.slice(-40);
 }
 
-function getFilePath(input: Record<string, unknown>): string {
-  const direct = input.file_path as string | undefined;
-  if (direct) return direct;
-
-  // Try _partial (streaming JSON — may be incomplete)
-  const partial = input._partial as string | undefined;
-  if (partial) {
-    try {
-      const parsed = JSON.parse(partial);
-      const fp = parsed.file_path as string | undefined;
-      if (fp) return fp;
-    } catch {
-      const m = partial.match(/"file_path"\s*:\s*"([^"]+)"/);
-      if (m) return m[1];
-    }
-  }
-
-  // Try _raw (STOP_BLOCK parse-failure fallback)
-  const raw = input._raw as string | undefined;
-  if (raw) {
-    const m = raw.match(/"file_path"\s*:\s*"([^"]+)"/);
-    if (m) return m[1];
-  }
-
-  return '';
-}
-
 export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
-  const fp = getFilePath(props.input);
+  const fp = (props.input.file_path as string) || '';
   const truncatedPath = fp ? truncatePath(fp) : '';
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
@@ -50,30 +23,29 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const addedLines = meta?.addedLines as number | undefined;
   const removedLines = meta?.removedLines as number | undefined;
   const diffLines = meta?.diffLines as string[] | undefined;
-  const isNewFile = meta?.isNewFile as boolean | undefined;
 
-  // Fallback: if metadata is missing, extract lines from raw result content
+  // Fallback: if metadata is missing, use raw result content
   const rawContent = props.result?.content ?? '';
   const rawLines = rawContent.split('\n').filter(l => l !== '');
-  const effectiveDiffLines = diffLines ?? rawLines;
-  const effectiveAdded = addedLines ?? (isNewFile !== false ? rawLines.length : undefined);
+  const effectiveDiffLines = diffLines ?? (rawLines.length > 0 ? rawLines : null);
+  const effectiveAdded = addedLines ?? (effectiveDiffLines ? rawLines.length : undefined);
   const effectiveRemoved = removedLines;
 
   const tooLong = !props.contentExpanded && effectiveDiffLines && effectiveDiffLines.length > COLLAPSE_THRESHOLD;
-  const displayDiffLines = tooLong ? effectiveDiffLines!.slice(0, COLLAPSE_THRESHOLD) : effectiveDiffLines;
+  const displayDiffLines = tooLong ? effectiveDiffLines.slice(0, COLLAPSE_THRESHOLD) : effectiveDiffLines;
   const hiddenCount = effectiveDiffLines ? effectiveDiffLines.length - COLLAPSE_THRESHOLD : 0;
 
-  // Build stats line
-  const statsParts: string[] = [];
+  // Build stats
+  const parts: string[] = [];
   if (effectiveAdded !== undefined && effectiveAdded > 0) {
-    statsParts.push(`Added ${effectiveAdded} line${effectiveAdded !== 1 ? 's' : ''}`);
+    parts.push(`Added ${effectiveAdded} line${effectiveAdded !== 1 ? 's' : ''}`);
   }
   if (effectiveRemoved !== undefined && effectiveRemoved > 0) {
-    statsParts.push(`removed ${effectiveRemoved} line${effectiveRemoved !== 1 ? 's' : ''}`);
+    parts.push(`removed ${effectiveRemoved} line${effectiveRemoved !== 1 ? 's' : ''}`);
   }
-  const stats = statsParts.length > 0 ? statsParts.join(', ') : undefined;
+  const stats = parts.length > 0 ? parts.join(', ') : undefined;
 
-  // Error state
+  // Error
   if (isError) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -87,7 +59,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
     );
   }
 
-  // Done state — show inline diff
+  // Done
   if (isDone) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -104,8 +76,9 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
         {displayDiffLines && displayDiffLines.length > 0 ? (
           <Box paddingLeft={2} flexDirection="column">
             {displayDiffLines.map((line, i) => {
-              const isAdd = line.trimStart().startsWith('+');
-              const isRemove = line.trimStart().startsWith('-');
+              const trimmed = line.trimStart();
+              const isAdd = trimmed.startsWith('+');
+              const isRemove = trimmed.startsWith('-');
               return (
                 <Text key={i} color={isAdd ? 'green' : isRemove ? 'red' : undefined}>
                   {line}
