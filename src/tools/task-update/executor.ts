@@ -1,4 +1,4 @@
-import { updateTask, listTasks } from '../../tasks/store.js';
+import { updateTask, listTasks, getTask } from '../../tasks/store.js';
 import type { TaskStatus } from '../../tasks/schema.js';
 import type { ToolExecutor } from '../types.js';
 
@@ -7,6 +7,11 @@ export const execute: ToolExecutor = async (input, _opts) => {
   if (!taskId) return { content: 'Error: taskId is required', isError: true };
 
   const statusInput = input.status as TaskStatus | undefined;
+
+  // Capture old state before update for inline rendering
+  const oldTask = await getTask(taskId);
+  const oldStatus = oldTask?.status;
+  const taskSubject = oldTask?.subject ?? input.subject ?? '';
 
   const result = await updateTask(taskId, {
     subject: input.subject as string | undefined,
@@ -51,6 +56,12 @@ export const execute: ToolExecutor = async (input, _opts) => {
   return {
     content,
     isError: false,
-    metadata: { taskId: task.id, updatedFields, status: task.status },
+    metadata: {
+      taskId: task.id,
+      updatedFields,
+      status: task.status,
+      oldStatus,
+      subject: taskSubject || task.subject,
+    },
   };
 };
