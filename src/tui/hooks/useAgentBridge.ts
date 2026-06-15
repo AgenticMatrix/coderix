@@ -317,7 +317,12 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
 
                 // Dispatch to TUI: exclude results shown inline by use renderers
                 const tuiBlocks = blocks.filter(
-                  (b) => b.type !== 'tool_result' || (b.toolName !== 'read' && b.toolName !== 'bash'),
+                  (b) => b.type !== 'tool_result' || (
+                    b.toolName !== 'read' && b.toolName !== 'bash' &&
+                    b.toolName !== 'glob' && b.toolName !== 'grep' &&
+                    b.toolName !== 'web-search' && b.toolName !== 'web-fetch' &&
+                    b.toolName !== 'write' && b.toolName !== 'edit'
+                  ),
                 );
                 if (tuiBlocks.length > 0) {
                   dispatch({
