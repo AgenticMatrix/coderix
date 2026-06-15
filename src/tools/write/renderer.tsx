@@ -79,13 +79,11 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
               const trimmed = line.trimStart();
               const isAdd = trimmed.startsWith('+');
               const isRemove = trimmed.startsWith('-');
-              if (isAdd) {
-                return <Text key={i} backgroundColor="green" color="black">{line}</Text>;
-              }
-              if (isRemove) {
-                return <Text key={i} backgroundColor="red" color="black">{line}</Text>;
-              }
-              return <Text key={i}>{line}</Text>;
+              return (
+                <Box key={i} backgroundColor={isAdd ? 'rgb(105,219,124)' : isRemove ? 'rgb(255,168,180)' : undefined}>
+                  <Text color={isAdd || isRemove ? 'black' : undefined}>{line}</Text>
+                </Box>
+              );
             })}
             {tooLong ? (
               <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
