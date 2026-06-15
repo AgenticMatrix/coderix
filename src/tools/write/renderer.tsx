@@ -10,8 +10,25 @@ function truncatePath(fp: string): string {
   return fp.slice(0, 40) + '...' + fp.slice(-40);
 }
 
+function getFilePath(input: Record<string, unknown>): string {
+  const direct = input.file_path as string | undefined;
+  if (direct) return direct;
+
+  const partial = input._partial as string | undefined;
+  if (partial) {
+    try {
+      const parsed = JSON.parse(partial);
+      return (parsed.file_path as string) ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
 export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
-  const fp = (props.input.file_path as string) || '';
+  const fp = getFilePath(props.input);
   const truncatedPath = fp ? truncatePath(fp) : '';
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
