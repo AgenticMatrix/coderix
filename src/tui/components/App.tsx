@@ -12,6 +12,7 @@ import { ApprovalPrompt } from './ApprovalPrompt.js';
 import { SubAgentTranscriptView } from './SubAgentTranscriptView.js';
 import { SubAgentPicker } from './SubAgentPicker.js';
 import { TaskPanel } from './TaskPanel.js';
+import { TodoPanel } from './TodoPanel.js';
 import { TeamPanel } from './TeamPanel.js';
 import { TeamAgentPicker } from './TeamAgentPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
@@ -104,6 +105,7 @@ export function App({ config, engine, store }: AppProps) {
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState });
 
   const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);
+  const handleTodoDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TODO_PANEL' }), [dispatch]);
   const handleTeamDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TEAM_PANEL' }), [dispatch]);
 
   // Load history on mount
@@ -276,6 +278,11 @@ export function App({ config, engine, store }: AppProps) {
       <TaskPanel
         dismissed={state.taskPanelDismissed}
         onDismissReset={handleTaskDismissReset}
+      />
+
+      <TodoPanel
+        dismissed={state.todoPanelDismissed}
+        onDismissReset={handleTodoDismissReset}
       />
 
       <TeamPanel

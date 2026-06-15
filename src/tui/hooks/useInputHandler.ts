@@ -146,6 +146,12 @@ export function useInputHandler({
         return;
       }
 
+      // Ctrl+O toggles todo panel
+      if (key.ctrl && input === 'o') {
+        dispatch({ type: 'TOGGLE_TODO_PANEL' });
+        return;
+      }
+
       // Ctrl+K opens team member picker overlay
       if (key.ctrl && input === 'k') {
         if (teamPicker) {

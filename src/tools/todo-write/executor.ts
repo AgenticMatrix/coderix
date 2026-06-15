@@ -65,9 +65,18 @@ export const execute: ToolExecutor = async (input, _opts) => {
         return `${icon} ${t.content}`;
       });
 
+  const pending = newTodos.filter((t) => t.status === 'pending').length;
+  const inProgress = newTodos.filter((t) => t.status === 'in_progress').length;
+  const completed = newTodos.filter((t) => t.status === 'completed').length;
+
   return {
     content: lines.join('\n') || '(empty todo list)',
     isError: false,
-    metadata: { count: newTodos.length },
+    metadata: {
+      count: newTodos.length,
+      pending,
+      inProgress,
+      completed,
+    },
   };
 };

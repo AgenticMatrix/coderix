@@ -300,6 +300,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'TOGGLE_TASK_PANEL':
       return { ...state, taskPanelDismissed: !state.taskPanelDismissed };
 
+    case 'TOGGLE_TODO_PANEL':
+      return { ...state, todoPanelDismissed: !state.todoPanelDismissed };
+
     case 'TOGGLE_TEAM_PANEL':
       return { ...state, teamPanelDismissed: !state.teamPanelDismissed };
 
@@ -478,6 +481,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     lastAgentViewId: null,
     agentPicker: false,
     taskPanelDismissed: false,
+    todoPanelDismissed: false,
     teamPanelDismissed: false,
     commandPickerIndex: -1,
     teamPicker: false,
