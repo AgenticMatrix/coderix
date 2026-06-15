@@ -271,18 +271,24 @@ export async function updateTask(
     // Handle dependencies
     if (input.addBlocks && input.addBlocks.length > 0) {
       const newBlocks = input.addBlocks.filter(bid => !task.blocks.includes(bid) && bid !== id);
-      for (const blockedId of newBlocks) {
-        await blockTask(id, blockedId, listId);
+      if (newBlocks.length > 0) {
+        task.blocks = [...task.blocks, ...newBlocks];
+        updatedFields.push('blocks');
+        for (const blockedId of newBlocks) {
+          await addBlockedByToRemote(blockedId, id, listId);
+        }
       }
-      if (newBlocks.length > 0) updatedFields.push('blocks');
     }
 
     if (input.addBlockedBy && input.addBlockedBy.length > 0) {
       const newBlockedBy = input.addBlockedBy.filter(bid => !task.blockedBy.includes(bid) && bid !== id);
-      for (const blockerId of newBlockedBy) {
-        await blockTask(blockerId, id, listId);
+      if (newBlockedBy.length > 0) {
+        task.blockedBy = [...task.blockedBy, ...newBlockedBy];
+        updatedFields.push('blockedBy');
+        for (const blockerId of newBlockedBy) {
+          await addBlockToRemote(blockerId, id, listId);
+        }
       }
-      if (newBlockedBy.length > 0) updatedFields.push('blockedBy');
     }
 
     task.updatedAt = Date.now();
@@ -309,6 +315,57 @@ async function updateTaskUnsafe(
   task.updatedAt = Date.now();
   const path = getTaskPath(taskListId, taskId);
   await writeFile(path, JSON.stringify(task, null, 2));
+}
+
+// ---------------------------------------------------------------------------
+// Remote dependency helpers — used by updateTask() which already holds a lock
+// on one side of the dependency. These acquire their own lock on the remote task.
+// ---------------------------------------------------------------------------
+
+/**
+ * Add `blockerId` to `taskId`'s blockedBy list.
+ * Acquires a lock on `taskId`'s file.
+ */
+async function addBlockedByToRemote(
+  taskId: string,
+  blockerId: string,
+  taskListId: string,
+): Promise<void> {
+  const path = getTaskPath(taskListId, taskId);
+  let release: (() => Promise<void>) | undefined;
+  try {
+    release = await lock(path);
+    const task = await getTask(taskId, taskListId);
+    if (!task || task.blockedBy.includes(blockerId)) return;
+    task.blockedBy = [...task.blockedBy, blockerId];
+    task.updatedAt = Date.now();
+    await writeFile(path, JSON.stringify(task, null, 2));
+  } finally {
+    if (release) await release();
+  }
+}
+
+/**
+ * Add `blockedId` to `taskId`'s blocks list.
+ * Acquires a lock on `taskId`'s file.
+ */
+async function addBlockToRemote(
+  taskId: string,
+  blockedId: string,
+  taskListId: string,
+): Promise<void> {
+  const path = getTaskPath(taskListId, taskId);
+  let release: (() => Promise<void>) | undefined;
+  try {
+    release = await lock(path);
+    const task = await getTask(taskId, taskListId);
+    if (!task || task.blocks.includes(blockedId)) return;
+    task.blocks = [...task.blocks, blockedId];
+    task.updatedAt = Date.now();
+    await writeFile(path, JSON.stringify(task, null, 2));
+  } finally {
+    if (release) await release();
+  }
 }
 
 // ---------------------------------------------------------------------------
