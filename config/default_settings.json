@@ -1,6 +1,12 @@
 {
   "theme": "light",
   "max_tokens": 32768,
+  "web_search": {
+    "provider": "bing_html",
+    "brave_api_key": "YOUR_BRAVE_API_KEY",
+    "bing_api_key": "YOUR_BING_API_KEY",
+    "proxy": ""
+  },
   "default_model": "deepseek/deepseek-v4-pro",
   "model_list": [
     {

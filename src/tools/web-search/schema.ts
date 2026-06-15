@@ -2,7 +2,8 @@ import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
   name: 'web-search',
-  description: 'Search the web and use the results to inform responses.',
+  description:
+    'Search the web. Returns result blocks with titles, URLs, and snippets.',
   input_schema: {
     type: 'object',
     properties: {
@@ -10,6 +11,16 @@ export const schema: ToolSchema = {
         type: 'string',
         minLength: 2,
         description: 'The search query to use',
+      },
+      allowed_domains: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Only include search results from these domains',
+      },
+      blocked_domains: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Never include search results from these domains',
       },
     },
     required: ['query'],
