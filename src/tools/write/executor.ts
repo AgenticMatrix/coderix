@@ -26,37 +26,39 @@ function computeDiff(oldLines: string[], newLines: string[]): DiffLine[] {
     }
   }
 
-  // Backtrack to produce diff
-  const result: DiffLine[] = [];
+  // Backtrack to produce diff (builds in reverse, reverse at end)
   let i = m, j = n;
-  const stack: DiffLine[] = [];
+  const result: DiffLine[] = [];
 
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
-      stack.push({ type: 'context', oldNum: i, newNum: j, text: oldLines[i - 1] });
+      result.push({ type: 'context', oldNum: i, newNum: j, text: oldLines[i - 1] });
       i--; j--;
     } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      stack.push({ type: 'add', newNum: j, text: newLines[j - 1] });
+      result.push({ type: 'add', newNum: j, text: newLines[j - 1] });
       j--;
     } else {
-      stack.push({ type: 'remove', oldNum: i, text: oldLines[i - 1] });
+      result.push({ type: 'remove', oldNum: i, text: oldLines[i - 1] });
       i--;
     }
   }
+
+  // Reverse to get forward order
+  result.reverse();
 
   // Add context around changes (3 lines of context)
   const merged: DiffLine[] = [];
   const CONTEXT = 3;
   let lastContext = -CONTEXT - 1;
 
-  for (let k = 0; k < stack.length; k++) {
-    const line = stack[k];
+  for (let k = 0; k < result.length; k++) {
+    const line = result[k];
     if (line.type === 'context') {
-      if (k - lastContext <= CONTEXT && k < stack.length - 1) {
+      if (k - lastContext <= CONTEXT && k < result.length - 1) {
         // Check if there's a change within CONTEXT lines ahead
         let hasNearbyChange = false;
-        for (let t = k + 1; t < Math.min(k + CONTEXT + 1, stack.length); t++) {
-          if (stack[t].type !== 'context') { hasNearbyChange = true; break; }
+        for (let t = k + 1; t < Math.min(k + CONTEXT + 1, result.length); t++) {
+          if (result[t].type !== 'context') { hasNearbyChange = true; break; }
         }
         // Also check behind
         for (let t = Math.max(0, k - CONTEXT); t < k; t++) {

@@ -80,7 +80,10 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
               const isAdd = trimmed.startsWith('+');
               const isRemove = trimmed.startsWith('-');
               return (
-                <Text key={i} backgroundColor={isAdd ? 'green' : isRemove ? 'red' : undefined}>
+                <Text key={i}
+                  backgroundColor={isAdd ? '#1a3a1a' : isRemove ? '#3a1a1a' : undefined}
+                  color={isAdd ? '#90EE90' : isRemove ? '#FF9090' : undefined}
+                >
                   {line}
                 </Text>
               );
