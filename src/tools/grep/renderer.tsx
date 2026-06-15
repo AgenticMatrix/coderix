@@ -13,11 +13,11 @@ export function GrepRenderer(props: ToolUseRendererProps): React.ReactNode {
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
 
   const resultContent = props.result?.content ?? '';
-  const resultLines = resultContent ? resultContent.split('\n').filter(l => l !== '') : [];
+  const allLines = resultContent.split('\n');
+  const resultLines = allLines.filter(l => l !== '');
   const tooLong = !props.contentExpanded && resultLines.length > COLLAPSE_THRESHOLD;
   const displayLines = tooLong ? resultLines.slice(0, COLLAPSE_THRESHOLD) : resultLines;
   const hiddenCount = resultLines.length - COLLAPSE_THRESHOLD;
-  const hasResult = isDone && props.result;
 
   // Error state
   if (isError) {
@@ -29,11 +29,16 @@ export function GrepRenderer(props: ToolUseRendererProps): React.ReactNode {
           {pattern ? <Text dimColor>({pattern})</Text> : null}
           <Text color="red"> failed</Text>
         </Text>
+        {resultContent ? (
+          <Box paddingLeft={3}>
+            <Text color="red">{resultContent}</Text>
+          </Box>
+        ) : null}
       </Box>
     );
   }
 
-  // Done state
+  // Done state — always show result content below
   if (isDone) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -42,20 +47,20 @@ export function GrepRenderer(props: ToolUseRendererProps): React.ReactNode {
           <Text bold>Grep</Text>
           {pattern ? <Text dimColor>({pattern})</Text> : null}
         </Text>
-        {hasResult && resultLines.length > 0 ? (
-          <Box paddingLeft={3} flexDirection="column">
-            {displayLines.map((line, i) => (
-              <Text key={i}>{line}</Text>
-            ))}
-            {tooLong ? (
-              <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
-            ) : null}
-          </Box>
-        ) : hasResult ? (
-          <Box paddingLeft={3}>
+        <Box paddingLeft={3} flexDirection="column">
+          {resultLines.length > 0 ? (
+            <>
+              {displayLines.map((line, i) => (
+                <Text key={i}>{line}</Text>
+              ))}
+              {tooLong ? (
+                <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+              ) : null}
+            </>
+          ) : (
             <Text dimColor>(no matches)</Text>
-          </Box>
-        ) : null}
+          )}
+        </Box>
       </Box>
     );
   }
