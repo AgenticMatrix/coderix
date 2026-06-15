@@ -39,21 +39,21 @@ function isToolResultOnly(m: Message): boolean {
 
 /** Find the index where the live (current-turn) zone begins.
  *
- *  During streaming we keep only the last 2 messages live (the currently-
- *  streaming assistant + the preceding tool_result).  Everything else is
- *  promoted to <Static>, minimizing the Ink output area that rewrites on
- *  every text delta. */
+ *  During streaming we keep only the LAST message live (the currently-
+ *  streaming assistant). Everything else is promoted to <Static>,
+ *  minimizing the Ink output area that rewrites on every text delta.
+ *
+ *  This is the key difference from the original: the original kept 2
+ *  messages live (assistant + tool_result), causing too much churn.
+ *  Keeping only 1 message live dramatically reduces flickering and
+ *  preserves terminal text selection on history content. */
 function getLiveStart(messages: Message[], isStreaming: boolean): number {
-  if (isStreaming) {
-    return Math.max(0, messages.length - 2);
+  if (!isStreaming) {
+    // Not streaming: show everything in Static, nothing live
+    return messages.length;
   }
-  // Not streaming: use turn boundary (last non-tool-result user message)
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'user' && !isToolResultOnly(messages[i])) {
-      return i;
-    }
-  }
-  return 0;
+  // Streaming: keep only the last message (streaming assistant) live
+  return Math.max(0, messages.length - 1);
 }
 
 type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
@@ -61,18 +61,20 @@ type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
 /**
  * App shell with zone-separated rendering:
  *
- *  Static zone  (<Static>)       — HeaderLogo + past turns, never re-rendered
- *  Live zone                     — current turn + input + StatusBar
+ *  Static zone  (<Static>)       — HeaderLogo + all past turns
+ *  Live zone                     — only the currently-streaming message
  *
- * StatusBar ticks every 1 s but only the live zone is rewritten,
- * preserving terminal text selection on historical content.
+ * During streaming, only 1 message is in the Live zone. This means Ink
+ * rewrites at most a few terminal rows on each text delta, eliminating
+ * flickering and preserving terminal-native text selection on everything
+ * above the current line.
  */
 export function App({ config, engine, store }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
 
-  // Sync ChatState → AppState so components reading via useAppState see the latest
+  // Sync ChatState → AppState.ui so components reading via useAppState see the latest
   useEffect(() => {
     store.setState(state);
   }, [state]);
@@ -149,9 +151,8 @@ export function App({ config, engine, store }: AppProps) {
   if (!state.isFrozen) frozenRef.current = state.messages;
   const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
 
-  // During streaming, liveStart advances as new messages arrive, promoting
-  // completed messages to <Static>.  This keeps the live zone to ≤2 messages
-  // so Ink only rewrites a minimal area on each text delta.
+  // During streaming, keep only the LAST message live.
+  // Everything else goes to <Static> and is never redrawn.
   const liveStart = getLiveStart(displayMessages, state.isStreaming);
 
   const staticItems = useMemo<StaticItem[]>(() => {
@@ -189,7 +190,7 @@ export function App({ config, engine, store }: AppProps) {
       )}
       {!state.isFrozen && <Box flexShrink={0} height={0} />}
 
-      {/* ── Live zone: current turn + input ────────────────────── */}
+      {/* ── Live zone: only the current streaming message ──────── */}
       <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
         {state.subAgentView ? (
           <SubAgentTranscriptView
