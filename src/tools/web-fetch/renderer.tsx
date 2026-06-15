@@ -50,7 +50,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
         <Text>
           <Text color="red">❌ </Text>
           <Text bold>WebFetch</Text>
-          {url ? <Text dimColor>"{shortenUrl(url)}"</Text> : null}
+          {url ? <Text dimColor>&quot;{shortenUrl(url)}&quot;</Text> : null}
           <Text color="red"> failed</Text>
         </Text>
       </Box>
@@ -64,7 +64,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
         <Text>
           <Text color="green">● </Text>
           <Text bold>WebFetch</Text>
-          <Text dimColor>("{shortenUrl(displayUrl)}")</Text>
+          <Text dimColor>(&quot;{shortenUrl(displayUrl)}&quot;)</Text>
         </Text>
         <Box paddingLeft={3} flexDirection="column">
           <Text dimColor>{displayUrl}</Text>
@@ -111,7 +111,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
       <Text>
         <Text color="yellow">{indicator} </Text>
         <Text bold>WebFetch</Text>
-        {url ? <Text dimColor>("{shortenUrl(url)}")</Text> : null}
+        {url ? <Text dimColor>(&quot;{shortenUrl(url)}&quot;)</Text> : null}
         {isExecuting ? (
           <Text dimColor color="yellow"> fetching {elapsedSecs}s</Text>
         ) : null}

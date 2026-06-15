@@ -25,7 +25,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
         <Text>
           <Text color="red">❌ </Text>
           <Text bold>WebSearch</Text>
-          {query ? <Text dimColor>("{query}")</Text> : null}
+          {query ? <Text dimColor>(&quot;{query}&quot;)</Text> : null}
           <Text color="red"> failed</Text>
         </Text>
       </Box>
@@ -39,7 +39,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
         <Text>
           <Text color="green">● </Text>
           <Text bold>WebSearch</Text>
-          <Text dimColor>("{query || ''}")</Text>
+          <Text dimColor>(&quot;{query || ''}&quot;)</Text>
         </Text>
         {visibleResults.length > 0 ? (
           <Box paddingLeft={3} flexDirection="column">
@@ -74,7 +74,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
       <Text>
         <Text color="yellow">{indicator} </Text>
         <Text bold>WebSearch</Text>
-        {query ? <Text dimColor>("{query}")</Text> : null}
+        {query ? <Text dimColor>(&quot;{query}&quot;)</Text> : null}
         {isExecuting ? (
           <Text dimColor color="yellow"> searching {elapsedSecs}s</Text>
         ) : null}

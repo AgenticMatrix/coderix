@@ -2,6 +2,11 @@
   "theme": "light",
   "max_tokens": 32768,
   "web_search": {
+    "_comment": "── Web Search & Fetch ──────────────────────────────────────",
+    "_provider": "bing_html = free, works globally (default). duckduckgo = free, blocked in China. brave / bing_api = needs API key.",
+    "_proxy_help": "If you're in China or behind a firewall, web-fetch and DuckDuckGo/Google won't work.",
+    "_proxy_help2": "Set proxy below to fix. Format: http://127.0.0.1:7890 or socks5://127.0.0.1:1080",
+    "_proxy_help3": "Leave empty if you don't need a proxy.",
     "provider": "bing_html",
     "brave_api_key": "YOUR_BRAVE_API_KEY",
     "bing_api_key": "YOUR_BING_API_KEY",
