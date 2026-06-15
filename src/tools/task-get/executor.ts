@@ -27,8 +27,12 @@ export const execute: ToolExecutor = async (input, _opts) => {
     metadata: {
       taskId: task.id,
       subject: task.subject,
+      description: task.description,
+      activeForm: task.activeForm,
       status: task.status,
       owner: task.owner,
+      blocks: task.blocks,
+      blockedBy: task.blockedBy,
     },
   };
 };

@@ -38,12 +38,17 @@ export const execute: ToolExecutor = async (input, _opts) => {
     return {
       content: `No task found with ID: ${taskId}. Background task IDs are shown in task tool results (e.g. "bash-12345" for bash, or agent IDs for spawned agents).`,
       isError: true,
+      metadata: { taskId, block },
     };
   }
 
   if (!block) {
     // Non-blocking: return current status immediately
     if (tracked) {
+      let outputText = '';
+      if (tracked.outputPath) {
+        outputText = await readOutputFile(tracked.outputPath, 50000);
+      }
       return {
         content: JSON.stringify({
           task_id: tracked.id,
@@ -54,6 +59,14 @@ export const execute: ToolExecutor = async (input, _opts) => {
           error: tracked.error ?? null,
         }, null, 2),
         isError: tracked.status === 'error',
+        metadata: {
+          taskId: tracked.id,
+          block,
+          description: tracked.description,
+          status: tracked.status,
+          taskType: tracked.type,
+          outputLines: outputText || undefined,
+        },
       };
     }
 
@@ -68,6 +81,15 @@ export const execute: ToolExecutor = async (input, _opts) => {
           tools: subAgent.toolCount,
         }, null, 2),
         isError: subAgent.status === 'error',
+        metadata: {
+          taskId: subAgent.id,
+          block,
+          description: subAgent.prompt.slice(0, 200),
+          status: subAgent.status,
+          taskType: 'agent',
+          turns: subAgent.turnCount,
+          tools: subAgent.toolCount,
+        },
       };
     }
   }
@@ -98,6 +120,14 @@ export const execute: ToolExecutor = async (input, _opts) => {
           finished: true,
         }, null, 2),
         isError: current.status === 'error',
+        metadata: {
+          taskId: current.id,
+          block,
+          description: current.description,
+          status: current.status,
+          taskType: current.type,
+          outputLines: current.result || output || undefined,
+        },
       };
     }
 
@@ -115,6 +145,15 @@ export const execute: ToolExecutor = async (input, _opts) => {
           finished: true,
         }, null, 2),
         isError: currentAgent.status === 'error',
+        metadata: {
+          taskId: currentAgent.id,
+          block,
+          description: currentAgent.prompt.slice(0, 200),
+          status: currentAgent.status,
+          taskType: 'agent',
+          turns: currentAgent.turnCount,
+          tools: currentAgent.toolCount,
+        },
       };
     }
 
@@ -135,6 +174,13 @@ export const execute: ToolExecutor = async (input, _opts) => {
         result: null,
       }, null, 2),
       isError: false,
+      metadata: {
+        taskId: final.id,
+        block,
+        description: final.description,
+        status: 'timeout',
+        taskType: final.type,
+      },
     };
   }
 
@@ -147,8 +193,15 @@ export const execute: ToolExecutor = async (input, _opts) => {
         description: finalAgent.prompt.slice(0, 200),
       }, null, 2),
       isError: false,
+      metadata: {
+        taskId: finalAgent.id,
+        block,
+        description: finalAgent.prompt.slice(0, 200),
+        status: 'timeout',
+        taskType: 'agent',
+      },
     };
   }
 
-  return { content: 'Task timed out and is no longer available', isError: true };
+  return { content: 'Task timed out and is no longer available', isError: true, metadata: { taskId, block } };
 };
