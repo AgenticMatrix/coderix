@@ -36,6 +36,7 @@ import type { AgentRegistry } from './agent-registry.js';
 import { estimateTokens } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
+import type { AppState } from '../state/AppState.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +69,10 @@ export interface QueryConfig {
   agentRegistry?: AgentRegistry;
   /** Role determines tool access: 'coordinator' gets restricted to orchestration tools only */
   agentRole?: 'default' | 'coordinator' | 'worker';
+  /** Read the current AppState snapshot (injected into ToolContext for tools). */
+  getAppState?: () => AppState;
+  /** Update AppState (injected into ToolContext for background task/agent registration). */
+  setAppState?: (partial: Partial<AppState>) => void;
 }
 
 export interface CallModelParams {
@@ -110,13 +115,15 @@ interface ExecuteSingleToolOpts {
   subAgentRegistry?: SubAgentRegistry;
   systemPromptAssembler?: SystemPromptAssembler;
   agentRegistry?: AgentRegistry;
+  getAppState?: () => AppState;
+  setAppState?: (partial: Partial<AppState>) => void;
 }
 
 async function executeSingleTool(
   toolBlock: ToolUseBlock,
   opts: ExecuteSingleToolOpts,
 ): Promise<ToolResultBlock> {
-  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry } = opts;
+  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, getAppState, setAppState } = opts;
   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
 
   // PreToolUse hook
@@ -142,6 +149,8 @@ async function executeSingleTool(
     sessionId,
     cwd,
     signal: abortController.signal,
+    getAppState,
+    setAppState,
     agentSpawn: subAgentRegistry && systemPromptAssembler && agentRegistry ? {
       callModel,
       toolRegistry,
@@ -235,6 +244,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     hookManager,
     agentRegistry,
     agentRole,
+    getAppState,
+    setAppState,
   } = config;
 
   let messages = [...config.messages];
@@ -313,6 +324,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       subAgentRegistry: config.subAgentRegistry,
       systemPromptAssembler: config.systemPromptAssembler,
       agentRegistry: config.agentRegistry,
+      getAppState: config.getAppState,
+      setAppState: config.setAppState,
     };
 
     try {

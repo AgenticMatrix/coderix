@@ -46,7 +46,18 @@ async function buildToolRegistry(): Promise<any> {
     const riskLevel = meta?.riskLevel === 'safe' ? RiskLevel.SAFE : meta?.riskLevel === 'destructive' ? RiskLevel.DESTRUCTIVE : RiskLevel.MUTATION;
     registry.register({ name: plugin.name, description: (schema.description as string) ?? plugin.name, input_schema: inputSchema, riskLevel, isConcurrencySafe: meta?.isConcurrencySafe ?? false },
       async (input: Record<string, unknown>, ctx: any) => {
-        try { const r = await plugin.executor(input, { cwd: ctx.cwd ?? process.cwd(), allowMutation: true, maxOutput: 50_000, bashTimeout: ctx.timeoutMs ?? 30_000, agentSpawn: ctx.agentSpawn }); return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata }; }
+        try {
+          const r = await plugin.executor(input, {
+            cwd: ctx.cwd ?? process.cwd(),
+            allowMutation: true,
+            maxOutput: 50_000,
+            bashTimeout: ctx.timeoutMs ?? 30_000,
+            agentSpawn: ctx.agentSpawn,
+            getAppState: ctx.getAppState,
+            setAppState: ctx.setAppState,
+          });
+          return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
+        }
         catch (err) { return { content: `Tool error: ${(err as Error).message}`, isError: true }; }
       });
   }
@@ -138,9 +149,37 @@ async function main(): Promise<void> {
   const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings });
   await engine.init();
 
+  // ── Create unified AppState store ──────────────────────────────────
+  const { createStore } = await import('../state/store.js');
+  const { getDefaultAppState } = await import('../state/AppState.js');
+  const { createInitialState } = await import('../tui/hooks/useChatReducer.js');
+  const appStore = createStore(getDefaultAppState(
+    config,
+    createInitialState(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice),
+    sm.getActive().id,
+  ));
+
+  // Inject AppState store into QueryEngine so tools can access it
+  engine.setAppStore(appStore);
+
+  // Wire SubAgentRegistry → AppState dual-write bridge (Phase 2)
+  subAgentRegistry.setAppStateSync((agents) => {
+    appStore.setState({ agents } as Partial<import('../state/AppState.js').AppState>);
+  });
+
+  // ── Persistence bridge (Phase 3) ──────────────────────────────────
+  const { attachPersistence } = await import('../state/persistence-bridge.js');
+  attachPersistence(appStore);
+
   const { render } = await import('ink');
   const { App } = await import('../tui/components/App.js');
-  const { waitUntilExit } = render(<App config={config} engine={engine} />, { exitOnCtrlC: false, patchConsole: true });
+  const { AppStateProvider } = await import('../state/AppStateContext.js');
+  const { waitUntilExit } = render(
+    <AppStateProvider store={appStore}>
+      <App config={config} engine={engine} store={appStore} />
+    </AppStateProvider>,
+    { exitOnCtrlC: false, patchConsole: true },
+  );
   await waitUntilExit();
 }
 

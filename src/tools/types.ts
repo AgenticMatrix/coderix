@@ -1,5 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
+import type { AppState } from '../state/AppState.js';
+
 /**
  * Tool Plugin Contract
  *
@@ -42,11 +44,16 @@ export interface ExecutorOptions {
   agentSpawn?: import('../core/types.js').AgentSpawnContext | undefined;
   /** Session ID for resolving the task list directory. */
   sessionId?: string;
+  /** Read the current AppState snapshot (for tools that need background task/agent info). */
+  getAppState?: () => AppState;
+  /** Update AppState (for tools that register/modify background tasks or agents). */
+  setAppState?: (partial: Partial<AppState>) => void;
 }
 
-/** Executor options with all core fields resolved (non-optional) but agentSpawn kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId'>;
+/** Executor options with all core fields resolved (non-optional) but
+ *  agentSpawn, sessionId, getAppState, setAppState kept optional. */
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,

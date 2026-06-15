@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { ToolExecutor, ToolResult } from '../types.js';
-import { registerTask, updateTask } from '../../tasks/task-tracker.js';
+import { registerTask, updateTask, syncTaskToAppState } from '../../tasks/task-tracker.js';
+import type { TrackedTask } from '../../tasks/task-tracker.js';
 
 const BG_CAPTURE_MS = 3000;
 
@@ -204,21 +205,34 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       const taskId = `bash-${result.pid}`;
 
       // Register with tracker for TaskOutput / TaskStop
-      registerTask({
+      const trackedTask = {
         id: taskId,
-        type: 'bash',
-        status: 'running',
+        type: 'bash' as const,
+        status: 'running' as const,
         description: command.slice(0, 120),
         process: result.child,
         createdAt: startTime,
-      });
+      };
+      registerTask(trackedTask);
+
+      // Dual-write to AppState (Phase 2 bridge)
+      if (opts.setAppState && opts.getAppState) {
+        syncTaskToAppState(opts.setAppState, opts.getAppState, trackedTask, 'register');
+      }
 
       // Listen for process exit to update tracker
       result.child.on('close', (code: number | null) => {
-        updateTask(taskId, {
-          status: code === 0 ? 'done' : 'error',
+        const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
+        const updatedTask: TrackedTask = {
+          ...trackedTask,
+          status: newStatus,
           finishedAt: Date.now(),
-        });
+        };
+        updateTask(taskId, { status: newStatus, finishedAt: Date.now() });
+        // Dual-write to AppState
+        if (opts.setAppState && opts.getAppState) {
+          syncTaskToAppState(opts.setAppState, opts.getAppState, updatedTask, 'update');
+        }
         result.child.unref();
       });
 

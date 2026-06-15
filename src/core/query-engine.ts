@@ -31,6 +31,8 @@ import { drainUnreadMessages } from '../teams/team-mailbox.js';
 import { execute as executeAgentMessage } from '../agents/agent-message/executor.js';
 import type { CoderSettings } from '../cli/config.js';
 import type { ToolResult } from '../tools/types.js';
+import type { AppState } from '../state/AppState.js';
+import type { Store } from '../state/store.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +64,8 @@ export interface QueryEngineConfig {
   settings?: CoderSettings;
   /** Active team name (when running in coordinator mode) */
   teamName?: string;
+  /** Unified AppState store (injected so tools can read/write AppState directly). */
+  appStore?: Store<AppState>;
 }
 
 export interface QueryEngineEvent {
@@ -251,6 +255,7 @@ export class QueryEngine {
       await this.init();
     }
 
+    const appStore = this.config.appStore;
     const queryConfig: QueryConfig = {
       sessionId: session.id,
       cwd: this.config.cwd,
@@ -272,6 +277,8 @@ export class QueryEngine {
       systemPromptAssembler: this.config.systemPromptAssembler,
       agentRegistry: this.config.agentRegistry,
       agentRole: getAgentRole(this.config.settings),
+      getAppState: appStore ? () => appStore.getState() : undefined,
+      setAppState: appStore ? (p) => appStore.setState(p) : undefined,
     };
 
     try {
@@ -396,5 +403,10 @@ export class QueryEngine {
     this.interrupt();
     const session = this.config.sessionManager.getActive();
     this.config.sessionManager.saveSession(session);
+  }
+
+  /** Inject the AppState store after construction (TUI creates store after engine init). */
+  setAppStore(store: Store<AppState>): void {
+    this.config.appStore = store;
   }
 }

@@ -21,12 +21,15 @@ import { useAgentBridge } from '../hooks/useAgentBridge.js';
 import { useInputHandler } from '../hooks/useInputHandler.js';
 import { useTokenStats } from '../hooks/useTokenStats.js';
 import { createSlashHandler } from '../../commands/index.js';
-import { getPendingApproval } from '../hooks/approval-store.js';
-import { loadHistory, addToHistory } from '../../cli/history.js';
+import { loadHistory } from '../../cli/history.js';
+import { useAppState, useSetAppState } from '../../state/AppStateContext.js';
+import type { Store } from '../../state/store.js';
+import type { AppState } from '../../state/AppState.js';
 
 interface AppProps {
   config: AppConfig;
   engine: QueryEngine;
+  store: Store<AppState>;
 }
 
 /** True when a user message contains only tool_result blocks. */
@@ -64,13 +67,20 @@ type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
  * StatusBar ticks every 1 s but only the live zone is rewritten,
  * preserving terminal text selection on historical content.
  */
-export function App({ config, engine }: AppProps) {
+export function App({ config, engine, store }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
+
+  const setAppState = useSetAppState();
+
+  // Sync ChatState → AppState so components reading via useAppState see the latest
+  useEffect(() => {
+    store.setState(state);
+  }, [state]);
 
   const messagesRef = useRef(state.messages);
   messagesRef.current = state.messages;
 
-  const { runAgentTurn } = useAgentBridge({ engine, dispatch });
+  const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState });
 
   const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);
   const handleTeamDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TEAM_PANEL' }), [dispatch]);
@@ -79,16 +89,6 @@ export function App({ config, engine }: AppProps) {
   useEffect(() => {
     dispatch({ type: 'LOAD_HISTORY', history: loadHistory() });
   }, [dispatch]);
-
-  // Persist new history entries to disk
-  const prevHistoryLen = useRef(state.history.length);
-  useEffect(() => {
-    if (state.history.length > prevHistoryLen.current) {
-      const last = state.history[state.history.length - 1];
-      if (last) addToHistory(last, state.history.slice(0, -1));
-    }
-    prevHistoryLen.current = state.history.length;
-  }, [state.history.length]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -120,8 +120,10 @@ export function App({ config, engine }: AppProps) {
     }),
   });
 
+  const pendingApproval = useAppState(s => s.pendingApproval);
+
   const handleApprovalChoice = (choice: string) => {
-    const pending = getPendingApproval();
+    const pending = pendingApproval;
     if (!pending) return;
 
     if (choice === 'deny') {
@@ -129,10 +131,7 @@ export function App({ config, engine }: AppProps) {
       engine.interrupt();
       dispatch({ type: 'INTERRUPT' });
     } else {
-      // 'once', 'session', 'always' all approve the tool
       pending.deferred.resolve(true);
-      // For session / always: switch to AUTO mode so subsequent
-      // tool calls in this session don't prompt again.
       if (choice === 'session' || choice === 'always') {
         engine.setPermissionMode(PermissionMode.AUTO);
         dispatch({ type: 'SET_MODE', mode: 'auto' });

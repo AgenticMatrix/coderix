@@ -20,8 +20,8 @@ import type {
   ApprovalRequest,
   BlockDeltaType,
 } from '../../types.js';
+import type { AppState } from '../../state/AppState.js';
 import { nextMessageId } from './useChatReducer.js';
-import { setPendingApproval, getPendingApproval } from './approval-store.js';
 
 /** Throttle interval for batched delta dispatches (ms). */
 const DELTA_FLUSH_INTERVAL = 60;
@@ -108,6 +108,7 @@ function createAssistantMessage(id: number, blocks: TuiContentBlock[]): Message 
 export interface AgentBridgeDeps {
   engine: QueryEngine;
   dispatch: React.Dispatch<ChatAction>;
+  setAppState: (partial: Partial<AppState>) => void;
 }
 
 /**
@@ -117,7 +118,7 @@ export interface AgentBridgeDeps {
  * The QueryEngine handles the full agent loop (API → tool execution →
  * permission → repeat), so this bridge is purely a translation layer.
  */
-export function useAgentBridge({ engine, dispatch }: AgentBridgeDeps) {
+export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDeps) {
   // Map tool_use_id → toolName for identifying read results
   const toolNameMapRef = useRef<Map<string, string>>(new Map());
 
@@ -374,12 +375,14 @@ export function useAgentBridge({ engine, dispatch }: AgentBridgeDeps) {
                   toolUseId: deferred.toolUseId,
                 };
 
-                setPendingApproval({
-                  toolName: deferred.toolName,
-                  command: deferred.command,
-                  description: deferred.description,
-                  toolUseId: deferred.toolUseId,
-                  deferred,
+                setAppState({
+                  pendingApproval: {
+                    toolName: deferred.toolName,
+                    command: deferred.command,
+                    description: deferred.description,
+                    toolUseId: deferred.toolUseId,
+                    deferred,
+                  },
                 });
 
                 dispatch({ type: 'SHOW_APPROVAL', req: approvalReq });
@@ -390,7 +393,7 @@ export function useAgentBridge({ engine, dispatch }: AgentBridgeDeps) {
                 await deferred.promise;
 
                 dispatch({ type: 'HIDE_APPROVAL' });
-                setPendingApproval(null);
+                setAppState({ pendingApproval: null });
               }
               break;
             }
@@ -406,7 +409,7 @@ export function useAgentBridge({ engine, dispatch }: AgentBridgeDeps) {
         dispatch({ type: 'SET_ERROR', error: (err as Error).message });
       }
     },
-    [engine, dispatch, flushDeltas, scheduleFlush],
+    [engine, dispatch, flushDeltas, scheduleFlush, setAppState],
   );
 
   return { runAgentTurn };

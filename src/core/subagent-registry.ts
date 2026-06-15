@@ -30,15 +30,34 @@ export interface SubAgentRecord {
 export class SubAgentRegistry {
   private agents = new Map<string, SubAgentRecord>();
   private _pendingNotifications: string[] = [];
+  private _appSyncFn: ((agents: Record<string, SubAgentRecord>) => void) | null = null;
+
+  /** Inject AppState sync for dual-write (Phase 2 bridge). */
+  setAppStateSync(syncFn: (record: Record<string, SubAgentRecord>) => void): void {
+    this._appSyncFn = syncFn;
+    // Sync all existing agents into AppState on bridge attach
+    this._flushToAppState();
+  }
+
+  private _flushToAppState(): void {
+    if (!this._appSyncFn) return;
+    const snapshot: Record<string, SubAgentRecord> = {};
+    for (const [id, record] of this.agents) {
+      snapshot[id] = record;
+    }
+    this._appSyncFn(snapshot);
+  }
 
   register(record: SubAgentRecord): void {
     this.agents.set(record.id, record);
+    this._flushToAppState();
   }
 
   update(id: string, patch: Partial<SubAgentRecord>): void {
     const existing = this.agents.get(id);
     if (existing) {
       Object.assign(existing, patch);
+      this._flushToAppState();
     }
   }
 

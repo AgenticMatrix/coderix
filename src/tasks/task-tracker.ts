@@ -48,3 +48,30 @@ export function listTasks(): TrackedTask[] {
 export function unregisterTask(id: string): void {
   tasks.delete(id);
 }
+
+// ── AppState dual-write bridge (Phase 2) ──────────────────────────────
+
+import type { AppState } from '../state/AppState.js';
+
+/**
+ * Mirror a register/update/unregister operation to AppState.
+ * Call this AFTER the corresponding Map operation so old consumers still work.
+ */
+export function syncTaskToAppState(
+  setAppState: (partial: Partial<AppState>) => void,
+  getAppState: () => AppState,
+  task: TrackedTask,
+  action: 'register' | 'update' | 'unregister',
+): void {
+  const prev = getAppState().backgroundTasks;
+  if (action === 'unregister') {
+    const { [task.id]: _, ...rest } = prev;
+    setAppState({ backgroundTasks: rest });
+  } else {
+    const existing = prev[task.id];
+    const merged = action === 'register'
+      ? task
+      : { ...existing, ...task };
+    setAppState({ backgroundTasks: { ...prev, [task.id]: merged } });
+  }
+}

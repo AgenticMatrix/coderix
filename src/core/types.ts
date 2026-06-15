@@ -328,6 +328,10 @@ export interface ToolContext {
   env?: Record<string, string>;
   timeoutMs?: number;
   agentSpawn?: AgentSpawnContext;
+  /** Read the current AppState snapshot (for tools that need background task/agent info). */
+  getAppState?: () => import('../state/AppState.js').AppState;
+  /** Update AppState (for tools that register/modify background tasks or agents). */
+  setAppState?: (partial: Partial<import('../state/AppState.js').AppState>) => void;
 }
 
 export interface ToolDefinition {
