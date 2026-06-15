@@ -16,11 +16,15 @@ function getFilePath(input: Record<string, unknown>): string {
 
   const partial = input._partial as string | undefined;
   if (partial) {
+    // Try full JSON parse first
     try {
       const parsed = JSON.parse(partial);
-      return (parsed.file_path as string) ?? '';
+      const fp = parsed.file_path as string | undefined;
+      if (fp) return fp;
     } catch {
-      return '';
+      // JSON incomplete during streaming — try regex extraction
+      const m = partial.match(/"file_path"\s*:\s*"([^"]+)"/);
+      if (m) return m[1];
     }
   }
 
