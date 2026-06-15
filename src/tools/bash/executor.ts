@@ -1,5 +1,6 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import type { ToolExecutor, ToolResult } from '../types.js';
+import { registerTask, updateTask } from '../../tasks/task-tracker.js';
 
 const BG_CAPTURE_MS = 3000;
 
@@ -83,6 +84,7 @@ function runBackgroundCommand(command: string, opts: {
   exitCode: number | null;
   error: Error | null;
   pid: number;
+  child: ChildProcess;
 }> {
   return new Promise((resolve) => {
     const child = spawn(command, {
@@ -100,19 +102,17 @@ function runBackgroundCommand(command: string, opts: {
     const capture = () => {
       if (settled) return;
       settled = true;
-      // Unpipe so remaining data doesn't keep accumulating
       child.stdout?.removeAllListeners('data');
       child.stderr?.removeAllListeners('data');
       child.removeAllListeners('close');
       child.removeAllListeners('error');
-      // Detach the child so it survives the parent Node process
-      child.unref();
       resolve({
         stdout,
         stderr,
         exitCode: child.exitCode,
         error: null,
         pid: child.pid ?? 0,
+        child,
       });
     };
 
@@ -133,13 +133,13 @@ function runBackgroundCommand(command: string, opts: {
         settled = true;
         child.stdout?.removeAllListeners('data');
         child.stderr?.removeAllListeners('data');
-        child.unref();
         resolve({
           stdout,
           stderr,
           exitCode: code,
           error: null,
           pid: child.pid ?? 0,
+          child,
         });
       }
     });
@@ -148,8 +148,7 @@ function runBackgroundCommand(command: string, opts: {
       clearTimeout(timer);
       if (!settled) {
         settled = true;
-        child.unref();
-        resolve({ stdout, stderr, exitCode: null, error: err, pid: 0 });
+        resolve({ stdout, stderr, exitCode: null, error: err, pid: 0, child });
       }
     });
 
@@ -202,12 +201,33 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       }
 
       const output = [stdout, stderr].filter(Boolean).join('\n');
+      const taskId = `bash-${result.pid}`;
+
+      // Register with tracker for TaskOutput / TaskStop
+      registerTask({
+        id: taskId,
+        type: 'bash',
+        status: 'running',
+        description: command.slice(0, 120),
+        process: result.child,
+        createdAt: startTime,
+      });
+
+      // Listen for process exit to update tracker
+      result.child.on('close', (code: number | null) => {
+        updateTask(taskId, {
+          status: code === 0 ? 'done' : 'error',
+          finishedAt: Date.now(),
+        });
+        result.child.unref();
+      });
+
       const statusLine = `Command started in background (pid ${result.pid}). Captured output after ${BG_CAPTURE_MS}ms:\n`;
       return {
         content: statusLine + (output || '(no output yet)'),
         isError: false,
         duration,
-        metadata: { command, pid: result.pid, background: true },
+        metadata: { command, pid: result.pid, background: true, task_id: taskId },
       };
     }
 

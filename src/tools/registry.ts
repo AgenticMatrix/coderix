@@ -25,11 +25,13 @@ import teamCreatePlugin from '../teams/tools/team-create/index.js';
 import teamDispatchPlugin from '../teams/tools/team-dispatch/index.js';
 import teamStatusPlugin from '../teams/tools/team-status/index.js';
 import teamMessagePlugin from '../teams/tools/team-message/index.js';
+import taskOutputPlugin from './task-output/index.js';
+import taskStopPlugin from './task-stop/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
   'notebook-edit', 'git', 'powershell',
-  'task-output', 'task-describe',
+  'task-describe',
   'ask-user-question', 'exit-plan-mode',
   'skill',
   'cron-create', 'cron-delete', 'cron-list',
@@ -61,6 +63,8 @@ export const plugins: ToolPlugin[] = [
   teamDispatchPlugin,
   teamStatusPlugin,
   teamMessagePlugin,
+  taskOutputPlugin,
+  taskStopPlugin,
 ];
 
 // Build lookup tables
