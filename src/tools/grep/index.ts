@@ -2,12 +2,14 @@ import type { ToolPlugin } from '../types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
 import { GrepRenderer } from './renderer.js';
+import { GrepResultRenderer } from './result-renderer.js';
 
 const grepPlugin: ToolPlugin = {
   name: 'grep',
   schema,
   executor: execute,
   useRenderer: GrepRenderer,
+  resultRenderer: GrepResultRenderer,
   paramSummary: (input) => {
     const p = input.pattern as string;
     if (!p) return undefined;
