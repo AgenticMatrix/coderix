@@ -42,17 +42,24 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const diffLines = meta?.diffLines as string[] | undefined;
   const isNewFile = meta?.isNewFile as boolean | undefined;
 
-  const tooLong = !props.contentExpanded && diffLines && diffLines.length > COLLAPSE_THRESHOLD;
-  const displayDiffLines = tooLong ? diffLines!.slice(0, COLLAPSE_THRESHOLD) : diffLines;
-  const hiddenCount = diffLines ? diffLines.length - COLLAPSE_THRESHOLD : 0;
+  // Fallback: if metadata is missing, extract lines from raw result content
+  const rawContent = props.result?.content ?? '';
+  const rawLines = rawContent.split('\n').filter(l => l !== '');
+  const effectiveDiffLines = diffLines ?? rawLines;
+  const effectiveAdded = addedLines ?? (isNewFile !== false ? rawLines.length : undefined);
+  const effectiveRemoved = removedLines;
+
+  const tooLong = !props.contentExpanded && effectiveDiffLines && effectiveDiffLines.length > COLLAPSE_THRESHOLD;
+  const displayDiffLines = tooLong ? effectiveDiffLines!.slice(0, COLLAPSE_THRESHOLD) : effectiveDiffLines;
+  const hiddenCount = effectiveDiffLines ? effectiveDiffLines.length - COLLAPSE_THRESHOLD : 0;
 
   // Build stats line
   const statsParts: string[] = [];
-  if (addedLines !== undefined && addedLines > 0) {
-    statsParts.push(`Added ${addedLines} line${addedLines !== 1 ? 's' : ''}`);
+  if (effectiveAdded !== undefined && effectiveAdded > 0) {
+    statsParts.push(`Added ${effectiveAdded} line${effectiveAdded !== 1 ? 's' : ''}`);
   }
-  if (removedLines !== undefined && removedLines > 0) {
-    statsParts.push(`removed ${removedLines} line${removedLines !== 1 ? 's' : ''}`);
+  if (effectiveRemoved !== undefined && effectiveRemoved > 0) {
+    statsParts.push(`removed ${effectiveRemoved} line${effectiveRemoved !== 1 ? 's' : ''}`);
   }
   const stats = statsParts.length > 0 ? statsParts.join(', ') : undefined;
 
