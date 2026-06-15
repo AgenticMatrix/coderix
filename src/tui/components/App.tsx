@@ -37,23 +37,42 @@ function isToolResultOnly(m: Message): boolean {
   return m.role === 'user' && m.blocks.length > 0 && m.blocks.every((b) => b.type === 'tool_result');
 }
 
-/** Find the index where the live (current-turn) zone begins.
+/** Check whether a message contains any tool_use blocks that are still
+ *  pending or executing.  When true, the message must stay in the Live
+ *  zone so that tool timers, blinking indicators, and inline progress
+ *  update correctly. */
+function hasActiveTools(msg: Message): boolean {
+  return msg.blocks.some(
+    (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
+  );
+}
+
+/** Find the index where the live zone begins.
  *
  *  During streaming we keep only the LAST message live (the currently-
  *  streaming assistant). Everything else is promoted to <Static>,
  *  minimizing the Ink output area that rewrites on every text delta.
  *
- *  This is the key difference from the original: the original kept 2
- *  messages live (assistant + tool_result), causing too much churn.
- *  Keeping only 1 message live dramatically reduces flickering and
- *  preserves terminal text selection on history content. */
+ *  When streaming ends while tools are still running, any message that
+ *  contains pending / executing tool_use blocks stays in the Live zone
+ *  until every tool settles (done / error).  Once all tools are settled
+ *  the entire conversation moves into <Static> and the terminal output
+ *  is frozen — scrollback, text selection, and Cmd+F all work normally
+ *  on the history. */
 function getLiveStart(messages: Message[], isStreaming: boolean): number {
-  if (!isStreaming) {
-    // Not streaming: show everything in Static, nothing live
-    return messages.length;
+  if (isStreaming) {
+    // Streaming: keep only the last message (streaming assistant) live
+    return Math.max(0, messages.length - 1);
   }
-  // Streaming: keep only the last message (streaming assistant) live
-  return Math.max(0, messages.length - 1);
+  // Not streaming: find the first message that still has active tools.
+  // It and everything after it stays live until all tools settle.
+  for (let i = 0; i < messages.length; i++) {
+    if (hasActiveTools(messages[i]!)) {
+      return i;
+    }
+  }
+  // All tools settled — everything goes to Static.
+  return messages.length;
 }
 
 type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
