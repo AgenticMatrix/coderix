@@ -39,8 +39,21 @@ export interface ModelEntry {
   provider?: string;
 }
 
+export interface WebSearchConfig {
+  /** Search provider: 'bing_html' (free, default), 'duckduckgo', 'brave', or 'bing_api'. */
+  provider?: 'bing_html' | 'duckduckgo' | 'brave' | 'bing_api';
+  /** Brave Search API key. Required when provider is 'brave'. */
+  brave_api_key?: string;
+  /** Bing Web Search API key. Required when provider is 'bing'. */
+  bing_api_key?: string;
+  /** HTTP/HTTPS proxy for web search/fetch requests. Overrides LLM proxy. */
+  proxy?: string;
+}
+
 export interface CoderSettings {
   env?: Record<string, string>;
+  /** Web search configuration. */
+  web_search?: WebSearchConfig;
   model_list?: ModelEntry[];
   /** Format: "provider/model-name" (e.g. "deepseek/deepseek-v4-pro") */
   default_model?: string;

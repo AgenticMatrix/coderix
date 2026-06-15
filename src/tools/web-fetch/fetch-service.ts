@@ -29,6 +29,11 @@ export interface FetchOptions {
   timeout?: number;
   /** HTTP/HTTPS proxy URL (uses ProxyAgent). */
   proxy?: string;
+  /**
+   * When true, try Google Web Cache if the site returns 403 (blocked).
+   * Default: true.
+   */
+  tryFallback?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +131,47 @@ function wrapFetchError(err: unknown, url: string, proxy?: string): Error {
   );
 }
 
+/**
+ * Build a helpful error for HTTP status codes.
+ */
+function wrapHttpError(status: number, statusText: string | undefined, finalUrl: string): Error {
+  const host = new URL(finalUrl).hostname;
+  const statusLine = `HTTP ${status}${statusText ? ' ' + statusText : ''}`;
+
+  switch (status) {
+    case 403:
+      return new Error(
+        `${statusLine} from ${host}. ` +
+        'This site blocks automated access. Try:\n' +
+        `  • Open ${finalUrl} in your browser manually\n` +
+        '  • Search for the same information with web-search instead\n' +
+        '  • Use a different source (Wikipedia, official docs, GitHub, etc.)',
+      );
+    case 404:
+      return new Error(`${statusLine}: page not found at ${finalUrl}. Check that the URL is correct.`);
+    case 429:
+      return new Error(
+        `${statusLine} from ${host}. Too many requests — the site is rate-limiting. Wait a moment and try again.`,
+      );
+    case 401:
+      return new Error(
+        `${statusLine} from ${host}. This page requires authentication.`,
+      );
+    case 503:
+    case 502:
+      return new Error(
+        `${statusLine} from ${host}. The server is temporarily unavailable. Try again later.`,
+      );
+    default:
+      if (status >= 500) {
+        return new Error(
+          `${statusLine} from ${host}. Server error — the site may be down or blocking requests.`,
+        );
+      }
+      return new Error(`${statusLine} from ${finalUrl}.`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // HTML → Text conversion
 // ---------------------------------------------------------------------------
@@ -172,6 +218,82 @@ export function htmlToText(html: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Fallback: Google Web Cache
+// ---------------------------------------------------------------------------
+
+/**
+ * Try to fetch a page from Google's Web Cache.
+ * Returns a FetchResult with a note that it's a cached version.
+ */
+async function fetchGoogleCache(
+  url: string,
+  maxContentLength: number,
+  timeout: number,
+  dispatcher: { dispatcher?: ProxyAgent },
+): Promise<FetchResult> {
+  const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`;
+  const response = await undiciFetch(cacheUrl, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    },
+    signal: AbortSignal.timeout(timeout),
+    redirect: 'follow',
+    ...dispatcher,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google Cache returned HTTP ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type') ?? 'text/plain';
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return { content: '', contentType, status: response.status, finalUrl: cacheUrl };
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalLength += value.length;
+    if (totalLength > maxContentLength) {
+      const remaining = maxContentLength - (totalLength - value.length);
+      if (remaining > 0) chunks.push(value.subarray(0, remaining));
+      await reader.cancel().catch(() => {});
+      break;
+    }
+    chunks.push(value);
+  }
+
+  const total = chunks.reduce((acc, c) => acc + c.length, 0);
+  const buffer = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    buffer.set(c, offset);
+    offset += c.length;
+  }
+
+  const rawText = new TextDecoder().decode(buffer);
+  const isHtml =
+    contentType.includes('text/html') ||
+    contentType.includes('application/xhtml');
+  const bodyText = isHtml ? htmlToText(rawText) : rawText;
+  const content = bodyText
+    ? `[Fetched from Google Web Cache — may be outdated]\n\n${bodyText}`
+    : '';
+
+  return {
+    content,
+    contentType,
+    status: response.status,
+    finalUrl: cacheUrl,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // URL fetching
 // ---------------------------------------------------------------------------
 
@@ -189,6 +311,7 @@ export async function fetchUrl(
 ): Promise<FetchResult> {
   const maxContentLength = opts.maxContentLength ?? 256 * 1024;
   const timeout = opts.timeout ?? 10_000;
+  const tryFallback = opts.tryFallback ?? true;
 
   let parsed: URL;
   try {
@@ -225,10 +348,23 @@ export async function fetchUrl(
     throw wrapFetchError(err, url, opts.proxy);
   }
 
+  // --- Fallback: try Google Web Cache on 403 ---
+  if (response.status === 403 && tryFallback) {
+    try {
+      return await fetchGoogleCache(url, maxContentLength, timeout, dispatcher);
+    } catch (cacheErr) {
+      // Cache failed too — throw the original 403 with a note that we tried
+      const baseErr = wrapHttpError(403, 'Forbidden', response.url || url);
+      const cacheMsg = cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
+      throw new Error(
+        baseErr.message +
+        `\n  (Google Web Cache fallback also failed: ${cacheMsg})`,
+      );
+    }
+  }
+
   if (!response.ok) {
-    throw new Error(
-      `HTTP ${response.status}${response.statusText ? ' ' + response.statusText : ''} from ${response.url || url}`,
-    );
+    throw wrapHttpError(response.status, response.statusText, response.url || url);
   }
 
   const contentType = response.headers.get('content-type') ?? 'text/plain';

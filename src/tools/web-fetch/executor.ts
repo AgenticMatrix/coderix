@@ -16,7 +16,6 @@ export const execute: ToolExecutor = async (input, _opts) => {
     if (config.proxy) {
       proxy = config.proxy;
     }
-    // Per-service proxy override from web_search settings
     const settings = loadSettings();
     if (settings.web_search?.proxy) {
       proxy = settings.web_search.proxy;
@@ -52,8 +51,25 @@ export const execute: ToolExecutor = async (input, _opts) => {
       },
     };
   } catch (err) {
+    const msg = (err as Error).message;
+
+    // 404 / 403 / 401 are valid HTTP responses, not tool errors.
+    // The tool worked — the page just doesn't exist or blocks us.
+    if (
+      msg.startsWith('HTTP 404') ||
+      msg.startsWith('HTTP 403') ||
+      msg.startsWith('HTTP 401')
+    ) {
+      return {
+        content: msg,
+        isError: false,
+        metadata: { httpStatus: msg.match(/^HTTP (\d+)/)?.[1] },
+      };
+    }
+
+    // Network errors, timeouts, DNS failures — real errors
     return {
-      content: `Web fetch failed: ${(err as Error).message}`,
+      content: `Web fetch failed: ${msg}`,
       isError: true,
     };
   }
