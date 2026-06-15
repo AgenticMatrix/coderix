@@ -124,10 +124,10 @@ export function computeEnvInfo(cwd: string, _model?: string): EnvInfo {
 }
 
 // ---------------------------------------------------------------------------
-// loadCodeAgentContext — CODERAGENT.md discovery
+// loadCodeAgentContext — CODER.md / CODERAGENT.md discovery
 // ---------------------------------------------------------------------------
 
-const CODERAGENT_FILENAME = 'CODERAGENT.md';
+const PROJECT_FILENAMES = ['CODER.md', 'CODERAGENT.md'];
 
 function tryReadFile(...segments: string[]): { content: string; path: string } | null {
   const filePath = join(...segments);
@@ -143,18 +143,24 @@ function tryReadFile(...segments: string[]): { content: string; path: string } |
 export function loadCodeAgentContext(cwd: string): CodeAgentContext {
   const result: CodeAgentContext = {};
 
-  // Project-level: <cwd>/CODERAGENT.md
-  const project = tryReadFile(cwd, CODERAGENT_FILENAME);
-  if (project) {
-    result.projectContext = project.content;
-    result.projectPath = project.path;
+  // Project-level: <cwd>/CODER.md or <cwd>/CODERAGENT.md (first found wins)
+  for (const name of PROJECT_FILENAMES) {
+    const project = tryReadFile(cwd, name);
+    if (project) {
+      result.projectContext = project.content;
+      result.projectPath = project.path;
+      break;
+    }
   }
 
-  // User-level: ~/.coder/CODERAGENT.md
-  const user = tryReadFile(homedir(), '.coder', CODERAGENT_FILENAME);
-  if (user) {
-    result.userContext = user.content;
-    result.userPath = user.path;
+  // User-level: ~/.coder/CODER.md or ~/.coder/CODERAGENT.md (first found wins)
+  for (const name of PROJECT_FILENAMES) {
+    const user = tryReadFile(homedir(), '.coder', name);
+    if (user) {
+      result.userContext = user.content;
+      result.userPath = user.path;
+      break;
+    }
   }
 
   return result;

@@ -29,7 +29,7 @@ export function CommandHint({ matches, selectedIndex, onSelect }: CommandHintPro
             }}
           >
             <span class="command-hint-name">/{cmd.name}</span>
-            <span class="command-hint-help"> — {cmd.help}</span>
+            <span class="command-hint-help">{cmd.help}</span>
           </div>
         );
       })}

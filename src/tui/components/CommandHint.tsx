@@ -56,9 +56,9 @@ export function CommandHint({ inputText, selectedIndex }: CommandHintProps) {
               color={isSelected ? 'cyan' : undefined}
               dimColor={!isSelected}
             >
-              {isSelected ? '> ' : '  '}/{cmd}
+              {isSelected ? '> ' : '  '}/{cmd.padEnd(22)}
             </Text>
-            <Text dimColor> — {help}</Text>
+            <Text dimColor>{help}</Text>
           </Text>
         );
       })}

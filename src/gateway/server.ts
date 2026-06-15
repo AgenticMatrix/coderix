@@ -19,6 +19,8 @@ import { SubAgentRegistry } from '../core/subagent-registry.js';
 import { SystemPromptAssembler } from '../core/system-prompt.js';
 import { plugins } from '../tools/registry.js';
 import { PermissionMode, RiskLevel } from '../core/types.js';
+import { isSlashCommand, parseSlashCommand } from '../commands/handler.js';
+import { findSlashCommand } from '../commands/registry.js';
 import type { ToolDefinition, ToolContext, ToolExecutionResult, DeferredPermission, AssistantMessage, ContentBlock, CompletionUsage, QueryMessage } from '../core/types.js';
 
 // ── JSON-RPC ────────────────────────────────────────────────────────
@@ -76,7 +78,7 @@ function convertMessageEvent(msg: QueryMessage, sessionId: string): unknown[] {
         break;
       case 'content_block_delta': {
         const d = ev.delta!;
-        if (d.type === 'text_delta') events.push({ type: 'message.delta', payload: { text: d.text }, session_id: sid });
+        if (d.type === 'text_delta') events.push({ type: 'message.delta', payload: { text: (d.text as string).replace(RE_BOX, '') }, session_id: sid });
         break;
       }
       case 'content_block_start': {
@@ -92,7 +94,7 @@ function convertMessageEvent(msg: QueryMessage, sessionId: string): unknown[] {
     }
   } else if (msg.type === 'assistant') {
     const am = msg.message as AssistantMessage;
-    const text = extractText(am);
+    const text = extractText(am).replace(RE_BOX, '');
     const toolNames = am.toolUseBlocks?.map((b: any) => b.name) ?? [];
     events.push({
       type: 'message.complete',
@@ -130,6 +132,10 @@ function convertMessageEvent(msg: QueryMessage, sessionId: string): unknown[] {
   }
   return events;
 }
+
+// Strip Unicode box-drawing & block chars some models hallucinate
+// U+2500–U+257F Box Drawing, U+2580–U+259F Block Elements
+const RE_BOX = /[─-▟]+/g;
 
 function extractText(msg: AssistantMessage): string {
   if (typeof msg.content === 'string') return msg.content;
@@ -192,7 +198,45 @@ export async function startGateway(): Promise<void> {
   async function processRequest(req: RpcRequest): Promise<void> {
     switch (req.method) {
       case 'prompt.submit': {
-        const text = (req.params?.text as string) ?? '';
+        let text = (req.params?.text as string) ?? '';
+
+        // ── Slash command interception ──
+        if (isSlashCommand(text)) {
+          const parsed = parseSlashCommand(text);
+          const cmd = findSlashCommand(parsed.name);
+          if (cmd) {
+            let sysMsg: string | null = null;
+            let sendMsg: string | null = null;
+
+            cmd.run(parsed.arg, {
+              rawCommand: text,
+              arg: parsed.arg,
+              dispatch: () => {},
+              send: (promptText: string) => { sendMsg = promptText; },
+              sys: (msg: string) => { sysMsg = msg; },
+              exit: () => {},
+              model: config.model,
+              isStreaming: false,
+              inputText: text,
+            });
+
+            if (sysMsg !== null) {
+              // Immediate display (e.g. /help, /status)
+              // Wrap in code block so monospace alignment works in webview
+              notify({ type: 'message.complete', payload: { text: '```\n' + sysMsg + '\n```' }, session_id: currentSessionId });
+              notify({ type: 'status.update', payload: { text: 'Ready' }, session_id: currentSessionId });
+              respond(req.id, { ok: true });
+              break;
+            }
+
+            if (sendMsg !== null) {
+              // Agent-injecting commands (e.g. /commit, /config, /init, /doctor)
+              text = sendMsg;
+            }
+            // Neither set: fall through, let the agent handle the unknown command
+          }
+        }
+
         // Auto-title from first message
         const s = sessionManager.get(currentSessionId);
         if (s && (s.title.startsWith('Session ') || s.title === 'Untitled')) {

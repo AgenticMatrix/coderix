@@ -261,13 +261,13 @@ export class SystemPromptAssembler {
 
     if (ctx.projectContext) {
       sections.push(
-        `# Project Instructions (CODERAGENT.md)\n\n${ctx.projectContext}`,
+        `# Project Instructions\n\n${ctx.projectContext}`,
       );
     }
 
     if (ctx.userContext) {
       sections.push(
-        `# User Instructions (~/.coder/CODERAGENT.md)\n\n${ctx.userContext}`,
+        `# User Instructions\n\n${ctx.userContext}`,
       );
     }
 
