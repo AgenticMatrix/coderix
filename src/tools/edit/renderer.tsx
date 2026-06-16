@@ -79,7 +79,7 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
                 // GitHub-style diff colors: green for additions, vermilion for deletions
                 const bgColor = isAdd ? 'rgb(205,255,216)' : isRemove ? 'rgb(255,215,213)' : undefined;
                 return (
-                  <Box key={i} backgroundColor={bgColor}>
+                  <Box key={i} width="90%" backgroundColor={bgColor}>
                     <Text color={isAdd || isRemove ? 'black' : undefined}>{line}</Text>
                   </Box>
                 );
