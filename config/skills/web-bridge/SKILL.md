@@ -2,22 +2,9 @@
 name: web-bridge
 description: Control a real Chrome/Edge browser via CDP — navigate, click, type, screenshot, extract JavaScript-rendered content, and access sites with login sessions.
 version: "2.0"
-triggers:
-  - "web-bridge"
-  - "webbridge"
-  - "browser control"
-  - "browser automation"
-  - "CDP"
-  - "chrome devtools"
-  - "截图"
-  - "浏览器操作"
-  - "网页自动化"
-tools:
-  - bash
-tags:
-  - browser
-  - automation
-  - web
+triggers: [web-bridge, webbridge, browser control, browser automation, CDP, chrome devtools, 截图, 浏览器操作, 网页自动化]
+tools: [bash]
+tags: [browser, automation, web]
 author: CoderAgent
 ---
 
