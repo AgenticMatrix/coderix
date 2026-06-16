@@ -347,7 +347,52 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Done
+# 8. Auto-install Chrome extension
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Registering Chrome extension...${NC}"
+
+EXT_DIR="${CODER_DIR}/skills/web-bridge/extension"
+EXT_ID="jflcjnbggjdlgklpodojdjgllfkgmhni"
+
+if [ -f "${EXT_DIR}/manifest.json" ]; then
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      powershell.exe -NoProfile -Command "
+        New-Item -Path 'HKCU:\\Software\\Google\\Chrome\\Extensions\\${EXT_ID}' -Force | Out-Null;
+        Set-ItemProperty -Path 'HKCU:\\Software\\Google\\Chrome\\Extensions\\${EXT_ID}' -Name 'path' -Value '$(cygpath -w "${EXT_DIR}" 2>/dev/null || echo "${EXT_DIR}" | sed 's/\//\\/g')' -Type String -Force;
+        Set-ItemProperty -Path 'HKCU:\\Software\\Google\\Chrome\\Extensions\\${EXT_ID}' -Name 'version' -Value '1.0' -Type String -Force;
+      " 2>/dev/null
+      echo -e "${GREEN}  Extension registered for Chrome.${NC}"
+      echo -e "${YELLOW}  Restart Chrome → chrome://extensions → enable 'Coder Web Bridge'${NC}"
+      ;;
+    Linux)
+      mkdir -p "${HOME}/.config/google-chrome/External Extensions"
+      cat > "${HOME}/.config/google-chrome/External Extensions/${EXT_ID}.json" << EOFEXT
+{
+  "external_crx": "${EXT_DIR}/extension.crx",
+  "external_version": "1.0"
+}
+EOFEXT
+      echo -e "${GREEN}  Extension registered for Chrome.${NC}"
+      ;;
+    Darwin)
+      mkdir -p "${HOME}/Library/Application Support/Google/Chrome/External Extensions"
+      cat > "${HOME}/Library/Application Support/Google/Chrome/External Extensions/${EXT_ID}.json" << EOFEXT
+{
+  "external_crx": "${EXT_DIR}/extension.crx",
+  "external_version": "1.0"
+}
+EOFEXT
+      echo -e "${GREEN}  Extension registered for Chrome.${NC}"
+      ;;
+  esac
+else
+  echo -e "${YELLOW}  Extension files not found, skipping.${NC}"
+fi
+
+# ---------------------------------------------------------------------------
+# 9. Done
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
