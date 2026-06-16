@@ -3,12 +3,15 @@
   "name": "Coder Web Bridge",
   "version": "1.0",
   "description": "Browser automation bridge for CoderAgent — enables AI-driven web interaction via CDP.",
-  "permissions": ["debugger", "tabs", "webNavigation"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "debugger",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
-  },
-  "icons": {
-    "128": "icon.png"
   }
 }
