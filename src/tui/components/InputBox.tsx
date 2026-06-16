@@ -15,6 +15,8 @@ export function InputBox({ inputText, cursorPosition, isStreaming }: InputBoxPro
   const beforeCursor = inputText.slice(0, cursorPosition);
   const afterCursor = inputText.slice(cursorPosition + 1);
 
+  const CURSOR_COLOR = '#4FC3F7';
+
   return (
     <Box
       paddingX={1}
@@ -24,7 +26,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming }: InputBoxPro
       flexDirection="row"
     >
       <Box marginRight={1}>
-        <Text color="cyan" bold>
+        <Text color={CURSOR_COLOR} bold>
           {'>'}
         </Text>
       </Box>
@@ -32,9 +34,9 @@ export function InputBox({ inputText, cursorPosition, isStreaming }: InputBoxPro
         <Text>
           {beforeCursor}
           {!isStreaming && cursorChar ? (
-            <Text backgroundColor="cyan" color="black">{cursorChar}</Text>
+            <Text backgroundColor={CURSOR_COLOR} color="black">{cursorChar}</Text>
           ) : !isStreaming ? (
-            <Text color="cyan" dimColor>▌</Text>
+            <Text color={CURSOR_COLOR}>█</Text>
           ) : null}
           {afterCursor}
         </Text>
