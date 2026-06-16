@@ -219,6 +219,8 @@ export interface ChatState {
   agentPicker: boolean;
   /** When true, the task panel has been manually dismissed. */
   taskPanelDismissed: boolean;
+  /** When true, the todo panel has been manually dismissed. */
+  todoPanelDismissed: boolean;
   /** When true, the team panel has been manually dismissed. */
   teamPanelDismissed: boolean;
   /** When true, the team picker overlay is shown. */
@@ -273,6 +275,7 @@ export type ChatAction =
   | { type: 'SHOW_AGENT_PICKER' }
   | { type: 'HIDE_AGENT_PICKER' }
   | { type: 'TOGGLE_TASK_PANEL' }
+  | { type: 'TOGGLE_TODO_PANEL' }
   | { type: 'TOGGLE_TEAM_PANEL' }
   | { type: 'SET_COMMAND_PICKER_INDEX'; index: number }
   | { type: 'SHOW_TEAM_PICKER' }

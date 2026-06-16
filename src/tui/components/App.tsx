@@ -12,6 +12,7 @@ import { ApprovalPrompt } from './ApprovalPrompt.js';
 import { SubAgentTranscriptView } from './SubAgentTranscriptView.js';
 import { SubAgentPicker } from './SubAgentPicker.js';
 import { TaskPanel } from './TaskPanel.js';
+import { TodoPanel } from './TodoPanel.js';
 import { TeamPanel } from './TeamPanel.js';
 import { TeamAgentPicker } from './TeamAgentPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
@@ -87,6 +88,11 @@ type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
  * rewrites at most a few terminal rows on each text delta, eliminating
  * flickering and preserving terminal-native text selection on everything
  * above the current line.
+ *
+ * Static is re-mounted (via dynamic key) on Ctrl+D / Ctrl+E toggles
+ * so expandable blocks (Edit/Write diffs, thinking) reflect the new
+ * expand/collapse state. Only the current round has collapsed content,
+ * so older messages render identically after remount.
  */
 export function App({ config, engine, store }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
@@ -104,6 +110,7 @@ export function App({ config, engine, store }: AppProps) {
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState });
 
   const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);
+  const handleTodoDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TODO_PANEL' }), [dispatch]);
   const handleTeamDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TEAM_PANEL' }), [dispatch]);
 
   // Load history on mount
@@ -171,7 +178,9 @@ export function App({ config, engine, store }: AppProps) {
   const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
 
   // During streaming, keep only the LAST message live.
-  // Everything else goes to <Static> and is never redrawn.
+  // Everything else goes to <Static> and is never redrawn —
+  // except on Ctrl+D / Ctrl+E, where the Static key bumps to remount
+  // and re-render with the toggled expand/collapse state.
   const liveStart = getLiveStart(displayMessages, state.isStreaming);
 
   const staticItems = useMemo<StaticItem[]>(() => {
@@ -180,7 +189,11 @@ export function App({ config, engine, store }: AppProps) {
       { _type: 'header' as const },
       ...historical.map((msg): StaticItem => ({ _type: 'message' as const, msg })),
     ];
-  }, [liveStart, state.contentExpanded]);
+  }, [displayMessages, liveStart]);
+
+  // Bump on contentExpanded toggle so <Static> remounts with new state.
+  // Only the current round has expandable blocks (Edit/Write diffs),
+  // so older messages render identically — no visual difference.
 
   const live = displayMessages.slice(liveStart);
 
@@ -191,8 +204,8 @@ export function App({ config, engine, store }: AppProps) {
 
   return (
     <Box flexDirection="column" height="100%" padding={1}>
-      {/* ── Static zone: never re-rendered ─────────────────────── */}
-      <Static items={staticItems}>
+      {/* ── Static zone: re-renders on Ctrl+D / Ctrl+E ────────────── */}
+      <Static key={`static-${state.contentExpanded}`} items={staticItems}>
         {(item) => {
           if (item._type === 'header') return <HeaderLogo key="header" />;
           return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} />;
@@ -276,6 +289,11 @@ export function App({ config, engine, store }: AppProps) {
       <TaskPanel
         dismissed={state.taskPanelDismissed}
         onDismissReset={handleTaskDismissReset}
+      />
+
+      <TodoPanel
+        dismissed={state.todoPanelDismissed}
+        onDismissReset={handleTodoDismissReset}
       />
 
       <TeamPanel

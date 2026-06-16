@@ -317,7 +317,12 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
 
                 // Dispatch to TUI: exclude results shown inline by use renderers
                 const tuiBlocks = blocks.filter(
-                  (b) => b.type !== 'tool_result' || (b.toolName !== 'read' && b.toolName !== 'bash'),
+                  (b) => b.type !== 'tool_result' || (
+                    b.toolName !== 'read' && b.toolName !== 'bash' &&
+                    b.toolName !== 'glob' && b.toolName !== 'grep' &&
+                    b.toolName !== 'web-search' && b.toolName !== 'web-fetch' &&
+                    b.toolName !== 'write' && b.toolName !== 'edit'
+                  ),
                 );
                 if (tuiBlocks.length > 0) {
                   dispatch({
@@ -341,14 +346,11 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
                       state: 'executing',
                     });
                   } else if (progress.status === 'completed') {
-                    // Tool finished — stop the timer immediately.
-                    // Full result (duration + content) arrives later via
-                    // the user message → SET_TOOL_USE_RESULT path.
-                    dispatch({
-                      type: 'UPDATE_BLOCK_STATE',
-                      toolId: progress.toolUseId,
-                      state: 'done',
-                    });
+                    // Keep as 'executing' — don't set 'done' early.
+                    // The full result arrives later via the user message →
+                    // SET_TOOL_USE_RESULT path. Setting 'done' now would
+                    // let the message move to Static before results arrive,
+                    // permanently hiding inline diff display.
                   } else if (progress.status === 'started') {
                     // Keep in 'pending' state; the message describes what's happening
                   }

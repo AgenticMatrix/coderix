@@ -1,4 +1,5 @@
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
+import { useState, useEffect } from 'react';
 
 import type {
   Message, TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock,
@@ -78,6 +79,16 @@ function buildParamSummary(input: Record<string, unknown>): string {
  */
 export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) {
   const { role } = message;
+  const { stdout } = useStdout();
+  const [termWidth, setTermWidth] = useState(
+    () => stdout?.columns ?? process.stdout.columns ?? 80,
+  );
+  useEffect(() => {
+    if (stdout?.columns && stdout.columns !== termWidth) {
+      setTermWidth(stdout.columns);
+    }
+  }, [stdout?.columns]);
+  const maxWidth = Math.max(20, Math.floor(termWidth * 0.9));
 
   // ── Determine content source ──────────────────────────────
   const hasBlocks = message.blocks && message.blocks.length > 0;
@@ -114,9 +125,9 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
       : contentLines;
 
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={1} width={maxWidth}>
         {displayLines.map((line, i) => (
-          <Box key={i} width="100%" backgroundColor="black">
+          <Box key={i} width={maxWidth} backgroundColor="black">
             <Text>
               {i === 0 ? (
                 <><Text color="cyan" bold>You:</Text>{' '}</>
