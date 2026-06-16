@@ -11,8 +11,9 @@ interface InputBoxProps {
  * Shows the current input buffer with a cursor at the editable position.
  */
 export function InputBox({ inputText, cursorPosition, isStreaming }: InputBoxProps) {
+  const cursorChar = inputText[cursorPosition] || '';
   const beforeCursor = inputText.slice(0, cursorPosition);
-  const afterCursor = inputText.slice(cursorPosition);
+  const afterCursor = inputText.slice(cursorPosition + 1);
 
   return (
     <Box
@@ -30,11 +31,11 @@ export function InputBox({ inputText, cursorPosition, isStreaming }: InputBoxPro
       <Box flexGrow={1}>
         <Text>
           {beforeCursor}
-          {!isStreaming && (
-            <Text color="cyan" dimColor>
-              ▌
-            </Text>
-          )}
+          {!isStreaming && cursorChar ? (
+            <Text backgroundColor="cyan" color="black">{cursorChar}</Text>
+          ) : !isStreaming ? (
+            <Text color="cyan" dimColor>▌</Text>
+          ) : null}
           {afterCursor}
         </Text>
       </Box>
