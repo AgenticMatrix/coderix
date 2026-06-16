@@ -375,6 +375,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'CLEAR_CHAT':
       return { ...state, messages: [] };
 
+    case 'LOAD_CHAT':
+      return {
+        ...state,
+        messages: action.messages,
+        turns: action.turns,
+        isStreaming: action.isStreaming ?? false,
+      };
+
     case 'SHOW_APPROVAL':
       return { ...state, approvalReq: action.req };
 

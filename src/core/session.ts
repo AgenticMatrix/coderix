@@ -82,7 +82,8 @@ export class SessionManager {
 
     this.sessions.set(id, session);
     this.activeSession = session;
-    this.saveSession(session);
+    // Don't save empty sessions — wait until first message is added
+    (session as any)._saved = false;
 
     return session;
   }
@@ -192,8 +193,10 @@ export class SessionManager {
       session.turnCount++;
     }
 
-    // Periodically save (every 5 messages)
-    if (session.messages.length % 5 === 0) {
+    // Save on first message (lazy-init) and periodically (every 5)
+    const saved = (session as any)._saved;
+    if (!saved || session.messages.length % 5 === 0) {
+      (session as any)._saved = true;
       this.saveSession(session);
     }
   }

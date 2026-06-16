@@ -114,6 +114,20 @@ export function gatewayToWebview(
       ];
     }
 
+    case 'sessionHistory':
+      return [{
+        type: 'sessionHistory' as const,
+        messages: (ev.messages as Array<{ role: 'assistant' | 'user' | 'system' | 'tool'; text: string }>),
+        sessionId: ev.sessionId ?? sid,
+      }];
+
+    case 'sessionSwitched':
+      return [{
+        type: 'sessionSwitched',
+        sessionId: ev.sessionId ?? sid,
+        title: ev.title,
+      }];
+
     // Events we don't translate to webview yet
     case 'gateway.ready':
     case 'gateway.stderr':

@@ -4,7 +4,7 @@
 
 import type { ChatAction } from '../types.js';
 import { findSlashCommand } from './registry.js';
-import type { SlashRunContext } from './types.js';
+import type { SessionSummary, SlashRunContext } from './types.js';
 
 export interface ParsedSlashCommand {
   /** The command name (without leading /) */
@@ -40,6 +40,8 @@ export interface SlashHandlerDeps {
   isStreaming: boolean;
   inputText: string;
   onExit: () => void;
+  listSessions?: () => SessionSummary[];
+  resumeSession?: (id: string) => void;
 }
 
 /**
@@ -48,7 +50,7 @@ export interface SlashHandlerDeps {
  * Returns true if the input was handled as a slash command, false otherwise.
  */
 export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => boolean {
-  const { dispatch, send, model, isStreaming, inputText, onExit } = deps;
+  const { dispatch, send, model, isStreaming, inputText, onExit, listSessions, resumeSession } = deps;
 
   return (input: string): boolean => {
     const parsed = parseSlashCommand(input);
@@ -80,6 +82,8 @@ export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => b
       model,
       isStreaming,
       inputText,
+      listSessions,
+      resumeSession,
     };
 
     cmd.run(parsed.arg, ctx);
