@@ -114,7 +114,7 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
       : contentLines;
 
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={1} width="90%">
         {displayLines.map((line, i) => (
           <Box key={i} width="100%" backgroundColor="black">
             <Text>
