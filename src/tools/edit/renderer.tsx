@@ -85,7 +85,9 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
                 );
               })}
               {tooLong ? (
-                <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+                <Box width="90%">
+                  <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+                </Box>
               ) : null}
             </Box>
           ) : null}
