@@ -36,7 +36,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming }: InputBoxPro
           {!isStreaming && cursorChar ? (
             <Text backgroundColor={CURSOR_COLOR} color="black">{cursorChar}</Text>
           ) : !isStreaming ? (
-            <Text color={CURSOR_COLOR}>█</Text>
+            <Text backgroundColor={CURSOR_COLOR}> </Text>
           ) : null}
           {afterCursor}
         </Text>
