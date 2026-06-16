@@ -150,11 +150,43 @@ function findBrowserPath(): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// CDP client (WebSocket-based, no chrome-remote-interface dependency needed)
+// Bridge server detection — try extension mode first, fall back to CDP
 // ---------------------------------------------------------------------------
 
-// We use fetch() to talk to the CDP HTTP endpoint and raw ws for the connection.
-// But for simplicity and reliability, we dynamically import chrome-remote-interface.
+const BRIDGE_PORT = 9223;
+
+async function tryBridge(action: string, params: Record<string, unknown>): Promise<{ ok: boolean; result?: unknown; error?: string }> {
+  try {
+    const resp = await fetch(`http://localhost:${BRIDGE_PORT}/cmd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, params }),
+      signal: AbortSignal.timeout(35_000),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.result !== undefined) {
+      return { ok: true, result: data.result };
+    }
+    return { ok: false, error: data.error || `HTTP ${resp.status}` };
+  } catch {
+    return { ok: false, error: 'Bridge server not reachable' };
+  }
+}
+
+async function isBridgeAvailable(): Promise<boolean> {
+  try {
+    const resp = await fetch(`http://localhost:${BRIDGE_PORT}/`, {
+      signal: AbortSignal.timeout(500),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CDP client
+// ---------------------------------------------------------------------------
 
 let CDP: any = null;
 async function loadCDP() {
@@ -177,8 +209,22 @@ async function main() {
   const action = (args.action as string) || 'status';
   const config = loadConfig();
   const port = config.debugPort;
+  const mode = (args.mode as string) || 'auto'; // auto | bridge | cdp
 
-  // Actions that don't need CDP connection
+  // For extension mode actions, try bridge server first
+  const useBridge = async (act: string, params: Record<string, unknown>) => {
+    if (mode === 'cdp') return null;
+    // Always try bridge unless explicitly told not to
+    const r = await tryBridge(act, params);
+    if (r.ok) return r.result;
+    if (mode === 'bridge') {
+      console.error(`ERROR: Bridge mode enabled but ${r.error}`);
+      process.exit(1);
+    }
+    return null; // fall through to CDP
+  };
+
+  // Actions that don't need CDP/bridge connection
   if (action === 'start-browser' || action === 'start_browser') {
     const browserPath = config.browserPath || findBrowserPath();
     if (!browserPath) {
@@ -212,11 +258,45 @@ async function main() {
     process.exit(1);
   }
 
+  // Try bridge server for page/tab operations (extension mode)
+  {
+    const bridgeActions = [
+      'navigate', 'screenshot', 'click', 'mouse_click', 'type', 'fill', 'send_keys',
+      'scroll', 'extract', 'evaluate', 'snapshot',
+      'get-tabs', 'get_tabs', 'new-tab', 'new_tab', 'close-tab', 'close_tab',
+      'switch-tab', 'switch_tab', 'find_tab',
+      'cdp', 'network', 'upload', 'save_as_pdf',
+      'status', 'connect',
+    ];
+    if (bridgeActions.includes(action)) {
+      const r = await useBridge(action, { ...args, cdpPort: port });
+      if (r !== null) {
+        // Format and print result
+        if (action === 'extract' && typeof r === 'object' && (r as any).content) {
+          console.log((r as any).content);
+        } else if (action === 'screenshot' && typeof r === 'object' && (r as any).data) {
+          console.log('SCREENSHOT_DATA_START');
+          console.log((r as any).data);
+          console.log('SCREENSHOT_DATA_END');
+          const tempPath = '/tmp/web-bridge-screenshot.png';
+          const { writeFileSync } = require('node:fs');
+          writeFileSync(tempPath, Buffer.from((r as any).data, 'base64'));
+          console.log(`Screenshot saved to ${tempPath}`);
+        } else if (Array.isArray(r)) {
+          for (const item of r) console.log(JSON.stringify(item));
+        } else {
+          console.log(typeof r === 'string' ? r : JSON.stringify(r, null, 2));
+        }
+        return;
+      }
+    }
+  }
+
   // All other actions need CDP
   const cdp = await loadCDP();
   const host = 'localhost';
 
-  // connect / status
+  // connect / status (CDP fallback when no bridge)
   if (action === 'connect') {
     const targets = await cdp.List({ host, port });
     const pages = targets.filter((t: any) => t.type === 'page');

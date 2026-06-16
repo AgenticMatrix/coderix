@@ -36,22 +36,41 @@ npx tsx ~/.coder/skills/web-bridge/web-bridge-cli.ts --action <action> [options.
 
 ## Setup
 
-### Option 1: Auto-launch (Recommended)
+### Option 1: Browser Extension (Recommended)
+
+Uses your existing Chrome session — no separate browser, preserves logins/cookies.
+
+1. **Start the bridge server:**
+```bash
+npx tsx ~/.coder/skills/web-bridge/bridge-server.ts
+```
+Keep it running. Prints `BRIDGE_READY port=9223` when ready.
+
+2. **Load the extension in Chrome:**
+   - Open `chrome://extensions/`
+   - Enable "Developer mode" (toggle top-right)
+   - Click "Load unpacked"
+   - Select `~/.coder/skills/web-bridge/extension/`
+   - Pin the extension icon for easy access
+
+3. **Done.** The CLI auto-detects the bridge and uses extension mode.
+
+### Option 2: Direct CDP (via --remote-debugging-port)
+
+Requires a separate Chrome instance. Use if you can't install extensions.
 
 ```bash
+# Auto-launch (easiest):
 npx tsx ~/.coder/skills/web-bridge/web-bridge-cli.ts --action start-browser
-```
 
-### Option 2: Manual Launch
-
-Start Chrome with remote debugging:
-```bash
+# Or manual launch:
 google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/cdp-test
-```
 
-Then connect:
-```bash
+# Then connect:
 npx tsx ~/.coder/skills/web-bridge/web-bridge-cli.ts --action connect
+
+# Force CDP mode even if bridge is running:
+npx tsx ~/.coder/skills/web-bridge/web-bridge-cli.ts --mode cdp --action ...
 ```
 
 Config in `~/.coder/settings.json` (optional):
