@@ -347,49 +347,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Auto-install Chrome extension
+# 8. Chrome extension reminder
 # ---------------------------------------------------------------------------
 echo ""
-echo -e "${CYAN}Registering Chrome extension...${NC}"
-
-EXT_DIR="${CODER_DIR}/skills/web-bridge/extension"
-EXT_ID="jflcjnbggjdlgklpodojdjgllfkgmhni"
-
-if [ -f "${EXT_DIR}/manifest.json" ]; then
-  case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-      powershell.exe -NoProfile -Command "
-        New-Item -Path 'HKCU:\\Software\\Google\\Chrome\\Extensions\\${EXT_ID}' -Force | Out-Null;
-        Set-ItemProperty -Path 'HKCU:\\Software\\Google\\Chrome\\Extensions\\${EXT_ID}' -Name 'path' -Value '$(cygpath -w "${EXT_DIR}" 2>/dev/null || echo "${EXT_DIR}" | sed 's/\//\\/g')' -Type String -Force;
-        Set-ItemProperty -Path 'HKCU:\\Software\\Google\\Chrome\\Extensions\\${EXT_ID}' -Name 'version' -Value '1.0' -Type String -Force;
-      " 2>/dev/null
-      echo -e "${GREEN}  Extension registered for Chrome.${NC}"
-      echo -e "${YELLOW}  Restart Chrome → chrome://extensions → enable 'Coder Web Bridge'${NC}"
-      ;;
-    Linux)
-      mkdir -p "${HOME}/.config/google-chrome/External Extensions"
-      cat > "${HOME}/.config/google-chrome/External Extensions/${EXT_ID}.json" << EOFEXT
-{
-  "external_crx": "${EXT_DIR}/extension.crx",
-  "external_version": "1.0"
-}
-EOFEXT
-      echo -e "${GREEN}  Extension registered for Chrome.${NC}"
-      ;;
-    Darwin)
-      mkdir -p "${HOME}/Library/Application Support/Google/Chrome/External Extensions"
-      cat > "${HOME}/Library/Application Support/Google/Chrome/External Extensions/${EXT_ID}.json" << EOFEXT
-{
-  "external_crx": "${EXT_DIR}/extension.crx",
-  "external_version": "1.0"
-}
-EOFEXT
-      echo -e "${GREEN}  Extension registered for Chrome.${NC}"
-      ;;
-  esac
-else
-  echo -e "${YELLOW}  Extension files not found, skipping.${NC}"
-fi
+echo -e "${CYAN}Chrome Extension:${NC}"
+echo -e "  To control your existing browser (preserve logins/cookies):"
+echo -e "  1. Open ${YELLOW}chrome://extensions/${NC}"
+echo -e "  2. Enable ${YELLOW}Developer mode${NC} (toggle top-right)"
+echo -e "  3. Click ${YELLOW}Load unpacked${NC}"
+echo -e "  4. Select: ${YELLOW}${CODER_DIR}/skills/web-bridge/extension/${NC}"
+echo ""
+echo -e "  Or use CDP mode (no extension needed):"
+echo -e "  ${YELLOW}npx tsx ${CODER_DIR}/skills/web-bridge/web-bridge-cli.ts --action start-browser${NC}"
 
 # ---------------------------------------------------------------------------
 # 9. Done
