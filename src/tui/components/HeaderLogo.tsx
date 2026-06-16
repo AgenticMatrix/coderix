@@ -95,6 +95,16 @@ export function HeaderLogo() {
       if (registry.count === 0) registry.loadFromDisk();
       const summaries = registry.getSummaries();
       const count = summaries.length;
+
+      // Keep descriptions short to prevent the right panel from
+      // overflowing the terminal width (each column is padded to
+      // the longest line regardless of terminal size).
+      const MAX_DESC = 60;
+      function shortDesc(raw: string): string {
+        if (raw.length <= MAX_DESC) return raw;
+        return raw.slice(0, MAX_DESC) + '…';
+      }
+
       const items: Array<{ text: string; render: (pad: number) => React.ReactNode }> = [
         {
           text: `skills: ${count}`,
@@ -108,7 +118,7 @@ export function HeaderLogo() {
       ];
       for (const s of summaries) {
         const label = `  - ${s.name}`;
-        const desc = `: ${s.description}`;
+        const desc = `: ${shortDesc(s.description)}`;
         items.push({
           text: `${label}${desc}`,
           render: (pad) => (
