@@ -207,6 +207,7 @@ export async function startGateway(): Promise<void> {
           if (cmd) {
             let sysMsg: string | null = null;
             let sendMsg: string | null = null;
+            let handled = false;
 
             cmd.run(parsed.arg, {
               rawCommand: text,
@@ -218,7 +219,70 @@ export async function startGateway(): Promise<void> {
               model: config.model,
               isStreaming: false,
               inputText: text,
+              listSessions: () =>
+                sessionManager.list().map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  turnCount: s.turnCount,
+                  model: s.model,
+                  updatedAt: s.updatedAt,
+                })),
+              resumeSession: (id: string) => {
+                if (id === '__last__') {
+                  const list = sessionManager.list();
+                  const target = list.find(
+                    (s) => s.turnCount > 0 && s.id !== currentSessionId,
+                  );
+                  if (!target) {
+                    sysMsg = 'No other sessions with content found.';
+                    return;
+                  }
+                  id = target.id;
+                }
+                if (id === currentSessionId) {
+                  sysMsg = 'Already viewing this session.';
+                  return;
+                }
+                let session;
+                try {
+                  session = sessionManager.resume(id);
+                } catch (e) {
+                  sysMsg = `Failed to resume session: ${(e as Error).message}`;
+                  return;
+                }
+                if (!session) return;
+                currentSessionId = id;
+                const msgs = session.messages
+                  .map((m: any) => {
+                    let text = '';
+                    if (typeof m.content === 'string') text = m.content;
+                    else if (Array.isArray(m.content))
+                      text = m.content
+                        .filter((b: any) => b.type === 'text')
+                        .map((b: any) => b.text ?? '')
+                        .join('\n');
+                    return { role: m.role, text };
+                  })
+                  .filter((m: any) => m.text.length > 0);
+                msgs.push({ role: 'system', text: `Resumed session: ${session.title}` });
+                notify({
+                  type: 'sessionHistory',
+                  messages: msgs,
+                  sessionId: id,
+                });
+                notify({
+                  type: 'sessionSwitched',
+                  sessionId: id,
+                  title: session.title,
+                });
+                handled = true;
+              },
             });
+
+            if (handled) {
+              respond(req.id, { ok: true });
+              break;
+            }
 
             if (sysMsg !== null) {
               // Immediate display (e.g. /help, /status)
@@ -289,7 +353,7 @@ export async function startGateway(): Promise<void> {
 
       case 'session.resume': {
         const id = (req.params?.session_id as string) ?? '';
-        const s = sessionManager.get(id);
+        const s = sessionManager.resume(id);
         if (s) {
           currentSessionId = id;
           const messages = s.messages.map((m: any) => {

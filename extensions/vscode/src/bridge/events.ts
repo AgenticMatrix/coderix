@@ -164,3 +164,5 @@ export type GatewayEvent =
       type: 'message.complete'
     }
   | { payload?: { message?: string }; session_id?: string; type: 'error' }
+  | { messages: { role: string; text: string }[]; payload?: never; session_id?: string; sessionId: string; type: 'sessionHistory' }
+  | { payload?: never; session_id?: string; sessionId: string; title: string; type: 'sessionSwitched' }

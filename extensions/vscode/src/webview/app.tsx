@@ -44,6 +44,7 @@ const COMMANDS = [
   { name: 'pr', help: 'create a pull request for the current branch (uses gh CLI)' },
   { name: 'quit', help: 'exit the application' },
   { name: 'retry', help: 'retry the last user message' },
+  { name: 'resume', help: 'list previous sessions or resume one by ID' },
   { name: 'review', help: 'review current branch changes' },
   { name: 'status', help: 'show session status' },
   { name: 'statusbar', help: 'toggle status bar' },

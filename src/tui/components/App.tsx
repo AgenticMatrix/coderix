@@ -2,7 +2,7 @@ import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, Static } from 'ink';
 
 import type { QueryEngine } from '../../core/query-engine.js';
-import type { AppConfig, Message } from '../../types.js';
+import type { AppConfig, Message, ContentBlock } from '../../types.js';
 import { PermissionMode } from '../../core/types.js';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -26,11 +26,13 @@ import { loadHistory } from '../../cli/history.js';
 import { useAppState, useSetAppState } from '../../state/AppStateContext.js';
 import type { Store } from '../../state/store.js';
 import type { AppState } from '../../state/AppState.js';
+import type { SessionManager } from '../../core/session.js';
 
 interface AppProps {
   config: AppConfig;
   engine: QueryEngine;
   store: Store<AppState>;
+  sessionManager: SessionManager;
 }
 
 /** True when a user message contains only tool_result blocks. */
@@ -94,7 +96,7 @@ type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
  * expand/collapse state. Only the current round has collapsed content,
  * so older messages render identically after remount.
  */
-export function App({ config, engine, store }: AppProps) {
+export function App({ config, engine, store, sessionManager }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
@@ -105,6 +107,7 @@ export function App({ config, engine, store }: AppProps) {
   }, [state]);
 
   const messagesRef = useRef(state.messages);
+  const currentSessionRef = useRef<string>('');
   messagesRef.current = state.messages;
 
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState });
@@ -144,6 +147,115 @@ export function App({ config, engine, store }: AppProps) {
       inputText: state.inputText,
       onExit: () => {
         process.exit(0);
+      },
+      listSessions: () =>
+        sessionManager.list().map((s) => ({
+          id: s.id,
+          title: s.title,
+          turnCount: s.turnCount,
+          model: s.model,
+          updatedAt: s.updatedAt,
+        })),
+      resumeSession: (id: string) => {
+        // __last__: find most recent non-empty session, skipping current
+        if (id === '__last__') {
+          const list = sessionManager.list();
+          const target = list.find(
+            (s) => s.turnCount > 0 && s.id !== currentSessionRef.current,
+          );
+          if (!target) {
+            dispatch({
+              type: 'ADD_USER_MESSAGE',
+              message: {
+                id: Date.now(),
+                role: 'system',
+                content: 'No other sessions with content found.',
+                blocks: [{ type: 'text' as const, content: 'No other sessions with content found.' }],
+                timestamp: Date.now(),
+              },
+            });
+            return;
+          }
+          id = target.id;
+        }
+        // Skip if already viewing this session
+        if (id === currentSessionRef.current) {
+          dispatch({
+            type: 'ADD_USER_MESSAGE',
+            message: {
+              id: Date.now(),
+              role: 'system',
+              content: 'Already viewing this session.',
+              blocks: [{ type: 'text' as const, content: 'Already viewing this session.' }],
+              timestamp: Date.now(),
+            },
+          });
+          return;
+        }
+        currentSessionRef.current = id;
+        let session;
+        try {
+          session = sessionManager.resume(id);
+        } catch (e) {
+          dispatch({
+            type: 'ADD_USER_MESSAGE',
+            message: {
+              id: Date.now(),
+              role: 'system',
+              content: `Failed to resume session: ${(e as Error).message}`,
+              blocks: [{ type: 'text' as const, content: `Failed to resume session: ${(e as Error).message}` }],
+              timestamp: Date.now(),
+            },
+          });
+          return;
+        }
+        if (!session) return;
+        const base = Date.now();
+        const msgs: Message[] = [];
+        for (let i = 0; i < session.messages.length; i++) {
+          const raw: any = session.messages[i];
+          // Build visible text content even for non-text messages
+          let content: string;
+          let blocks: ContentBlock[];
+          if (typeof raw.content === 'string') {
+            content = raw.content;
+            blocks = [{ type: 'text' as const, content }];
+          } else if (Array.isArray(raw.content)) {
+            const textBlocks = raw.content.filter((b: any) => b.type === 'text');
+            content = textBlocks.map((b: any) => b.text ?? '').join('\n');
+            // If no text blocks, show a summary of block types
+            if (!content) {
+              const types = raw.content.map((b: any) => b.type).join(', ');
+              content = `[${types}]`;
+            }
+            blocks = raw.content as ContentBlock[];
+          } else {
+            content = '(empty)';
+            blocks = [{ type: 'text' as const, content }];
+          }
+          msgs.push({
+            id: base * 1000 + i,
+            role: raw.role,
+            content,
+            blocks,
+            timestamp: base + i,
+          });
+        }
+        msgs.push({
+          id: base * 1000 + msgs.length,
+          role: 'system' as const,
+          content: msgs.length === 0
+            ? `Resumed empty session: ${session.title}`
+            : `Resumed session: ${session.title}`,
+          blocks: [{
+            type: 'text' as const,
+            content: msgs.length === 0
+              ? `Resumed empty session: ${session.title}`
+              : `Resumed session: ${session.title}`,
+          }],
+          timestamp: base + msgs.length,
+        });
+        dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false });
       },
     }),
   });

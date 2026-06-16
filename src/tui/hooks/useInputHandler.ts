@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useInput } from 'ink';
 
 import type { Message, ChatAction } from '../../types.js';
@@ -82,6 +83,11 @@ export function useInputHandler({
   teamPicker,
   commandPickerIndex,
 }: InputHandlerDeps) {
+  const slashRef = useRef(onSlashCommand);
+  slashRef.current = onSlashCommand;
+  const inputRef = useRef(inputText);
+  inputRef.current = inputText;
+
   useInput(
     (input, key) => {
       // ── Ctrl+C: smart 3-tier exit ──────────────────────────
@@ -93,7 +99,7 @@ export function useInputHandler({
           return;
         }
         // Tier 2: input has text → clear it
-        if (inputText.length > 0) {
+        if (inputRef.current.length > 0) {
           dispatch({ type: 'SET_INPUT', text: '' });
           dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
           return;
@@ -202,8 +208,9 @@ export function useInputHandler({
       }
 
       // Tab: fill command from picker
-      if (key.tab && inputText.startsWith('/')) {
-        const inputName = inputText.slice(1).split(' ')[0]!.toLowerCase();
+      const curInput = inputRef.current;
+      if (key.tab && curInput.startsWith('/')) {
+        const inputName = curInput.slice(1).split(' ')[0]!.toLowerCase();
         const allCmds = listCommandNames();
         const group = getCycleGroup(inputName, allCmds);
         const matches = group.length > 0 ? group : allCmds.filter((c) => c.startsWith(inputName));
@@ -219,8 +226,8 @@ export function useInputHandler({
 
       // Enter: if exact known command, fall through to execute;
       // otherwise fill AND execute in one step
-      if (key.return && inputText.startsWith('/')) {
-        const inputName = inputText.slice(1).split(' ')[0]!.toLowerCase();
+      if (key.return && curInput.startsWith('/')) {
+        const inputName = curInput.slice(1).split(' ')[0]!.toLowerCase();
         const exactMatch = listCommandNames().includes(inputName);
         if (exactMatch) {
           // Known command — hide picker and let normal Enter handler execute it
@@ -238,7 +245,7 @@ export function useInputHandler({
             const filled = '/' + matches[idx]! + ' ';
             dispatch({ type: 'SET_INPUT', text: filled });
             dispatch({ type: 'SET_COMMAND_PICKER_INDEX', index: -1 });
-            if (onSlashCommand?.(filled.trimEnd())) {
+            if (slashRef.current?.(filled.trimEnd())) {
               dispatch({ type: 'SET_INPUT', text: '' });
             }
           } else {
@@ -249,15 +256,16 @@ export function useInputHandler({
       }
 
       if (key.return) {
-        if (inputText.trim().length > 0) {
+        const cur = inputRef.current;
+        if (cur.trim().length > 0) {
           // Auto-resume following when user sends a message
           dispatch({ type: 'UNFREEZE_DISPLAY' });
           // Expand paste markers to full text before sending / saving history
-          const expandedText = expandPasteMarkers(inputText.trim(), pasteBlocks);
+          const expandedText = expandPasteMarkers(cur.trim(), pasteBlocks);
           dispatch({ type: 'ADD_HISTORY', line: expandedText });
           dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
           // Check for slash commands first
-          if (inputText.startsWith('/') && onSlashCommand?.(inputText)) {
+          if (cur.startsWith('/') && slashRef.current?.(cur)) {
             dispatch({ type: 'SET_INPUT', text: '' });
           } else {
             onSend(expandedText);
@@ -267,8 +275,8 @@ export function useInputHandler({
       }
 
       // ── Command picker navigation (up / down arrows) ──────────
-      if (inputText.startsWith('/') && (key.upArrow || key.downArrow)) {
-        const inputName = inputText.slice(1).split(' ')[0]!.toLowerCase();
+      if (curInput.startsWith('/') && (key.upArrow || key.downArrow)) {
+        const inputName = curInput.slice(1).split(' ')[0]!.toLowerCase();
         const allCmds = listCommandNames();
         const group = getCycleGroup(inputName, allCmds);
         const matches = group.length > 0 ? group : allCmds.filter((c) => c.startsWith(inputName));

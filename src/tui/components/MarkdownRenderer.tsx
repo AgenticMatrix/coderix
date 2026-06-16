@@ -227,7 +227,7 @@ function padToWidth(str: string, targetWidth: number, align: 'left' | 'center' |
  * 4. Parse inline formatting
  */
 function parseBlocks(raw: string): Block[] {
-  if (!raw.trim()) return [];
+  if (!raw?.trim()) return [];
 
   const blocks: Block[] = [];
 

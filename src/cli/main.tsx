@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   const { AppStateProvider } = await import('../state/AppStateContext.js');
   const { waitUntilExit } = render(
     <AppStateProvider store={appStore}>
-      <App config={config} engine={engine} store={appStore} />
+      <App config={config} engine={engine} store={appStore} sessionManager={sm} />
     </AppStateProvider>,
     { exitOnCtrlC: false, patchConsole: true },
   );

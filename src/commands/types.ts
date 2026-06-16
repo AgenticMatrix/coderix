@@ -4,6 +4,14 @@
 
 import type { ChatAction } from '../types.js';
 
+export interface SessionSummary {
+  id: string;
+  title: string;
+  turnCount: number;
+  model: string;
+  updatedAt: Date;
+}
+
 export interface SlashRunContext {
   /** The raw slash command string (including leading /) */
   rawCommand: string;
@@ -23,6 +31,10 @@ export interface SlashRunContext {
   isStreaming: boolean;
   /** Current input text */
   inputText: string;
+  /** List recent sessions. Optional — unavailable in some environments. */
+  listSessions?: () => SessionSummary[];
+  /** Resume a session by ID. Returns true on success. Optional. */
+  resumeSession?: (id: string) => void;
 }
 
 export interface SlashCommand {

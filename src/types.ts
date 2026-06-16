@@ -286,6 +286,7 @@ export type ChatAction =
   | { type: 'SET_ERROR'; error: string }
   | { type: 'CLEAR_ERROR' }
   | { type: 'CLEAR_CHAT' }
+  | { type: 'LOAD_CHAT'; messages: Message[]; turns: TurnSummary[]; isStreaming?: boolean }
   // Permission / approval
   | { type: 'SHOW_APPROVAL'; req: ApprovalRequest }
   | { type: 'HIDE_APPROVAL' }
