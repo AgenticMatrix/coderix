@@ -290,10 +290,10 @@ mkdir -p "${CODER_DIR}/scratchpad"
 echo -e "${GREEN}Configuration directory created at ${CODER_DIR}${NC}"
 
 # Copy bundled skills (web-bridge, etc.) to ~/.coder/skills/
-if [ -d "${SCRIPT_DIR}/config/skills" ]; then
+if [ -d "${SCRIPT_DIR}/resources/skills" ]; then
   echo ""
   echo -e "${CYAN}Installing bundled skills...${NC}"
-  for skill_dir in "${SCRIPT_DIR}/config/skills"/*/; do
+  for skill_dir in "${SCRIPT_DIR}/resources/skills"/*/; do
     skill_name=$(basename "${skill_dir}")
     if [ -f "${skill_dir}/SKILL.md" ]; then
       dest_dir="${CODER_DIR}/skills/${skill_name}"

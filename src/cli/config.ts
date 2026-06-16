@@ -123,14 +123,14 @@ export function loadSettings(): CoderSettings {
 }
 
 /**
- * Copy bundled skills from config/skills/ to ~/.coder/skills/.
+ * Copy bundled skills from resources/skills/ to ~/.coder/skills/.
  * Skips skills that already exist (user may have customized them).
  */
 export function installBundledSkills(): void {
   const skillsDir = join(homedir(), '.coder', 'skills');
   const bundleDir = join(
     dirname(fileURLToPath(import.meta.url)),
-    '..', '..', 'config', 'skills',
+    '..', '..', 'resources', 'skills',
   );
 
   if (!existsSync(bundleDir)) return;

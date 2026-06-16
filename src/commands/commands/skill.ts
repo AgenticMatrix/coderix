@@ -77,7 +77,7 @@ export const skillCommands: SlashCommand[] = [
         ctx.sys(
           'No skills installed.\n\n' +
           'Skills are stored in ~/.coder/skills/<name>/SKILL.md\n' +
-          'Bundled skills are copied on first run (see config/skills/).\n' +
+          'Bundled skills are copied on first run (see resources/skills/).\n' +
           'Run install.sh or restart CoderAgent to install bundled skills.',
         );
         return;
