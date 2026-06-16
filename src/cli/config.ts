@@ -67,13 +67,6 @@ export interface CoderSettings {
   coordinator_mode?: boolean;
   /** Default team name to resume on startup. */
   default_team?: string;
-  /** Web search configuration. */
-  web_search?: {
-    provider?: 'bing_html' | 'duckduckgo' | 'brave' | 'bing_api';
-    brave_api_key?: string;
-    bing_api_key?: string;
-    proxy?: string;
-  };
 }
 
 // ---------------------------------------------------------------------------

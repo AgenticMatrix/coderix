@@ -4,6 +4,7 @@ import { registerTask, updateTask, syncTaskToAppState } from '../../tasks/task-t
 import type { TrackedTask } from '../../tasks/task-tracker.js';
 
 const BG_CAPTURE_MS = 3000;
+const AUTO_BG_MS = 15000; // 15 seconds before auto-backgrounding
 
 function isErrorStatus(status: number | null): boolean {
   return status !== 0;
@@ -20,6 +21,8 @@ function runCommand(command: string, opts: {
   signal: string | null;
   error: Error | null;
   pid: number;
+  child: ChildProcess;
+  autoBackgrounded: boolean;
 }> {
   return new Promise((resolve) => {
     const child = spawn(command, {
@@ -32,21 +35,36 @@ function runCommand(command: string, opts: {
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let autoBackgrounded = false;
 
     const finish = (error: Error | null, exitCode: number | null, signal: string | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode, signal, error, pid: child.pid ?? 0 });
+      clearTimeout(autoBgTimer);
+      resolve({ stdout, stderr, exitCode, signal, error, pid: child.pid ?? 0, child, autoBackgrounded });
     };
 
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      // Give it a moment, then force kill
-      setTimeout(() => {
-        if (!child.killed) child.kill('SIGKILL');
-      }, 1000);
-    }, opts.timeout);
+    // Auto-background: detach listeners so the process keeps running,
+    // then resolve immediately so the caller can register it as a background task.
+    const doAutoBackground = () => {
+      if (settled) return;
+      settled = true;
+      autoBackgrounded = true;
+      clearTimeout(timer);
+      clearTimeout(autoBgTimer);
+      child.stdout?.removeAllListeners('data');
+      child.stderr?.removeAllListeners('data');
+      child.removeAllListeners('close');
+      child.removeAllListeners('error');
+      resolve({ stdout, stderr, exitCode: null, signal: null, error: null, pid: child.pid ?? 0, child, autoBackgrounded });
+    };
+
+    // Auto-background after 15 seconds of running
+    const autoBgTimer = setTimeout(doAutoBackground, AUTO_BG_MS);
+
+    // Timeout also triggers auto-background instead of killing the process
+    const timer = setTimeout(doAutoBackground, opts.timeout);
 
     child.stdout?.on('data', (chunk: Buffer) => {
       const str = chunk.toString();
@@ -245,7 +263,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       };
     }
 
-    // Foreground mode: wait for completion or timeout
+    // Foreground mode: wait for completion or auto-background
     const result = await runCommand(command, {
       cwd: opts.cwd,
       timeout,
@@ -257,7 +275,6 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
     const stderr = result.stderr.trim();
     const exitCode = result.exitCode;
     const error = result.error;
-    const timedOut = result.signal === 'SIGTERM' && result.exitCode === null;
 
     if (error) {
       return {
@@ -268,12 +285,45 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       };
     }
 
-    if (timedOut) {
+    // Command was auto-backgrounded (ran > 15s or hit timeout) — register as background task
+    if (result.autoBackgrounded) {
+      const output = [stdout, stderr].filter(Boolean).join('\n');
+      const taskId = `bash-${result.pid}`;
+
+      const trackedTask: TrackedTask = {
+        id: taskId,
+        type: 'bash' as const,
+        status: 'running' as const,
+        description: command.slice(0, 120),
+        process: result.child,
+        createdAt: startTime,
+      };
+      registerTask(trackedTask);
+
+      if (opts.setAppState && opts.getAppState) {
+        syncTaskToAppState(opts.setAppState, opts.getAppState, trackedTask, 'register');
+      }
+
+      result.child.on('close', (code: number | null) => {
+        const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
+        const updatedTask: TrackedTask = {
+          ...trackedTask,
+          status: newStatus,
+          finishedAt: Date.now(),
+        };
+        updateTask(taskId, { status: newStatus, finishedAt: Date.now() });
+        if (opts.setAppState && opts.getAppState) {
+          syncTaskToAppState(opts.setAppState, opts.getAppState, updatedTask, 'update');
+        }
+        result.child.unref();
+      });
+
+      const statusLine = `Command auto-backgrounded after ${AUTO_BG_MS / 1000}s (pid ${result.pid}). Captured output:\n`;
       return {
-        content: `Error: command timed out after ${timeout}ms`,
-        isError: true,
+        content: statusLine + (output || '(no output yet)'),
+        isError: false,
         duration,
-        metadata: { command, exitCode, stderr: stderr || undefined, timedOut: true },
+        metadata: { command, pid: result.pid, background: true, autoBackgrounded: true, task_id: taskId },
       };
     }
 
