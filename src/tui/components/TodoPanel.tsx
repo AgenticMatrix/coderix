@@ -24,6 +24,10 @@ interface TodoPanelProps {
 const TODOS_BASE_DIR = join(homedir(), '.coder', 'todos');
 const POLL_INTERVAL_MS = 1000;
 
+/** Hourglass flip animation: ⏳ sand-up → ⌛ sand-down, repeat */
+const HOURGLASS_FRAMES = ['⏳', '⌛'];
+const ANIMATION_INTERVAL_MS = 500;
+
 function getTodoPath(sessionId: string): string {
   const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, '-');
   return join(TODOS_BASE_DIR, `${safe}.json`);
@@ -56,7 +60,21 @@ const STATUS_COLOR: Record<string, string> = {
  */
 export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [frame, setFrame] = useState(0);
   const prevFingerprint = useState<string>('')[1];
+  const hasActiveTodos = todos.some(t => t.status === 'in_progress');
+
+  // Animate hourglass when there are active todos
+  useEffect(() => {
+    if (!hasActiveTodos) {
+      setFrame(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setFrame(f => (f + 1) % HOURGLASS_FRAMES.length);
+    }, ANIMATION_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [hasActiveTodos]);
 
   useEffect(() => {
     let active = true;
@@ -120,7 +138,9 @@ export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
       </Box>
 
       {display.map((todo, i) => {
-        const icon = STATUS_ICON[todo.status] ?? '?';
+        const icon = todo.status === 'in_progress'
+          ? HOURGLASS_FRAMES[frame]
+          : STATUS_ICON[todo.status] ?? '?';
         const color = STATUS_COLOR[todo.status];
         const label = todo.status === 'in_progress' && todo.activeForm
           ? todo.activeForm
