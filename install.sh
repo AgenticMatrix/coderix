@@ -289,8 +289,34 @@ mkdir -p "${CODER_DIR}/scratchpad"
 
 echo -e "${GREEN}Configuration directory created at ${CODER_DIR}${NC}"
 
+# Copy bundled skills (web-bridge, etc.) to ~/.coder/skills/
+if [ -d "${SCRIPT_DIR}/config/skills" ]; then
+  echo ""
+  echo -e "${CYAN}Installing bundled skills...${NC}"
+  for skill_dir in "${SCRIPT_DIR}/config/skills"/*/; do
+    skill_name=$(basename "${skill_dir}")
+    if [ -f "${skill_dir}/SKILL.md" ]; then
+      dest_dir="${CODER_DIR}/skills/${skill_name}"
+      mkdir -p "${dest_dir}"
+      # Copy all files from the skill directory
+      copied=0
+      for src_file in "${skill_dir}"/*; do
+        [ -f "$src_file" ] || continue
+        fname=$(basename "${src_file}")
+        # Don't overwrite user-customized SKILL.md
+        if [ "$fname" = "SKILL.md" ] && [ -f "${dest_dir}/${fname}" ]; then
+          continue
+        fi
+        cp "${src_file}" "${dest_dir}/${fname}"
+        copied=$((copied + 1))
+      done
+      echo -e "${GREEN}  + ${skill_name} (${copied} files)${NC}"
+    fi
+  done
+fi
+
 # ---------------------------------------------------------------------------
-# 7. Create default settings.json
+# 8. Create default settings.json
 # ---------------------------------------------------------------------------
 SETTINGS_FILE="${CODER_DIR}/settings.json"
 

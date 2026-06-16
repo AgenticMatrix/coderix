@@ -27,13 +27,13 @@ import teamStatusPlugin from '../teams/tools/team-status/index.js';
 import teamMessagePlugin from '../teams/tools/team-message/index.js';
 import taskOutputPlugin from './task-output/index.js';
 import taskStopPlugin from './task-stop/index.js';
+import skillPlugin from './skill/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
   'notebook-edit', 'git', 'powershell',
   'task-describe',
   'ask-user-question', 'exit-plan-mode',
-  'skill',
   'cron-create', 'cron-delete', 'cron-list',
   'enter-worktree', 'exit-worktree',
   'lsp',
@@ -41,6 +41,7 @@ const KNOWN_TOOL_NAMES: string[] = [
 
 // ── Plugin registration ────────────────────────────────────────────────
 
+/** Core plugins loaded at startup. Skill-activated tools are in LAZY_PLUGINS. */
 export const plugins: ToolPlugin[] = [
   bashPlugin,
   readPlugin,
@@ -65,6 +66,7 @@ export const plugins: ToolPlugin[] = [
   teamMessagePlugin,
   taskOutputPlugin,
   taskStopPlugin,
+  skillPlugin,
 ];
 
 // Build lookup tables

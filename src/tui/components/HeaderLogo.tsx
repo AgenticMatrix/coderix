@@ -1,4 +1,6 @@
+import React from 'react';
 import { Box, Text } from 'ink';
+import { getSkillRegistry } from '../../skills/registry.js';
 
 const CADUCEUS_ART = [
   '               ················',
@@ -88,33 +90,37 @@ export function HeaderLogo() {
       ),
     },
     { text: '', render: (pad) => <Text>{' '.repeat(pad)}</Text> },
-    {
-      text: 'skills: 2',
-      render: (pad) => (
-        <Text>
-          <Kw>skills:</Kw>
-          <Text color="white"> 2{' '.repeat(pad)}</Text>
-        </Text>
-      ),
-    },
-    {
-      text: '  - kimi-webbridge: interact with websites via real browser',
-      render: (pad) => (
-        <Text>
-          <Dim>  - kimi-webbridge</Dim>
-          <Text color="white">: interact with websites via real browser{' '.repeat(pad)}</Text>
-        </Text>
-      ),
-    },
-    {
-      text: '  - update-config: configure Claude Code harness settings',
-      render: (pad) => (
-        <Text>
-          <Dim>  - update-config</Dim>
-          <Text color="white">: configure Claude Code harness settings{' '.repeat(pad)}</Text>
-        </Text>
-      ),
-    },
+    ...(() => {
+      const registry = getSkillRegistry();
+      if (registry.count === 0) registry.loadFromDisk();
+      const summaries = registry.getSummaries();
+      const count = summaries.length;
+      const items: Array<{ text: string; render: (pad: number) => React.ReactNode }> = [
+        {
+          text: `skills: ${count}`,
+          render: (pad) => (
+            <Text>
+              <Kw>skills:</Kw>
+              <Text color="white"> {count}{' '.repeat(pad)}</Text>
+            </Text>
+          ),
+        },
+      ];
+      for (const s of summaries) {
+        const label = `  - ${s.name}`;
+        const desc = `: ${s.description}`;
+        items.push({
+          text: `${label}${desc}`,
+          render: (pad) => (
+            <Text>
+              <Dim>{label}</Dim>
+              <Text color="white">{desc}{' '.repeat(pad)}</Text>
+            </Text>
+          ),
+        });
+      }
+      return items;
+    })(),
     { text: '', render: (pad) => <Text>{' '.repeat(pad)}</Text> },
     {
       text: `workspace: ${process.cwd()}`,

@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, copyFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { AppConfig } from '../types.js';
@@ -50,10 +50,25 @@ export interface WebSearchConfig {
   proxy?: string;
 }
 
+export interface WebBridgeConfig {
+  /** Enable the web-bridge tool. Default: false (opt-in). */
+  enabled?: boolean;
+  /** Chrome DevTools Protocol debug port. Default: 9222. */
+  debugPort?: number;
+  /** Path to Chrome/Edge executable. Auto-detected if not set. */
+  browserPath?: string;
+  /** Run browser in headless mode. Default: false. */
+  headless?: boolean;
+  /** Custom user data directory for the browser profile. */
+  userDataDir?: string;
+}
+
 export interface CoderSettings {
   env?: Record<string, string>;
   /** Web search configuration. */
   web_search?: WebSearchConfig;
+  /** Web bridge (browser automation) configuration. */
+  web_bridge?: WebBridgeConfig;
   model_list?: ModelEntry[];
   /** Format: "provider/model-name" (e.g. "deepseek/deepseek-v4-pro") */
   default_model?: string;
@@ -96,11 +111,73 @@ export function loadSettings(): CoderSettings {
     }
   }
 
+  // Copy bundled skills to ~/.coder/skills/ on first install or update
+  installBundledSkills();
+
   try {
     const raw = readFileSync(settingsPath, 'utf-8');
     return JSON.parse(raw) as CoderSettings;
   } catch {
     return {};
+  }
+}
+
+/**
+ * Copy bundled skills from config/skills/ to ~/.coder/skills/.
+ * Skips skills that already exist (user may have customized them).
+ */
+export function installBundledSkills(): void {
+  const skillsDir = join(homedir(), '.coder', 'skills');
+  const bundleDir = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..', '..', 'config', 'skills',
+  );
+
+  if (!existsSync(bundleDir)) return;
+
+  mkdirSync(skillsDir, { recursive: true });
+
+  let entries: string[];
+  try {
+    entries = readdirSync(bundleDir);
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const bundlePath = join(bundleDir, entry);
+    try {
+      if (!statSync(bundlePath).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+
+    const skillFile = join(bundlePath, 'SKILL.md');
+    if (!existsSync(skillFile)) continue;
+
+    const destDir = join(skillsDir, entry);
+    mkdirSync(destDir, { recursive: true });
+
+    // Copy all files from the skill directory (SKILL.md, scripts, configs, etc.)
+    let fileEntries: string[];
+    try {
+      fileEntries = readdirSync(bundlePath);
+    } catch {
+      continue;
+    }
+
+    for (const fileName of fileEntries) {
+      const srcPath = join(bundlePath, fileName);
+      const destPath = join(destDir, fileName);
+      try {
+        if (!statSync(srcPath).isFile()) continue;
+      } catch {
+        continue;
+      }
+      // Don't overwrite user-customized SKILL.md
+      if (fileName === 'SKILL.md' && existsSync(destPath)) continue;
+      copyFileSync(srcPath, destPath);
+    }
   }
 }
 

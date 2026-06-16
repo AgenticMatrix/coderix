@@ -1,6 +1,14 @@
 {
   "theme": "light",
   "max_tokens": 32768,
+  "web_bridge": {
+    "_comment": "── Web Bridge (Browser Automation via CDP) ───────────────────",
+    "_help": "Control a real Chrome/Edge browser from the AI agent.",
+    "_help2": "Requires: chrome-remote-interface (npm install chrome-remote-interface).",
+    "_help3": "Set enabled=true and use 'start_browser' action to auto-launch Chrome.",
+    "enabled": false,
+    "debugPort": 9222
+  },
   "web_search": {
     "_comment": "── Web Search & Fetch ──────────────────────────────────────",
     "_provider": "bing_html = free, works globally (default). duckduckgo = free, blocked in China. brave / bing_api = needs API key.",

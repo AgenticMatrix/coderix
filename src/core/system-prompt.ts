@@ -10,6 +10,7 @@
  */
 
 import { computeEnvInfo, loadCodeAgentContext, type EnvInfo, type CodeAgentContext } from './context-loader.js';
+import { getSkillRegistry } from '../skills/registry.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +56,7 @@ export class SystemPromptAssembler {
       () => this.buildEnvInfo(envInfo, ctx.model),
       () => this.buildCodeAgentMd(codeAgentContext, role),
       () => this.buildPermissionMode(ctx.permissionMode),
+      () => this.buildSkills(role),
       () => this.buildAgentRegistry(role),
       () => this.buildCustom(ctx.customPrompt),
       () => this.buildAppend(ctx.appendPrompt),
@@ -158,6 +160,7 @@ export class SystemPromptAssembler {
       '- **Agent**: Launch sub-agents for parallel work or complex multi-step tasks.',
       '- **WebFetch**: Fetch and process web page content.',
       '- **WebSearch**: Search the web for current information.',
+      '- **Skill**: Load a skill by name to get specialized instructions and activate capabilities. See "Available Skills" below for the list.',
       '- **TaskCreate / TaskList / TaskUpdate / TaskGet**: Manage a structured task list for complex work.',
       '',
       'When using Bash:',
@@ -313,6 +316,46 @@ export class SystemPromptAssembler {
         // 'auto' mode — no instructions needed
         return null;
     }
+  }
+
+  /**
+   * Priority 45 — Available skills loaded from ~/.coder/skills/.
+   *
+   * Progressive Disclosure: only name + description + triggers are shown.
+   * The full skill body is loaded when the agent invokes the Skill tool.
+   */
+  private buildSkills(role: string): PromptPart | null {
+    if (role === 'worker') return null;
+
+    const registry = getSkillRegistry();
+    if (registry.count === 0) {
+      registry.loadFromDisk();
+    }
+
+    const summaries = registry.getSummaries();
+    if (summaries.length === 0) return null;
+
+    const lines: string[] = [
+      '# Available Skills',
+      '',
+      'The following skills are available. Invoke a skill by using the Skill tool',
+      'with the exact skill name (e.g., `skill="web-bridge"`).',
+      'Some skills activate additional tools when loaded.',
+      '',
+    ];
+
+    for (const s of summaries) {
+      const triggers = s.triggers.length > 0
+        ? ` (triggers: ${s.triggers.join(', ')})`
+        : '';
+      lines.push(`- **${s.name}**: ${s.description}${triggers}`);
+    }
+
+    return {
+      name: 'skills',
+      content: lines.join('\n'),
+      priority: 45,
+    };
   }
 
   /**

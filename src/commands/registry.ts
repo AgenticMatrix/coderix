@@ -4,6 +4,7 @@ import { coreCommands } from './commands/core.js';
 import { doctorCommands } from './commands/doctor.js';
 import { gitCommands } from './commands/git.js';
 import { initCommands } from './commands/init.js';
+import { skillCommands } from './commands/skill.js';
 import { tasksCommand } from './commands/tasks.js';
 
 export const SLASH_COMMANDS: SlashCommand[] = [
@@ -12,6 +13,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   ...doctorCommands,
   ...gitCommands,
   ...initCommands,
+  ...skillCommands,
   tasksCommand,
 ];
 
