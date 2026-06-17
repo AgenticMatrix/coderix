@@ -26,5 +26,13 @@ export const schema: ToolSchema = {
     },
     required: ['command'],
   },
-  _meta: { riskLevel: 'mutation', isConcurrencySafe: true },
+  _meta: {
+    riskLevel: 'mutation',
+    /**
+     * Default: false. Overridden dynamically per-command by the security
+     * check hook and PermissionEngine — read-only commands (git diff, ls, etc.)
+     * are promoted to concurrency-safe at runtime.
+     */
+    isConcurrencySafe: false,
+  },
 };

@@ -28,6 +28,10 @@ import { ToolRegistry } from './tool-registry.js';
 import { PermissionEngine } from './permission.js';
 import { SessionManager } from './session.js';
 import { CheckpointManager } from './checkpoint.js';
+import { CommandCategory } from '../tools/bash/command-classifier.js';
+import type { ClassificationResult } from '../tools/bash/command-classifier.js';
+import { tokenizeCommand, extractCommandTokens } from '../tools/bash/command-tokenizer.js';
+import { classifyCommand } from '../tools/bash/command-classifier.js';
 import type { SystemPrompt } from './system-prompt.js';
 import type { SystemPromptAssembler } from './system-prompt.js';
 import type { HookManager } from './hooks.js';
@@ -98,6 +102,60 @@ function createToolErrorResult(toolUseId: string, error: string): ToolResultBloc
     content: error,
     is_error: true,
   };
+}
+
+// ── Dynamic bash risk assessment ────────────────────────────────────
+
+/**
+ * Dynamically determine the riskLevel and isConcurrencySafe for a bash command
+ * based on command classification. Read-only commands are SAFE and concurrency-safe;
+ * code exec is DESTRUCTIVE; everything else keeps the static metadata.
+ */
+function resolveBashRiskLevel(
+  toolName: string,
+  input: Record<string, unknown>,
+  staticRiskLevel: string,
+  staticIsConcurrencySafe: boolean,
+): { riskLevel: string; isConcurrencySafe: boolean; classification?: ClassificationResult } {
+  if (toolName !== 'bash') {
+    return { riskLevel: staticRiskLevel, isConcurrencySafe: staticIsConcurrencySafe };
+  }
+
+  const command = input.command as string | undefined;
+  if (!command) {
+    return { riskLevel: staticRiskLevel, isConcurrencySafe: staticIsConcurrencySafe };
+  }
+
+  const tokenizeResult = tokenizeCommand(command);
+  const tokens = tokenizeResult.success ? extractCommandTokens(tokenizeResult.entries) : [];
+
+  const classification = classifyCommand(command, tokens, { mode: 'default' });
+
+  if (classification.category === CommandCategory.READ_ONLY) {
+    return {
+      riskLevel: RiskLevel.SAFE,
+      isConcurrencySafe: true,
+      classification,
+    };
+  }
+
+  if (classification.category === CommandCategory.CODE_EXEC) {
+    return {
+      riskLevel: RiskLevel.DESTRUCTIVE,
+      isConcurrencySafe: false,
+      classification,
+    };
+  }
+
+  if (classification.category === CommandCategory.DESTRUCTIVE) {
+    return {
+      riskLevel: RiskLevel.DESTRUCTIVE,
+      isConcurrencySafe: false,
+      classification,
+    };
+  }
+
+  return { riskLevel: staticRiskLevel, isConcurrencySafe: staticIsConcurrencySafe, classification };
 }
 
 // ---------------------------------------------------------------------------
@@ -492,18 +550,45 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             // Permission check + enqueue (may yield for ASK mode)
             if (!abortController.signal.aborted) {
               const toolDef = toolRegistry.get(toolBlock.name)?.definition;
+              const staticRiskLevel = (toolDef?.riskLevel ?? RiskLevel.MUTATION) as RiskLevel;
+              const staticConcurrencySafe = toolDef?.isConcurrencySafe ?? false;
+
+              // Dynamic risk assessment for bash commands
+              const dynamic = resolveBashRiskLevel(
+                toolBlock.name,
+                toolBlock.input as Record<string, unknown>,
+                staticRiskLevel,
+                staticConcurrencySafe,
+              );
+              const effectiveRiskLevel = dynamic.riskLevel as RiskLevel;
+              const effectiveConcurrencySafe = dynamic.isConcurrencySafe;
+
+              // Inject dynamic classification into tool input for the executor
+              if (dynamic.classification) {
+                toolBlock.input = {
+                  ...toolBlock.input,
+                  _classification: dynamic.classification,
+                };
+              }
+
+              // Extract command content for bash permission rules
+              const cmdContent = toolBlock.name === 'bash'
+                ? (toolBlock.input as Record<string, unknown>).command as string | undefined
+                : undefined;
+
               let permissionResult = await permissionEngine.check(
                 {
                   toolName: toolBlock.name,
                   input: toolBlock.input,
-                  riskLevel: (toolDef?.riskLevel ?? RiskLevel.MUTATION) as RiskLevel,
+                  riskLevel: effectiveRiskLevel,
                 },
                 toolDef,
+                cmdContent,
               );
 
               // PermissionRequest hook
               if (hookManager && permissionResult.behavior !== 'approve') {
-                const riskLevelStr = toolDef?.riskLevel ?? RiskLevel.MUTATION;
+                const riskLevelStr = effectiveRiskLevel;
                 const { permissionOverride } = await hookManager.onPermissionRequest(
                   sessionId, cwd, toolBlock.name, toolBlock.input,
                   String(riskLevelStr), permissionResult.behavior,
@@ -514,13 +599,15 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 } else if (permissionOverride === 'auto-deny') {
                   permissionResult.allowed = false;
                   permissionResult.behavior = 'deny';
-                  permissionResult.reason = 'Auto-denied by PermissionRequest hook';
+                  permissionResult.reason = { type: 'hook', mode: 'auto-denied' };
                 }
               }
 
               // deny
               if (!permissionResult.allowed && permissionResult.behavior === 'deny') {
-                const reason = permissionResult.reason ?? 'Denied';
+                const reason = typeof permissionResult.reason === 'string'
+                  ? permissionResult.reason
+                  : permissionResult.reason?.mode ?? 'Denied';
                 queue.storeError(toolBlock, reason);
                 hookManager?.onPermissionDenied(
                   sessionId, cwd, toolBlock.name, toolBlock.input, reason,
@@ -667,17 +754,37 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 // Permission check + enqueue (same logic as streaming path above)
                 if (!abortController.signal.aborted) {
                   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
+                  const staticRiskLevel = (toolDef?.riskLevel ?? RiskLevel.MUTATION) as RiskLevel;
+                  const staticConcurrencySafe = toolDef?.isConcurrencySafe ?? false;
+
+                  // Dynamic risk assessment for bash commands
+                  const dynamic = resolveBashRiskLevel(
+                    toolBlock.name,
+                    toolBlock.input as Record<string, unknown>,
+                    staticRiskLevel,
+                    staticConcurrencySafe,
+                  );
+                  const effectiveRiskLevel = dynamic.riskLevel as RiskLevel;
+
+                  // Inject dynamic classification into tool input for the executor
+                  if (dynamic.classification) {
+                    toolBlock.input = {
+                      ...toolBlock.input,
+                      _classification: dynamic.classification,
+                    };
+                  }
+
                   let permissionResult = await permissionEngine.check(
                     {
                       toolName: toolBlock.name,
                       input: toolBlock.input,
-                      riskLevel: (toolDef?.riskLevel ?? RiskLevel.MUTATION) as RiskLevel,
+                      riskLevel: effectiveRiskLevel,
                     },
                     toolDef,
                   );
 
                   if (hookManager && permissionResult.behavior !== 'approve') {
-                    const riskLevelStr = toolDef?.riskLevel ?? RiskLevel.MUTATION;
+                    const riskLevelStr = effectiveRiskLevel;
                     const { permissionOverride } = await hookManager.onPermissionRequest(
                       sessionId, cwd, toolBlock.name, toolBlock.input,
                       String(riskLevelStr), permissionResult.behavior,
@@ -688,12 +795,14 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                     } else if (permissionOverride === 'auto-deny') {
                       permissionResult.allowed = false;
                       permissionResult.behavior = 'deny';
-                      permissionResult.reason = 'Auto-denied by PermissionRequest hook';
+                      permissionResult.reason = { type: 'hook', mode: 'auto-denied' };
                     }
                   }
 
                   if (!permissionResult.allowed && permissionResult.behavior === 'deny') {
-                    const reason = permissionResult.reason ?? 'Denied';
+                    const reason = typeof permissionResult.reason === 'string'
+                      ? permissionResult.reason
+                      : permissionResult.reason?.mode ?? 'Denied';
                     queue.storeError(toolBlock, reason);
                     hookManager?.onPermissionDenied(
                       sessionId, cwd, toolBlock.name, toolBlock.input, reason,

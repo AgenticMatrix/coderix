@@ -2,6 +2,57 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import type { ToolExecutor, ToolResult } from '../types.js';
 import { registerTask, updateTask, syncTaskToAppState } from '../../tasks/task-tracker.js';
 import type { TrackedTask } from '../../tasks/task-tracker.js';
+import {
+  tokenizeCommand,
+  extractCommandTokens,
+  type TokenizeResult,
+} from './command-tokenizer.js';
+import { CommandCategory, type ClassificationResult } from './command-classifier.js';
+
+// ── Security check hook ─────────────────────────────────────────────
+
+/**
+ * Result of a pre-execution security check on a bash command.
+ */
+export interface SecurityCheckResult {
+  allowed: boolean;
+  reason?: string;
+  classification: ClassificationResult;
+}
+
+/**
+ * Pre-execution security check function signature.
+ *
+ * When installed (via setPreExecSecurityCheck), this function is called
+ * for EVERY bash command BEFORE spawn(). It receives the raw command,
+ * tokenized tokens, and executor options.
+ *
+ * Return `{ allowed: false }` to block execution. The reason string
+ * is returned to the LLM as an error.
+ */
+export type PreExecSecurityCheck = (
+  command: string,
+  tokens: string[],
+  cwd: string,
+) => SecurityCheckResult | Promise<SecurityCheckResult>;
+
+/** Module-level security check hook. Set by the security system at boot. */
+let _securityCheckHook: PreExecSecurityCheck | null = null;
+
+/**
+ * Install the pre-execution security check hook.
+ * Called by index.ts or security-check.ts at plugin load time.
+ */
+export function setPreExecSecurityCheck(fn: PreExecSecurityCheck): void {
+  _securityCheckHook = fn;
+}
+
+/**
+ * Get the currently installed security check hook (for testing).
+ */
+export function getPreExecSecurityCheck(): PreExecSecurityCheck | null {
+  return _securityCheckHook;
+}
 
 const BG_CAPTURE_MS = 3000;
 const AUTO_BG_MS = 15000; // 15 seconds before auto-backgrounding
@@ -184,6 +235,48 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
   const command = input.command as string;
   if (!command) return { content: 'Error: command is required', isError: true };
 
+  // ── Pre-execution security check ──────────────────────────────
+  // Tokenize the command, then run the security check hook (if installed).
+  // This blocks dangerous commands BEFORE they reach spawn().
+  const tokenizeResult = tokenizeCommand(command);
+  let tokens: string[] = [];
+  let classification: ClassificationResult | undefined;
+
+  if (tokenizeResult.success) {
+    tokens = extractCommandTokens(tokenizeResult.entries);
+  }
+  // On tokenization failure, tokens stays empty and the hook
+  // receives an empty array — it should treat this as UNKNOWN.
+
+  if (_securityCheckHook) {
+    const result = await _securityCheckHook(command, tokens, opts.cwd);
+    classification = result.classification;
+
+    if (!result.allowed) {
+      const reason = result.reason || 'Command blocked by security check';
+      return {
+        content: `Error: ${reason}`,
+        isError: true,
+        duration: 0,
+        metadata: {
+          command,
+          securityBlocked: true,
+          classification: result.classification,
+        },
+      };
+    }
+  }
+
+  // If no hook installed, classification stays undefined (backward compat)
+  if (!classification) {
+    classification = {
+      category: CommandCategory.UNKNOWN,
+      isReadOnly: false,
+      isConcurrencySafe: false,
+      reason: 'No security check installed',
+    };
+  }
+
   const runInBackground = input.run_in_background as boolean | undefined;
   const timeout = (input.timeout as number) ?? opts.bashTimeout;
   const startTime = Date.now();
@@ -215,7 +308,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
           content: output || '(no output)',
           isError: isErrorStatus(result.exitCode),
           duration,
-          metadata: { command, exitCode: result.exitCode ?? null, stderr: stderr || undefined, background: true },
+          metadata: { command, exitCode: result.exitCode ?? null, stderr: stderr || undefined, background: true, classification },
         };
       }
 
@@ -259,7 +352,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         content: statusLine + (output || '(no output yet)'),
         isError: false,
         duration,
-        metadata: { command, pid: result.pid, background: true, task_id: taskId },
+        metadata: { command, pid: result.pid, background: true, task_id: taskId, classification },
       };
     }
 
@@ -323,7 +416,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         content: statusLine + (output || '(no output yet)'),
         isError: false,
         duration,
-        metadata: { command, pid: result.pid, background: true, autoBackgrounded: true, task_id: taskId },
+        metadata: { command, pid: result.pid, background: true, autoBackgrounded: true, task_id: taskId, classification },
       };
     }
 
@@ -335,6 +428,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         command,
         exitCode: exitCode ?? null,
         stderr: stderr || undefined,
+        classification,
       },
     };
   } catch (err) {

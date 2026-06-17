@@ -117,9 +117,20 @@ export function getToolMeta(toolName: string): ToolMeta | undefined {
   return schemaByName.get(toolName)?._meta;
 }
 
-/** Get risk level for a tool by name. */
-export function getToolRiskLevel(toolName: string): ToolMeta['riskLevel'] {
-  return getToolMeta(toolName)?.riskLevel ?? 'safe';
+/** Get risk level for a tool by name, optionally considering command content. */
+export function getToolRiskLevel(toolName: string, input?: Record<string, unknown>): ToolMeta['riskLevel'] {
+  const meta = getToolMeta(toolName);
+  const staticRisk = meta?.riskLevel ?? 'safe';
+
+  // Dynamic override for bash commands based on classification
+  if (toolName === 'bash' && input?._classification) {
+    const c = input._classification as { isReadOnly?: boolean; category?: string };
+    if (c.isReadOnly) return 'safe';
+    if (c.category === 'code_exec' || c.category === 'destructive') return 'destructive';
+    if (c.category === 'network') return 'destructive';
+  }
+
+  return staticRisk;
 }
 
 const EXECUTOR_DEFAULTS: ResolvedExecutorOptions = {

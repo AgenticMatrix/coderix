@@ -1,12 +1,29 @@
 /**
- * PermissionEngine — Simplified Plan / Ask / Auto permission system.
+ * PermissionEngine — Plan / Ask / Auto permission system with optional rule engine.
  *
  * In AUTO mode everything is auto-approved.
  * In PLAN mode, only SAFE operations are approved; everything else is denied.
  * In ASK mode, ALL operations require user confirmation.
+ * In LOW mode, SAFE auto-approved, MUTATION/DESTRUCTIVE prompt the user.
+ *
+ * Optional PermissionRuleEngine integration: when rules are configured,
+ * they are evaluated BEFORE the mode-based check. Rules can override
+ * mode behavior per-tool or per-command-content (e.g., "always deny Bash(rm:*)")
  */
 
-import { PermissionMode, RiskLevel, type ToolDefinition } from './types.js';
+import {
+  PermissionMode,
+  RiskLevel,
+} from './types.js';
+import type { ToolDefinition } from './types.js';
+import {
+  PermissionRuleEngine,
+  type PermissionRule,
+  type PermissionRuleResult,
+  type PermissionBehavior,
+} from './permission-rules.js';
+
+// ── Permission check types ──────────────────────────────────────────
 
 export interface PermissionCheck {
   toolName: string;
@@ -17,17 +34,29 @@ export interface PermissionCheck {
 export interface PermissionResult {
   allowed: boolean;
   behavior: 'approve' | 'deny' | 'ask_user';
-  reason?: string;
+  reason?: {
+    type: string;
+    rule?: PermissionRule;
+    mode?: string;
+    riskLevel?: string;
+    matchedPattern?: string;
+  };
   prompt?: string;
 }
+
+// ── PermissionEngine ────────────────────────────────────────────────
 
 export class PermissionEngine {
   private mode: PermissionMode = PermissionMode.ASK;
   private cwd: string;
+  private ruleEngine: PermissionRuleEngine;
 
-  constructor(cwd: string) {
+  constructor(cwd: string, initialRules?: PermissionRule[]) {
     this.cwd = cwd;
+    this.ruleEngine = new PermissionRuleEngine(initialRules);
   }
+
+  // ── Mode management ──────────────────────────────────────────────
 
   setMode(mode: PermissionMode): void {
     this.mode = mode;
@@ -41,29 +70,127 @@ export class PermissionEngine {
     this.cwd = cwd;
   }
 
-  async check(permission: PermissionCheck, _toolDef?: ToolDefinition): Promise<PermissionResult> {
+  getCwd(): string {
+    return this.cwd;
+  }
+
+  // ── Rule management ──────────────────────────────────────────────
+
+  /** Add a permission rule to the rule engine. */
+  addPermissionRule(rule: PermissionRule): void {
+    this.ruleEngine.addRule(rule);
+  }
+
+  /** Remove a permission rule by tool name and optional content pattern. */
+  removePermissionRule(toolName: string, ruleContent?: string): void {
+    this.ruleEngine.removeRule(toolName, ruleContent);
+  }
+
+  /** Get all registered permission rules. */
+  getPermissionRules(): PermissionRule[] {
+    return this.ruleEngine.getRules();
+  }
+
+  // ── Permission check ─────────────────────────────────────────────
+
+  /**
+   * Check if a tool operation is allowed under the current permission mode.
+   *
+   * Flow:
+   * 1. If a commandContent is provided AND the rule engine has matching rules,
+   *    the rule result takes priority (overriding mode behavior).
+   * 2. Otherwise, fall back to mode-based check.
+   *
+   * @param permission - The permission check request
+   * @param _toolDef - Optional tool definition (unused currently, reserved for future)
+   * @param commandContent - Optional command content for bash command-aware rules
+   */
+  async check(
+    permission: PermissionCheck,
+    _toolDef?: ToolDefinition,
+    commandContent?: string,
+  ): Promise<PermissionResult> {
+    // ── 1. Rule engine check (explicit rules override mode) ──────
+    if (commandContent || this.ruleEngine.getRules().some(
+      r => r.toolName.toLowerCase() === permission.toolName.toLowerCase(),
+    )) {
+      const ruleResult = this.ruleEngine.evaluate(
+        permission.toolName,
+        commandContent,
+      );
+
+      if (ruleResult) {
+        return this._convertRuleResult(ruleResult);
+      }
+    }
+
+    // ── 2. Mode-based fallback ───────────────────────────────────
+    return this._modeCheck(permission);
+  }
+
+  // ── Private methods ──────────────────────────────────────────────
+
+  private _convertRuleResult(ruleResult: PermissionRuleResult): PermissionResult {
+    return {
+      allowed: ruleResult.allowed,
+      behavior: ruleResult.behavior,
+      reason: ruleResult.reason
+        ? {
+            type: ruleResult.reason.type,
+            rule: ruleResult.reason.type === 'rule_match'
+              ? ruleResult.reason.rule
+              : undefined,
+            matchedPattern: ruleResult.reason.type === 'rule_match'
+              ? ruleResult.reason.matchedPattern
+              : undefined,
+          }
+        : undefined,
+      prompt: ruleResult.prompt,
+    };
+  }
+
+  private _modeCheck(permission: PermissionCheck): PermissionResult {
     // AUTO mode: auto-approve everything
     if (this.mode === PermissionMode.AUTO) {
-      return { allowed: true, behavior: 'approve' };
+      return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'auto' } };
     }
+
     // PLAN mode: approve safe, deny mutation/destructive
     if (this.mode === PermissionMode.PLAN) {
       if (permission.riskLevel === RiskLevel.SAFE) {
-        return { allowed: true, behavior: 'approve' };
+        return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'plan' } };
       }
-      return { allowed: false, behavior: 'deny', reason: `Plan mode: ${permission.toolName} requires approval` };
+      return {
+        allowed: false,
+        behavior: 'deny',
+        reason: { type: 'mode_default', mode: 'plan' },
+        prompt: `Plan mode: ${permission.toolName} requires approval`,
+      };
     }
+
     // ASK mode: require confirmation for ALL operations
     if (this.mode === PermissionMode.ASK) {
-      return { allowed: false, behavior: 'ask_user', prompt: `Allow ${permission.toolName}?` };
+      return {
+        allowed: false,
+        behavior: 'ask_user',
+        reason: { type: 'mode_default', mode: 'ask' },
+        prompt: `Allow ${permission.toolName}?`,
+      };
     }
+
     // LOW mode: auto-approve safe, ask for mutation/destructive
     if (this.mode === PermissionMode.LOW) {
       if (permission.riskLevel === RiskLevel.SAFE) {
-        return { allowed: true, behavior: 'approve' };
+        return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'low' } };
       }
-      return { allowed: false, behavior: 'ask_user', prompt: `Allow ${permission.toolName} (${permission.riskLevel})?` };
+      return {
+        allowed: false,
+        behavior: 'ask_user',
+        reason: { type: 'mode_default', mode: 'low' },
+        prompt: `Allow ${permission.toolName} (${permission.riskLevel})?`,
+      };
     }
-    return { allowed: true, behavior: 'approve' };
+
+    return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'default' } };
   }
 }
