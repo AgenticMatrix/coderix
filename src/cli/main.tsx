@@ -55,6 +55,7 @@ async function buildToolRegistry(): Promise<any> {
             agentSpawn: ctx.agentSpawn,
             getAppState: ctx.getAppState,
             setAppState: ctx.setAppState,
+            setPermissionMode: ctx.setPermissionMode,
           });
           return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
         }
