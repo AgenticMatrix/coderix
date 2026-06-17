@@ -29,12 +29,13 @@ import taskOutputPlugin from './task-output/index.js';
 import taskStopPlugin from './task-stop/index.js';
 import skillPlugin from './skill/index.js';
 import askUserQuestionPlugin from './ask-user-question/index.js';
+import enterPlanModePlugin from './enter-plan-mode/index.js';
+import exitPlanModePlugin from './exit-plan-mode/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
   'notebook-edit', 'git', 'powershell',
   'task-describe',
-  'exit-plan-mode',
   'cron-create', 'cron-delete', 'cron-list',
   'enter-worktree', 'exit-worktree',
   'lsp',
@@ -69,6 +70,8 @@ export const plugins: ToolPlugin[] = [
   taskStopPlugin,
   skillPlugin,
   askUserQuestionPlugin,
+  enterPlanModePlugin,
+  exitPlanModePlugin,
 ];
 
 // Build lookup tables
@@ -123,6 +126,7 @@ const EXECUTOR_DEFAULTS: ResolvedExecutorOptions = {
   maxOutput: 50_000,
   bashTimeout: 30_000,
   agentSpawn: undefined,
+  setPermissionMode: undefined,
 };
 
 /**

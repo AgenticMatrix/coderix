@@ -1,14 +1,6 @@
 import type { ToolExecutor } from '../types.js';
 
-/**
- * The actual blocking/pausing happens in query.ts BEFORE this executor runs.
- * When query.ts detects an `ask-user-question` tool call, it yields a
- * `question_required` event and awaits the user's answer. The answer is
- * then merged into `input.answers` before this executor is called.
- *
- * So this executor just returns the user's answers as the tool result.
- */
-export const execute: ToolExecutor = async (input, _opts) => {
+export const execute: ToolExecutor = async (input, options) => {
   const answers = (input as any).answers as
     | Record<string, string | string[]>
     | undefined;
@@ -20,13 +12,21 @@ export const execute: ToolExecutor = async (input, _opts) => {
     };
   }
 
+  // Apply permission level
+  const level = ((input as any).permissionLevel as string) ?? 'low';
+  if (options.setPermissionMode) {
+    options.setPermissionMode(level);
+  }
+
   const lines = Object.entries(answers).map(
     ([header, value]) => `${header}: ${Array.isArray(value) ? value.join(', ') : value}`,
   );
 
+  const modeLabel = level === 'high' ? 'all tools blocked' : 'write/edit blocked';
+
   return {
-    content: lines.join('\n'),
+    content: `${lines.join('\n')}\n\n[Permission: ${modeLabel}]`,
     isError: false,
-    metadata: { answers },
+    metadata: { answers, permissionLevel: level },
   };
 };

@@ -216,6 +216,7 @@ export enum PermissionMode {
   PLAN = 'plan',
   ASK = 'ask',
   AUTO = 'auto',
+  LOW = 'low',
 }
 
 export enum RiskLevel {
@@ -348,6 +349,8 @@ export interface ToolContext {
   getAppState?: () => import('../state/AppState.js').AppState;
   /** Update AppState (for tools that register/modify background tasks or agents). */
   setAppState?: (partial: Partial<import('../state/AppState.js').AppState>) => void;
+  /** Switch permission mode (for enter/exit-plan-mode tools). */
+  setPermissionMode?: (mode: string) => void;
 }
 
 export interface ToolDefinition {

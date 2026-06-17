@@ -57,6 +57,13 @@ export class PermissionEngine {
     if (this.mode === PermissionMode.ASK) {
       return { allowed: false, behavior: 'ask_user', prompt: `Allow ${permission.toolName}?` };
     }
+    // LOW mode: auto-approve safe, ask for mutation/destructive
+    if (this.mode === PermissionMode.LOW) {
+      if (permission.riskLevel === RiskLevel.SAFE) {
+        return { allowed: true, behavior: 'approve' };
+      }
+      return { allowed: false, behavior: 'ask_user', prompt: `Allow ${permission.toolName} (${permission.riskLevel})?` };
+    }
     return { allowed: true, behavior: 'approve' };
   }
 }
