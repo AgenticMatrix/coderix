@@ -1,7 +1,7 @@
 import type { AppConfig, ChatState } from '../types.js';
 import type { TrackedTask } from '../tasks/task-tracker.js';
 import type { SubAgentRecord } from '../core/subagent-registry.js';
-import type { DeferredPermission } from '../core/types.js';
+import type { DeferredPermission, DeferredQuestion } from '../core/types.js';
 import type { ApprovalRequest } from '../types.js';
 
 /**
@@ -13,6 +13,16 @@ export interface PendingApproval {
   description: string;
   toolUseId: string;
   deferred: DeferredPermission;
+}
+
+/**
+ * Pending user question (ask-user-question tool blocking).
+ */
+export interface PendingQuestion {
+  toolName: string;
+  toolUseId: string;
+  questions: DeferredQuestion['questions'];
+  deferred: DeferredQuestion;
 }
 
 /**
@@ -32,6 +42,9 @@ export interface AppState extends ChatState {
   /** Pending permission approval request (replaces approval-store singleton). */
   pendingApproval: PendingApproval | null;
 
+  /** Pending user question (ask-user-question tool). */
+  pendingQuestion: PendingQuestion | null;
+
   /** Background tasks keyed by task ID (dual-write from task-tracker). */
   backgroundTasks: Record<string, TrackedTask>;
 
@@ -45,6 +58,7 @@ export function getDefaultAppState(config: AppConfig, initialChat: ChatState, se
     config,
     sessionId,
     pendingApproval: null,
+    pendingQuestion: null,
     backgroundTasks: {},
     agents: {},
   };

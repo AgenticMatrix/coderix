@@ -158,6 +158,21 @@ export interface DeferredPermission {
   promise: Promise<boolean>;
 }
 
+export interface UserQuestion {
+  header: string;
+  question: string;
+  options?: Array<{ label: string; description: string }>;
+  multiSelect?: boolean;
+}
+
+export interface DeferredQuestion {
+  toolName: string;
+  toolUseId: string;
+  questions: UserQuestion[];
+  resolve: (answers: Record<string, string | string[]>) => void;
+  promise: Promise<Record<string, string | string[]>>;
+}
+
 export interface ToolProgress {
   toolName: string;
   toolUseId: string;
@@ -192,7 +207,8 @@ export type QueryMessage =
   | { type: 'system'; subtype: 'compact_boundary'; compactMetadata: CompactMetadata }
   | { type: 'system'; subtype: 'error'; error: AgentError }
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
-  | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission };
+  | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission }
+  | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion };
 
 // ── Permission ────────────────────────────────────────────────────────
 
@@ -200,6 +216,7 @@ export enum PermissionMode {
   PLAN = 'plan',
   ASK = 'ask',
   AUTO = 'auto',
+  LOW = 'low',
 }
 
 export enum RiskLevel {
@@ -332,6 +349,8 @@ export interface ToolContext {
   getAppState?: () => import('../state/AppState.js').AppState;
   /** Update AppState (for tools that register/modify background tasks or agents). */
   setAppState?: (partial: Partial<import('../state/AppState.js').AppState>) => void;
+  /** Switch permission mode (for enter/exit-plan-mode tools). */
+  setPermissionMode?: (mode: string) => void;
 }
 
 export interface ToolDefinition {

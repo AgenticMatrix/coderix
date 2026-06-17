@@ -22,7 +22,7 @@ import type {
   CompactMetadata,
   DeferredPermission,
 } from './types.js';
-import { AgentError, RiskLevel } from './types.js';
+import { AgentError, RiskLevel, PermissionMode } from './types.js';
 import type { ToolContext } from './types.js';
 import { ToolRegistry } from './tool-registry.js';
 import { PermissionEngine } from './permission.js';
@@ -117,13 +117,14 @@ interface ExecuteSingleToolOpts {
   agentRegistry?: AgentRegistry;
   getAppState?: () => AppState;
   setAppState?: (partial: Partial<AppState>) => void;
+  setPermissionMode?: (mode: string) => void;
 }
 
 async function executeSingleTool(
   toolBlock: ToolUseBlock,
   opts: ExecuteSingleToolOpts,
 ): Promise<ToolResultBlock> {
-  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, getAppState, setAppState } = opts;
+  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, getAppState, setAppState, setPermissionMode } = opts;
   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
 
   // PreToolUse hook
@@ -151,6 +152,7 @@ async function executeSingleTool(
     signal: abortController.signal,
     getAppState,
     setAppState,
+    setPermissionMode,
     agentSpawn: subAgentRegistry && systemPromptAssembler && agentRegistry ? {
       callModel,
       toolRegistry,
@@ -326,6 +328,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       agentRegistry: config.agentRegistry,
       getAppState: config.getAppState,
       setAppState: config.setAppState,
+      setPermissionMode: (mode: string) => {
+        permissionEngine.setMode(mode as PermissionMode);
+      },
     };
 
     try {
@@ -419,6 +424,68 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 `Tool '${toolBlock.name}' is not available in coordinator mode. Use agent/team orchestration tools instead.`);
               buildingBlock = null;
               continue;
+            }
+
+            // ── exit-plan-mode: block for user approval ──
+            if (toolBlock.name === 'exit-plan-mode') {
+              const planText = (toolBlock.input as any)?.plan as string ?? '';
+              const description = planText
+                ? `Approve plan to exit plan mode and begin implementation?\n\n${planText.slice(0, 500)}${planText.length > 500 ? '...' : ''}`
+                : 'Exit plan mode and begin implementation?';
+
+              let resolve!: (allowed: boolean) => void;
+              const promise = new Promise<boolean>((res) => { resolve = res; });
+              const deferred = {
+                toolName: toolBlock.name, command: 'exit-plan-mode',
+                description, toolUseId: toolBlock.id, resolve, promise,
+              };
+
+              yield {
+                type: 'system', subtype: 'permission_required',
+                deferred,
+              } as any;
+
+              const allowed = await new Promise<boolean>((res) => {
+                promise.then((v) => res(v));
+                abortController.signal.addEventListener('abort', () => res(false), { once: true });
+              });
+
+              if (!allowed) {
+                queue.storeError(toolBlock, 'User rejected the plan');
+                buildingBlock = null;
+                continue;
+              }
+              // Approved — fall through to normal execution
+            }
+
+            // ── ask-user-question: block and wait for user input ──
+            if (toolBlock.name === 'ask-user-question') {
+              const qInput = toolBlock.input as Record<string, unknown>;
+              const questions = (qInput?.questions as Array<{
+                question: string; header: string;
+                options?: Array<{ label: string; description: string }>;
+                multiSelect?: boolean;
+              }>) ?? [];
+
+              if (questions.length > 0) {
+                let resolve!: (answers: Record<string, string | string[]>) => void;
+                const promise = new Promise<Record<string, string | string[]>>((r) => { resolve = r; });
+                const deferred = {
+                  toolName: toolBlock.name, toolUseId: toolBlock.id,
+                  questions,
+                  resolve, promise,
+                };
+
+                yield {
+                  type: 'system', subtype: 'question_required',
+                  deferred,
+                } as any;
+
+                const answers = await promise;
+                // Merge answers into input so executor can return them
+                toolBlock.input = { ...toolBlock.input, answers };
+              }
+              // Fall through to normal execution — executor returns the answers
             }
 
             // Permission check + enqueue (may yield for ASK mode)
@@ -541,6 +608,59 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                   queue.storeError(toolBlock,
                     `Tool '${toolBlock.name}' is not available in coordinator mode. Use agent/team orchestration tools instead.`);
                   continue;
+                }
+
+                // ── exit-plan-mode: block for user approval ──
+                if (toolBlock.name === 'exit-plan-mode') {
+                  const planText2 = (toolBlock.input as any)?.plan as string ?? '';
+                  const desc2 = planText2
+                    ? `Approve plan? ${planText2.slice(0, 300)}${planText2.length > 300 ? '...' : ''}`
+                    : 'Exit plan mode and begin implementation?';
+
+                  let res2!: (allowed: boolean) => void;
+                  const prom2 = new Promise<boolean>((r) => { res2 = r; });
+                  const def2 = {
+                    toolName: toolBlock.name, command: 'exit-plan-mode',
+                    description: desc2, toolUseId: toolBlock.id,
+                    resolve: res2, promise: prom2,
+                  };
+
+                  yield { type: 'system', subtype: 'permission_required', deferred: def2 } as any;
+
+                  const ok2 = await new Promise<boolean>((r) => {
+                    prom2.then((v) => r(v));
+                    abortController.signal.addEventListener('abort', () => r(false), { once: true });
+                  });
+
+                  if (!ok2) { queue.storeError(toolBlock, 'User rejected the plan'); continue; }
+                }
+
+                // ── ask-user-question: block and wait for user input ──
+                if (toolBlock.name === 'ask-user-question') {
+                  const qInput = toolBlock.input as Record<string, unknown>;
+                  const questions = (qInput?.questions as Array<{
+                    question: string; header: string;
+                    options?: Array<{ label: string; description: string }>;
+                    multiSelect?: boolean;
+                  }>) ?? [];
+
+                  if (questions.length > 0) {
+                    let resolve!: (answers: Record<string, string | string[]>) => void;
+                    const promise = new Promise<Record<string, string | string[]>>((r) => { resolve = r; });
+                    const deferred = {
+                      toolName: toolBlock.name, toolUseId: toolBlock.id,
+                      questions,
+                      resolve, promise,
+                    };
+
+                    yield {
+                      type: 'system', subtype: 'question_required',
+                      deferred,
+                    } as any;
+
+                    const answers = await promise;
+                    toolBlock.input = { ...toolBlock.input, answers };
+                  }
                 }
 
                 // Permission check + enqueue (same logic as streaming path above)

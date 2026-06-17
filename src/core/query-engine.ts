@@ -16,6 +16,7 @@ import type {
   DeferredPermission,
   ContentBlock,
 } from './types.js';
+import type { DeferredQuestion } from './types.js';
 import { PermissionMode, AgentError } from './types.js';
 import { query, type QueryConfig, type CallModelParams } from './query.js';
 import { ToolRegistry } from './tool-registry.js';
@@ -69,9 +70,9 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'done' | 'permission_required';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'done' | 'permission_required' | 'question_required';
   data?: unknown;
-  deferred?: DeferredPermission;
+  deferred?: DeferredPermission | DeferredQuestion;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,6 +305,8 @@ export class QueryEngine {
               yield { type: 'message', data: msg };
             } else if (msg.subtype === 'permission_required') {
               yield { type: 'permission_required', data: msg.deferred, deferred: msg.deferred };
+            } else if (msg.subtype === 'question_required') {
+              yield { type: 'question_required', data: msg.deferred, deferred: msg.deferred };
             }
             break;
         }

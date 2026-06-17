@@ -369,7 +369,7 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
             // ── Permission required ──────────────────────────────
             case 'permission_required': {
               if (event.deferred) {
-                const deferred = event.deferred;
+                const deferred = event.deferred as any;
                 const approvalReq: ApprovalRequest = {
                   toolName: deferred.toolName,
                   command: deferred.command,
@@ -396,6 +396,32 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
 
                 dispatch({ type: 'HIDE_APPROVAL' });
                 setAppState({ pendingApproval: null });
+              }
+              break;
+            }
+
+            // ── Question required ───────────────────────────────
+            case 'question_required': {
+              if (event.deferred) {
+                const deferred = event.deferred as any; // DeferredQuestion
+                setAppState({
+                  pendingQuestion: {
+                    toolName: deferred.toolName,
+                    toolUseId: deferred.toolUseId,
+                    questions: deferred.questions,
+                    deferred,
+                  },
+                } as any);
+
+                dispatch({
+                  type: 'SHOW_QUESTION',
+                  questions: deferred.questions,
+                } as any);
+
+                await deferred.promise;
+
+                dispatch({ type: 'HIDE_QUESTION' } as any);
+                setAppState({ pendingQuestion: null } as any);
               }
               break;
             }

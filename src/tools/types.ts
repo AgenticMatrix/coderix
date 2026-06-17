@@ -48,12 +48,14 @@ export interface ExecutorOptions {
   getAppState?: () => AppState;
   /** Update AppState (for tools that register/modify background tasks or agents). */
   setAppState?: (partial: Partial<AppState>) => void;
+  /** Switch permission mode (for enter/exit-plan-mode tools). */
+  setPermissionMode?: (mode: string) => void;
 }
 
 /** Executor options with all core fields resolved (non-optional) but
  *  agentSpawn, sessionId, getAppState, setAppState kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState'>;
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState' | 'setPermissionMode'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState' | 'setPermissionMode'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,
