@@ -359,6 +359,9 @@ export interface ToolDefinition {
   input_schema: Record<string, unknown>;
   riskLevel?: RiskLevel;
   isConcurrencySafe?: boolean;
+  /** Maximum tool result size in characters before persistence (default: 50_000).
+   *  Infinity disables persistence for this tool. */
+  maxResultSizeChars?: number;
 }
 
 export interface ToolExecutionResult {

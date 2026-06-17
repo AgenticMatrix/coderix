@@ -16,6 +16,7 @@ import type {
   StopReason,
 } from './types.js';
 import type { CallModelParams } from './query.js';
+import { normalizeMessagesForAPI } from './message-normalizer.js';
 
 // ---------------------------------------------------------------------------
 // Message conversion: core/types.ts → Anthropic API format
@@ -35,10 +36,13 @@ interface AnthropicRequest {
 function toAnthropicMessages(
   messages: Array<{ role: string; content: string | ContentBlock[] }>,
 ): AnthropicRequest {
+  // Normalize messages before API conversion (merge, hoist, smoosh, pair repair)
+  const normalized = normalizeMessagesForAPI(messages);
+
   const systemParts: string[] = [];
   const apiMessages: Anthropic.MessageParam[] = [];
 
-  for (const m of messages) {
+  for (const m of normalized) {
     if (m.role === 'system') {
       const text = typeof m.content === 'string' ? m.content : '';
       if (text.trim()) systemParts.push(text);

@@ -19,6 +19,7 @@ import type {
 } from './base.js';
 import { calculateCost } from './base.js';
 import { withRetry, classifyError } from './retry.js';
+import { normalizeMessagesForAPI } from '../core/message-normalizer.js';
 
 // ---------------------------------------------------------------------------
 // Anthropic Provider Implementation
@@ -322,7 +323,10 @@ export class AnthropicProvider implements Provider {
   // -----------------------------------------------------------------------
 
   private normalizeMessages(messages: ProviderMessage[]): MessageParam[] {
-    return messages
+    // Apply API normalization pipeline (merge, hoist, smoosh, pair repair)
+    const normalized = normalizeMessagesForAPI(messages);
+
+    return normalized
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m): MessageParam => {
         if (typeof m.content === 'string') {

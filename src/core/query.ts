@@ -37,6 +37,7 @@ import { estimateTokens } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
 import type { AppState } from '../state/AppState.js';
+import { applyToolResultLimits } from './tool-result-limiter.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -836,8 +837,14 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     }
 
     // Assemble results in original parse order
-    const toolResults: ToolResultBlock[] = orderedBlocks.map((block) =>
+    let toolResults: ToolResultBlock[] = orderedBlocks.map((block) =>
       queue.getResult(block.id) ?? createToolErrorResult(block.id, 'Tool execution skipped'),
+    );
+
+    // Apply per-result and per-message size limits
+    toolResults = applyToolResultLimits(
+      toolResults,
+      orderedBlocks.map((b) => b.name),
     );
 
     // === PostToolBatch hook (non-blockable) ===
