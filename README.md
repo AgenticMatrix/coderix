@@ -6,7 +6,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![DeepSeek](https://img.shields.io/badge/built%20by-DeepSeek%2099.9%25-536DFE)](https://deepseek.com)
-[**🇨🇳 中文**](README.zh-CN.md)
+[![中文](https://img.shields.io/badge/🌐-中文_README-ff69b4?style=flat-square)](README.zh-CN.md)
 
 **A fully open-source (Apache 2.0) terminal AI programming assistant — the free alternative to Claude Code.**
 

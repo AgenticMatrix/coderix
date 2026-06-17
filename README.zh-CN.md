@@ -6,7 +6,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![DeepSeek](https://img.shields.io/badge/%E7%94%B1%20DeepSeek%2099.9%25%20%E7%94%9F%E6%88%90-536DFE)](https://deepseek.com)
-[**🇺🇸 English**](README.md)
+[![English](https://img.shields.io/badge/🌐-English_README-6f42c1?style=flat-square)](README.md)
 
 **一个完全开源（Apache 2.0）的终端 AI 编程助手 —— Claude Code 的自由替代品。**
 
