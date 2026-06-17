@@ -158,6 +158,21 @@ export interface DeferredPermission {
   promise: Promise<boolean>;
 }
 
+export interface UserQuestion {
+  header: string;
+  question: string;
+  options?: Array<{ label: string; description: string }>;
+  multiSelect?: boolean;
+}
+
+export interface DeferredQuestion {
+  toolName: string;
+  toolUseId: string;
+  questions: UserQuestion[];
+  resolve: (answers: Record<string, string | string[]>) => void;
+  promise: Promise<Record<string, string | string[]>>;
+}
+
 export interface ToolProgress {
   toolName: string;
   toolUseId: string;
@@ -192,7 +207,8 @@ export type QueryMessage =
   | { type: 'system'; subtype: 'compact_boundary'; compactMetadata: CompactMetadata }
   | { type: 'system'; subtype: 'error'; error: AgentError }
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
-  | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission };
+  | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission }
+  | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion };
 
 // ── Permission ────────────────────────────────────────────────────────
 

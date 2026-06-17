@@ -175,6 +175,15 @@ export interface ApprovalRequest {
   toolUseId: string;
 }
 
+export interface QuestionRequest {
+  questions: Array<{
+    header: string;
+    question: string;
+    options?: Array<{ label: string; description: string }>;
+    multiSelect?: boolean;
+  }>;
+}
+
 // ── Chat state ──────────────────────────────────────────────────────
 
 export type AgentMode = 'plan' | 'ask' | 'auto';
@@ -201,6 +210,8 @@ export interface ChatState {
   currentTurnId: number;
   /** Pending approval request — shown as a floating prompt overlay. */
   approvalReq: ApprovalRequest | null;
+  /** Pending question request (ask-user-question tool). */
+  questionReq: QuestionRequest | null;
   /** Input history lines (newest last). */
   history: string[];
   /** Current position in history (-1 = not browsing). */
@@ -290,6 +301,8 @@ export type ChatAction =
   // Permission / approval
   | { type: 'SHOW_APPROVAL'; req: ApprovalRequest }
   | { type: 'HIDE_APPROVAL' }
+  | { type: 'SHOW_QUESTION'; questions: QuestionRequest['questions'] }
+  | { type: 'HIDE_QUESTION' }
   // History
   | { type: 'LOAD_HISTORY'; history: string[] }
   | { type: 'ADD_HISTORY'; line: string }

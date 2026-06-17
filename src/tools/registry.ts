@@ -28,12 +28,13 @@ import teamMessagePlugin from '../teams/tools/team-message/index.js';
 import taskOutputPlugin from './task-output/index.js';
 import taskStopPlugin from './task-stop/index.js';
 import skillPlugin from './skill/index.js';
+import askUserQuestionPlugin from './ask-user-question/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
   'notebook-edit', 'git', 'powershell',
   'task-describe',
-  'ask-user-question', 'exit-plan-mode',
+  'exit-plan-mode',
   'cron-create', 'cron-delete', 'cron-list',
   'enter-worktree', 'exit-worktree',
   'lsp',
@@ -67,6 +68,7 @@ export const plugins: ToolPlugin[] = [
   taskOutputPlugin,
   taskStopPlugin,
   skillPlugin,
+  askUserQuestionPlugin,
 ];
 
 // Build lookup tables

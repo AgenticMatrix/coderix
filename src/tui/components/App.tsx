@@ -9,6 +9,7 @@ import { MessageBubble } from './MessageBubble.js';
 import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
+import { QuestionPrompt } from './QuestionPrompt.js';
 import { SubAgentTranscriptView } from './SubAgentTranscriptView.js';
 import { SubAgentPicker } from './SubAgentPicker.js';
 import { TaskPanel } from './TaskPanel.js';
@@ -130,7 +131,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     onSend: runAgentTurn,
     onInterrupt: () => engine.interrupt(),
     onExit: () => process.exit(0),
-    blocked: state.approvalReq !== null || state.agentPicker,
+    blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker,
     teamPicker: state.teamPicker,
     subAgentView: state.subAgentView,
     lastAgentViewId: state.lastAgentViewId,
@@ -279,6 +280,14 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     }
   };
 
+  const pendingQuestion = useAppState(s => s.pendingQuestion);
+
+  const handleQuestionAnswer = (answers: Record<string, string | string[]>) => {
+    const pending = pendingQuestion;
+    if (!pending) return;
+    pending.deferred.resolve(answers);
+  };
+
   const stats = useTokenStats(state.messages, state.tokenUsage, state.accumulatedCost);
 
   const messages = state.messages;
@@ -367,6 +376,15 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
                 <ApprovalPrompt
                   req={state.approvalReq}
                   onChoice={handleApprovalChoice}
+                />
+              </Box>
+            )}
+
+            {state.questionReq && (
+              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+                <QuestionPrompt
+                  questions={state.questionReq.questions}
+                  onAnswer={handleQuestionAnswer}
                 />
               </Box>
             )}

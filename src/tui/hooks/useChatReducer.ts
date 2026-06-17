@@ -389,6 +389,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'HIDE_APPROVAL':
       return { ...state, approvalReq: null };
 
+    case 'SHOW_QUESTION':
+      return { ...state, questionReq: { questions: action.questions } };
+
+    case 'HIDE_QUESTION':
+      return { ...state, questionReq: null };
+
     case 'LOAD_HISTORY':
       return { ...state, history: action.history };
 
@@ -480,6 +486,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     turns: [],
     currentTurnId: 0,
     approvalReq: null,
+    questionReq: null,
     history: [],
     historyIndex: -1,
     historyScratch: '',

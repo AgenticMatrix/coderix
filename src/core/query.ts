@@ -421,6 +421,36 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               continue;
             }
 
+            // ── ask-user-question: block and wait for user input ──
+            if (toolBlock.name === 'ask-user-question') {
+              const qInput = toolBlock.input as Record<string, unknown>;
+              const questions = (qInput?.questions as Array<{
+                question: string; header: string;
+                options?: Array<{ label: string; description: string }>;
+                multiSelect?: boolean;
+              }>) ?? [];
+
+              if (questions.length > 0) {
+                let resolve!: (answers: Record<string, string | string[]>) => void;
+                const promise = new Promise<Record<string, string | string[]>>((r) => { resolve = r; });
+                const deferred = {
+                  toolName: toolBlock.name, toolUseId: toolBlock.id,
+                  questions,
+                  resolve, promise,
+                };
+
+                yield {
+                  type: 'system', subtype: 'question_required',
+                  deferred,
+                } as any;
+
+                const answers = await promise;
+                // Merge answers into input so executor can return them
+                toolBlock.input = { ...toolBlock.input, answers };
+              }
+              // Fall through to normal execution — executor returns the answers
+            }
+
             // Permission check + enqueue (may yield for ASK mode)
             if (!abortController.signal.aborted) {
               const toolDef = toolRegistry.get(toolBlock.name)?.definition;
@@ -541,6 +571,34 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                   queue.storeError(toolBlock,
                     `Tool '${toolBlock.name}' is not available in coordinator mode. Use agent/team orchestration tools instead.`);
                   continue;
+                }
+
+                // ── ask-user-question: block and wait for user input ──
+                if (toolBlock.name === 'ask-user-question') {
+                  const qInput = toolBlock.input as Record<string, unknown>;
+                  const questions = (qInput?.questions as Array<{
+                    question: string; header: string;
+                    options?: Array<{ label: string; description: string }>;
+                    multiSelect?: boolean;
+                  }>) ?? [];
+
+                  if (questions.length > 0) {
+                    let resolve!: (answers: Record<string, string | string[]>) => void;
+                    const promise = new Promise<Record<string, string | string[]>>((r) => { resolve = r; });
+                    const deferred = {
+                      toolName: toolBlock.name, toolUseId: toolBlock.id,
+                      questions,
+                      resolve, promise,
+                    };
+
+                    yield {
+                      type: 'system', subtype: 'question_required',
+                      deferred,
+                    } as any;
+
+                    const answers = await promise;
+                    toolBlock.input = { ...toolBlock.input, answers };
+                  }
                 }
 
                 // Permission check + enqueue (same logic as streaming path above)
