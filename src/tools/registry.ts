@@ -31,10 +31,11 @@ import skillPlugin from './skill/index.js';
 import askUserQuestionPlugin from './ask-user-question/index.js';
 import enterPlanModePlugin from './enter-plan-mode/index.js';
 import exitPlanModePlugin from './exit-plan-mode/index.js';
+import notebookEditPlugin from './notebook-edit/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
-  'notebook-edit', 'git', 'powershell',
+  'git', 'powershell',
   'task-describe',
   'cron-create', 'cron-delete', 'cron-list',
   'enter-worktree', 'exit-worktree',
@@ -72,6 +73,7 @@ export const plugins: ToolPlugin[] = [
   askUserQuestionPlugin,
   enterPlanModePlugin,
   exitPlanModePlugin,
+  notebookEditPlugin,
 ];
 
 // Build lookup tables
