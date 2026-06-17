@@ -19,6 +19,7 @@ import type {
   ModelInfo,
 } from './base.js';
 import { withRetry, classifyError } from './retry.js';
+import { normalizeMessagesForAPI } from '../core/message-normalizer.js';
 
 // ---------------------------------------------------------------------------
 // OpenAI API Types (minimal)
@@ -471,13 +472,16 @@ export class OpenAICompatProvider implements Provider {
   // -----------------------------------------------------------------------
 
   private convertMessages(system: string, messages: ProviderMessage[]): OpenAIMessage[] {
+    // Normalize messages before API conversion (merge, hoist, smoosh, pair repair)
+    const normalized = normalizeMessagesForAPI(messages);
+
     const result: OpenAIMessage[] = [];
 
     if (system) {
       result.push({ role: 'system', content: system });
     }
 
-    for (const msg of messages) {
+    for (const msg of normalized) {
       if (msg.role === 'system') continue;
 
       if (typeof msg.content === 'string') {
