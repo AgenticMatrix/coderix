@@ -34,7 +34,7 @@ import { tokenizeCommand, extractCommandTokens } from '../tools/bash/command-tok
 import { classifyCommand } from '../tools/bash/command-classifier.js';
 import type { SystemPrompt } from './system-prompt.js';
 import type { SystemPromptAssembler } from './system-prompt.js';
-import type { HookManager } from './hooks.js';
+import type { HookManager } from '../hooks/index.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
 import type { AgentRegistry } from './agent-registry.js';
 import { estimateTokens } from './token-budget.js';

@@ -333,7 +333,7 @@ export interface AgentSpawnContext {
   toolRegistry: import('./tool-registry.js').ToolRegistry;
   sessionManager: import('./session.js').SessionManager;
   subAgentRegistry: import('./subagent-registry.js').SubAgentRegistry;
-  hookManager?: import('./hooks.js').HookManager;
+  hookManager?: import('../hooks/index.js').HookManager;
   systemPromptAssembler: import('./system-prompt.js').SystemPromptAssembler;
   agentRegistry: import('./agent-registry.js').AgentRegistry;
 }

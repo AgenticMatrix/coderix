@@ -24,7 +24,7 @@ import { PermissionEngine } from './permission.js';
 import { SystemPromptAssembler, type SystemPrompt } from './system-prompt.js';
 import { SessionManager } from './session.js';
 import { CheckpointManager } from './checkpoint.js';
-import type { HookManager } from './hooks.js';
+import type { HookManager } from '../hooks/index.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
 import type { AgentRegistry } from './agent-registry.js';
 import { getAgentRole, getCoordinatorSystemContext } from '../teams/coordinator-mode.js';
