@@ -32,7 +32,7 @@ export const GLOBAL_DISALLOWED_FOR_SUBAGENTS = new Set([
 /** backward-compat alias */
 export const ALL_AGENT_DISALLOWED_TOOLS = GLOBAL_DISALLOWED_FOR_SUBAGENTS;
 
-export type SubagentType = 'explore' | 'plan' | 'general-purpose' | 'verification' | 'claude-code-guide' | 'statusline-setup';
+export type SubagentType = 'explore' | 'plan' | 'general-purpose' | 'verification' | 'coder-guide' | 'statusline-setup';
 
 /** Apply agent-specific tool filtering to a list of ToolDefinitions. */
 export function filterToolsForAgent(
