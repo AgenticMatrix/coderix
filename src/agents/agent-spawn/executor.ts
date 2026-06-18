@@ -9,6 +9,16 @@ import { CheckpointManager } from '../../core/checkpoint.js';
 import { filterToolsForAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../tool-filtering.js';
 import { query } from '../../core/query.js';
 import teamMessagePlugin from '../../teams/tools/team-message/index.js';
+import {
+  runWithAgentContext,
+  createSubagentContext,
+  type SubagentContext,
+} from '../agent-context.js';
+import {
+  isAgentMemoryEnabled,
+  loadAgentMemoryPrompt,
+  augmentToolsForMemory,
+} from '../agent-memory.js';
 
 const DEFAULT_MAX_TURNS = 20;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -218,7 +228,14 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // Build filtered tool registry from the agent definition
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
-  const filteredDefs = filterToolsForAgent(parentDefs, agentDef);
+  let effectiveTools = agentDef.tools;
+  if (isAgentMemoryEnabled() && agentDef.memory) {
+    effectiveTools = augmentToolsForMemory(effectiveTools ?? '*');
+  }
+  const agentDefForFilter = effectiveTools !== agentDef.tools
+    ? { ...agentDef, tools: effectiveTools }
+    : agentDef;
+  const filteredDefs = filterToolsForAgent(parentDefs, agentDefForFilter);
   const subToolRegistry = new ToolRegistry();
   for (const def of filteredDefs) {
     const registration = agentSpawn.toolRegistry.get(def.name);
@@ -272,9 +289,21 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   ];
 
   // Enrich agent prompt with environment info
-  const enrichedPrompt = agentSpawn.systemPromptAssembler
+  let enrichedPrompt = agentSpawn.systemPromptAssembler
     ? await enrichAgentPrompt(agentDef.getSystemPrompt(), agentSpawn.systemPromptAssembler)
     : agentDef.getSystemPrompt();
+
+  // Inject memory if enabled and agent declares a memory scope
+  if (isAgentMemoryEnabled() && agentDef.memory) {
+    const memoryPrompt = await loadAgentMemoryPrompt(
+      agentType,
+      agentDef.memory,
+      process.cwd(),
+    );
+    if (memoryPrompt) {
+      enrichedPrompt = memoryPrompt + '\n\n' + enrichedPrompt;
+    }
+  }
 
   agentSpawn.subAgentRegistry.register({
     id: agentId,
@@ -292,44 +321,51 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   if (isBackground) {
     // ── Async path: fire-and-forget ─────────────────────────────────
     const spawnTime = Date.now();
+    const bgContext: SubagentContext = createSubagentContext(
+      agentId,
+      agentType,
+      agentDef.source === 'built-in',
+    );
 
-    runAgentLoop({
-      agentId, agentType, prompt, agentSpawn,
-      systemPromptText: enrichedPrompt,
-      effectiveModel, subToolRegistry, subAbortController,
-      effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
-      effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
-      initialMessages,
-    }).then(result => {
-      const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-      const compressed = compressTranscript(result.transcript);
+    runWithAgentContext(bgContext, () => {
+      runAgentLoop({
+        agentId, agentType, prompt, agentSpawn,
+        systemPromptText: enrichedPrompt,
+        effectiveModel, subToolRegistry, subAbortController,
+        effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
+        effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+        initialMessages,
+      }).then(result => {
+        const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+        const compressed = compressTranscript(result.transcript);
 
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status,
-        finishedAt: Date.now(),
-        turnCount: result.assistantTurnCount,
-        messageCount: result.transcript.length,
-        toolCount: result.toolCount,
-        result: compressed,
-        transcript: result.transcript,
-        error: result.error,
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status,
+          finishedAt: Date.now(),
+          turnCount: result.assistantTurnCount,
+          messageCount: result.transcript.length,
+          toolCount: result.toolCount,
+          result: compressed,
+          transcript: result.transcript,
+          error: result.error,
+        });
+
+        // Push notification for the next main-loop turn
+        const summary = result.error
+          ? `Background agent ${agentId} (${agentType}) failed after ${result.assistantTurnCount} turns: ${result.error}`
+          : `Background agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`;
+        agentSpawn.subAgentRegistry.pushNotification(summary);
+      }).catch(err => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status: 'error',
+          finishedAt: Date.now(),
+          error: errorMsg,
+        });
+        agentSpawn.subAgentRegistry.pushNotification(
+          `Background agent ${agentId} (${agentType}) crashed: ${errorMsg}`,
+        );
       });
-
-      // Push notification for the next main-loop turn
-      const summary = result.error
-        ? `Background agent ${agentId} (${agentType}) failed after ${result.assistantTurnCount} turns: ${result.error}`
-        : `Background agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`;
-      agentSpawn.subAgentRegistry.pushNotification(summary);
-    }).catch(err => {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status: 'error',
-        finishedAt: Date.now(),
-        error: errorMsg,
-      });
-      agentSpawn.subAgentRegistry.pushNotification(
-        `Background agent ${agentId} (${agentType}) crashed: ${errorMsg}`,
-      );
     });
 
     return {
@@ -341,14 +377,22 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   }
 
   // ── Sync path (existing behavior) ──────────────────────────────────
-  const result = await runAgentLoop({
-    agentId, agentType, prompt, agentSpawn,
-    systemPromptText: enrichedPrompt,
-    effectiveModel, subToolRegistry, subAbortController,
-    effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
-    effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
-    initialMessages,
-  });
+  const subContext: SubagentContext = createSubagentContext(
+    agentId,
+    agentType,
+    agentDef.source === 'built-in',
+  );
+
+  const result = await runWithAgentContext(subContext, () =>
+    runAgentLoop({
+      agentId, agentType, prompt, agentSpawn,
+      systemPromptText: enrichedPrompt,
+      effectiveModel, subToolRegistry, subAbortController,
+      effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
+      effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+      initialMessages,
+    }),
+  );
 
   const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
   const compressed = compressTranscript(result.transcript);
@@ -414,29 +458,34 @@ async function executeFork(
     }
   }
 
-  // Inherit parent's system prompt
+  // Inherit parent's system prompt — prefer the already-rendered bytes
+  // to share the prompt cache with the parent. Only re-assemble as fallback.
   let systemPromptText: string;
-  try {
-    const assembler = agentSpawn.systemPromptAssembler;
-    const parentSystem = await assembler.assemble({
-      cwd: process.cwd(),
-      permissionMode: PermissionMode.AUTO,
-      agentRole: 'default',
-    });
-    systemPromptText = parentSystem.prompt;
-  } catch {
-    systemPromptText = 'You are a forked sub-agent with full context of the parent agent. Complete the assigned task efficiently.';
+  if (agentSpawn.renderedSystemPrompt) {
+    systemPromptText = agentSpawn.renderedSystemPrompt.prompt;
+  } else {
+    try {
+      const assembler = agentSpawn.systemPromptAssembler;
+      const parentSystem = await assembler.assemble({
+        cwd: process.cwd(),
+        permissionMode: PermissionMode.AUTO,
+        agentRole: 'default',
+      });
+      systemPromptText = parentSystem.prompt;
+    } catch {
+      systemPromptText = 'You are a forked sub-agent with full context of the parent agent. Complete the assigned task efficiently.';
+    }
   }
 
   const effectiveModel = modelOverride;
   const effectiveMaxTurns = DEFAULT_MAX_TURNS;
   const effectiveContextBudget = DEFAULT_CONTEXT_BUDGET;
 
-  // Inherit parent's recent conversation as initial context
+  // Inherit parent's full conversation context for cache-identical prefixes
   const parentSession = agentSpawn.sessionManager.getActive();
   const parentMessages = parentSession?.messages ?? [];
-  // Take last 20 messages to keep context manageable
-  const recentMessages = parentMessages.slice(-20);
+  // Take up to 50 recent messages for reasonable context inheritance
+  const recentMessages = parentMessages.slice(-50);
 
   const userPrompt = `[Forked from parent agent]\n\n${prompt}`;
   const initialMessages: Message[] = [
@@ -459,34 +508,41 @@ async function executeFork(
 
   if (isBackground) {
     const spawnTime = Date.now();
+    const forkBgContext: SubagentContext = createSubagentContext(
+      agentId,
+      'fork',
+      true,
+    );
 
-    runAgentLoop({
-      agentId, agentType, prompt, agentSpawn,
-      systemPromptText, effectiveModel, subToolRegistry, subAbortController,
-      effectiveMaxTurns, effectiveContextBudget, initialMessages,
-    }).then(result => {
-      const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-      const compressed = compressTranscript(result.transcript);
+    runWithAgentContext(forkBgContext, () => {
+      runAgentLoop({
+        agentId, agentType, prompt, agentSpawn,
+        systemPromptText, effectiveModel, subToolRegistry, subAbortController,
+        effectiveMaxTurns, effectiveContextBudget, initialMessages,
+      }).then(result => {
+        const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+        const compressed = compressTranscript(result.transcript);
 
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status, finishedAt: Date.now(),
-        turnCount: result.assistantTurnCount,
-        messageCount: result.transcript.length,
-        toolCount: result.toolCount,
-        result: compressed,
-        transcript: result.transcript,
-        error: result.error,
-      });
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status, finishedAt: Date.now(),
+          turnCount: result.assistantTurnCount,
+          messageCount: result.transcript.length,
+          toolCount: result.toolCount,
+          result: compressed,
+          transcript: result.transcript,
+          error: result.error,
+        });
 
-      const summary = result.error
-        ? `Fork agent ${agentId} failed after ${result.assistantTurnCount} turns: ${result.error}`
-        : `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`;
-      agentSpawn.subAgentRegistry.pushNotification(summary);
+        const summary = result.error
+          ? `Fork agent ${agentId} failed after ${result.assistantTurnCount} turns: ${result.error}`
+          : `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`;
+        agentSpawn.subAgentRegistry.pushNotification(summary);
     }).catch(err => {
       agentSpawn.subAgentRegistry.update(agentId, {
         status: 'error', finishedAt: Date.now(),
         error: err instanceof Error ? err.message : String(err),
       });
+    });
     });
 
     return {
@@ -498,11 +554,19 @@ async function executeFork(
   }
 
   // Sync fork
-  const result = await runAgentLoop({
-    agentId, agentType, prompt, agentSpawn,
-    systemPromptText, effectiveModel, subToolRegistry, subAbortController,
-    effectiveMaxTurns, effectiveContextBudget, initialMessages,
-  });
+  const forkContext: SubagentContext = createSubagentContext(
+    agentId,
+    'fork',
+    true,
+  );
+
+  const result = await runWithAgentContext(forkContext, () =>
+    runAgentLoop({
+      agentId, agentType, prompt, agentSpawn,
+      systemPromptText, effectiveModel, subToolRegistry, subAbortController,
+      effectiveMaxTurns, effectiveContextBudget, initialMessages,
+    }),
+  );
 
   const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
   const compressed = compressTranscript(result.transcript);

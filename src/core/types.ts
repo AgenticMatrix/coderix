@@ -268,6 +268,8 @@ export interface BaseAgentDefinition {
   isolation?: 'worktree';
   /** Display color for this agent in the TUI. */
   color?: string;
+  /** Memory scope for per-agent persistent memory injection. */
+  memory?: 'user' | 'project' | 'local';
 }
 
 /** A built-in agent definition shipped with the application. */
@@ -336,6 +338,9 @@ export interface AgentSpawnContext {
   hookManager?: import('../hooks/index.js').HookManager;
   systemPromptAssembler: import('./system-prompt.js').SystemPromptAssembler;
   agentRegistry: import('./agent-registry.js').AgentRegistry;
+  /** The fully rendered system prompt from the parent agent.
+   *  Threaded through for fork sub-agents to share prompt cache with parent. */
+  renderedSystemPrompt?: import('./system-prompt.js').SystemPrompt;
 }
 
 export interface ToolContext {

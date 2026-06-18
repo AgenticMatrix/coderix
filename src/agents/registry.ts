@@ -16,8 +16,11 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { AgentRegistry } from '../core/agent-registry.js';
 import type { AgentDefinitionsResult } from '../core/types.js';
-import { exploreAgent, planAgent, generalPurposeAgent } from './builtin/index.js';
+import { exploreAgent, planAgent, generalPurposeAgent, verificationAgent, claudeCodeGuideAgent, statuslineSetupAgent } from './builtin/index.js';
+import { getCoordinatorAgents } from './builtin/coordinator-agents.js';
 import { loadAgentsFromDir, getActiveAgents } from './loader.js';
+import { loadPluginAgents } from './plugin-loader.js';
+import { isCoordinatorModeEnabled } from '../teams/coordinator-mode.js';
 
 /**
  * Build an AgentRegistry by layering agents from all discovery sources.
@@ -30,11 +33,30 @@ export async function buildAgentRegistry(cwd: string): Promise<{
   const registry = new AgentRegistry();
 
   // Layer 1: built-in agents
+  const coordinatorEnabled = isCoordinatorModeEnabled();
+  if (coordinatorEnabled) {
+    // Coordinator mode: register specialized worker agents
+    for (const agent of getCoordinatorAgents()) {
+      registry.register(agent);
+    }
+  }
+  // Always register the base set (coordinator can still use them)
   registry.register(exploreAgent);
   registry.register(planAgent);
   registry.register(generalPurposeAgent);
+  registry.register(verificationAgent);
+  registry.register(claudeCodeGuideAgent);
+  registry.register(statuslineSetupAgent);
 
-  // Layer 2: plugin agents (placeholder — will be implemented when plugin system exists)
+  // Layer 2: plugin agents
+  const pluginResult = await loadPluginAgents(cwd);
+  for (const agent of pluginResult.agents) {
+    registry.register(agent);
+  }
+  const pluginFailedFiles = pluginResult.errors.map(e => ({
+    path: e.plugin,
+    error: e.error,
+  }));
 
   // Layer 3: user-level agents
   const userDir = join(homedir(), '.coder', 'agents');
@@ -54,6 +76,7 @@ export async function buildAgentRegistry(cwd: string): Promise<{
   const allAgents = registry.list();
   const activeAgents = getActiveAgents(allAgents);
   const allFailedFiles = [
+    ...pluginFailedFiles,
     ...(userResult.failedFiles ?? []),
     ...(projectResult.failedFiles ?? []),
   ];

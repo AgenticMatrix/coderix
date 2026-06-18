@@ -166,6 +166,12 @@ export function parseAgentFromMarkdown(
   const color = typeof frontmatter['color'] === 'string' ? frontmatter['color'] : undefined;
   const initialPrompt = typeof frontmatter['initialPrompt'] === 'string' ? frontmatter['initialPrompt'] : undefined;
 
+  const memoryRaw = frontmatter['memory'] as unknown;
+  let memory: 'user' | 'project' | 'local' | undefined;
+  if (memoryRaw === 'user' || memoryRaw === 'project' || memoryRaw === 'local') {
+    memory = memoryRaw;
+  }
+
   const systemPrompt = body.trim();
 
   return {
@@ -185,6 +191,7 @@ export function parseAgentFromMarkdown(
     ...(isolation ? { isolation } : {}),
     ...(color ? { color } : {}),
     ...(initialPrompt ? { initialPrompt } : {}),
+    ...(memory ? { memory } : {}),
   };
 }
 
@@ -222,6 +229,12 @@ export function parseAgentFromJson(
   const color = typeof definition['color'] === 'string' ? definition['color'] : undefined;
   const initialPrompt = typeof definition['initialPrompt'] === 'string' ? definition['initialPrompt'] : undefined;
 
+  const memoryRaw = definition['memory'] as unknown;
+  let memory: 'user' | 'project' | 'local' | undefined;
+  if (memoryRaw === 'user' || memoryRaw === 'project' || memoryRaw === 'local') {
+    memory = memoryRaw;
+  }
+
   const filename = filePath ? basename(filePath, extname(filePath)) : undefined;
 
   const systemPrompt = prompt;
@@ -243,6 +256,7 @@ export function parseAgentFromJson(
     ...(isolation ? { isolation } : {}),
     ...(color ? { color } : {}),
     ...(initialPrompt ? { initialPrompt } : {}),
+    ...(memory ? { memory } : {}),
   };
 }
 
