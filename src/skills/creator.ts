@@ -192,7 +192,7 @@ export class SkillCreator {
   // ── Private: LLM Prompts ────────────────────────────────────────
 
   private buildDraftSystemPrompt(): string {
-    return `You are a skill author for the Coder Agent platform. Your task is to create a SKILL.md file that teaches an AI agent how to perform a specific task.
+    return `You are a skill author for the CodeRix platform. Your task is to create a SKILL.md file that teaches an AI agent how to perform a specific task.
 
 ## SKILL.md Format
 

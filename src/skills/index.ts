@@ -1,5 +1,5 @@
 /**
- * skills — Coder Agent Skills System
+ * skills — CodeRix Skills System
  *
  * SKILL.md discovery, Progressive Disclosure, and self-evolution.
  */

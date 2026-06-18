@@ -196,7 +196,7 @@ export class SkillImprover {
   // ── Private: LLM Interaction ────────────────────────────────────
 
   private buildAnalysisSystemPrompt(): string {
-    return `You are a skill quality analyst for the Coder Agent platform. Your job is to compare what a skill expected with what actually happened during execution, and suggest concrete improvements.
+    return `You are a skill quality analyst for the CodeRix platform. Your job is to compare what a skill expected with what actually happened during execution, and suggest concrete improvements.
 
 ## What to look for
 
