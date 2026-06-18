@@ -42,7 +42,14 @@ import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
 import type { AppState } from '../state/AppState.js';
 import { applyToolResultLimits } from './tool-result-limiter.js';
-import { Compactor, calculateMessagesToKeepIndex } from './compactor.js';
+import {
+  Compactor,
+  calculateMessagesToKeepIndex,
+  compactConversation,
+  trySessionMemoryCompact,
+  consumeManualCompactRequest,
+} from './compactor.js';
+import { classifyError } from './error-recovery.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -315,7 +322,30 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
   let turnCount = 0;
   let totalCost = 0;
 
+  // Circuit breaker: stop auto-compact after N consecutive failures.
+  // Resets on success. Manual /compact always bypasses.
+  const compactFailures = { count: 0 };
+  const MAX_AUTOCOMPACT_FAILURES = 3;
+
+  // Prevent infinite reactive-compact loops (only one per turn)
+  let thisTurnDidReactiveCompact = false;
+
   while (true) {
+    // ── Per-turn reset ──────────────────────────────────────────────
+    thisTurnDidReactiveCompact = false;
+
+    // ── Manual /compact check ──────────────────────────────────────
+    if (consumeManualCompactRequest()) {
+      messages = yield* runCompaction(
+        messages,
+        tokenCountWithEstimation(messages),
+        contextBudget,
+        { sessionId, cwd, hookManager, callModel },
+        abortController.signal,
+        { count: 0 }, // bypass circuit breaker
+      );
+    }
+
     // === Exit conditions ===
     if (turnCount >= maxTurns) {
       hookManager?.onNotification(
@@ -852,7 +882,30 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         }
       }
     } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      // ── Reactive Compact: context_too_large → compact + retry ──
+      const classified = classifyError(err);
+      if (classified.category === 'context_too_large' && !thisTurnDidReactiveCompact) {
+        thisTurnDidReactiveCompact = true;
+        hookManager?.onNotification(
+          sessionId, cwd, 'warn',
+          'Context too large — compacting and retrying...',
+          { tokens: tokenCountWithEstimation(messages) },
+        ).catch(() => {});
+
+        messages = yield* runCompaction(
+          messages,
+          tokenCountWithEstimation(messages),
+          contextBudget,
+          { sessionId, cwd, hookManager, callModel },
+          abortController.signal,
+          compactFailures,
+        );
+        continue; // Retry the API call with compacted messages
+      }
+
+      const errMsg = err.message;
       for (const block of orderedBlocks) {
         const errorMsg = createUserMessage([createToolErrorResult(block.id, errMsg)]);
         messages.push(errorMsg);
@@ -1019,8 +1072,14 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         messages,
         currentTokens,
         contextBudget,
-        { sessionId, cwd, hookManager },
+        {
+          sessionId,
+          cwd,
+          hookManager,
+          callModel,
+        },
         abortController.signal,
+        compactFailures,
       );
     }
   }
@@ -1038,10 +1097,13 @@ async function* runCompaction(
     sessionId: string;
     cwd: string;
     hookManager?: HookManager;
+    callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
   },
   signal: AbortSignal,
+  compactFailures: { count: number },
 ): AsyncGenerator<QueryMessage, Message[]> {
-  const { sessionId, cwd, hookManager } = ctx;
+  const { sessionId, cwd, hookManager, callModel } = ctx;
+  const MAX_AUTOCOMPACT_FAILURES = 3;
 
   // ── PreCompact hook ──────────────────────────────────────────────
   let injectContext = '';
@@ -1119,7 +1181,101 @@ async function* runCompaction(
     }
   }
 
-  // ── Step 2: Token-aware truncation ──────────────────────────────
+  // ── Step 2: Session Memory Compact (zero API cost) ─────────────
+  if (hasMicroCompact) {
+    messages = mcResult.messages;
+  }
+
+  const smCompact = await trySessionMemoryCompact(cwd);
+  if (smCompact) {
+    const smSummary: Message = {
+      role: 'user',
+      content: smCompact.summaryContent,
+    };
+
+    const keepIndex = calculateMessagesToKeepIndex(messages);
+    const keptMessages = keepIndex > 0 ? messages.slice(keepIndex) : messages;
+
+    // Assemble: summary + kept messages
+    messages = [smSummary, ...keptMessages];
+
+    const afterTokens = tokenCountWithEstimation(messages);
+    if (afterTokens / contextBudget <= 0.7) {
+      yield {
+        type: 'system',
+        subtype: 'compact_boundary',
+        compactMetadata: {
+          beforeTokens: currentTokens,
+          afterTokens,
+          strategy: 'summarize',
+        },
+      };
+      hookManager?.onNotification(
+        sessionId, cwd, 'info',
+        `Session-memory compacted: ${currentTokens} → ${afterTokens} tokens`,
+        { beforeTokens: currentTokens, afterTokens },
+      ).catch(() => {});
+      compactFailures.count = 0;
+      return messages;
+    }
+  }
+
+  // ── Step 3: LLM Summarization Compact ───────────────────────────
+  // Circuit breaker: skip if already tripped
+  if (compactFailures.count < MAX_AUTOCOMPACT_FAILURES) {
+    const llmSignal = signal.aborted ? new AbortController().signal : signal;
+    if (!llmSignal.aborted) {
+      try {
+        const llmResult = await compactConversation(messages, callModel, {
+          signal: llmSignal,
+          preCompactTokens: currentTokens,
+          model: 'auto',
+        });
+
+        messages = [
+          llmResult.boundaryMarker,
+          ...llmResult.summaryMessages,
+          ...llmResult.messagesToKeep,
+        ];
+
+        // Post-compact restoration: re-inject context marker
+        const ctxMsg: Message = {
+          role: 'system',
+          content: `[Context restored after compaction]\nWorking directory: ${cwd}\nSystem prompt preserved from session start.`,
+        };
+        messages.push(ctxMsg);
+
+        const afterTokens = tokenCountWithEstimation(messages);
+        yield {
+          type: 'system',
+          subtype: 'compact_boundary',
+          compactMetadata: {
+            beforeTokens: currentTokens,
+            afterTokens,
+            strategy: 'summarize',
+          },
+        };
+        hookManager?.onNotification(
+          sessionId, cwd, 'info',
+          `LLM-compacted: ${currentTokens} → ${afterTokens} tokens (summarize)`,
+          { beforeTokens: currentTokens, afterTokens },
+        ).catch(() => {});
+        compactFailures.count = 0;
+        return messages;
+      } catch {
+        compactFailures.count++;
+        if (compactFailures.count >= MAX_AUTOCOMPACT_FAILURES) {
+          hookManager?.onNotification(
+            sessionId, cwd, 'warn',
+            `Auto-compact failed ${compactFailures.count} times — circuit breaker tripped. Use /compact to retry manually.`,
+            { compactFailures: compactFailures.count },
+          ).catch(() => {});
+        }
+      }
+    }
+  }
+
+  // ── Step 4: Token-aware truncation (last resort) ─────────────────
   const prevCount = messages.length;
   const keepIndex = calculateMessagesToKeepIndex(messages);
   if (keepIndex > 0) {
@@ -1133,28 +1289,16 @@ async function* runCompaction(
     ? 'time_based'
     : 'token_snip';
 
-  const compactMeta: CompactMetadata = {
-    beforeTokens: currentTokens,
-    afterTokens,
-    strategy,
-  };
   yield {
     type: 'system',
     subtype: 'compact_boundary',
-    compactMetadata: compactMeta,
+    compactMetadata: { beforeTokens: currentTokens, afterTokens, strategy },
   };
 
   hookManager?.onNotification(
-    sessionId,
-    cwd,
-    'info',
+    sessionId, cwd, 'info',
     `Context compacted: ${currentTokens} → ${afterTokens} tokens (${strategy}${droppedCount > 0 ? `, dropped ${droppedCount} messages` : ''})`,
-    {
-      beforeTokens: currentTokens,
-      afterTokens,
-      strategy,
-      droppedMessages: droppedCount,
-    },
+    { beforeTokens: currentTokens, afterTokens, strategy, droppedMessages: droppedCount },
   ).catch(() => {});
 
   return messages;

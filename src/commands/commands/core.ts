@@ -1,5 +1,6 @@
 import type { SlashCommand } from '../types.js';
 import { findSlashCommand, listCommandNames } from '../registry.js';
+import { requestManualCompact } from '../../core/compactor.js';
 
 export const coreCommands: SlashCommand[] = [
   {
@@ -81,7 +82,8 @@ export const coreCommands: SlashCommand[] = [
     help: 'compact the conversation context',
     name: 'compact',
     run: (_arg, ctx) => {
-      ctx.sys('Compacting conversation... (context optimization triggered)');
+      requestManualCompact();
+      ctx.sys('Compacting conversation context — LLM summarization will run on the next turn.');
     },
   },
 

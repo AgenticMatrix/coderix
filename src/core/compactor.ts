@@ -1,23 +1,87 @@
 /**
- * Compactor — Micro-compaction and token-aware context truncation.
+ * Compactor — Micro-compaction, LLM summarization, and token-aware truncation.
  *
- * Two strategies, both purely client-side (zero API cost):
+ * Strategies, ordered by cost (cheapest first):
  *
- * 1. Time-Based Micro Compact
- *    When the gap since the last assistant message exceeds 60 minutes,
- *    the server-side prompt cache has expired. We content-clear old
- *    compactable tool results in-place to shrink what gets rewritten.
- *    Keeps the most recent N results intact.
+ * 1. Time-Based Micro Compact — clear old tool results when server cache expired
+ * 2. Session Memory Compact — use existing memory files as summary (zero API cost)
+ * 3. LLM Summarization — call model to generate conversation summary
+ * 4. Token-Aware Truncation — last resort, drop oldest messages
  *
- * 2. Token-Aware Truncation
- *    Replaces the fixed "keep last 30 messages" with a token-budgeted
- *    approach: keep min 10K / max 40K tokens, at least 5 text-bearing
- *    messages, and never split tool_use/tool_result pairs or thinking
- *    blocks that share a message.id.
+ * Each strategy is tried in order; if one brings context under threshold,
+ * subsequent strategies are skipped.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { estimateMessageTokens } from './token-budget.js';
-import type { Message, ContentBlock, ToolResultBlock } from './types.js';
+import type {
+  Message,
+  ContentBlock,
+  ToolResultBlock,
+  AssistantMessage,
+  UserMessage,
+  StreamEvent,
+} from './types.js';
+import type { CompactMetadata } from './types.js';
+
+// Lazy imports to avoid circular deps — these are only needed for
+// session-memory compact and LLM summarization paths.
+let _getMemoryDir: ((cwd: string) => string) | null = null;
+let _scanMemoryFiles:
+  | ((
+      dir: string,
+      limit: number,
+      signal: AbortSignal,
+    ) => Promise<
+      Array<{
+        filename: string;
+        filePath: string;
+        description: string | null;
+        type: string | undefined;
+      }>
+    >)
+  | null = null;
+let _classifyError:
+  | ((error: Error) => { category: string; retryable: boolean })
+  | null = null;
+
+async function ensureMemoryImports() {
+  if (!_getMemoryDir) {
+    const mod = await import('../memory/memory-directory.js');
+    _getMemoryDir = mod.getMemoryDir;
+  }
+  if (!_scanMemoryFiles) {
+    const mod = await import('../memory/frontmatter.js');
+    _scanMemoryFiles = mod.scanMemoryFiles;
+  }
+}
+
+async function ensureErrorImports() {
+  if (!_classifyError) {
+    const mod = await import('./error-recovery.js');
+    _classifyError = mod.classifyError;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Manual compact flag — set by /compact command, consumed by query loop
+// ---------------------------------------------------------------------------
+
+let _manualCompactRequested = false;
+
+/** Signal that a manual /compact was requested by the user. */
+export function requestManualCompact(): void {
+  _manualCompactRequested = true;
+}
+
+/** Consume the manual compact flag. Returns true if compaction was requested. */
+export function consumeManualCompactRequest(): boolean {
+  const was = _manualCompactRequested;
+  _manualCompactRequested = false;
+  return was;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -448,4 +512,417 @@ function estimateBlockTokensForResult(block: ContentBlock): number {
     }
     return sum;
   }, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Types for LLM compaction
+// ---------------------------------------------------------------------------
+
+// compactConversation uses same signature as query.ts CallModelParams.
+// Avoids a circular import by not importing CallModelParams directly.
+type CompactModelFn = (
+  params: {
+    system: string;
+    messages: Message[];
+    tools: unknown[];
+    signal: AbortSignal;
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+) => AsyncGenerator<StreamEvent | AssistantMessage, any, any>;
+
+export interface LLMCompactResult {
+  boundaryMarker: Message;
+  summaryMessages: UserMessage[];
+  messagesToKeep: Message[];
+  preCompactTokens: number;
+  postCompactTokens: number;
+  strategy: CompactMetadata['strategy'];
+}
+
+// ---------------------------------------------------------------------------
+// Public API — LLM Summarization Compact
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a conversation summary via LLM and return the compacted result.
+ *
+ * Handles:
+ * - Image stripping (images aren't needed for summarization)
+ * - PTL retry (drop oldest message groups if summarization itself is too long)
+ * - Summary formatting
+ *
+ * Caller is responsible for assembling the final message array from
+ * boundaryMarker + summaryMessages + messagesToKeep.
+ */
+export async function compactConversation(
+  messages: Message[],
+  callModel: CompactModelFn,
+  options: {
+    signal: AbortSignal;
+    preCompactTokens: number;
+    model: string;
+    customInstructions?: string;
+  },
+): Promise<LLMCompactResult> {
+  let messagesToSummarize = stripImagesFromMessages(messages);
+  const preCompactTokens = options.preCompactTokens;
+
+  const summaryPrompt = buildCompactSystemPrompt(options.customInstructions);
+  const summaryRequest: Array<{ role: string; content: string }> = [
+    { role: 'user', content: summaryPrompt },
+  ];
+
+  // PTL retry loop
+  const MAX_PTL_RETRIES = 3;
+  let ptlAttempts = 0;
+
+  for (;;) {
+    const result = await callSummaryModel(
+      callModel,
+      summaryPrompt,
+      messagesToSummarize,
+      options.signal,
+    );
+
+    // Check for prompt-too-long
+    const isPTL = isPromptTooLongError(result.error);
+    if (!isPTL) {
+      if (!result.text) {
+        throw new Error(
+          'Failed to generate conversation summary — empty response',
+        );
+      }
+
+      // Build the compact result
+      const summaryText = formatCompactSummary(result.text);
+      const summaryContent = buildCompactSummaryContent(
+        summaryText,
+        true, // suppressFollowUpQuestions
+      );
+
+      const messagesToKeep = calculateMessagesToKeepIndex(messages);
+      const keptMessages =
+        messagesToKeep > 0 ? messages.slice(messagesToKeep) : [];
+
+      const boundaryMarker: Message = {
+        role: 'system',
+        content: `[Compact boundary — context summarized. ${preCompactTokens} → ~${estimateMessageTokens({ role: 'user', content: summaryContent })} tokens]`,
+      };
+
+      return {
+        boundaryMarker,
+        summaryMessages: [{ role: 'user', content: summaryContent }],
+        messagesToKeep: keptMessages,
+        preCompactTokens,
+        postCompactTokens:
+          estimateMessageTokens({ role: 'user', content: summaryContent }) +
+          keptMessages.reduce((s, m) => s + estimateMessageTokens(m), 0),
+        strategy: 'summarize',
+      };
+    }
+
+    // PTL: drop oldest messages
+    ptlAttempts++;
+    if (ptlAttempts > MAX_PTL_RETRIES) {
+      throw new Error(
+        'Compaction failed — summarization request too large after retries',
+      );
+    }
+
+    const truncated = dropOldestMessageGroups(messagesToSummarize);
+    if (!truncated) {
+      throw new Error(
+        'Compaction failed — cannot reduce summarization input further',
+      );
+    }
+    messagesToSummarize = truncated;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API — Session Memory Compact
+// ---------------------------------------------------------------------------
+
+export interface SessionMemoryCompactResult {
+  summaryContent: string;
+  messagesToKeep: Message[];
+}
+
+/**
+ * Try to build a summary from existing memory files.
+ * Returns null if memory is unavailable or empty.
+ *
+ * This is a zero-API-cost alternative to LLM summarization —
+ * it reuses the memory that was already extracted by the background
+ * extraction system instead of calling the model again.
+ */
+export async function trySessionMemoryCompact(
+  cwd: string,
+): Promise<SessionMemoryCompactResult | null> {
+  await ensureMemoryImports();
+
+  try {
+    const memoryDir = _getMemoryDir!(cwd);
+    if (!existsSync(memoryDir)) return null;
+
+    const ac = new AbortController();
+    const files = await _scanMemoryFiles!(memoryDir, 100, ac.signal);
+    if (files.length === 0) return null;
+
+    // Read memory file contents
+    const memories: Array<{
+      name: string;
+      description: string;
+      content: string;
+    }> = [];
+    for (const file of files) {
+      try {
+        const filePath = join(memoryDir, file.filename);
+        const raw = readFileSync(filePath, 'utf-8');
+        // Extract content after frontmatter (between second ---)
+        const parts = raw.split('---');
+        const body =
+          parts.length >= 3 ? parts.slice(2).join('---').trim() : raw;
+        memories.push({
+          name: file.filename.replace(/\.md$/, ''),
+          description: file.description ?? file.filename,
+          content: body.slice(0, 3000), // cap per memory
+        });
+      } catch {
+        // skip unreadable files
+      }
+    }
+
+    if (memories.length === 0) return null;
+
+    // Build summary from memory contents
+    const summary = [
+      'This session is being continued from a previous conversation.',
+      'The following context was extracted from earlier work:',
+      '',
+      ...memories.map(
+        (m) =>
+          `## ${m.description}\n${m.content.slice(0, 2000)}`,
+      ),
+    ].join('\n\n');
+
+    return {
+      summaryContent: summary,
+      messagesToKeep: [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LLM Summarization helpers
+// ---------------------------------------------------------------------------
+
+function buildCompactSystemPrompt(customInstructions?: string): string {
+  let prompt = `You are summarizing a conversation between an AI coding agent and a user.
+Your task is to create a detailed summary so that work can continue seamlessly.
+
+Include these sections:
+1. Primary Request and Intent: What the user asked for, in detail
+2. Key Technical Concepts: Technologies, frameworks, patterns discussed
+3. Files and Code: Specific files examined, modified, or created. Include code snippets.
+4. Errors and Fixes: Problems encountered and how they were resolved. Include user feedback.
+5. All User Messages: List every non-tool-result message from the user
+6. Pending Tasks: Tasks explicitly requested but not yet completed
+7. Current Work: Precisely what was being worked on immediately before this summary
+
+Be thorough. Include file names, function signatures, and code snippets.
+`;
+  if (customInstructions) {
+    prompt += `\nAdditional instructions: ${customInstructions}`;
+  }
+  return prompt;
+}
+
+async function callSummaryModel(
+  callModel: CompactModelFn,
+  systemPrompt: string,
+  messages: Message[],
+  signal: AbortSignal,
+): Promise<{ text: string | null; error: Error | null }> {
+  try {
+    // Build context from messages — convert to simple text format
+    const contextText = buildCompactContext(messages);
+
+    const gen = callModel({
+      system: systemPrompt,
+      messages: [{ role: 'user' as const, content: contextText }],
+      tools: [],
+      signal,
+    });
+
+    let fullText = '';
+    for await (const event of gen) {
+      // Handle AssistantMessage directly
+      if ('role' in event && event.role === 'assistant') {
+        const assistantEvent = event as AssistantMessage;
+        if (Array.isArray(assistantEvent.content)) {
+          for (const block of assistantEvent.content) {
+            if (block.type === 'text') {
+              fullText += block.text ?? '';
+            }
+          }
+        } else if (typeof assistantEvent.content === 'string') {
+          fullText += assistantEvent.content;
+        }
+        continue;
+      }
+
+      // Handle stream events
+      const streamEvent = event as StreamEvent;
+      if (
+        streamEvent.type === 'content_block_delta' &&
+        streamEvent.delta?.type === 'text_delta'
+      ) {
+        fullText += (streamEvent.delta as { text: string }).text ?? '';
+      }
+    }
+
+    return { text: fullText || null, error: null };
+  } catch (error) {
+    return { text: null, error: error as Error };
+  }
+}
+
+function buildCompactContext(messages: Message[]): string {
+  const parts: string[] = [];
+  parts.push('Below is the conversation to summarize:\n');
+
+  for (const msg of messages) {
+    if (msg.role === 'system') continue;
+
+    const role = msg.role === 'assistant' ? 'ASSISTANT' : 'USER';
+    if (typeof msg.content === 'string') {
+      parts.push(`[${role}] ${msg.content.slice(0, 2000)}`);
+    } else if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.type === 'text') {
+          parts.push(`[${role}] ${(block.text ?? '').slice(0, 2000)}`);
+        } else if (block.type === 'tool_use') {
+          parts.push(
+            `[${role} — used tool: ${block.name}]`,
+          );
+        } else if (
+          block.type === 'tool_result' &&
+          typeof block.content === 'string'
+        ) {
+          parts.push(
+            `[tool result] ${block.content.slice(0, 500)}`,
+          );
+        }
+      }
+    }
+  }
+
+  return parts.join('\n');
+}
+
+function formatCompactSummary(raw: string): string {
+  // Clean up common artifacts
+  let text = raw
+    .replace(/<analysis>[\s\S]*?<\/analysis>/g, '')
+    .replace(/<summary>|<\/summary>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
+}
+
+function buildCompactSummaryContent(
+  summary: string,
+  suppressFollowUp: boolean,
+): string {
+  let content = `This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n${summary}`;
+
+  if (suppressFollowUp) {
+    content +=
+      '\n\nContinue the conversation from where it left off without asking the user any further questions. Resume directly.';
+  }
+
+  return content;
+}
+
+// ---------------------------------------------------------------------------
+// PTL Retry helpers
+// ---------------------------------------------------------------------------
+
+function isPromptTooLongError(error: Error | null): boolean {
+  if (!error) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('prompt too long') ||
+    msg.includes('context_too_large') ||
+    msg.includes('too large') ||
+    msg.includes('413') ||
+    msg.includes('maximum context length') ||
+    msg.includes('token limit')
+  );
+}
+
+/**
+ * Drop the oldest ~20% of message groups. Groups are delimited by
+ * assistant messages (each new assistant starts a new API round).
+ */
+function dropOldestMessageGroups(messages: Message[]): Message[] | null {
+  if (messages.length <= 2) return null;
+
+  // Find group boundaries: a new assistant message starts a group
+  const boundaries: number[] = [0];
+  for (let i = 1; i < messages.length; i++) {
+    if (messages[i]?.role === 'assistant') {
+      boundaries.push(i);
+    }
+  }
+  boundaries.push(messages.length);
+
+  if (boundaries.length <= 3) return null; // only 1-2 groups
+
+  const dropGroups = Math.max(1, Math.floor((boundaries.length - 1) * 0.2));
+  const cutIndex = boundaries[dropGroups] ?? boundaries[1];
+
+  const result = messages.slice(cutIndex!);
+
+  // Ensure first message is role=user (API requirement)
+  if (result.length > 0 && result[0]?.role === 'assistant') {
+    return [
+      {
+        role: 'user' as const,
+        content: '[earlier context truncated for compaction]',
+      },
+      ...result,
+    ];
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Image stripping (for compact input)
+// ---------------------------------------------------------------------------
+
+function stripImagesFromMessages(messages: Message[]): Message[] {
+  return messages.map((message) => {
+    if (message.role !== 'user') return message;
+    const content = message.content;
+    if (typeof content === 'string') return message;
+    if (!Array.isArray(content)) return message;
+
+    let hasImage = false;
+    const newContent = content.flatMap((block) => {
+      if (block.type === 'image') {
+        hasImage = true;
+        return [{ type: 'text' as const, text: '[image]' }];
+      }
+      return [block];
+    });
+
+    if (!hasImage) return message;
+    return { ...message, content: newContent } as Message;
+  });
 }
