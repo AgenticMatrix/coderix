@@ -8,6 +8,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
@@ -50,6 +51,18 @@ function createTransport(
     case 'http': {
       if (!('url' in config)) return null;
       return new StreamableHTTPClientTransport(
+        new URL(config.url),
+        {
+          requestInit: config.headers
+            ? { headers: config.headers as Record<string, string> }
+            : undefined,
+        },
+      );
+    }
+
+    case 'sse': {
+      if (!('url' in config)) return null;
+      return new SSEClientTransport(
         new URL(config.url),
         {
           requestInit: config.headers

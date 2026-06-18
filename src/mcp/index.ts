@@ -3,7 +3,8 @@
  */
 
 // Manager (main entry point)
-export { McpManager, hasMcpConfig } from './manager.js';
+export { McpManager, hasMcpConfig, loadEnabledMcpConfigs } from './manager.js';
+export type { ToolsChangedCallback } from './manager.js';
 
 // Types
 export type {
@@ -13,12 +14,14 @@ export type {
   ScopedServerConfig,
   StdioServerConfig,
   HttpServerConfig,
+  SSEServerConfig,
   McpJsonConfig,
   ServerConnection,
   ConnectedServer,
   FailedServer,
   PendingServer,
   DisabledServer,
+  ServerResource,
   SerializedMcpTool,
 } from './types.js';
 
@@ -28,18 +31,26 @@ export {
   McpJsonConfigSchema,
   StdioServerConfigSchema,
   HttpServerConfigSchema,
+  SSEServerConfigSchema,
 } from './types.js';
 
 // Tool helpers
 export { buildMcpToolName, parseMcpToolName } from './mcp-tool.js';
 
-// Connection (for advanced use)
+// Connection
 export { connectToServer, CONNECT_TIMEOUT_MS } from './connection.js';
 
-// Discovery (for advanced use)
-export { discoverTools } from './discovery.js';
+// Discovery (tools + resources)
+export { discoverTools, discoverResources, readResource } from './discovery.js';
 
-// Config loader (for advanced use)
+// MCP Server mode
+export { startMcpServer } from './mcp-server.js';
+
+// MCP Skills
+export { discoverMcpSkills, formatMcpSkillsForPrompt } from './mcp-skills.js';
+export type { McpSkill } from './mcp-skills.js';
+
+// Config loader
 export {
   loadMcpConfigs,
   addMcpConfig,
@@ -48,4 +59,8 @@ export {
   listMcpServerNames,
   projectConfigPath,
   userConfigPath,
+  isServerDisabled,
+  disableServer,
+  enableServer,
+  listDisabledServerNames,
 } from './config-loader.js';

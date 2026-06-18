@@ -166,3 +166,88 @@ export function getMcpConfig(
 export function listMcpServerNames(cwd?: string): string[] {
   return Object.keys(loadMcpConfigs(cwd ?? process.cwd()));
 }
+
+// ── Enable / Disable (Phase 2 refined) ──────────────────────────────────
+
+const DISABLED_KEY = 'disabledServers';
+
+/** Get the set of disabled server names from the given file. */
+function getDisabledSet(filePath: string): Set<string> {
+  const raw = readRawJsonFile(filePath);
+  if (!raw) return new Set();
+  const list = raw[DISABLED_KEY];
+  if (Array.isArray(list)) return new Set(list.filter((x): x is string => typeof x === 'string'));
+  return new Set();
+}
+
+/** Write the disabled server set back to the file. */
+function writeDisabledSet(filePath: string, set: Set<string>): void {
+  const existing = readRawJsonFile(filePath) ?? {};
+  if (set.size === 0) {
+    delete existing[DISABLED_KEY];
+  } else {
+    existing[DISABLED_KEY] = [...set].sort();
+  }
+  if (Object.keys(existing).length === 0) {
+    if (existsSync(filePath)) unlinkSync(filePath);
+    return;
+  }
+  writeJsonFile(filePath, existing);
+}
+
+/** Check if a server is disabled in its config file. */
+export function isServerDisabled(name: string, scope: ConfigScope, cwd?: string): boolean {
+  const filePath = configPathForScope(scope, cwd);
+  return getDisabledSet(filePath).has(name);
+}
+
+/** Disable a server (add it to the disabledServers list in its config file). */
+export function disableServer(name: string, scope: ConfigScope, cwd?: string): void {
+  const filePath = configPathForScope(scope, cwd);
+  const set = getDisabledSet(filePath);
+  set.add(name);
+  writeDisabledSet(filePath, set);
+}
+
+/** Enable a server (remove it from the disabledServers list). */
+export function enableServer(name: string, scope: ConfigScope, cwd?: string): void {
+  const filePath = configPathForScope(scope, cwd);
+  const set = getDisabledSet(filePath);
+  set.delete(name);
+  writeDisabledSet(filePath, set);
+}
+
+/**
+ * Load all MCP server configs, merged across scopes, filtering out disabled servers.
+ * This overload is used by McpManager to get only enabled servers.
+ */
+export function loadEnabledMcpConfigs(cwd: string): Record<string, ScopedServerConfig> {
+  const all = loadMcpConfigs(cwd);
+  const filtered: Record<string, ScopedServerConfig> = {};
+  for (const [name, config] of Object.entries(all)) {
+    if (!isServerDisabled(name, config.scope, cwd)) {
+      filtered[name] = config;
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Get all disabled server names across all scopes.
+ */
+export function listDisabledServerNames(cwd?: string): Array<{ name: string; scope: ConfigScope }> {
+  const result: Array<{ name: string; scope: ConfigScope }> = [];
+  const userPath = userConfigPath();
+  const projectPath = projectConfigPath(cwd ?? process.cwd());
+
+  for (const name of getDisabledSet(projectPath)) {
+    result.push({ name, scope: 'project' as ConfigScope });
+  }
+  for (const name of getDisabledSet(userPath)) {
+    // Project-scoped entries take precedence
+    if (!result.some(e => e.name === name && e.scope === 'project')) {
+      result.push({ name, scope: 'user' as ConfigScope });
+    }
+  }
+  return result;
+}

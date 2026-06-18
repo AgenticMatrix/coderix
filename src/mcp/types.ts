@@ -9,7 +9,7 @@
 
 import { z } from 'zod/v4';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
+import type { ServerCapabilities, Resource } from '@modelcontextprotocol/sdk/types.js';
 
 // ── Config Scope ────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ export type ConfigScope = z.infer<typeof ConfigScope>;
 
 // ── Transport Type ──────────────────────────────────────────────────────
 
-export const TransportType = z.enum(['stdio', 'http']);
+export const TransportType = z.enum(['stdio', 'http', 'sse']);
 export type Transport = z.infer<typeof TransportType>;
 
 // ── Server Config Schemas ───────────────────────────────────────────────
@@ -40,10 +40,19 @@ export const HttpServerConfigSchema = z.object({
 });
 export type HttpServerConfig = z.infer<typeof HttpServerConfigSchema>;
 
+/** SSE transport — Server-Sent Events (most common remote MCP transport). */
+export const SSEServerConfigSchema = z.object({
+  type: z.literal('sse'),
+  url: z.string().min(1, 'URL cannot be empty'),
+  headers: z.record(z.string(), z.string()).optional(),
+});
+export type SSEServerConfig = z.infer<typeof SSEServerConfigSchema>;
+
 /** Union of all supported server config types. */
 export const ServerConfigSchema = z.union([
   StdioServerConfigSchema,
   HttpServerConfigSchema,
+  SSEServerConfigSchema,
 ]);
 export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 
@@ -94,6 +103,10 @@ export type ServerConnection =
   | FailedServer
   | PendingServer
   | DisabledServer;
+
+// ── Resource types ────────────────────────────────────────────────────
+
+export type ServerResource = Resource & { server: string };
 
 // ── Serialized MCP Tool (for CLI / debug) ──────────────────────────────
 

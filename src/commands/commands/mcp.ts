@@ -2,31 +2,50 @@
  * /mcp — TUI slash command for MCP server management.
  *
  * Usage:
- *   /mcp               — list all MCP servers with status & tool counts
- *   /mcp <name>        — show details for a specific server
- *   /mcp status        — quick connection status summary
+ *   /mcp                      — list all MCP servers with status & tool counts
+ *   /mcp <name>               — show details for a specific server
+ *   /mcp status               — quick connection status summary
+ *   /mcp enable <name>        — enable a disabled server
+ *   /mcp disable <name>       — disable a server
  */
 
 import type { SlashCommand } from '../types.js';
-import { loadMcpConfigs } from '../../mcp/config-loader.js';
+import {
+  loadMcpConfigs,
+  isServerDisabled,
+  disableServer as disableServerConfig,
+  enableServer as enableServerConfig,
+} from '../../mcp/config-loader.js';
 import { connectToServer } from '../../mcp/connection.js';
 import { discoverTools } from '../../mcp/discovery.js';
 
 export const mcpCommand: SlashCommand = {
   name: 'mcp',
   aliases: [],
-  help: 'list MCP servers and their status (/mcp [name|status])',
-  usage: '/mcp [server-name|status]',
+  help: 'manage MCP servers (/mcp [status|enable|disable] [name])',
+  usage: '/mcp [server-name|status|enable|disable] [name]',
   run(arg, ctx) {
-    const trimmed = arg.trim();
+    const parts = arg.trim().split(/\s+/);
+    const cmd = parts[0] ?? '';
+    const name = parts.slice(1).join(' ');
 
-    if (trimmed === 'status') {
+    if (cmd === 'status') {
       void showQuickStatus(ctx);
       return;
     }
 
-    if (trimmed) {
-      void showServerDetail(trimmed, ctx);
+    if (cmd === 'enable' && name) {
+      void handleEnable(name, ctx);
+      return;
+    }
+
+    if (cmd === 'disable' && name) {
+      void handleDisable(name, ctx);
+      return;
+    }
+
+    if (cmd) {
+      void showServerDetail(cmd, ctx);
       return;
     }
 
@@ -202,4 +221,50 @@ async function showQuickStatus(ctx: {
   ];
 
   ctx.sys(summary.join('\n'));
+}
+
+// ── Enable server ──────────────────────────────────────────────────────
+
+async function handleEnable(
+  name: string,
+  ctx: { sys: (msg: string) => void },
+): Promise<void> {
+  const configs = loadMcpConfigs(process.cwd());
+  const config = configs[name];
+
+  if (!config) {
+    ctx.sys(`MCP server "${name}" not found in config.`);
+    return;
+  }
+
+  if (!isServerDisabled(name, config.scope)) {
+    ctx.sys(`"${name}" is already enabled.`);
+    return;
+  }
+
+  enableServerConfig(name, config.scope);
+  ctx.sys(`✓ "${name}" enabled — will connect on next startup or use /mcp ${name} to test.`);
+}
+
+// ── Disable server ─────────────────────────────────────────────────────
+
+async function handleDisable(
+  name: string,
+  ctx: { sys: (msg: string) => void },
+): Promise<void> {
+  const configs = loadMcpConfigs(process.cwd());
+  const config = configs[name];
+
+  if (!config) {
+    ctx.sys(`MCP server "${name}" not found in config.`);
+    return;
+  }
+
+  if (isServerDisabled(name, config.scope)) {
+    ctx.sys(`"${name}" is already disabled.`);
+    return;
+  }
+
+  disableServerConfig(name, config.scope);
+  ctx.sys(`✓ "${name}" disabled — it will be skipped on next startup.`);
 }
