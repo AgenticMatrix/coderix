@@ -15,7 +15,7 @@
  * provider's tokenizer (e.g., tiktoken for OpenAI-compatible APIs).
  */
 
-import type { Message, ContentBlock } from './types.js';
+import type { Message, ContentBlock, AssistantMessage } from './types.js';
 
 // ---------------------------------------------------------------------------
 // TokenBudget type (canonical definition)
@@ -225,4 +225,52 @@ export function needsCompaction(
   threshold = 0.6,
 ): boolean {
   return budget.ratio > threshold;
+}
+
+// ---------------------------------------------------------------------------
+// API-reported token count helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the input_tokens from the last API response in a message array.
+ *
+ * The API's usage.input_tokens is the authoritative token count for the
+ * request that produced the last assistant message. This is far more
+ * accurate than character-based estimation.
+ *
+ * Returns undefined when no assistant message with usage data exists
+ * (e.g., on the very first turn before any API call).
+ */
+export function tokenCountFromLastAPIResponse(
+  messages: Message[],
+): number | undefined {
+  // Walk backwards to find the last assistant message with usage data
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role === 'assistant' && 'usage' in msg) {
+      const usage = (msg as AssistantMessage).usage;
+      if (usage?.input_tokens && usage.input_tokens > 0) {
+        return usage.input_tokens;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Hybrid token counter: uses API-reported input_tokens when available,
+ * falls back to character-based estimation.
+ *
+ * The API value reflects the token count of the request that produced the
+ * last assistant message — it does NOT include messages added since
+ * (new assistant messages, tool results, injected context). For compaction
+ * decisions this is safely conservative: we'll trigger compaction slightly
+ * earlier than strictly necessary, which is better than missing the window.
+ */
+export function tokenCountWithEstimation(messages: Message[]): number {
+  const apiCount = tokenCountFromLastAPIResponse(messages);
+  if (apiCount !== undefined) {
+    return apiCount;
+  }
+  return estimateTokens(messages);
 }

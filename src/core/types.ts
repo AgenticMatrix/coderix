@@ -185,7 +185,7 @@ export interface ToolProgress {
 export interface CompactMetadata {
   beforeTokens: number;
   afterTokens: number;
-  strategy: 'none' | 'snip' | 'auto' | 'summarize' | 'time_based' | 'cache_edit';
+  strategy: 'none' | 'snip' | 'auto' | 'summarize' | 'time_based' | 'cache_edit' | 'token_snip';
 }
 
 export class AgentError extends Error {

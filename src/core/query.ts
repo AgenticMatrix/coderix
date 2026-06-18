@@ -37,11 +37,12 @@ import type { SystemPromptAssembler } from './system-prompt.js';
 import type { HookManager } from '../hooks/index.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
 import type { AgentRegistry } from './agent-registry.js';
-import { estimateTokens } from './token-budget.js';
+import { estimateTokens, tokenCountWithEstimation } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
 import type { AppState } from '../state/AppState.js';
 import { applyToolResultLimits } from './tool-result-limiter.js';
+import { Compactor, calculateMessagesToKeepIndex } from './compactor.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1011,73 +1012,150 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       }
     }
 
-    // === Context compaction check (basic snip) ===
-    const currentTokens = estimateTokens(messages);
+    // === Context compaction check ===
+    const currentTokens = tokenCountWithEstimation(messages);
     if (currentTokens / contextBudget > compactThreshold) {
-      // PreCompact hook
-      let injectContext = '';
-      if (hookManager) {
-        try {
-          const result = await hookManager.onPreCompact(
-            sessionId,
-            cwd,
-            messages.length,
-            currentTokens,
-            contextBudget,
-            'snip',
-          );
-          injectContext = result.injectContext;
-        } catch {
-          // Hook failures are non-fatal during compaction
-        }
-      }
+      messages = yield* runCompaction(
+        messages,
+        currentTokens,
+        contextBudget,
+        { sessionId, cwd, hookManager },
+        abortController.signal,
+      );
+    }
+  }
+}
 
-      if (injectContext) {
-        const compactCtxMsg: Message = {
-          role: 'system',
-          content: `[PreCompact hook context]\n${injectContext}`,
-        };
-        messages.push(compactCtxMsg);
-      }
+// ---------------------------------------------------------------------------
+// Compaction (extracted from the main loop for clarity)
+// ---------------------------------------------------------------------------
 
+async function* runCompaction(
+  messages: Message[],
+  currentTokens: number,
+  contextBudget: number,
+  ctx: {
+    sessionId: string;
+    cwd: string;
+    hookManager?: HookManager;
+  },
+  signal: AbortSignal,
+): AsyncGenerator<QueryMessage, Message[]> {
+  const { sessionId, cwd, hookManager } = ctx;
+
+  // ── PreCompact hook ──────────────────────────────────────────────
+  let injectContext = '';
+  if (hookManager) {
+    try {
+      const result = await hookManager.onPreCompact(
+        sessionId,
+        cwd,
+        messages.length,
+        currentTokens,
+        contextBudget,
+        'auto',
+      );
+      injectContext = result.injectContext;
+    } catch {
+      // Hook failures are non-fatal during compaction
+    }
+  }
+
+  if (injectContext) {
+    const compactCtxMsg: Message = {
+      role: 'system',
+      content: `[PreCompact hook context]\n${injectContext}`,
+    };
+    messages.push(compactCtxMsg);
+  }
+
+  // ── Step 1: Micro Compact (time-based, zero API cost) ───────────
+  const compactor = new Compactor({
+    estimateTokens,
+    summarizeEnabled: false,
+  });
+
+  // Derive last interaction time from the last assistant message's
+  // position in the array — a rough heuristic since Message has no
+  // timestamp field. When session.ts adds timestamps, this should
+  // use the actual timestamp instead.
+  const lastUserInteractionTime = Date.now() - (messages.length * 30_000);
+  // ^ Rough: each turn ~30s, so earlier messages = older interaction
+
+  const mcResult = await compactor.microcompact(messages, lastUserInteractionTime);
+  const hasMicroCompact = mcResult.strategy !== 'none';
+
+  if (hasMicroCompact && mcResult.savedTokens > 0) {
+    messages = mcResult.messages;
+
+    // If microcompact brought us under threshold, we're done
+    const afterMCTokens = tokenCountWithEstimation(messages);
+    if (afterMCTokens / contextBudget <= 0.6) {
       const compactMeta: CompactMetadata = {
         beforeTokens: currentTokens,
-        afterTokens: Math.ceil(currentTokens * 0.5),
-        strategy: 'snip',
+        afterTokens: afterMCTokens,
+        strategy: 'time_based',
       };
-      yield { type: 'system', subtype: 'compact_boundary', compactMetadata: compactMeta };
+      yield {
+        type: 'system',
+        subtype: 'compact_boundary',
+        compactMetadata: compactMeta,
+      };
 
       hookManager?.onNotification(
         sessionId,
         cwd,
         'info',
-        `Context compacted: ${currentTokens} → ${compactMeta.afterTokens} tokens (snip)`,
+        `Micro-compacted: ${currentTokens} → ${afterMCTokens} tokens (${mcResult.strategy}, ${mcResult.removedCount} results cleared)`,
         {
           beforeTokens: currentTokens,
-          afterTokens: compactMeta.afterTokens,
-          strategy: 'snip',
+          afterTokens: afterMCTokens,
+          strategy: mcResult.strategy,
         },
       ).catch(() => {});
 
-      // Simple truncation: keep last N messages.
-      // Never split tool_use/tool_result pairs — if the first kept message
-      // has tool_results, walk backwards to include its assistant pair.
-      if (messages.length > 30) {
-        let cutoff = messages.length - 30;
-        while (cutoff > 0) {
-          const msg = messages[cutoff];
-          if (
-            msg?.role === 'user' &&
-            Array.isArray(msg.content) &&
-            msg.content.some((b) => b.type === 'tool_result')
-          ) {
-            cutoff--;
-          } else {
-            break;
-          }
-        }
-        messages = messages.slice(cutoff);
-      }
+      // Early return — messages already updated
+      return messages;
     }
   }
+
+  // ── Step 2: Token-aware truncation ──────────────────────────────
+  const prevCount = messages.length;
+  const keepIndex = calculateMessagesToKeepIndex(messages);
+  if (keepIndex > 0) {
+    messages = messages.slice(keepIndex);
+  }
+  const droppedCount = prevCount - messages.length;
+
+  const afterTokens = tokenCountWithEstimation(messages);
+
+  const strategy: CompactMetadata['strategy'] = hasMicroCompact
+    ? 'time_based'
+    : 'token_snip';
+
+  const compactMeta: CompactMetadata = {
+    beforeTokens: currentTokens,
+    afterTokens,
+    strategy,
+  };
+  yield {
+    type: 'system',
+    subtype: 'compact_boundary',
+    compactMetadata: compactMeta,
+  };
+
+  hookManager?.onNotification(
+    sessionId,
+    cwd,
+    'info',
+    `Context compacted: ${currentTokens} → ${afterTokens} tokens (${strategy}${droppedCount > 0 ? `, dropped ${droppedCount} messages` : ''})`,
+    {
+      beforeTokens: currentTokens,
+      afterTokens,
+      strategy,
+      droppedMessages: droppedCount,
+    },
+  ).catch(() => {});
+
+  return messages;
 }
