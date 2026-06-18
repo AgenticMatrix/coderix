@@ -1,5 +1,5 @@
 /**
- * Skill tool plugin — loads skills from ~/.coder/skills/.
+ * Skill tool plugin — loads skills from ~/.coderix/skills/.
  */
 
 import { schema } from './schema.js';

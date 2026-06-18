@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HookManager } from '../manager.js';
 
-const TEST_DIR = join(tmpdir(), 'coderagent-hook-mgr-' + Date.now());
+const TEST_DIR = join(tmpdir(), 'coderix-hook-mgr-' + Date.now());
 
 function writeHookFile(dir: string, hooks: unknown[]): string {
   const filepath = join(dir, 'hooks.json');

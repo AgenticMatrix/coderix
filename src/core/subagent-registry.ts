@@ -7,7 +7,7 @@
 
 import type { Message } from './types.js';
 
-export type SubagentType = 'explore' | 'plan' | 'general-purpose' | 'verification' | 'coder-guide' | 'statusline-setup';
+export type SubagentType = 'explore' | 'plan' | 'general-purpose' | 'verification' | 'coderix-guide' | 'statusline-setup';
 export type SubAgentStatus = 'running' | 'done' | 'error' | 'stopped';
 
 export interface SubAgentRecord {

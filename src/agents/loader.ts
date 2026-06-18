@@ -5,7 +5,7 @@
  * Discovery priority hierarchy (last write wins for same agentType):
  *   Layer 1: built-in (lowest)
  *   Layer 2: plugin
- *   Layer 3: userSettings   (~/.coder/agents/)
+ *   Layer 3: userSettings   (~/.coderix/agents/)
  *   Layer 4: projectSettings (<project>/.coder/agents/)
  *
  * Adapted from claude-code-best's loadAgentsDir.ts.

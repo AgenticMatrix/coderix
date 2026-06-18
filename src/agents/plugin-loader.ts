@@ -44,7 +44,7 @@ export interface PluginLoadResult {
 export async function loadPluginAgents(
   cwd: string,
 ): Promise<PluginLoadResult> {
-  const pluginsDir = join(cwd, '.coder', 'plugins');
+  const pluginsDir = join(cwd, '.coderix', 'plugins');
   const agents: PluginAgentDefinition[] = [];
   const errors: Array<{ plugin: string; error: string }> = [];
 

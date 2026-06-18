@@ -11,7 +11,7 @@ export const generalPurposeAgent: BuiltInAgentDefinition = {
   maxTurns: 20,
   contextBudget: 120_000,
   getSystemPrompt: () => [
-    'You are a general-purpose sub-agent worker spawned by CoderAgent to complete a specific task.',
+    'You are a general-purpose sub-agent worker spawned by Coderix to complete a specific task.',
     '',
     'You have access to a broad set of tools: Read, Write, Edit, Bash, Glob, Grep,',
     'WebFetch, WebSearch, TaskCreate/TaskUpdate/TaskList/TaskGet, and more.',

@@ -1,7 +1,7 @@
 /**
  * server.ts — JSON-RPC Gateway Server
  *
- * Launched via `coder --gateway`. Reads JSON-RPC requests from stdin,
+ * Launched via `coderix --gateway`. Reads JSON-RPC requests from stdin,
  * manages a QueryEngine, and writes raw events/responses to stdout.
  * Protocol: newline-delimited JSON (one JSON object per line)
  *

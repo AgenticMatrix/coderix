@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CoderAgent — CLI Entry Point
+ * Coderix — CLI Entry Point
  *
  * Flags: --help, --version, --model, --setup, --print, --gateway
  * Dynamic imports keep TUI deps (react/ink) out of gateway/print modes.
@@ -101,9 +101,9 @@ async function runPrintMode(queryText: string): Promise<void> {
 async function main(): Promise<void> {
   const cliArgs = parseCliArgs(process.argv.slice(2));
 
-  if (cliArgs.help) { console.log(`Usage: coder [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode\n`); process.exit(0); }
+  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode\n`); process.exit(0); }
 
-  if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; console.log(`coder-agent ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}`); process.exit(0); }
+  if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; console.log(`coderix ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}`); process.exit(0); }
 
   if (cliArgs.model !== undefined || process.argv.includes('--model') || process.argv.includes('-m')) {
     const { handleModelFlag } = await import('./model-picker.js');

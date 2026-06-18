@@ -2,7 +2,7 @@
  * Team mailbox — inter-agent messaging.
  *
  * Each team member gets an inbox file:
- *   ~/.coder/teams/{team-name}/inboxes/{agent-name}.json
+ *   ~/.coderix/teams/{team-name}/inboxes/{agent-name}.json
  *
  * Messages are appended to the recipient's inbox under a file lock.
  * The coordinator drains unread messages before each turn.

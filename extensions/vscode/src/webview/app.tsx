@@ -35,7 +35,7 @@ const COMMANDS = [
   { name: 'agent', help: 'view sub-agent transcript' },
   { name: 'clear', help: 'start a new conversation' },
   { name: 'commit', help: 'auto-generate commit message and commit staged changes' },
-  { name: 'config', help: 'read or modify settings in ~/.coder/settings.json' },
+  { name: 'config', help: 'read or modify settings in ~/.coderix/settings.json' },
   { name: 'compact', help: 'compact the conversation context' },
   { name: 'doctor', help: 'diagnose your development environment' },
   { name: 'help', help: 'list available commands' },

@@ -4,7 +4,7 @@
  * Consumes the query() AsyncGenerator, manages session state,
  * and provides the main entry point for user interaction.
  *
- * Adapted from CoderAgent for ink-chat-tui.
+ * Adapted from Coderix for ink-chat-tui.
  */
 
 import type {

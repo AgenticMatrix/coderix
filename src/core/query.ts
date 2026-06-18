@@ -5,7 +5,7 @@
  * (stream_event / assistant / user / system / error / progress)
  * consumed by QueryEngine.submitMessage() via for-await.
  *
- * Adapted from CoderAgent for ink-chat-tui.
+ * Adapted from Coderix for ink-chat-tui.
  */
 
 import type {

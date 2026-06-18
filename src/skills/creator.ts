@@ -5,10 +5,10 @@
  * skill creation via LLM draft generation, and writes SKILL.md files.
  *
  * Flow:
- *  1. trackTask() — record each task execution to ~/.coder/skills/.task-patterns.json
+ *  1. trackTask() — record each task execution to ~/.coderix/skills/.task-patterns.json
  *  2. shouldCreateSkill() — check if pattern repeats enough (≥2) or is complex enough
  *  3. generateDraft() → proposeSkill() — LLM generates SKILL.md draft
- *  4. writeSkill() — atomic write to ~/.coder/skills/<name>/SKILL.md
+ *  4. writeSkill() — atomic write to ~/.coderix/skills/<name>/SKILL.md
  */
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
@@ -27,7 +27,7 @@ import { SkillLoader } from './loader.js';
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_SKILLS_DIR = join(homedir(), '.coder', 'skills');
+const DEFAULT_SKILLS_DIR = join(homedir(), '.coderix', 'skills');
 const TASK_PATTERNS_FILE = '.task-patterns.json';
 const MIN_REPEAT_COUNT = 2;
 const MIN_COMPLEXITY = 0.6;

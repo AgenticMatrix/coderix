@@ -3,7 +3,7 @@
  *
  * ContentBlock-driven message model: each Message contains an array of
  * typed ContentBlocks that drive rendering.  The model supports both
- * CoderAgent (35+ tools).
+ * Coderix (35+ tools).
  */
 
 // ── ContentBlock types ──────────────────────────────────────────────

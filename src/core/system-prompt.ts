@@ -254,7 +254,7 @@ export class SystemPromptAssembler {
   }
 
   /**
-   * Priority 30 — Project and user CODERAGENT.md context.
+   * Priority 30 — Project and user CODERIX.md context.
    */
   private buildCodeAgentMd(ctx: CodeAgentContext, role: string): PromptPart | null {
     // Workers are too focused to need broad project context
@@ -319,7 +319,7 @@ export class SystemPromptAssembler {
   }
 
   /**
-   * Priority 45 — Available skills loaded from ~/.coder/skills/.
+   * Priority 45 — Available skills loaded from ~/.coderix/skills/.
    *
    * Progressive Disclosure: only name + description + triggers are shown.
    * The full skill body is loaded when the agent invokes the Skill tool.
@@ -411,12 +411,12 @@ export class SystemPromptAssembler {
     return [
       '# Role',
       '',
-      'You are CoderAgent, a fully open-source coding agent. You help users write,',
+      'You are Coderix, a fully open-source coding agent. You help users write,',
       'edit, understand, and navigate code. You have access to the filesystem, can',
       'run shell commands, search code, browse the web, manage structured task lists,',
       'and spawn sub-agents for parallel work.',
       '',
-      'CoderAgent is community-maintained and provider-agnostic — you can work with',
+      'Coderix is community-maintained and provider-agnostic — you can work with',
       'any LLM provider. Your goal is to be a capable, reliable coding partner.',
       '',
       'Work methodically:',
@@ -431,7 +431,7 @@ export class SystemPromptAssembler {
     return [
       '# Role',
       '',
-      'You are CoderAgent, a fully open-source coding agent. You help users write,',
+      'You are Coderix, a fully open-source coding agent. You help users write,',
       'edit, understand, and navigate code. You have access to the filesystem, can',
       'run shell commands, search code, browse the web, manage structured task lists,',
       'and spawn sub-agents for parallel work.',
@@ -457,7 +457,7 @@ export class SystemPromptAssembler {
     return [
       '# Role',
       '',
-      'You are a sub-agent worker spawned by CoderAgent to complete a specific task.',
+      'You are a sub-agent worker spawned by Coderix to complete a specific task.',
       'Complete your task efficiently using the tools available to you.',
       '',
       'Rules:',

@@ -205,7 +205,7 @@ async function searchDuckDuckGo(
   const url = `https://html.duckduckgo.com/html?q=${encodeURIComponent(query)}`;
   const response = await undiciFetch(url, {
     headers: {
-      'User-Agent': 'CoderAgent/0.1 (open-source; web-search)',
+      'User-Agent': 'Coderix/0.1 (open-source; web-search)',
       'Accept': 'text/html',
     },
     signal: AbortSignal.timeout(10_000),
@@ -300,7 +300,7 @@ async function searchBrave(
   const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
   const response = await undiciFetch(url, {
     headers: {
-      'User-Agent': 'CoderAgent/0.1 (open-source; web-search)',
+      'User-Agent': 'Coderix/0.1 (open-source; web-search)',
       'Accept': 'application/json',
       'Accept-Encoding': 'gzip',
       'X-Subscription-Token': apiKey,
@@ -339,7 +339,7 @@ async function searchBingApi(
   const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=${maxResults}&mkt=en-US`;
   const response = await undiciFetch(url, {
     headers: {
-      'User-Agent': 'CoderAgent/0.1 (open-source; web-search)',
+      'User-Agent': 'Coderix/0.1 (open-source; web-search)',
       'Accept': 'application/json',
       'Ocp-Apim-Subscription-Key': apiKey,
     },

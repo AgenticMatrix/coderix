@@ -1,7 +1,7 @@
 /**
  * Team store — persistence layer for team configs.
  *
- * Teams are stored at ~/.coder/teams/{team-name}/config.json.
+ * Teams are stored at ~/.coderix/teams/{team-name}/config.json.
  * Uses proper-lockfile for concurrent access.
  */
 
@@ -16,7 +16,7 @@ import type { TeamConfig, TeamMember } from './types.js';
 // Path helpers
 // ---------------------------------------------------------------------------
 
-const TEAMS_DIR = join(homedir(), '.coder', 'teams');
+const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
 
 function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'unnamed';

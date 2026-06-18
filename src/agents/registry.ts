@@ -6,7 +6,7 @@
  * Registration order determines override priority (last write wins):
  *   Layer 1: built-in (lowest priority)
  *   Layer 2: plugin agents (future)
- *   Layer 3: user-level agents   (~/.coder/agents/*.md)
+ *   Layer 3: user-level agents   (~/.coderix/agents/*.md)
  *   Layer 4: project-level agents (<cwd>/.coder/agents/*.md)
  *
  * Adapted from claude-code-best's loadAgentsDir + getBuiltInAgents.
@@ -59,14 +59,14 @@ export async function buildAgentRegistry(cwd: string): Promise<{
   }));
 
   // Layer 3: user-level agents
-  const userDir = join(homedir(), '.coder', 'agents');
+  const userDir = join(homedir(), '.coderix', 'agents');
   const userResult = await loadAgentsFromDir(userDir, 'userSettings');
   for (const agent of userResult.agents) {
     registry.register(agent);
   }
 
   // Layer 4: project-level agents
-  const projectDir = join(cwd, '.coder', 'agents');
+  const projectDir = join(cwd, '.coderix', 'agents');
   const projectResult = await loadAgentsFromDir(projectDir, 'projectSettings');
   for (const agent of projectResult.agents) {
     registry.register(agent);

@@ -1,6 +1,6 @@
 /**
  * Provider-internal message types — decoupled from the TUI message model.
- * These match the CoderAgent @coder/shared types that the provider layer expects.
+ * These match the Coderix @coder/shared types that the provider layer expects.
  */
 
 // ---------------------------------------------------------------------------

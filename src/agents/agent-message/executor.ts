@@ -99,7 +99,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // Use agent definition's system prompt if available, else fallback
   const systemPromptText = agentDef?.getSystemPrompt() ?? [
-    'You are a sub-agent worker spawned by CoderAgent to complete a specific task.',
+    'You are a sub-agent worker spawned by Coderix to complete a specific task.',
     'Complete the task efficiently using the tools available to you.',
     'You CANNOT spawn additional sub-agents.',
     'Do not ask the user questions -- you are operating autonomously.',

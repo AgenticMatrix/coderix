@@ -106,7 +106,7 @@ function wrapFetchError(err: unknown, url: string, proxy?: string): Error {
         ? `The proxy (${proxy}) may be unreachable.`
         : 'The site may be blocked or unreachable from your network.',
       'If you are behind a firewall or in a restricted network,',
-      'configure a proxy in ~/.coder/settings.json under web_search.proxy.',
+      'configure a proxy in ~/.coderix/settings.json under web_search.proxy.',
     ];
     return new Error(hints.join(' '));
   }

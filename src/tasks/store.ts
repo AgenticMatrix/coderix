@@ -16,7 +16,7 @@ import {
 // Paths
 // ---------------------------------------------------------------------------
 
-const TASKS_BASE_DIR = join(homedir(), '.coder', 'tasks');
+const TASKS_BASE_DIR = join(homedir(), '.coderix', 'tasks');
 const HIGH_WATER_MARK_FILE = '.highwatermark';
 
 function getTaskListDir(taskListId: string): string {

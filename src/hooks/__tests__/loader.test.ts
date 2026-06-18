@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HookLoader } from '../loader.js';
 
-const TEST_DIR = join(tmpdir(), 'coderagent-hook-test-' + Date.now());
+const TEST_DIR = join(tmpdir(), 'coderix-hook-test-' + Date.now());
 
 function writeHookFile(dir: string, hooks: unknown[]): string {
   const filepath = join(dir, 'hooks.json');

@@ -1,4 +1,4 @@
-# CoderAgent Skills
+# Coderix Skills
 
 Skills are optional, installable modules that add capabilities to the AI agent.
 
@@ -10,7 +10,7 @@ resources/skills/           ← source (shipped with the project)
     ├── SKILL.md            ← skill definition (YAML frontmatter + Markdown body)
     └── ...                 ← supporting files (scripts, configs, etc.)
 
-~/.coder/skills/            ← installed target (copied on first run)
+~/.coderix/skills/            ← installed target (copied on first run)
 └── <skill-name>/
     ├── SKILL.md
     └── ...
@@ -64,7 +64,7 @@ author: your-name
 
 ## How Skills Work
 
-1. **Install**: `install.sh` copies `resources/skills/` → `~/.coder/skills/`
+1. **Install**: `install.sh` copies `resources/skills/` → `~/.coderix/skills/`
 2. **Discover**: System prompt lists available skills (name + description + triggers)
 3. **Invoke**: Agent calls the `skill` tool → loads SKILL.md body → follows instructions
 4. **Execute**: Skill instructions tell the agent which tools to use and how
@@ -79,5 +79,5 @@ author: your-name
 
 1. Create `resources/skills/<name>/SKILL.md`
 2. Add supporting files (scripts, configs) to the same directory
-3. Test: copy to `~/.coder/skills/<name>/`, restart CoderAgent, type `/skill`
-4. All files in the skill directory are copied to `~/.coder/skills/<name>/` on install
+3. Test: copy to `~/.coderix/skills/<name>/`, restart Coderix, type `/skill`
+4. All files in the skill directory are copied to `~/.coderix/skills/<name>/` on install

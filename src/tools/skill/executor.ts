@@ -1,5 +1,5 @@
 /**
- * Skill tool executor — loads a skill by name from ~/.coder/skills/
+ * Skill tool executor — loads a skill by name from ~/.coderix/skills/
  * and returns its full body as tool output so the LLM can follow
  * the skill's instructions.
  *

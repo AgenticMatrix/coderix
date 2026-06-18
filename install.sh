@@ -1,9 +1,9 @@
 #!/bin/bash
-# install.sh — One-click installer for CoderAgent
+# install.sh — One-click installer for Coderix
 #
 # Usage:
 #   # Remote install (from GitHub)
-#   curl -fsSL https://raw.githubusercontent.com/AgenticMatrix/CoderAgent/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/AgenticMatrix/coderix/main/install.sh | bash
 #
 #   # Local development install (run from repo root)
 #   ./install.sh --local
@@ -11,7 +11,7 @@
 #
 # This script:
 #   1. Checks Node.js >= 22
-#   2. Installs coder (npm registry or local link)
+#   2. Installs coderix (npm registry or local link)
 #   3. Creates ~/.coder configuration directory
 #   4. Optionally sets up API keys
 set -euo pipefail
@@ -31,7 +31,7 @@ done
 
 echo -e "${CYAN}"
 echo "╔══════════════════════════════════════════════════╗"
-echo "║       CoderAgent — One-Click Installer           ║"
+echo "║       Coderix — One-Click Installer           ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
@@ -44,7 +44,7 @@ NODE_MIN_VERSION=22
 if ! command -v node &> /dev/null; then
   echo -e "${RED}ERROR: Node.js is not installed.${NC}"
   echo ""
-  echo "CoderAgent requires Node.js >= ${NODE_MIN_VERSION}."
+  echo "Coderix requires Node.js >= ${NODE_MIN_VERSION}."
   echo "Install it from: https://nodejs.org/"
   echo ""
   echo "Or use a version manager:"
@@ -60,7 +60,7 @@ NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
 echo -e "Node.js version: ${GREEN}v${NODE_VERSION}${NC}"
 
 if [ "$NODE_MAJOR" -lt "$NODE_MIN_VERSION" ]; then
-  echo -e "${YELLOW}Node.js v${NODE_MAJOR} detected. CoderAgent requires >= ${NODE_MIN_VERSION}.${NC}"
+  echo -e "${YELLOW}Node.js v${NODE_MAJOR} detected. Coderix requires >= ${NODE_MIN_VERSION}.${NC}"
   echo ""
 
   AUTO_INSTALLED=false
@@ -124,51 +124,13 @@ fi
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -f "${SCRIPT_DIR}/package.json" ] && grep -q '"coder-agent"' "${SCRIPT_DIR}/package.json" 2>/dev/null; then
+if [ -f "${SCRIPT_DIR}/package.json" ] && grep -q '"coderix"' "${SCRIPT_DIR}/package.json" 2>/dev/null; then
   LOCAL_INSTALL=true
   REPO_DIR="${SCRIPT_DIR}"
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Clean up stale coder command from KodeAgent
-# ---------------------------------------------------------------------------
-echo ""
-
-# Remove stale shell alias for coder (from KodeAgent)
-if alias coder &>/dev/null 2>&1; then
-  echo -e "${YELLOW}Found stale 'coder' alias (from KodeAgent). Removing...${NC}"
-  unalias coder 2>/dev/null || true
-
-  # Clean up the alias from shell rc files
-  for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.config/fish/config.fish"; do
-    if [ -f "$rc" ]; then
-      # Remove lines containing the KodeAgent coder alias
-      if grep -q "alias coder=" "$rc" 2>/dev/null; then
-        echo -e "${YELLOW}Removing 'alias coder=' from ${rc}${NC}"
-
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-          sed -i '' '/alias coder=/d' "$rc"
-        else
-          sed -i '/alias coder=/d' "$rc"
-        fi
-      fi
-    fi
-  done
-fi
-
-# Remove stale global npm coder link from @coder/cli (KodeAgent)
-NPM_PREFIX=$(npm config get prefix 2>/dev/null || echo "")
-if [ -n "$NPM_PREFIX" ]; then
-  STALE_CODER="${NPM_PREFIX}/bin/coder"
-  if [ -L "$STALE_CODER" ] && readlink "$STALE_CODER" 2>/dev/null | grep -q "@coder/cli"; then
-    echo -e "${YELLOW}Found stale 'coder' link from @coder/cli (KodeAgent). Removing...${NC}"
-    rm -f "$STALE_CODER"
-    npm uninstall -g @coder/cli 2>/dev/null || true
-  fi
-fi
-
-# ---------------------------------------------------------------------------
-# 4. Install coder
+# 3. Install coderix
 # ---------------------------------------------------------------------------
 echo ""
 
@@ -176,10 +138,10 @@ if $LOCAL_INSTALL; then
   echo -e "${CYAN}Local development install detected.${NC}"
 
   if [ -z "${REPO_DIR:-}" ]; then
-    echo -e "${RED}ERROR: --local flag used but not inside coder repo.${NC}"
+    echo -e "${RED}ERROR: --local flag used but not inside coderix repo.${NC}"
     echo "Run this script from the repo root:"
-    echo "  git clone https://github.com/AgenticMatrix/CoderAgent.git"
-    echo "  cd CoderAgent && ./install.sh --local"
+    echo "  git clone https://github.com/AgenticMatrix/coderix.git"
+    echo "  cd coderix && ./install.sh --local"
     exit 1
   fi
 
@@ -190,25 +152,25 @@ if $LOCAL_INSTALL; then
   (cd "${REPO_DIR}" && npm install)
 
   echo ""
-  echo -e "${CYAN}Building coder...${NC}"
+  echo -e "${CYAN}Building coderix...${NC}"
   (cd "${REPO_DIR}" && npm run build)
 
   echo ""
-  echo -e "${CYAN}Linking coder command globally...${NC}"
+  echo -e "${CYAN}Linking coderix command globally...${NC}"
   (cd "${REPO_DIR}" && npm link --force 2>/dev/null || npm link 2>/dev/null || true)
 
-  echo -e "${GREEN}coder built and linked locally${NC}"
+  echo -e "${GREEN}coderix built and linked locally${NC}"
 
 else
-  echo -e "${CYAN}Installing coder from npm registry...${NC}"
-  if npm install -g coder 2>&1; then
-    echo -e "${GREEN}coder installed from npm${NC}"
+  echo -e "${CYAN}coderix from npm registry...${NC}"
+  if npm install -g coderix 2>&1; then
+    echo -e "${GREEN}coderix installed from npm${NC}"
   else
     echo -e "${YELLOW}npm registry install failed (package may not be published yet).${NC}"
     echo ""
     echo "To install from source:"
-    echo "  git clone https://github.com/AgenticMatrix/CoderAgent.git"
-    echo "  cd CoderAgent && ./install.sh --local"
+    echo "  git clone https://github.com/AgenticMatrix/coderix.git"
+    echo "  cd coderix && ./install.sh --local"
     exit 1
   fi
 fi
@@ -219,11 +181,11 @@ fi
 echo ""
 echo -e "${CYAN}Verifying installation...${NC}"
 
-if command -v coder &> /dev/null; then
-  CODER_VERSION=$(coder --version 2>/dev/null || echo "0.1.0")
-  echo -e "${GREEN}coder command available (${CODER_VERSION})${NC}"
+if command -v coderix &> /dev/null; then
+  CODER_VERSION=$(coderix --version 2>/dev/null || echo "0.1.0")
+  echo -e "${GREEN}coderix command available (${CODER_VERSION})${NC}"
 else
-  echo -e "${YELLOW}coder command not on PATH yet. Configuring PATH automatically...${NC}"
+  echo -e "${YELLOW}coderix command not on PATH yet. Configuring PATH automatically...${NC}"
 
   SHELL_NAME=$(basename "$SHELL" 2>/dev/null || echo "bash")
 
@@ -257,7 +219,7 @@ else
     esac
 
     echo "" >> "$RC_FILE"
-    echo "# Added by CoderAgent installer" >> "$RC_FILE"
+    echo "# Added by Coderix installer" >> "$RC_FILE"
     echo "export PATH=\"${NPM_BIN_DIR}:\$PATH\"" >> "$RC_FILE"
 
     export PATH="${NPM_BIN_DIR}:$PATH"
@@ -267,9 +229,9 @@ else
     echo "Run this to apply immediately:"
     echo "  source ${RC_FILE}"
 
-    if command -v coder &> /dev/null; then
-      CODER_VERSION=$(coder --version 2>/dev/null || echo "0.1.0")
-      echo -e "${GREEN}coder command available (${CODER_VERSION})${NC}"
+    if command -v coderix &> /dev/null; then
+      CODER_VERSION=$(coderix --version 2>/dev/null || echo "0.1.0")
+      echo -e "${GREEN}coderix command available (${CODER_VERSION})${NC}"
     fi
   fi
 fi
@@ -277,26 +239,26 @@ fi
 # ---------------------------------------------------------------------------
 # 6. Create configuration directory
 # ---------------------------------------------------------------------------
-CODER_DIR="${HOME}/.coder"
+CODERIX_DIR="${HOME}/.coderix"
 
 echo ""
 echo -e "${CYAN}Setting up configuration...${NC}"
 
-mkdir -p "${CODER_DIR}"
-mkdir -p "${CODER_DIR}/sessions"
-mkdir -p "${CODER_DIR}/skills"
-mkdir -p "${CODER_DIR}/scratchpad"
+mkdir -p "${CODERIX_DIR}"
+mkdir -p "${CODERIX_DIR}/sessions"
+mkdir -p "${CODERIX_DIR}/skills"
+mkdir -p "${CODERIX_DIR}/scratchpad"
 
-echo -e "${GREEN}Configuration directory created at ${CODER_DIR}${NC}"
+echo -e "${GREEN}Configuration directory created at ${CODERIX_DIR}${NC}"
 
-# Copy bundled skills (web-bridge, etc.) to ~/.coder/skills/
+# Copy bundled skills (web-bridge, etc.) to ~/.coderix/skills/
 if [ -d "${SCRIPT_DIR}/resources/skills" ]; then
   echo ""
   echo -e "${CYAN}Installing bundled skills...${NC}"
   for skill_dir in "${SCRIPT_DIR}/resources/skills"/*/; do
     skill_name=$(basename "${skill_dir}")
     if [ -f "${skill_dir}/SKILL.md" ]; then
-      dest_dir="${CODER_DIR}/skills/${skill_name}"
+      dest_dir="${CODERIX_DIR}/skills/${skill_name}"
       mkdir -p "${dest_dir}"
       # Copy all files from the skill directory
       copied=0
@@ -318,7 +280,7 @@ fi
 # ---------------------------------------------------------------------------
 # 8. Create default settings.json
 # ---------------------------------------------------------------------------
-SETTINGS_FILE="${CODER_DIR}/settings.json"
+SETTINGS_FILE="${CODERIX_DIR}/settings.json"
 
 echo ""
 if [ ! -f "$SETTINGS_FILE" ]; then
@@ -355,30 +317,30 @@ echo -e "  To control your existing browser (preserve logins/cookies):"
 echo -e "  1. Open ${YELLOW}chrome://extensions/${NC}"
 echo -e "  2. Enable ${YELLOW}Developer mode${NC} (toggle top-right)"
 echo -e "  3. Click ${YELLOW}Load unpacked${NC}"
-echo -e "  4. Select: ${YELLOW}${CODER_DIR}/skills/web-bridge/extension/${NC}"
+echo -e "  4. Select: ${YELLOW}${CODERIX_DIR}/skills/web-bridge/extension/${NC}"
 echo ""
 echo -e "  Or use CDP mode (no extension needed):"
-echo -e "  ${YELLOW}npx tsx ${CODER_DIR}/skills/web-bridge/web-bridge-cli.ts --action start-browser${NC}"
+echo -e "  ${YELLOW}npx tsx ${CODERIX_DIR}/skills/web-bridge/web-bridge-cli.ts --action start-browser${NC}"
 
 # ---------------------------------------------------------------------------
 # 9. Done
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  CoderAgent installation complete!               ║${NC}"
+echo -e "${GREEN}║  Coderix installation complete!               ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${CYAN}Quick Start:${NC}"
 echo ""
 echo "  # Start an interactive session"
-echo "  coder"
+echo "  coderix"
 echo ""
 echo "  # Ask a one-shot question"
-echo "  coder 'Explain this codebase'"
+echo "  coderix 'Explain this codebase'"
 echo ""
 echo -e "${CYAN}Configuration:${NC}"
-echo "  ~/.coder/               — Configuration directory"
-echo "  ~/.coder/settings.json  — Provider & model settings"
-echo "  CODERAGENT.md           — Project-specific instructions"
+echo "  ~/.coderix/               — Configuration directory"
+echo "  ~/.coderix/settings.json  — Provider & model settings"
+echo "  CODERIX.md           — Project-specific instructions"
 echo ""
-echo -e "${YELLOW}Documentation: https://github.com/AgenticMatrix/CoderAgent${NC}"
+echo -e "${YELLOW}Documentation: https://github.com/AgenticMatrix/Coderix${NC}"

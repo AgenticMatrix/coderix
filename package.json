@@ -1,10 +1,10 @@
 {
-  "name": "coder-agent",
+  "name": "coderix",
   "version": "0.1.0",
-  "description": "CoderAgent — A fully open-source AI programming assistant for the terminal",
+  "description": "Coderix — A fully open-source AI programming assistant for the terminal",
   "type": "module",
   "bin": {
-    "coder": "./bin/coder.js"
+    "coderix": "./bin/coderix.js"
   },
   "scripts": {
     "start": "tsx src/cli/main.tsx",

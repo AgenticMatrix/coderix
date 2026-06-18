@@ -2,7 +2,7 @@
  * loader.ts — HookLoader
  *
  * Discovers hook configurations from two layers:
- *   1. Global: ~/.coder/hooks.json
+ *   1. Global: ~/.coderix/hooks.json
  *   2. Project: .coder/hooks.json (takes precedence — its hooks run first)
  *
  * Merged hooks are indexed by event type for O(1) lookup inside
@@ -18,8 +18,8 @@ import type { HookConfig, HookDefinition, HookEvent } from './types.js';
 // Default paths
 // ═══════════════════════════════════════════════════════════════════
 
-const DEFAULT_GLOBAL_PATH = join(homedir(), '.coder', 'hooks.json');
-const DEFAULT_PROJECT_PATH = join('.coder', 'hooks.json');
+const DEFAULT_GLOBAL_PATH = join(homedir(), '.coderix', 'hooks.json');
+const DEFAULT_PROJECT_PATH = join('.coderix', 'hooks.json');
 
 // ═══════════════════════════════════════════════════════════════════
 // Loader config

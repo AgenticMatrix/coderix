@@ -1,5 +1,5 @@
 /**
- * /skill — list available skills from ~/.coder/skills/
+ * /skill — list available skills from ~/.coderix/skills/
  *
  * Usage:
  *   /skill          List all installed skills
@@ -37,7 +37,7 @@ export const skillCommands: SlashCommand[] = [
           ctx.sys(
             `Skill "${skillName}" not found.\n\n` +
             `Installed skills: ${names || '(none)'}\n\n` +
-            `Skills are stored in ~/.coder/skills/<name>/SKILL.md`,
+            `Skills are stored in ~/.coderix/skills/<name>/SKILL.md`,
           );
           return;
         }
@@ -76,9 +76,9 @@ export const skillCommands: SlashCommand[] = [
       if (all.length === 0) {
         ctx.sys(
           'No skills installed.\n\n' +
-          'Skills are stored in ~/.coder/skills/<name>/SKILL.md\n' +
+          'Skills are stored in ~/.coderix/skills/<name>/SKILL.md\n' +
           'Bundled skills are copied on first run (see resources/skills/).\n' +
-          'Run install.sh or restart CoderAgent to install bundled skills.',
+          'Run install.sh or restart Coderix to install bundled skills.',
         );
         return;
       }

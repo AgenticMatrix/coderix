@@ -6,7 +6,7 @@
  * each agent type its own persistent memory context across sessions.
  *
  * Supported scopes:
- *   - 'user'     — user-level memories (~/.coder/memory/)
+ *   - 'user'     — user-level memories (~/.coderix/memory/)
  *   - 'project'  — project-level memories (<project>/.coder/memory/)
  *   - 'local'    — local workspace memories (cwd/.coder/memory/)
  *
@@ -28,13 +28,13 @@ export type AgentMemoryScope = 'user' | 'project' | 'local';
 function getMemoryDir(scope: AgentMemoryScope, cwd: string): string {
   switch (scope) {
     case 'user':
-      return join(homedir(), '.coder', 'memory');
+      return join(homedir(), '.coderix', 'memory');
     case 'project':
-      return join(cwd, '.coder', 'memory');
+      return join(cwd, '.coderix', 'memory');
     case 'local':
-      return join(cwd, '.coder', 'memory');
+      return join(cwd, '.coderix', 'memory');
     default:
-      return join(cwd, '.coder', 'memory');
+      return join(cwd, '.coderix', 'memory');
   }
 }
 

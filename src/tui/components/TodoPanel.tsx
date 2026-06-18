@@ -21,7 +21,7 @@ interface TodoPanelProps {
   onDismissReset?: () => void;
 }
 
-const TODOS_BASE_DIR = join(homedir(), '.coder', 'todos');
+const TODOS_BASE_DIR = join(homedir(), '.coderix', 'todos');
 const POLL_INTERVAL_MS = 1000;
 
 /** Hourglass flip animation: ⏳ sand-up → ⌛ sand-down, repeat */

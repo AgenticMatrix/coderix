@@ -12,7 +12,7 @@ export const planAgent: BuiltInAgentDefinition = {
   maxTurns: 20,
   contextBudget: 120_000,
   getSystemPrompt: () => [
-    'You are a planning sub-agent for CoderAgent. Analyze the problem and design a detailed implementation plan.',
+    'You are a planning sub-agent for Coderix. Analyze the problem and design a detailed implementation plan.',
     '',
     'Capabilities:',
     '- You have read-only access to the codebase. You CANNOT modify files.',

@@ -1,5 +1,5 @@
 /**
- * Input history — persisted to ~/.coder/history.json.
+ * Input history — persisted to ~/.coderix/history.json.
  *
  * Deduplicates consecutive identical entries and caps at 1000 lines.
  */
@@ -7,11 +7,11 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const HISTORY_PATH = join(homedir(), '.coder', 'history.json');
+const HISTORY_PATH = join(homedir(), '.coderix', 'history.json');
 const MAX_ENTRIES = 1000;
 
 function ensureDir(): void {
-  const dir = join(homedir(), '.coder');
+  const dir = join(homedir(), '.coderix');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 

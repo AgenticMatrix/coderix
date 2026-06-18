@@ -1,5 +1,5 @@
 /**
- * Core shared types — aggregated from CoderAgent's @coder/shared.
+ * Core shared types — aggregated from Coderix's @coder/shared.
  *
  * Only the types actually imported by query-engine.ts and query.ts are included.
  */

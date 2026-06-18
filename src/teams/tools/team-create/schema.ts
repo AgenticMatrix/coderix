@@ -3,7 +3,7 @@ import type { ToolSchema } from '../../../tools/types.js';
 export const schema: ToolSchema = {
   name: 'team-create',
   description:
-    'Create a new team for coordinated multi-agent work. A team defines a roster of members (each with a name, agent type, and task) that can be activated with team-dispatch. The team persists in ~/.coder/teams/ and supports inter-agent messaging via team-message.',
+    'Create a new team for coordinated multi-agent work. A team defines a roster of members (each with a name, agent type, and task) that can be activated with team-dispatch. The team persists in ~/.coderix/teams/ and supports inter-agent messaging via team-message.',
   input_schema: {
     type: 'object',
     properties: {

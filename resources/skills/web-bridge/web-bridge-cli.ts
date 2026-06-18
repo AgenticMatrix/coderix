@@ -18,7 +18,7 @@
  *   npx tsx web-bridge-cli.ts --action connect
  *   npx tsx web-bridge-cli.ts --action status
  *
- * Config (read from ~/.coder/settings.json web_bridge section):
+ * Config (read from ~/.coderix/settings.json web_bridge section):
  *   debugPort:    CDP port (default 9222)
  *   browserPath:  path to Chrome/Edge binary
  *   headless:     run headless (default false)
@@ -76,7 +76,7 @@ interface WbConfig {
 
 function loadConfig(): WbConfig {
   try {
-    const settingsPath = join(homedir(), '.coder', 'settings.json');
+    const settingsPath = join(homedir(), '.coderix', 'settings.json');
     if (existsSync(settingsPath)) {
       const raw = readFileSync(settingsPath, 'utf-8');
       const settings = JSON.parse(raw);
@@ -228,7 +228,7 @@ async function main() {
   if (action === 'start-browser' || action === 'start_browser') {
     const browserPath = config.browserPath || findBrowserPath();
     if (!browserPath) {
-      console.error('ERROR: No Chrome/Edge found. Set web_bridge.browserPath in ~/.coder/settings.json');
+      console.error('ERROR: No Chrome/Edge found. Set web_bridge.browserPath in ~/.coderix/settings.json');
       process.exit(1);
     }
     const userDataDir = config.userDataDir || `${process.env.TEMP || '/tmp'}/cdp-profile-${Date.now()}`;

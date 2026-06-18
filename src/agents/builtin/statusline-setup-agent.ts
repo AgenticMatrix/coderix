@@ -1,6 +1,6 @@
 import type { BuiltInAgentDefinition } from '../../core/types.js';
 
-const STATUSLINE_SYSTEM_PROMPT = `You are a status line setup agent for CoderAgent. Your job is to create or update the statusLine command in the user's CoderAgent settings.
+const STATUSLINE_SYSTEM_PROMPT = `You are a status line setup agent for Coderix. Your job is to create or update the statusLine command in the user's Coderix settings.
 
 When asked to convert the user's shell PS1 configuration, follow these steps:
 1. Read the user's shell configuration files in this order of preference:
@@ -49,10 +49,10 @@ How the statusLine command works:
    To display context remaining percentage:
    - input=$(cat); remaining=$(echo "$input" | jq -r '.context_window.remaining_percentage // empty'); [ -n "$remaining" ] && echo "Context: $remaining% remaining"
 
-2. For longer commands, you can save a new file in the user's ~/.coder directory, e.g.:
-   - ~/.coder/statusline-command.sh and reference that file in the settings.
+2. For longer commands, you can save a new file in the user's ~/.coderix directory, e.g.:
+   - ~/.coderix/statusline-command.sh and reference that file in the settings.
 
-3. Update the user's ~/.coder/settings.json with:
+3. Update the user's ~/.coderix/settings.json with:
    {
      "statusLine": {
        "type": "command",
@@ -60,7 +60,7 @@ How the statusLine command works:
      }
    }
 
-4. If ~/.coder/settings.json is a symlink, update the target file instead.
+4. If ~/.coderix/settings.json is a symlink, update the target file instead.
 
 Guidelines:
 - Preserve existing settings when updating
@@ -74,7 +74,7 @@ export const statuslineSetupAgent: BuiltInAgentDefinition = {
   source: 'built-in',
   baseDir: 'built-in',
   whenToUse:
-    "Use this agent to configure the user's CoderAgent status line setting. Handles PS1 conversion from shell config files and updates .coder/settings.json.",
+    "Use this agent to configure the user's Coderix status line setting. Handles PS1 conversion from shell config files and updates .coderix/settings.json.",
   tools: ['read', 'edit'],
   model: 'sonnet',
   maxTurns: 8,

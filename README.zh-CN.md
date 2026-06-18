@@ -1,4 +1,4 @@
-# CoderAgent
+# Coderix
 
 <div align="center">
 
@@ -13,18 +13,18 @@
 </div>
 
 <div align="center">
-<img src="./assets/screen.gif" width="80%" alt="CoderAgent 演示" />
+<img src="./assets/screen.gif" width="80%" alt="Coderix 演示" />
 </div>
 
-CoderAgent 是一个强大的命令行 AI 编程助手，完全运行在你的终端中。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。基于 Ink/React 构建，拥有精美的终端界面。
+Coderix 是一个强大的命令行 AI 编程助手，完全运行在你的终端中。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。基于 Ink/React 构建，拥有精美的终端界面。
 
 > 本项目 **99.9%** 的代码由 **DeepSeek** 模型生成。我们相信，展示 AI 编码能力的最佳方式就是用 AI 构建一个编码工具。
 
 ---
 
-## 为什么选择 CoderAgent？
+## 为什么选择 Coderix？
 
-|  | Claude Code | CoderAgent |
+|  | Claude Code | Coderix |
 |---|---|---|
 | **许可证** | 闭源商业许可 | Apache 2.0 开源 |
 | **源代码** | 不公开 | 完全开放 |
@@ -44,8 +44,8 @@ CoderAgent 是一个强大的命令行 AI 编程助手，完全运行在你的�
 ### 安装
 
 ```bash
-git clone https://github.com/AgenticMatrix/CoderAgent.git
-cd CoderAgent
+git clone https://github.com/AgenticMatrix/coderix.git
+cd coderix
 ./install.sh --local
 ```
 
@@ -59,23 +59,23 @@ npm run dev
 
 ```bash
 # 首次运行配置向导
-coder setup
+coderix setup
 
-# 或者手动编辑 ~/.coder/settings.json
+# 或者手动编辑 ~/.coderix/settings.json
 ```
 
 ### 开始使用
 
 ```bash
 # 交互式会话
-coder
+coderix
 
 # 单次查询
-coder --print "解释 src/core/query-engine.ts 这个文件"
+coderix --print "解释 src/core/query-engine.ts 这个文件"
 
 # 切换模型
-coder --model
-coder -m "deepseek/deepseek-v4-pro"
+coderix --model
+coderix -m "deepseek/deepseek-v4-pro"
 ```
 
 ---
@@ -93,13 +93,13 @@ coder -m "deepseek/deepseek-v4-pro"
 - **Hook 钩子系统** — 可扩展的生命周期钩子
 - **技能模块** — 可插拔的技能插件
 - **会话管理** — 检查点保存、恢复、分支会话
-- **模型选择器** — 交互式终端模型选择（`coder --model` / `coder setup`）
+- **模型选择器** — 交互式终端模型选择（`coderix --model` / `coderix setup`）
 
 ---
 
 ## 配置说明
 
-编辑 `~/.coder/settings.json`：
+编辑 `~/.coderix/settings.json`：
 
 ```json
 {
@@ -172,20 +172,20 @@ coder -m "deepseek/deepseek-v4-pro"
 
 | 命令 | 说明 |
 |---|---|
-| `coder` | 启动交互式会话 |
-| `coder "问题"` | 单次提问 |
-| `coder --help` | 显示帮助信息 |
-| `coder --version` | 输出版本号 |
-| `coder --model` | 交互式模型选择器 |
-| `coder -m "provider/model"` | 直接指定模型 |
-| `coder setup` | 首次配置向导 |
+| `coderix` | 启动交互式会话 |
+| `coderix "问题"` | 单次提问 |
+| `coderix --help` | 显示帮助信息 |
+| `coderix --version` | 输出版本号 |
+| `coderix --model` | 交互式模型选择器 |
+| `coderix -m "provider/model"` | 直接指定模型 |
+| `coderix setup` | 首次配置向导 |
 
 ---
 
 ## 项目结构
 
 ```
-CoderAgent/
+Coderix/
 ├── src/
 │   ├── cli/           # CLI 入口，终端渲染组件
 │   ├── core/          # 核心引擎：Agent 循环、查询处理、上下文管理

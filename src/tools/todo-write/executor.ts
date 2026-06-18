@@ -15,7 +15,7 @@ interface TodoStore {
   updatedAt: number;
 }
 
-const TODOS_BASE_DIR = join(homedir(), '.coder', 'todos');
+const TODOS_BASE_DIR = join(homedir(), '.coderix', 'todos');
 
 function getTodoPath(sessionId: string): string {
   const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, '-');

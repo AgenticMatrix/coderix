@@ -348,7 +348,7 @@ export interface HookProvider {
 export interface HookManagerConfig {
   /** Execution providers (default: [ScriptProvider]) */
   providers?: HookProvider[];
-  /** Path to global hooks config (default: ~/.coder/hooks.json) */
+  /** Path to global hooks config (default: ~/.coderix/hooks.json) */
   globalConfigPath?: string;
   /** Path to project hooks config (default: ./.coder/hooks.json) */
   projectConfigPath?: string;

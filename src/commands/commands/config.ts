@@ -22,7 +22,7 @@ export const configCommands: SlashCommand[] = [
   {
     name: 'config',
     aliases: ['cfg'],
-    help: 'read or modify settings in ~/.coder/settings.json',
+    help: 'read or modify settings in ~/.coderix/settings.json',
     usage: '/config [set <key> <value>]',
     run: (arg, ctx) => {
       if (ctx.isStreaming) {
@@ -35,9 +35,9 @@ export const configCommands: SlashCommand[] = [
 
       if (!trimmed) {
         // ── Direct display (no AI needed) ──
-        const settingsPath = join(homedir(), '.coder', 'settings.json');
+        const settingsPath = join(homedir(), '.coderix', 'settings.json');
         if (!existsSync(settingsPath)) {
-          ctx.sys('No settings file found at ~/.coder/settings.json.\nRun the app once to generate default settings.');
+          ctx.sys('No settings file found at ~/.coderix/settings.json.\nRun the app once to generate default settings.');
           return;
         }
 
@@ -45,7 +45,7 @@ export const configCommands: SlashCommand[] = [
         try {
           settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
         } catch {
-          ctx.sys('Failed to parse ~/.coder/settings.json.');
+          ctx.sys('Failed to parse ~/.coderix/settings.json.');
           return;
         }
 
@@ -123,10 +123,10 @@ export const configCommands: SlashCommand[] = [
         const value = parts.slice(2).join(' ');
         ctx.send(
           [
-            `Update the setting "${key}" to "${value}" in ~/.coder/settings.json.`,
+            `Update the setting "${key}" to "${value}" in ~/.coderix/settings.json.`,
             '',
             'Follow these steps:',
-            '1. Read the current ~/.coder/settings.json file',
+            '1. Read the current ~/.coderix/settings.json file',
             '2. Parse it as JSON and locate the key "' + key + '"',
             '   - For top-level keys (e.g., "theme", "max_tokens", "default_model"), update directly',
             '3. Convert the value appropriately:',
@@ -134,7 +134,7 @@ export const configCommands: SlashCommand[] = [
             '   - Pure numeric string → number',
             '   - Otherwise → keep as string',
             '4. The new value is: "' + value + '"',
-            '5. Write the updated JSON back to ~/.coder/settings.json with 2-space indentation',
+            '5. Write the updated JSON back to ~/.coderix/settings.json with 2-space indentation',
             '6. Read the file back and confirm the change was applied successfully',
             '7. Show a brief confirmation: "Updated <key> to <value>"',
             '',

@@ -1,9 +1,9 @@
 /**
- * model-picker.ts — Interactive model selection for `coder --model`.
+ * model-picker.ts — Interactive model selection for `coderix --model`.
  *
  * Provides a terminal-based (non-TUI) interactive picker that lets users
  * browse providers, configure API keys, select models, and persist the
- * choice to ~/.coder/settings.json.
+ * choice to ~/.coderix/settings.json.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -378,7 +378,7 @@ export async function runInteractiveModelSetup(
 }
 
 // ---------------------------------------------------------------------------
-// handleModelFlag — entry point for `coder --model [value]`
+// handleModelFlag — entry point for `coderix --model [value]`
 // ---------------------------------------------------------------------------
 
 export async function handleModelFlag(modelArg: string | undefined): Promise<void> {
@@ -386,7 +386,7 @@ export async function handleModelFlag(modelArg: string | undefined): Promise<voi
   const { homedir } = await import('node:os');
   const { join } = await import('node:path');
 
-  const settingsPath = join(homedir(), '.coder', 'settings.json');
+  const settingsPath = join(homedir(), '.coderix', 'settings.json');
   let settings: CoderSettings = {};
   try {
     settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as CoderSettings;
@@ -397,7 +397,7 @@ export async function handleModelFlag(modelArg: string | undefined): Promise<voi
   const modelList: ModelEntry[] = settings.model_list ?? [];
 
   if (modelList.length === 0) {
-    console.log('No models configured. Add models to ~/.coder/settings.json model_list.');
+    console.log('No models configured. Add models to ~/.coderix/settings.json model_list.');
     process.exit(0);
   }
 
@@ -440,13 +440,13 @@ export async function handleModelFlag(modelArg: string | undefined): Promise<voi
     process.exit(0);
   }
 
-  // Interactive mode: coder --model (no value)
+  // Interactive mode: coderix --model (no value)
   await runInteractiveModelSetup(settings, modelList, settingsPath, process.stdin, process.stdout);
   process.exit(0);
 }
 
 // ---------------------------------------------------------------------------
-// handleSetupFlag — first-time setup wizard: `coder setup` / `coder --setup`
+// handleSetupFlag — first-time setup wizard: `coderix setup` / `coderix --setup`
 // ---------------------------------------------------------------------------
 
 export async function handleSetupFlag(): Promise<void> {
@@ -457,7 +457,7 @@ export async function handleSetupFlag(): Promise<void> {
   const stdin = process.stdin;
   const stdout = process.stdout;
 
-  const settingsPath = join(homedir(), '.coder', 'settings.json');
+  const settingsPath = join(homedir(), '.coderix', 'settings.json');
   let settings: CoderSettings = {};
   try {
     settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as CoderSettings;
@@ -466,7 +466,7 @@ export async function handleSetupFlag(): Promise<void> {
   }
   settings.model_list = settings.model_list ?? [];
 
-  console.log('\n🔧 CoderAgent — First Time Setup\n');
+  console.log('\n🔧 Coderix — First Time Setup\n');
 
   // ── Step 1: Theme ───────────────────────────────────────────────
   const themeIdx = await radioSelect(
@@ -504,8 +504,8 @@ export async function handleSetupFlag(): Promise<void> {
   // and max_tokens are persisted (they were set on the settings object above).
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
-  console.log('\n✅ Setup complete! Settings saved to ~/.coder/settings.json\n');
-  console.log('Starting CoderAgent...\n');
+  console.log('\n✅ Setup complete! Settings saved to ~/.coderix/settings.json\n');
+  console.log('Starting Coderix...\n');
 
   // Fall through to TUI init
 }

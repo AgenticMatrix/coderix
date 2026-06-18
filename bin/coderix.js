@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CoderAgent CLI wrapper.
+ * Coderix CLI wrapper.
  *
  * Launches the TypeScript entry point via tsx so TypeScript compilation
  * is not required at runtime.

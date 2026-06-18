@@ -1,7 +1,7 @@
 /**
  * registry.ts — SkillRegistry: in-memory skill index with disk persistence
  *
- * Map-based registry with singleton access. Loads skills from ~/.coder/skills/
+ * Map-based registry with singleton access. Loads skills from ~/.coderix/skills/
  * via SkillLoader on init or reload(). Provides indexed lookups by tag and
  * trigger keyword, usage tracking, and improvement candidate detection.
  */

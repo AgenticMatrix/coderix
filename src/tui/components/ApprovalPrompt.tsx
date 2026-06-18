@@ -4,7 +4,7 @@
  * Renders when the agent wants to execute a tool that requires user
  * confirmation (mutation / destructive operations in ASK mode).
  *
- * Ported from KodeAgent's prompts.tsx ApprovalPrompt.
+ * Ported from Coderix's prompts.tsx ApprovalPrompt.
  */
 import { Box, Text, useInput } from 'ink';
 import { useState } from 'react';

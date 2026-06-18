@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { AppConfig } from '../types.js';
 
 // ---------------------------------------------------------------------------
-// Settings types — matches ~/.coder/settings.json format
+// Settings types — matches ~/.coderix/settings.json format
 // ---------------------------------------------------------------------------
 
 export interface ModelPrice {
@@ -96,7 +96,7 @@ export function inferProvider(model: string): string {
 }
 
 export function loadSettings(): CoderSettings {
-  const settingsDir = join(homedir(), '.coder');
+  const settingsDir = join(homedir(), '.coderix');
   const settingsPath = join(settingsDir, 'settings.json');
 
   if (!existsSync(settingsPath)) {
@@ -111,7 +111,7 @@ export function loadSettings(): CoderSettings {
     }
   }
 
-  // Copy bundled skills to ~/.coder/skills/ on first install or update
+  // Copy bundled skills to ~/.coderix/skills/ on first install or update
   installBundledSkills();
 
   try {
@@ -123,11 +123,11 @@ export function loadSettings(): CoderSettings {
 }
 
 /**
- * Copy bundled skills from resources/skills/ to ~/.coder/skills/.
+ * Copy bundled skills from resources/skills/ to ~/.coderix/skills/.
  * Skips skills that already exist (user may have customized them).
  */
 export function installBundledSkills(): void {
-  const skillsDir = join(homedir(), '.coder', 'skills');
+  const skillsDir = join(homedir(), '.coderix', 'skills');
   const bundleDir = join(
     dirname(fileURLToPath(import.meta.url)),
     '..', '..', 'resources', 'skills',
@@ -189,7 +189,7 @@ export function getMaxToolConcurrency(settings?: CoderSettings): number {
 }
 
 // ---------------------------------------------------------------------------
-// Model resolution — matches KodeAgent priority:
+// Model resolution — matches Coderix priority:
 //   1. CODER_MODEL env var (highest)
 //   2. default_model parsed as "provider/model-name", looked up in model_list
 //   3. First entry in model_list
@@ -261,7 +261,7 @@ function resolveModel(settings: CoderSettings): {
   }
 
   throw new Error(
-    'No model configured. Add model_list to ~/.coder/settings.json.',
+    'No model configured. Add model_list to ~/.coderix/settings.json.',
   );
 }
 
@@ -270,7 +270,7 @@ function resolveModel(settings: CoderSettings): {
 // ---------------------------------------------------------------------------
 
 /**
- * Load AI model configuration from ~/.coder/settings.json.
+ * Load AI model configuration from ~/.coderix/settings.json.
  *
  * Resolution priority:
  *   1. default_model — "provider/model-name" format, looked up in model_list
@@ -298,7 +298,7 @@ export function loadConfig(): AppConfig {
 
   if (!model) {
     throw new Error(
-      'No model configured. Set default_model in ~/.coder/settings.json.',
+      'No model configured. Set default_model in ~/.coderix/settings.json.',
     );
   }
 

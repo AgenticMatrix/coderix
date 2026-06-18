@@ -4,7 +4,7 @@
  *
  * Two concerns:
  *   1. EnvInfo        — OS, shell, git, date, model
- *   2. CodeAgentContext — CODERAGENT.md from project (~/.coder/) directories
+ *   2. CodeAgentContext — CODERIX.md from project (~/.coderix/) directories
  */
 
 import { execSync } from 'node:child_process';
@@ -124,10 +124,10 @@ export function computeEnvInfo(cwd: string, _model?: string): EnvInfo {
 }
 
 // ---------------------------------------------------------------------------
-// loadCodeAgentContext — CODER.md / CODERAGENT.md discovery
+// loadCodeAgentContext — CODERIX.md discovery
 // ---------------------------------------------------------------------------
 
-const PROJECT_FILENAMES = ['CODER.md', 'CODERAGENT.md'];
+const PROJECT_FILENAMES = ['CODERIX.md'];
 
 function tryReadFile(...segments: string[]): { content: string; path: string } | null {
   const filePath = join(...segments);
@@ -143,7 +143,7 @@ function tryReadFile(...segments: string[]): { content: string; path: string } |
 export function loadCodeAgentContext(cwd: string): CodeAgentContext {
   const result: CodeAgentContext = {};
 
-  // Project-level: <cwd>/CODER.md or <cwd>/CODERAGENT.md (first found wins)
+  // Project-level: <cwd>/CODERIX.md (first found wins)
   for (const name of PROJECT_FILENAMES) {
     const project = tryReadFile(cwd, name);
     if (project) {
@@ -153,9 +153,9 @@ export function loadCodeAgentContext(cwd: string): CodeAgentContext {
     }
   }
 
-  // User-level: ~/.coder/CODER.md or ~/.coder/CODERAGENT.md (first found wins)
+  // User-level: ~/.coderix/CODERIX.md
   for (const name of PROJECT_FILENAMES) {
-    const user = tryReadFile(homedir(), '.coder', name);
+    const user = tryReadFile(homedir(), '.coderix', name);
     if (user) {
       result.userContext = user.content;
       result.userPath = user.path;

@@ -1,5 +1,5 @@
 /**
- * ToolRegistry — Adapter bridging CoderAgent's ToolRegistry pattern
+ * ToolRegistry — Adapter bridging Coderix's ToolRegistry pattern
  * to ink-chat-tui's existing tools/plugins.
  *
  * Tools are registered with a definition (for the LLM) and an execute
