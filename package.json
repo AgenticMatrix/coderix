@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "chrome-remote-interface": "^0.34.0",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
@@ -24,7 +25,8 @@
     "proper-lockfile": "^4.1.2",
     "react": "^19.2.4",
     "shell-quote": "^1.8.4",
-    "undici": "^7.27.2"
+    "undici": "^7.27.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -7,6 +7,7 @@ import { initCommands } from './commands/init.js';
 import { sessionCommands } from './commands/session.js';
 import { skillCommands } from './commands/skill.js';
 import { tasksCommand } from './commands/tasks.js';
+import { mcpCommand } from './commands/mcp.js';
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   ...configCommands,
@@ -17,6 +18,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   ...sessionCommands,
   ...skillCommands,
   tasksCommand,
+  mcpCommand,
 ];
 
 const byName = new Map<string, SlashCommand>(

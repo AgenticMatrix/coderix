@@ -34,12 +34,16 @@ function parseCliArgs(argv: string[]): CliArgs {
 
 // ── Tool registry (shared) ──────────────────────────────────────────
 
-async function buildToolRegistry(): Promise<any> {
+async function buildToolRegistry(mcpPlugins?: any[]): Promise<any> {
   const { ToolRegistry } = await import('../core/tool-registry.js');
   const { plugins } = await import('../tools/registry.js');
   const { RiskLevel } = await import('../core/types.js');
   const registry = new ToolRegistry();
-  for (const plugin of plugins) {
+
+  // Collect all plugins: built-in + MCP
+  const allPlugins = [...plugins, ...(mcpPlugins ?? [])];
+
+  for (const plugin of allPlugins) {
     const schema = plugin.schema as unknown as Record<string, unknown>;
     const inputSchema = schema.input_schema as Record<string, unknown>;
     const meta = schema._meta as { riskLevel?: string; isConcurrencySafe?: boolean } | undefined;
@@ -65,6 +69,29 @@ async function buildToolRegistry(): Promise<any> {
   return registry;
 }
 
+// ── MCP initialization ─────────────────────────────────────────────────
+
+async function initMcpAndGetPlugins(cwd: string): Promise<any[]> {
+  try {
+    const { McpManager } = await import('../mcp/index.js');
+    const manager = new McpManager(cwd);
+    await manager.initialize();
+    const plugins = manager.getToolPlugins();
+    if (plugins.length > 0) {
+      process.stderr.write(`[MCP] Loaded ${plugins.length} tool(s) from ${manager.getConnectedServerNames().length} server(s)\n`);
+      const failed = manager.getFailedServerNames();
+      if (failed.length > 0) {
+        process.stderr.write(`[MCP] Warning: ${failed.length} server(s) failed to connect: ${failed.join(', ')}\n`);
+      }
+    }
+    return plugins;
+  } catch (err) {
+    // MCP is optional — don't block startup on errors
+    process.stderr.write(`[MCP] Initialization failed: ${(err as Error).message}\n`);
+    return [];
+  }
+}
+
 // ── Print mode ──────────────────────────────────────────────────────
 
 async function runPrintMode(queryText: string): Promise<void> {
@@ -83,7 +110,8 @@ async function runPrintMode(queryText: string): Promise<void> {
   const { buildAgentRegistry } = await import('../agents/registry.js');
   const { registry: agentRegistry } = await buildAgentRegistry(process.cwd());
   const settings = loadSettings();
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings });
+  const mcpPlugins = await initMcpAndGetPlugins(process.cwd());
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPlugins), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings });
   await engine.init(); engine.setPermissionMode(PermissionMode.AUTO);
   let fullText = '';
   for await (const event of engine.submitMessage(queryText)) {
@@ -101,7 +129,14 @@ async function runPrintMode(queryText: string): Promise<void> {
 async function main(): Promise<void> {
   const cliArgs = parseCliArgs(process.argv.slice(2));
 
-  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode\n`); process.exit(0); }
+  // ── MCP subcommand (before help/version to allow `coderix mcp --help`) ─
+  if (process.argv[2] === 'mcp') {
+    const { handleMcpCli } = await import('./mcp-cli.js');
+    await handleMcpCli(process.argv.slice(3));
+    return;
+  }
+
+  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
 
   if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; console.log(`coderix ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}`); process.exit(0); }
 
@@ -147,7 +182,8 @@ async function main(): Promise<void> {
   setSubAgentRegistry(subAgentRegistry);
   const { registry: agentRegistry } = await buildAgentReg(process.cwd());
   const settings = loadSettings();
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings });
+  const mcpPluginsTui = await initMcpAndGetPlugins(process.cwd());
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPluginsTui), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings });
   await engine.init();
 
   // ── Create unified AppState store ──────────────────────────────────
