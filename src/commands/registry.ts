@@ -9,6 +9,7 @@ import { skillCommands } from './commands/skill.js';
 import { tasksCommand } from './commands/tasks.js';
 import { mcpCommand } from './commands/mcp.js';
 import { memoryCommand } from './commands/memory.js';
+import { addDirCommand } from './commands/add-dir.js';
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   ...configCommands,
@@ -21,6 +22,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   tasksCommand,
   mcpCommand,
   memoryCommand,
+  addDirCommand,
 ];
 
 const byName = new Map<string, SlashCommand>(
