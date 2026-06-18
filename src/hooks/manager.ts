@@ -38,6 +38,8 @@ import type {
   NotificationContext,
   SetupContext,
   ConfigChangeContext,
+  WorktreeCreateContext,
+  WorktreeRemoveContext,
   // Result types
   PreToolUseResult,
   PermissionRequestResult,
@@ -46,6 +48,8 @@ import type {
   PreMessageResult,
   StopResult,
   PreCompactResult,
+  WorktreeCreateHookResult,
+  WorktreeRemoveHookResult,
 } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -476,6 +480,87 @@ export class HookManager {
     for (const hook of hooks) {
       try { await this.runProviders(hook, ctx); } catch {}
     }
+  }
+
+  // ── Worktree hooks (run outside REPL for VCS isolation) ──────────
+
+  /**
+   * Check if any WorktreeCreate hooks are configured.
+   * Returns true if hooks exist for alternative VCS worktree creation.
+   */
+  hasWorktreeCreateHook(): boolean {
+    return this.loader.getForEvent('WorktreeCreate').length > 0;
+  }
+
+  /**
+   * Execute WorktreeCreate hooks to create a worktree via user-configured VCS.
+   * Returns the worktree path from the first successful hook.
+   * Throws if hooks fail or produce no output.
+   */
+  async onWorktreeCreate(sessionId: string, cwd: string, name: string): Promise<WorktreeCreateHookResult | null> {
+    const hooks = this.loader.getForEvent('WorktreeCreate');
+    if (!hooks.length) return null;
+
+    const ctx: HookContext = {
+      event: 'WorktreeCreate',
+      sessionId,
+      cwd,
+      timestamp: Date.now(),
+      name,
+    } as WorktreeCreateContext;
+
+    const successfulPaths: string[] = [];
+    const errors: string[] = [];
+
+    for (const hook of hooks) {
+      try {
+        const result = await this.runProviders(hook, ctx) as Partial<WorktreeCreateHookResult>;
+        if (result.worktreePath) {
+          successfulPaths.push(result.worktreePath);
+        }
+      } catch (err) {
+        errors.push(`${hook.command ?? 'hook'}: ${(err as Error).message}`);
+      }
+    }
+
+    if (successfulPaths.length > 0) {
+      return { worktreePath: successfulPaths[0] };
+    }
+
+    if (errors.length > 0) {
+      throw new Error(
+        `WorktreeCreate hook(s) failed: ${errors.join('; ') || 'no successful output'}`,
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Execute WorktreeRemove hooks to remove a worktree via user-configured VCS.
+   * Returns true if hooks ran, false if no hooks are configured.
+   */
+  async onWorktreeRemove(sessionId: string, cwd: string, worktreePath: string): Promise<boolean> {
+    const hooks = this.loader.getForEvent('WorktreeRemove');
+    if (!hooks.length) return false;
+
+    const ctx: HookContext = {
+      event: 'WorktreeRemove',
+      sessionId,
+      cwd,
+      timestamp: Date.now(),
+      worktreePath,
+    } as WorktreeRemoveContext;
+
+    for (const hook of hooks) {
+      try {
+        await this.runProviders(hook, ctx);
+      } catch {
+        // Hook failure is non-fatal for removal
+      }
+    }
+
+    return true;
   }
 
   // ── Private helpers ────────────────────────────────────────────

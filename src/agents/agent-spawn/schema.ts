@@ -42,6 +42,11 @@ If agent_type is omitted, the sub-agent inherits the parent's context (fork mode
         type: 'string',
         description: 'Optional: member display name within the team. Used as the sender identity for team-message.',
       },
+      isolation: {
+        type: 'string',
+        enum: ['worktree'],
+        description: 'Isolation mode. "worktree" creates a temporary git worktree for this sub-agent, isolating all file operations from the main working directory. The worktree is automatically cleaned up when the agent completes (if no changes were made).',
+      },
     },
     required: ['prompt'],
   },

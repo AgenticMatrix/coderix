@@ -19,6 +19,11 @@ import {
   loadAgentMemoryPrompt,
   augmentToolsForMemory,
 } from '../agent-memory.js';
+import {
+  createAgentWorktree,
+  removeAgentWorktree,
+  hasWorktreeChanges,
+} from '../../utils/worktree.js';
 
 const DEFAULT_MAX_TURNS = 20;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -88,6 +93,7 @@ interface RunAgentParams {
   initialMessages: Message[];
   subToolRegistry: ToolRegistry;
   subAbortController: AbortController;
+  cwd: string;
 }
 
 async function runAgentLoop(params: RunAgentParams): Promise<{
@@ -102,16 +108,16 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   const {
     agentId, agentType, prompt, agentSpawn,
     systemPromptText, effectiveModel, effectiveMaxTurns, effectiveContextBudget,
-    initialMessages, subToolRegistry, subAbortController,
+    initialMessages, subToolRegistry, subAbortController, cwd,
   } = params;
 
-  const subPermissionEngine = new PermissionEngine(process.cwd());
+  const subPermissionEngine = new PermissionEngine(cwd);
   subPermissionEngine.setMode(PermissionMode.AUTO);
 
   const subSessionManager = new SessionManager();
   subSessionManager.create({
     title: `Sub-agent: ${agentType}`,
-    cwd: process.cwd(),
+    cwd,
     model: effectiveModel,
   });
 
@@ -131,7 +137,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   try {
     const generator = query({
       sessionId: subSessionManager.getActive()?.id ?? agentId,
-      cwd: process.cwd(),
+      cwd,
       messages: initialMessages,
       systemPrompt: workerPrompt,
       toolRegistry: subToolRegistry,
@@ -189,6 +195,35 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// Worktree cleanup helper
+// ---------------------------------------------------------------------------
+
+interface WorktreeCleanup {
+  worktreePath: string;
+  worktreeBranch?: string;
+  worktreeGitRoot?: string;
+  worktreeHeadCommit?: string;
+  worktreeHookBased?: boolean;
+}
+
+async function cleanupAgentWorktree(wt: WorktreeCleanup, hookManager?: import('../../core/types.js').AgentSpawnContext['hookManager']): Promise<string> {
+  const { worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased } = wt;
+  try {
+    let changed = false;
+    if (worktreeHeadCommit && !worktreeHookBased) {
+      changed = await hasWorktreeChanges(worktreePath, worktreeHeadCommit);
+    }
+    if (changed) {
+      return `\nWorktree preserved at: ${worktreePath}`;
+    }
+    await removeAgentWorktree(worktreePath, worktreeBranch, worktreeGitRoot, worktreeHookBased, hookManager);
+    return '';
+  } catch {
+    return `\nWorktree left at: ${worktreePath} (cleanup failed)`;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Execute
 // ---------------------------------------------------------------------------
 
@@ -205,10 +240,11 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const prompt = input.prompt as string;
   const modelOverride = input.model as string | undefined;
   const backgroundOverride = input.background as boolean | undefined;
+  const isolation = input.isolation as 'worktree' | undefined;
 
   // ── Fork mode: no agent_type → inherit parent context ───────────────
   if (!agentTypeInput) {
-    return executeFork(prompt, modelOverride, backgroundOverride, agentSpawn);
+    return executeFork(prompt, modelOverride, backgroundOverride, isolation, agentSpawn);
   }
 
   // ── Explicit agent_type path ────────────────────────────────────────
@@ -279,6 +315,31 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   const effectiveModel = modelOverride ?? agentDef.model;
 
+  // ── Worktree isolation ──────────────────────────────────────────────
+  let worktreePath: string | undefined;
+  let worktreeBranch: string | undefined;
+  let worktreeGitRoot: string | undefined;
+  let worktreeHeadCommit: string | undefined;
+  let worktreeHookBased: boolean | undefined;
+  const effectiveCwd = options.cwd ?? process.cwd();
+
+  const effectiveIsolation = isolation ?? agentDef.isolation;
+  if (effectiveIsolation === 'worktree') {
+    try {
+      const wt = await createAgentWorktree(`${agentType}-${agentId}`, agentSpawn.hookManager);
+      worktreePath = wt.worktreePath;
+      worktreeBranch = wt.worktreeBranch;
+      worktreeGitRoot = wt.gitRoot;
+      worktreeHeadCommit = wt.headCommit;
+      worktreeHookBased = wt.hookBased;
+    } catch (err) {
+      return {
+        content: `Failed to create worktree for ${agentType} agent: ${(err as Error).message}`,
+        isError: true,
+      };
+    }
+  }
+
   // Prepend initialPrompt if defined
   const userPrompt = agentDef.initialPrompt
     ? `${agentDef.initialPrompt}\n\n${prompt}`
@@ -298,7 +359,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     const memoryPrompt = await loadAgentMemoryPrompt(
       agentType,
       agentDef.memory,
-      process.cwd(),
+      worktreePath ?? process.cwd(),
     );
     if (memoryPrompt) {
       enrichedPrompt = memoryPrompt + '\n\n' + enrichedPrompt;
@@ -335,7 +396,16 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
         effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
         initialMessages,
-      }).then(result => {
+        cwd: worktreePath ?? effectiveCwd,
+      }).then(async result => {
+        // Worktree cleanup
+        let cleanupNote = '';
+        if (worktreePath) {
+          cleanupNote = await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager);
+        }
+
         const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
         const compressed = compressTranscript(result.transcript);
 
@@ -352,10 +422,16 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
         // Push notification for the next main-loop turn
         const summary = result.error
-          ? `Background agent ${agentId} (${agentType}) failed after ${result.assistantTurnCount} turns: ${result.error}`
-          : `Background agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`;
+          ? `Background agent ${agentId} (${agentType}) failed after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`
+          : `Background agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`;
         agentSpawn.subAgentRegistry.pushNotification(summary);
-      }).catch(err => {
+      }).catch(async err => {
+        // Attempt worktree cleanup even on crash
+        if (worktreePath) {
+          await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager).catch(() => {});
+        }
         const errorMsg = err instanceof Error ? err.message : String(err);
         agentSpawn.subAgentRegistry.update(agentId, {
           status: 'error',
@@ -369,10 +445,10 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     });
 
     return {
-      content: `Background agent ${agentId} (${agentType}) running. Results will be delivered automatically when complete. Do not poll — just wait.`,
+      content: `Background agent ${agentId} (${agentType}) running. Results will be delivered automatically when complete. Do not poll — just wait.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
       isError: false,
       duration: Date.now() - spawnTime,
-      metadata: { agentId, agentType, background: true },
+      metadata: { agentId, agentType, background: true, worktreePath },
     };
   }
 
@@ -391,8 +467,17 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
       effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
       initialMessages,
+      cwd: worktreePath ?? effectiveCwd,
     }),
   );
+
+  // Worktree cleanup
+  let cleanupNote = '';
+  if (worktreePath) {
+    cleanupNote = await cleanupAgentWorktree({
+      worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+    }, agentSpawn.hookManager);
+  }
 
   const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
   const compressed = compressTranscript(result.transcript);
@@ -410,15 +495,15 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   if (result.error) {
     return {
-      content: `Sub-agent ${agentId} (${agentType}) error after ${result.assistantTurnCount} turns: ${result.error}`,
+      content: `Sub-agent ${agentId} (${agentType}) error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
       isError: true,
       duration: Date.now() - result.startTime,
-      metadata: { agentId, agentType, error: result.error },
+      metadata: { agentId, agentType, error: result.error, worktreePath },
     };
   }
 
   return {
-    content: `Sub-agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`,
+    content: `Sub-agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`,
     isError: false,
     duration: Date.now() - result.startTime,
     metadata: {
@@ -428,6 +513,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       messageCount: result.transcript.length,
       toolCount: result.toolCount,
       duration: Date.now() - result.startTime,
+      worktreePath,
     },
   };
 };
@@ -440,12 +526,36 @@ async function executeFork(
   prompt: string,
   modelOverride: string | undefined,
   backgroundOverride: boolean | undefined,
+  isolation: 'worktree' | undefined,
   agentSpawn: AgentSpawnContext,
 ): Promise<ToolResult> {
   const agentType = 'fork';
   const agentId = `fork-${shortId()}`;
   const subAbortController = new AbortController();
   const isBackground = backgroundOverride ?? false;
+
+  // ── Worktree isolation ──────────────────────────────────────────────
+  let worktreePath: string | undefined;
+  let worktreeBranch: string | undefined;
+  let worktreeGitRoot: string | undefined;
+  let worktreeHeadCommit: string | undefined;
+  let worktreeHookBased: boolean | undefined;
+
+  if (isolation === 'worktree') {
+    try {
+      const wt = await createAgentWorktree(`agent-${agentType}-${agentId}`, agentSpawn.hookManager);
+      worktreePath = wt.worktreePath;
+      worktreeBranch = wt.worktreeBranch;
+      worktreeGitRoot = wt.gitRoot;
+      worktreeHeadCommit = wt.headCommit;
+      worktreeHookBased = wt.hookBased;
+    } catch (err) {
+      return {
+        content: `Failed to create worktree for fork agent: ${(err as Error).message}`,
+        isError: true,
+      };
+    }
+  }
 
   // Inherit parent tools (minus globally disallowed)
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
@@ -480,6 +590,7 @@ async function executeFork(
   const effectiveModel = modelOverride;
   const effectiveMaxTurns = DEFAULT_MAX_TURNS;
   const effectiveContextBudget = DEFAULT_CONTEXT_BUDGET;
+  const cwd = worktreePath ?? process.cwd();
 
   // Inherit parent's full conversation context for cache-identical prefixes
   const parentSession = agentSpawn.sessionManager.getActive();
@@ -519,7 +630,14 @@ async function executeFork(
         agentId, agentType, prompt, agentSpawn,
         systemPromptText, effectiveModel, subToolRegistry, subAbortController,
         effectiveMaxTurns, effectiveContextBudget, initialMessages,
-      }).then(result => {
+        cwd,
+      }).then(async result => {
+        let cleanupNote = '';
+        if (worktreePath) {
+          cleanupNote = await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager);
+        }
         const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
         const compressed = compressTranscript(result.transcript);
 
@@ -534,10 +652,15 @@ async function executeFork(
         });
 
         const summary = result.error
-          ? `Fork agent ${agentId} failed after ${result.assistantTurnCount} turns: ${result.error}`
-          : `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`;
+          ? `Fork agent ${agentId} failed after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`
+          : `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`;
         agentSpawn.subAgentRegistry.pushNotification(summary);
-    }).catch(err => {
+    }).catch(async err => {
+      if (worktreePath) {
+        await cleanupAgentWorktree({
+          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        }, agentSpawn.hookManager).catch(() => {});
+      }
       agentSpawn.subAgentRegistry.update(agentId, {
         status: 'error', finishedAt: Date.now(),
         error: err instanceof Error ? err.message : String(err),
@@ -546,10 +669,10 @@ async function executeFork(
     });
 
     return {
-      content: `Fork agent ${agentId} spawned in background. Use agent-read to check progress.`,
+      content: `Fork agent ${agentId} spawned in background. Use agent-read to check progress.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
       isError: false,
       duration: Date.now() - spawnTime,
-      metadata: { agentId, agentType: 'fork', background: true },
+      metadata: { agentId, agentType: 'fork', background: true, worktreePath },
     };
   }
 
@@ -565,8 +688,17 @@ async function executeFork(
       agentId, agentType, prompt, agentSpawn,
       systemPromptText, effectiveModel, subToolRegistry, subAbortController,
       effectiveMaxTurns, effectiveContextBudget, initialMessages,
+      cwd,
     }),
   );
+
+  // Worktree cleanup
+  let cleanupNote = '';
+  if (worktreePath) {
+    cleanupNote = await cleanupAgentWorktree({
+      worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+    }, agentSpawn.hookManager);
+  }
 
   const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
   const compressed = compressTranscript(result.transcript);
@@ -583,15 +715,15 @@ async function executeFork(
 
   if (result.error) {
     return {
-      content: `Fork agent ${agentId} error after ${result.assistantTurnCount} turns: ${result.error}`,
+      content: `Fork agent ${agentId} error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
       isError: true,
       duration: Date.now() - result.startTime,
-      metadata: { agentId, agentType: 'fork', error: result.error },
+      metadata: { agentId, agentType: 'fork', error: result.error, worktreePath },
     };
   }
 
   return {
-    content: `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}`,
+    content: `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`,
     isError: false,
     duration: Date.now() - result.startTime,
     metadata: {
@@ -600,6 +732,7 @@ async function executeFork(
       messageCount: result.transcript.length,
       toolCount: result.toolCount,
       duration: Date.now() - result.startTime,
+      worktreePath,
     },
   };
 }

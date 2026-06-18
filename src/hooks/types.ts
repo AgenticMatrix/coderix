@@ -30,7 +30,9 @@ export type HookEvent =
   | 'onPostCompact'
   | 'onNotification'
   | 'onSetup'
-  | 'onConfigChange';
+  | 'onConfigChange'
+  | 'WorktreeCreate'
+  | 'WorktreeRemove';
 
 // ═══════════════════════════════════════════════════════════════════
 // HookDefinition — one hook entry in a config file
@@ -191,6 +193,18 @@ export interface ConfigChangeContext extends BaseHookContext {
   newValue: string;
 }
 
+export interface WorktreeCreateContext extends BaseHookContext {
+  event: 'WorktreeCreate';
+  /** The worktree slug/name being created */
+  name: string;
+}
+
+export interface WorktreeRemoveContext extends BaseHookContext {
+  event: 'WorktreeRemove';
+  /** Absolute path to the worktree being removed */
+  worktreePath: string;
+}
+
 export type HookContext =
   | PreToolUseContext
   | PostToolUseContext
@@ -208,7 +222,9 @@ export type HookContext =
   | PostCompactContext
   | NotificationContext
   | SetupContext
-  | ConfigChangeContext;
+  | ConfigChangeContext
+  | WorktreeCreateContext
+  | WorktreeRemoveContext;
 
 // ═══════════════════════════════════════════════════════════════════
 // HookResult — union of event-specific return payloads
@@ -301,6 +317,16 @@ export interface ConfigChangeResult {
   restartRequired?: boolean;
 }
 
+export interface WorktreeCreateHookResult {
+  /** The absolute path to the created worktree */
+  worktreePath: string;
+}
+
+export interface WorktreeRemoveHookResult {
+  /** Whether the worktree was successfully removed */
+  removed: boolean;
+}
+
 export type HookResult =
   | PreToolUseResult
   | PostToolUseResult
@@ -318,7 +344,9 @@ export type HookResult =
   | PostCompactResult
   | NotificationResult
   | SetupResult
-  | ConfigChangeResult;
+  | ConfigChangeResult
+  | WorktreeCreateHookResult
+  | WorktreeRemoveHookResult;
 
 // ═══════════════════════════════════════════════════════════════════
 // HookProvider — pluggable execution backend

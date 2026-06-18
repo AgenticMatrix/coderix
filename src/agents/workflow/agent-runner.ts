@@ -26,6 +26,11 @@ import { SessionManager } from '../../core/session.js';
 import { CheckpointManager } from '../../core/checkpoint.js';
 import { filterToolsForAgent } from '../tool-filtering.js';
 import { query } from '../../core/query.js';
+import {
+  createAgentWorktree,
+  removeAgentWorktree,
+  hasWorktreeChanges,
+} from '../../utils/worktree.js';
 
 // ---------------------------------------------------------------------------
 // StructuredOutput validation
@@ -225,6 +230,8 @@ interface RunAgentLoopParams {
   subAbortController: AbortController;
   /** If set, the sub-agent must call structured_output with valid JSON. */
   outputSchema?: JsonSchema;
+  /** Working directory override (for worktree isolation). */
+  cwd?: string;
 }
 
 async function runAgentLoop(params: RunAgentLoopParams): Promise<{
@@ -240,16 +247,18 @@ async function runAgentLoop(params: RunAgentLoopParams): Promise<{
   const {
     agentId, agentType, prompt, agentSpawn,
     systemPromptText, effectiveModel, effectiveMaxTurns, effectiveContextBudget,
-    initialMessages, subToolRegistry, subAbortController, outputSchema,
+    initialMessages, subToolRegistry, subAbortController, outputSchema, cwd,
   } = params;
 
-  const subPermissionEngine = new PermissionEngine(process.cwd());
+  const effectiveCwd = cwd ?? process.cwd();
+
+  const subPermissionEngine = new PermissionEngine(effectiveCwd);
   subPermissionEngine.setMode(PermissionMode.AUTO);
 
   const subSessionManager = new SessionManager();
   subSessionManager.create({
     title: `Workflow: ${agentType}`,
-    cwd: process.cwd(),
+    cwd: effectiveCwd,
     model: effectiveModel,
   });
 
@@ -314,7 +323,7 @@ async function runAgentLoop(params: RunAgentLoopParams): Promise<{
     try {
       const generator = query({
         sessionId: subSessionManager.getActive()?.id ?? agentId,
-        cwd: process.cwd(),
+        cwd: effectiveCwd,
         messages: attemptMessages,
         systemPrompt: workerPrompt,
         toolRegistry: subToolRegistry,
@@ -407,6 +416,7 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
     model,
     schema,
     label,
+    isolation,
   } = options;
 
   const agentDef = agentSpawn.agentRegistry.get(agentType);
@@ -416,6 +426,22 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
 
   const agentId = `wf-${shortId()}`;
   const subAbortController = new AbortController();
+
+  // ── Worktree isolation ──────────────────────────────────────────────
+  let worktreePath: string | undefined;
+  let worktreeBranch: string | undefined;
+  let worktreeGitRoot: string | undefined;
+  let worktreeHeadCommit: string | undefined;
+  let worktreeHookBased: boolean | undefined;
+
+  if (isolation === 'worktree') {
+    const wt = await createAgentWorktree(`wf-${agentId.slice(0, 8)}`, agentSpawn.hookManager);
+    worktreePath = wt.worktreePath;
+    worktreeBranch = wt.worktreeBranch;
+    worktreeGitRoot = wt.gitRoot;
+    worktreeHeadCommit = wt.headCommit;
+    worktreeHookBased = wt.hookBased;
+  }
 
   // Build filtered tool registry
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
@@ -475,7 +501,26 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
     subToolRegistry,
     subAbortController,
     outputSchema: schema,
+    cwd: worktreePath,
   });
+
+  // Worktree cleanup
+  let cleanupNote = '';
+  if (worktreePath) {
+    try {
+      let changed = false;
+      if (worktreeHeadCommit && !worktreeHookBased) {
+        changed = await hasWorktreeChanges(worktreePath, worktreeHeadCommit);
+      }
+      if (changed) {
+        cleanupNote = `\nWorktree preserved at: ${worktreePath}`;
+      } else {
+        await removeAgentWorktree(worktreePath, worktreeBranch, worktreeGitRoot, worktreeHookBased, agentSpawn.hookManager);
+      }
+    } catch {
+      cleanupNote = `\nWorktree left at: ${worktreePath} (cleanup failed)`;
+    }
+  }
 
   const status = result.error
     ? 'error'
@@ -497,7 +542,7 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
   });
 
   if (result.error) {
-    throw new Error(`Workflow agent ${agentType} failed: ${result.error}`);
+    throw new Error(`Workflow agent ${agentType} failed: ${result.error}${cleanupNote}`);
   }
 
   // Return structured output as JSON string, or compressed transcript
@@ -505,5 +550,5 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
     return JSON.stringify(result.structuredOutput);
   }
 
-  return compressTranscript(result.transcript);
+  return compressTranscript(result.transcript) + cleanupNote;
 }

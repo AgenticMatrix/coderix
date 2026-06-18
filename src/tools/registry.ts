@@ -33,13 +33,14 @@ import enterPlanModePlugin from './enter-plan-mode/index.js';
 import exitPlanModePlugin from './exit-plan-mode/index.js';
 import notebookEditPlugin from './notebook-edit/index.js';
 import workflowPlugin from '../agents/workflow/index.js';
+import enterWorktreePlugin from './enter-worktree/index.js';
+import exitWorktreePlugin from './exit-worktree/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
   'git', 'powershell',
   'task-describe',
   'cron-create', 'cron-delete', 'cron-list',
-  'enter-worktree', 'exit-worktree',
   'lsp',
 ];
 
@@ -76,6 +77,8 @@ export const plugins: ToolPlugin[] = [
   exitPlanModePlugin,
   notebookEditPlugin,
   workflowPlugin,
+  enterWorktreePlugin,
+  exitWorktreePlugin,
 ];
 
 // Build lookup tables
