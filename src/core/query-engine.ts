@@ -30,7 +30,7 @@ import type { AgentRegistry } from './agent-registry.js';
 import { getAgentRole, getCoordinatorSystemContext } from '../teams/coordinator-mode.js';
 import { drainUnreadMessages } from '../teams/team-mailbox.js';
 import { execute as executeAgentMessage } from '../agents/agent-message/executor.js';
-import type { CoderSettings } from '../cli/config.js';
+import type { CoderSettings, ModelItem, ModelEntry } from '../cli/config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { AppState } from '../state/AppState.js';
 import type { Store } from '../state/store.js';
@@ -110,6 +110,24 @@ export class QueryEngine {
       model: 'deepseek-v4-pro',
       ...config,
     };
+
+    // Derive contextBudget from the model's actual context window
+    // when no explicit budget was set.  Falls back to the hardcoded
+    // 180_000 default when model_list has no max_context info.
+    if (
+      config.contextBudget === undefined &&
+      config.settings?.model_list &&
+      config.model
+    ) {
+      const budget = resolveModelMaxContext(
+        config.model,
+        config.settings.model_list,
+      );
+      if (budget) {
+        this.config.contextBudget = budget;
+      }
+    }
+
     this.permissionEngine = new PermissionEngine(config.cwd);
     this.checkpointManager = new CheckpointManager();
     this.memoryConfig = loadMemoryConfig(config.settings?.memory);
@@ -471,4 +489,40 @@ export class QueryEngine {
   setAppStore(store: Store<AppState>): void {
     this.config.appStore = store;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const modelName = (m: string | ModelItem): string =>
+  typeof m === 'string' ? m : m.name;
+
+const modelMaxContext = (m: string | ModelItem): number | undefined =>
+  typeof m === 'string' ? undefined : m.price?.max_context;
+
+/**
+ * Look up a model's max context window from settings.model_list.
+ *
+ * Resolution order matches Coderix's model resolution:
+ *   1. Find the model by exact name in any entry's model list
+ *   2. If not found, use the first model in the first entry
+ *   3. If nothing works, return undefined
+ */
+function resolveModelMaxContext(
+  model: string,
+  modelList: ModelEntry[],
+): number | undefined {
+  for (const entry of modelList) {
+    const found = entry.model.find((m) => modelName(m) === model);
+    if (found) {
+      return modelMaxContext(found);
+    }
+  }
+  // Fallback: first model of first entry
+  if (modelList.length > 0) {
+    const first = modelList[0]!.model[0];
+    if (first) return modelMaxContext(first);
+  }
+  return undefined;
 }
