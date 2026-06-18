@@ -126,9 +126,8 @@ export function isMemoryEnabled(): boolean {
   const envDisabled = process.env.CODERIX_DISABLE_MEMORY;
   if (isTruthy(envDisabled)) return false;
 
-  // Without explicit env var, default to OFF (opt-in)
-  // Full settings.json check happens via loadMemoryConfig
-  return false;
+  // Default: ON (opt-out via CODERIX_DISABLE_MEMORY=true)
+  return true;
 }
 
 /**

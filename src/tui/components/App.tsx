@@ -16,6 +16,7 @@ import { TaskPanel } from './TaskPanel.js';
 import { TodoPanel } from './TodoPanel.js';
 import { TeamPanel } from './TeamPanel.js';
 import { TeamAgentPicker } from './TeamAgentPicker.js';
+import { MemoryPicker } from './MemoryPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { CommandHint } from './CommandHint.js';
 import { useChatReducer } from '../hooks/useChatReducer.js';
@@ -409,6 +410,27 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
                     dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
                   }}
                   onCancel={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
+                />
+              </Box>
+            )}
+
+            {state.memoryPicker && (
+              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+                <MemoryPicker
+                  cwd={process.cwd()}
+                  onSelect={(target) => {
+                    dispatch({ type: 'HIDE_MEMORY_PICKER' });
+                    const prompts: Record<string, string> = {
+                      user: 'Read and display the contents of ~/.coderix/CODER.md (the user-level memory file).',
+                      project: 'Read and display the contents of ./CODERIX.md (the project-level memory file).',
+                      auto: 'List all files in the auto-memory directory and show the MEMORY.md index contents.',
+                    };
+                    const prompt = prompts[target];
+                    if (prompt) {
+                      runAgentTurn(prompt);
+                    }
+                  }}
+                  onCancel={() => dispatch({ type: 'HIDE_MEMORY_PICKER' })}
                 />
               </Box>
             )}

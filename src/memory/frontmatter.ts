@@ -42,7 +42,15 @@ export function validateMemoryFrontmatter(
   const name = typeof data.name === 'string' ? data.name.trim() : '';
   const description =
     typeof data.description === 'string' ? data.description.trim() : '';
-  const type = parseMemoryType(data.type);
+
+  // type: try top-level first, then metadata.type (Claude Code compat)
+  let type = parseMemoryType(data.type);
+  if (!type) {
+    const meta = data.metadata;
+    if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+      type = parseMemoryType((meta as Record<string, unknown>).type);
+    }
+  }
 
   if (!name || !description || !type) {
     return null;
@@ -50,20 +58,39 @@ export function validateMemoryFrontmatter(
 
   const fm: MemoryFrontmatter = { name, description, type };
 
-  // Preserve optional metadata if present and valid
+  // Preserve optional metadata (supports nested values, not just strings)
   if (
     typeof data.metadata === 'object' &&
     data.metadata !== null &&
     !Array.isArray(data.metadata)
   ) {
-    const meta: Record<string, string> = {};
+    const meta: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data.metadata)) {
-      if (typeof value === 'string') {
+      if (value !== undefined && value !== null) {
         meta[key] = value;
       }
     }
     if (Object.keys(meta).length > 0) {
       fm.metadata = meta;
+    }
+  }
+
+  // originSessionId: top-level or metadata.originSessionId (Claude Code compat)
+  const originId = data.originSessionId;
+  if (typeof originId === 'string' && originId.length > 0) {
+    fm.originSessionId = originId;
+  } else if (fm.metadata) {
+    const metaId = fm.metadata.originSessionId;
+    if (typeof metaId === 'string' && metaId.length > 0) {
+      fm.originSessionId = metaId;
+    }
+  }
+
+  // node_type from metadata (Claude Code internal marker)
+  if (fm.metadata) {
+    const nt = fm.metadata.node_type;
+    if (typeof nt === 'string' && nt.length > 0) {
+      fm.nodeType = nt;
     }
   }
 
