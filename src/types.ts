@@ -236,6 +236,8 @@ export interface ChatState {
   teamPanelDismissed: boolean;
   /** When true, the team picker overlay is shown. */
   teamPicker: boolean;
+  /** When true, the memory picker overlay is shown. */
+  memoryPicker: boolean;
   /** Selected index in the command picker dropdown (-1 = hidden). */
   commandPickerIndex: number;
   /** When true, display is frozen (user scrolled up during streaming). */
@@ -291,6 +293,8 @@ export type ChatAction =
   | { type: 'SET_COMMAND_PICKER_INDEX'; index: number }
   | { type: 'SHOW_TEAM_PICKER' }
   | { type: 'HIDE_TEAM_PICKER' }
+  | { type: 'SHOW_MEMORY_PICKER' }
+  | { type: 'HIDE_MEMORY_PICKER' }
   | { type: 'FREEZE_DISPLAY' }
   | { type: 'UNFREEZE_DISPLAY' }
   | { type: 'SET_MODE'; mode: AgentMode }

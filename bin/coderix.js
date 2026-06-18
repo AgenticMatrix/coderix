@@ -15,6 +15,7 @@ const mainPath = resolve(__dirname, '..', 'src', 'cli', 'main.tsx');
 const child = spawn('npx', ['tsx', mainPath, ...process.argv.slice(2)], {
   stdio: 'inherit',
   env: process.env,
+  shell: true,
 });
 
 child.on('exit', (code) => {

@@ -315,6 +315,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'HIDE_TEAM_PICKER':
       return { ...state, teamPicker: false };
 
+    case 'SHOW_MEMORY_PICKER':
+      return { ...state, memoryPicker: true };
+
+    case 'HIDE_MEMORY_PICKER':
+      return { ...state, memoryPicker: false };
+
     case 'FREEZE_DISPLAY':
       return { ...state, isFrozen: true };
 
@@ -500,6 +506,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     teamPanelDismissed: false,
     commandPickerIndex: -1,
     teamPicker: false,
+    memoryPicker: false,
     isFrozen: false,
     tokenUsage: { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 },
     accumulatedCost: 0,

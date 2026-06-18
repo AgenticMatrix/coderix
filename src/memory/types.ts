@@ -29,7 +29,11 @@ export interface MemoryFrontmatter {
   name: string;
   description: string;
   type: MemoryType;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  /** Session UUID that created this memory (Claude Code compat). */
+  originSessionId?: string;
+  /** Claude Code internal marker (e.g. "memory"). */
+  nodeType?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +100,7 @@ export interface MemoryConfig {
 }
 
 export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
-  enabled: false,
+  enabled: true,
   autoExtract: true,
   extractEveryNTurns: 10,
   maxMemoryFiles: 200,
