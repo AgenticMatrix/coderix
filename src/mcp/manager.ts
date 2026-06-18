@@ -87,7 +87,73 @@ export class McpManager {
       }),
     );
 
+    // Auto-inject builtin MCP servers (Chrome Use, Computer Use)
+    await this.initializeBuiltinServers();
+
     this.initialized = true;
+  }
+
+  /**
+   * Auto-detect and inject built-in MCP servers.
+   * Skips servers already configured by the user.
+   */
+  private async initializeBuiltinServers(): Promise<void> {
+    const existingNames = new Set(this.connections.keys());
+
+    // ── Chrome Use MCP ──────────────────────────────────────────────
+    const chromeMcpName = 'coder-chrome-mcp';
+    if (!existingNames.has(chromeMcpName) && this.isChromeAvailable()) {
+      const config: ScopedServerConfig = {
+        type: 'stdio',
+        command: process.execPath,
+        args: ['--chrome-mcp'],
+        scope: 'local',
+      };
+      await this.connectAndDiscover(chromeMcpName, config);
+    }
+
+    // ── Computer Use MCP (macOS only) ───────────────────────────────
+    const cuMcpName = 'coder-computer-use-mcp';
+    if (!existingNames.has(cuMcpName) && process.platform === 'darwin') {
+      const config: ScopedServerConfig = {
+        type: 'stdio',
+        command: process.execPath,
+        args: ['--computer-use-mcp'],
+        scope: 'local',
+      };
+      await this.connectAndDiscover(cuMcpName, config);
+    }
+  }
+
+  /** Check if Chrome, Chromium, or Edge is installed on the system. */
+  private isChromeAvailable(): boolean {
+    if (process.platform === 'darwin') {
+      const { existsSync } = require('node:fs');
+      const candidates = [
+        '/Applications/Google Chrome.app',
+        '/Applications/Chromium.app',
+        '/Applications/Microsoft Edge.app',
+        '/Applications/Brave Browser.app',
+      ];
+      return candidates.some((p) => existsSync(p));
+    }
+    if (process.platform === 'linux') {
+      try {
+        require('node:child_process').execSync('which google-chrome chromium chromium-browser microsoft-edge 2>/dev/null', { stdio: 'pipe' });
+        return true;
+      } catch { return false; }
+    }
+    // Windows
+    if (process.platform === 'win32') {
+      const { existsSync } = require('node:fs');
+      const candidates = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+      ];
+      return candidates.some((p) => existsSync(p));
+    }
+    return false;
   }
 
   // ── Connection lifecycle ────────────────────────────────────────────
