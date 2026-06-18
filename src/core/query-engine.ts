@@ -34,6 +34,20 @@ import type { CoderSettings } from '../cli/config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { AppState } from '../state/AppState.js';
 import type { Store } from '../state/store.js';
+import {
+  loadMemoryConfig,
+} from '../memory/config.js';
+import type { MemoryConfig } from '../memory/types.js';
+import {
+  executeExtractMemories,
+  initExtractMemories as initMemoryExtraction,
+  drainPendingExtraction as drainMemoryExtraction,
+} from '../memory/extract-memories.js';
+import {
+  findRelevantMemories,
+  formatRecalledMemories,
+  RelevanceCache,
+} from '../memory/recall.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,6 +99,8 @@ export class QueryEngine {
   private abortController: AbortController | null = null;
   private checkpointManager: CheckpointManager;
   private systemPrompt: SystemPrompt | null = null;
+  private memoryConfig: MemoryConfig;
+  private relevanceCache = new RelevanceCache();
 
   constructor(config: QueryEngineConfig) {
     this.config = {
@@ -96,6 +112,8 @@ export class QueryEngine {
     };
     this.permissionEngine = new PermissionEngine(config.cwd);
     this.checkpointManager = new CheckpointManager();
+    this.memoryConfig = loadMemoryConfig(config.settings?.memory);
+    initMemoryExtraction();
   }
 
   async init(): Promise<void> {
@@ -118,6 +136,7 @@ export class QueryEngine {
       appendPrompt,
       agentRole,
       model: this.config.model,
+      memorySettings: this.config.settings?.memory,
     });
 
     // Setup hook (non-blockable, fires on first init)
@@ -252,6 +271,34 @@ export class QueryEngine {
 
     this.config.sessionManager.addMessage(userMessage);
 
+    // Memory recall: search for relevant memories and inject as system context
+    if (this.memoryConfig.enabled && this.memoryConfig.recallEnabled) {
+      const ac = new AbortController();
+      try {
+        const recalled = await findRelevantMemories(
+          effectiveInput,
+          this.config.cwd,
+          this.memoryConfig,
+          this.relevanceCache.getSurfaced(),
+          ac.signal,
+        );
+        if (recalled.length > 0) {
+          const contextText = formatRecalledMemories(recalled);
+          const contextBlock: ContentBlock = {
+            type: 'text',
+            text: contextText,
+          };
+          this.config.sessionManager.addMessage({
+            role: 'user',
+            content: [contextBlock],
+          });
+          this.relevanceCache.markSurfaced(recalled.map(r => r.path));
+        }
+      } catch {
+        // Recall is best-effort — don't break the query on errors
+      }
+    }
+
     if (!this.systemPrompt) {
       await this.init();
     }
@@ -312,6 +359,16 @@ export class QueryEngine {
         }
       }
       yield { type: 'done', data: { sessionId: session.id } };
+
+      // Memory extraction: fire-and-forget background extraction
+      if (this.memoryConfig.enabled && this.memoryConfig.autoExtract) {
+        executeExtractMemories(
+          session.messages,
+          this.config.cwd,
+          this.memoryConfig,
+          null, // callModel — wired in Phase 5 (integration)
+        );
+      }
     } catch (error: unknown) {
       const errMsg = error instanceof Error ? error.message : String(error);
       yield { type: 'error', data: { message: errMsg } };
@@ -402,10 +459,12 @@ export class QueryEngine {
     }
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
     this.interrupt();
     const session = this.config.sessionManager.getActive();
     this.config.sessionManager.saveSession(session);
+    // Drain pending memory extraction before shutdown
+    await drainMemoryExtraction(30_000);
   }
 
   /** Inject the AppState store after construction (TUI creates store after engine init). */

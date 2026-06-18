@@ -4,6 +4,7 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { AppConfig } from '../types.js';
+import type { MemorySettings } from '../memory/types.js';
 
 // ---------------------------------------------------------------------------
 // Settings types — matches ~/.coderix/settings.json format
@@ -82,6 +83,8 @@ export interface CoderSettings {
   coordinator_mode?: boolean;
   /** Default team name to resume on startup. */
   default_team?: string;
+  /** Persistent memory system configuration. */
+  memory?: MemorySettings;
 }
 
 // ---------------------------------------------------------------------------

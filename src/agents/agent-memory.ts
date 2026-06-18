@@ -1,11 +1,16 @@
 /**
- * Agent Memory System — per-agent memory scope injection.
+ * Agent Memory System — per-agent memory scope injection AND global
+ * auto-memory integration.
  *
  * Agents can declare a `memory` field in their frontmatter to pull relevant
  * memories from the corresponding scope into their system prompt. This gives
  * each agent type its own persistent memory context across sessions.
  *
- * Supported scopes:
+ * Additionally, the global auto-memory system (~/.coderix/projects/<slug>/memory/)
+ * provides project-scoped persistent memory with MEMORY.md indexing,
+ * frontmatter-based topic files, auto-extraction, and recall.
+ *
+ * Supported scopes (per-agent):
  *   - 'user'     — user-level memories (~/.coderix/memory/)
  *   - 'project'  — project-level memories (<project>/.coder/memory/)
  *   - 'local'    — local workspace memories (cwd/.coder/memory/)
@@ -18,6 +23,12 @@
 import { readFile, readdir } from 'fs/promises';
 import { join, basename, extname } from 'path';
 import { homedir } from 'os';
+import {
+  getMemoryDir as getAutoMemoryDir,
+  isMemoryEnabled,
+} from '../memory/memory-directory.js';
+import { loadIndex } from '../memory/memory-index.js';
+import type { MemoryIndexEntry } from '../memory/types.js';
 
 export type AgentMemoryScope = 'user' | 'project' | 'local';
 
@@ -157,12 +168,32 @@ export function augmentToolsForMemory(
 
 /**
  * Check whether the automatic memory system is enabled.
- * Currently gated on CODER_MEMORY_ENABLED env var.
- * Future: read from settings.json.
+ * Delegates to the new memory module's isMemoryEnabled() which checks
+ * CODERIX_MEMORY_ENABLED, CODERIX_DISABLE_MEMORY, and settings.json.
  */
 export function isAgentMemoryEnabled(): boolean {
-  return (
-    process.env.CODER_MEMORY_ENABLED === 'true' ||
-    process.env.CODER_MEMORY_ENABLED === '1'
-  );
+  return isMemoryEnabled();
 }
+
+// ---------------------------------------------------------------------------
+// Global auto-memory integration
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the MEMORY.md index entries for the current project.
+ * Uses the new auto-memory path (~/.coderix/projects/<slug>/memory/).
+ *
+ * Returns entries sorted by path (stable ordering for prompt injection).
+ */
+export async function loadMemoryMdIndex(
+  cwd: string = process.cwd(),
+): Promise<MemoryIndexEntry[]> {
+  const { entries } = await loadIndex(cwd);
+  return entries;
+}
+
+/**
+ * Get the global auto-memory directory for the current project.
+ * This is the shared project memory, distinct from per-agent scoped memory.
+ */
+export { getAutoMemoryDir, isMemoryEnabled };

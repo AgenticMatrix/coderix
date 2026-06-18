@@ -3,14 +3,20 @@
  *
  * Produces a structured prompt from multiple prioritized sections:
  *   persona  →  system_rules  →  tool_usage  →  communication
- *   →  env_info  →  codeagent_md  →  permission_mode
- *   →  agent_registry  →  custom  →  append
+ *   →  env_info  →  codeagent_md  →  memory (35) →  permission_mode
+ *   →  skills  →  agent_registry  →  custom  →  append
  *
  * Worker agents get a reduced set (persona + env_info + permission_mode).
  */
 
 import { computeEnvInfo, loadCodeAgentContext, type EnvInfo, type CodeAgentContext } from './context-loader.js';
 import { getSkillRegistry } from '../skills/registry.js';
+import { loadMemoryPrompt } from '../memory/prompt-builder.js';
+import {
+  loadMemoryConfig,
+} from '../memory/config.js';
+import type { MemoryConfig } from '../memory/types.js';
+import { MemorySettings } from '../memory/types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,6 +40,8 @@ export interface AssemblyContext {
   appendPrompt?: string;
   agentRole?: 'default' | 'coordinator' | 'worker';
   model?: string;
+  /** Memory settings from CoderSettings (optional — skips memory section if not provided). */
+  memorySettings?: MemorySettings;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,13 +56,14 @@ export class SystemPromptAssembler {
     const envInfo = computeEnvInfo(ctx.cwd, ctx.model);
     const codeAgentContext = loadCodeAgentContext(ctx.cwd);
 
-    const builders: Array<() => PromptPart | null> = [
+    const builders: Array<() => PromptPart | null | Promise<PromptPart | null>> = [
       () => this.buildPersona(role),
       () => this.buildSystemRules(role),
       () => this.buildToolUsage(role),
       () => this.buildCommunication(role),
       () => this.buildEnvInfo(envInfo, ctx.model),
       () => this.buildCodeAgentMd(codeAgentContext, role),
+      () => this.buildMemoryContext(role, ctx),
       () => this.buildPermissionMode(ctx.permissionMode),
       () => this.buildSkills(role),
       () => this.buildAgentRegistry(role),
@@ -64,7 +73,7 @@ export class SystemPromptAssembler {
 
     const parts: PromptPart[] = [];
     for (const builder of builders) {
-      const part = builder();
+      const part = await builder();
       if (part) parts.push(part);
     }
 
@@ -277,6 +286,25 @@ export class SystemPromptAssembler {
     if (sections.length === 0) return null;
 
     return { name: 'codeagent_md', content: sections.join('\n\n'), priority: 30 };
+  }
+
+  /**
+   * Priority 35 — Persistent memory system instructions and index.
+   * Loaded only for default and coordinator agents (not worker).
+   */
+  private async buildMemoryContext(
+    role: string,
+    ctx: AssemblyContext,
+  ): Promise<PromptPart | null> {
+    if (role === 'worker') return null;
+
+    const memoryConfig = loadMemoryConfig(ctx.memorySettings);
+    if (!memoryConfig.enabled) return null;
+
+    const prompt = await loadMemoryPrompt(ctx.cwd, memoryConfig);
+    if (!prompt) return null;
+
+    return { name: 'memory', content: prompt, priority: 35 };
   }
 
   /**
