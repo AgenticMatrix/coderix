@@ -1,295 +1,41 @@
 /**
- * Workflow executor — runs multi-agent workflow scripts.
+ * Workflow tool executor — bridges the workflow runtime to the Coderix agent system.
  *
- * The script format is a simplified JavaScript subset:
- *   export const meta = { name: '...', description: '...' }
- *   // script body using agent(), parallel(), pipeline(), phase(), log()
+ * This is the tool-plugin layer. It:
+ *   1. Creates a ConcurrencyController (rate-limit sub-agent spawns)
+ *   2. Creates a CheckpointManager (cache/resume agent results)
+ *   3. Builds SandboxGlobals backed by agent-runner.ts (spawn real sub-agents)
+ *   4. Delegates script execution to the runtime layer (src/workflow/runtime.ts)
  *
- * This executor provides a sandboxed execution environment that:
- *   - Limits agent concurrency (16 max) and total count (1000 max)
- *   - Prevents filesystem/network access
- *   - Tracks phases for progress reporting
+ * The runtime layer itself knows nothing about Coderix agents or tools — it only
+ * calls the agent/parallel/pipeline factories injected via SandboxGlobals.
  */
 
 import type { ToolExecutor, ToolResult } from '../../tools/types.js';
 import type { AgentSpawnContext } from '../../core/types.js';
-import { filterToolsForAgent } from '../tool-filtering.js';
-import { ToolRegistry } from '../../core/tool-registry.js';
-import { PermissionEngine } from '../../core/permission.js';
-import { PermissionMode } from '../../core/types.js';
-import { SessionManager } from '../../core/session.js';
-import { CheckpointManager } from '../../core/checkpoint.js';
-import { query } from '../../core/query.js';
+import type { SandboxGlobals, PhaseProgress } from '../../workflow/types.js';
+import { executeWorkflow } from '../../workflow/runtime.js';
+import { ConcurrencyController, executePipeline } from '../../workflow/concurrency.js';
+import { CheckpointManager } from '../../workflow/checkpoint.js';
+import { runWorkflowAgent } from './agent-runner.js';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_CONCURRENT = 16;
 const MAX_TOTAL_AGENTS = 1000;
-
-// ---------------------------------------------------------------------------
-// Progress tracking
-// ---------------------------------------------------------------------------
-
-interface PhaseProgress {
-  title: string;
-  agentCount: number;
-  completedCount: number;
-}
-
-// ---------------------------------------------------------------------------
-// Agent runner
-// ---------------------------------------------------------------------------
-
-async function runWorkflowAgent(
-  prompt: string,
-  agentSpawn: AgentSpawnContext,
-  agentType: string = 'general-purpose',
-): Promise<string> {
-  const agentDef = agentSpawn.agentRegistry.get(agentType);
-  if (!agentDef) {
-    throw new Error(`Unknown agent type: ${agentType}`);
-  }
-
-  const shortId = Math.random().toString(36).slice(2, 10);
-  const agentId = `wf-${shortId}`;
-  const abortController = new AbortController();
-
-  // Build filtered tool registry
-  const parentDefs = agentSpawn.toolRegistry.getDefinitions();
-  const filteredDefs = filterToolsForAgent(parentDefs, agentDef);
-  const subToolRegistry = new ToolRegistry();
-  for (const def of filteredDefs) {
-    const registration = agentSpawn.toolRegistry.get(def.name);
-    if (registration) {
-      subToolRegistry.register(def, registration.execute);
-    }
-  }
-
-  const subPermissionEngine = new PermissionEngine(process.cwd());
-  subPermissionEngine.setMode(PermissionMode.AUTO);
-
-  const subSessionManager = new SessionManager();
-  subSessionManager.create({
-    title: `Workflow: ${agentType}`,
-    cwd: process.cwd(),
-    model: agentDef.model,
-  });
-
-  const subCheckpointManager = new CheckpointManager();
-
-  const initialMessages = [
-    { role: 'user' as const, content: prompt },
-  ];
-
-  const systemPrompt = {
-    prompt: agentDef.getSystemPrompt(),
-    parts: [{ name: `agent-${agentType}`, content: agentDef.getSystemPrompt(), priority: 0 }],
-  };
-
-  agentSpawn.subAgentRegistry.register({
-    id: agentId,
-    name: `wf-${agentType}`,
-    agentType: agentType as 'explore' | 'plan' | 'general-purpose',
-    status: 'running',
-    prompt,
-    createdAt: Date.now(),
-    turnCount: 0,
-    messageCount: 0,
-    toolCount: 0,
-    abortController,
-  });
-
-  let turnCount = 0;
-  let toolCount = 0;
-  const transcripts: string[] = [];
-
-  try {
-    const generator = query({
-      sessionId: subSessionManager.getActive()?.id ?? agentId,
-      cwd: process.cwd(),
-      messages: initialMessages,
-      systemPrompt,
-      toolRegistry: subToolRegistry,
-      permissionEngine: subPermissionEngine,
-      sessionManager: subSessionManager,
-      checkpointManager: subCheckpointManager,
-      abortController,
-      maxTurns: agentDef.maxTurns ?? 15,
-      contextBudget: agentDef.contextBudget ?? 80_000,
-      compactThreshold: 0.7,
-      maxToolConcurrency: 4,
-      callModel: agentSpawn.callModel,
-    });
-
-    for await (const msg of generator) {
-      if (abortController.signal.aborted) break;
-
-      if (msg.type === 'assistant') {
-        turnCount++;
-        const assistantMsg = msg.message as { content?: unknown };
-        const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
-        toolCount += blocks.filter((b: { type?: string }) => b.type === 'tool_use').length;
-
-        for (const block of blocks) {
-          if (block.type === 'text' && typeof (block as { text?: string }).text === 'string') {
-            transcripts.push((block as { text: string }).text);
-          }
-        }
-      }
-    }
-
-    const result = transcripts.join('\n\n') || '(no output)';
-
-    agentSpawn.subAgentRegistry.update(agentId, {
-      status: abortController.signal.aborted ? 'stopped' : 'done',
-      finishedAt: Date.now(),
-      turnCount,
-      toolCount,
-      result: result.slice(0, 2000),
-    });
-
-    return result;
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    agentSpawn.subAgentRegistry.update(agentId, {
-      status: 'error',
-      finishedAt: Date.now(),
-      error: errorMsg,
-    });
-    throw err;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Workflow script execution
-// ---------------------------------------------------------------------------
-
-interface WorkflowMeta {
-  name: string;
-  description: string;
-  phases?: Array<{ title: string }>;
-}
-
-interface WorkflowContext {
-  agentSpawn: AgentSpawnContext;
-  args?: Record<string, unknown>;
-  phases: PhaseProgress[];
-  totalAgentCount: number;
-  currentPhase: string;
-}
-
-/**
- * Execute a workflow script.
- */
-async function executeWorkflowScript(
-  script: string,
-  context: WorkflowContext,
-): Promise<{
-  results: string[];
-  phases: PhaseProgress[];
-}> {
-  const results: string[] = [];
-
-  // Parse metadata from the script
-  const metaMatch = script.match(/export\s+const\s+meta\s*=\s*(\{[\s\S]*?\n\});/);
-  const meta: WorkflowMeta = metaMatch
-    ? eval(`(${metaMatch[1]})`)
-    : { name: 'unnamed', description: '' };
-
-  // Extract script body (everything after the meta declaration)
-  const bodyStart = script.indexOf('\n', metaMatch ? script.indexOf(metaMatch[0]) + metaMatch[0].length : 0);
-  const scriptBody = bodyStart > 0 ? script.slice(bodyStart) : script;
-
-  // Sandboxed environment
-  const sandbox: Record<string, unknown> = {
-    // Metadata
-    __meta: meta,
-    __results: results,
-    __phases: context.phases,
-    args: context.args ?? {},
-
-    // Agent function
-    async agent(prompt: string, opts?: { model?: string; agentType?: string }) {
-      if (context.totalAgentCount >= MAX_TOTAL_AGENTS) {
-        throw new Error(`Workflow agent limit reached (${MAX_TOTAL_AGENTS})`);
-      }
-      context.totalAgentCount++;
-
-      return runWorkflowAgent(
-        prompt,
-        context.agentSpawn,
-        opts?.agentType ?? 'general-purpose',
-      );
-    },
-
-    // Parallel execution
-    async parallel(thunks: Array<() => Promise<string>>) {
-      const limited = thunks.slice(0, MAX_CONCURRENT);
-      const results = await Promise.all(
-        limited.map(t => t().catch(err => `ERROR: ${err instanceof Error ? err.message : String(err)}`)),
-      );
-      return results.filter((r): r is string => r !== null);
-    },
-
-    // Pipeline execution
-    async pipeline<T>(
-      items: T[],
-      ...stages: Array<(item: T, index: number) => Promise<string>>
-    ) {
-      const outcomes: string[] = [];
-      for (let i = 0; i < items.length; i++) {
-        let current = items[i];
-        for (const stage of stages) {
-          current = await stage(current, i) as unknown as T;
-        }
-        outcomes.push(current as unknown as string);
-      }
-      return outcomes;
-    },
-
-    // Phase tracking
-    phase(title: string) {
-      context.currentPhase = title;
-      context.phases.push({ title, agentCount: 0, completedCount: 0 });
-    },
-
-    // Logging
-    log(message: string) {
-      results.push(`[log] ${message}`);
-    },
-  };
-
-  // Execute script body as async function
-  const scriptFn = new Function(
-    ...Object.keys(sandbox),
-    `"use strict"; return (async () => { ${scriptBody} })();`,
-  );
-
-  try {
-    const scriptResult = await scriptFn(...Object.values(sandbox));
-    if (scriptResult && typeof scriptResult === 'object') {
-      return {
-        results: Array.isArray(scriptResult) ? scriptResult : [String(scriptResult)],
-        phases: context.phases,
-      };
-    }
-  } catch (err) {
-    results.push(`Workflow error: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
-  return { results, phases: context.phases };
-}
 
 // ---------------------------------------------------------------------------
 // Tool Executor
 // ---------------------------------------------------------------------------
 
 export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
-  const agentSpawn = options.agentSpawn;
+  const agentSpawn: AgentSpawnContext | undefined = options.agentSpawn;
   if (!agentSpawn) {
-    return { content: 'workflow requires agentSpawn context.', isError: true };
+    return {
+      content: 'workflow requires agentSpawn context (running inside a sub-agent is not supported).',
+      isError: true,
+    };
   }
 
   const script = input.script as string;
@@ -299,31 +45,133 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     return { content: 'workflow requires a non-empty script string.', isError: true };
   }
 
-  const startTime = Date.now();
+  // -------------------------------------------------------------------
+  // Setup
+  // -------------------------------------------------------------------
 
-  const context: WorkflowContext = {
-    agentSpawn,
+  const startTime = Date.now();
+  const controller = new ConcurrencyController();
+  const checkpoint = new CheckpointManager(script, args);
+
+  // Agent call counter (shared across all primitives)
+  const agentCounter = { count: 0 };
+  let totalAgentCount = 0;
+
+  // Phase tracking
+  const phases: PhaseProgress[] = [];
+  let currentPhase = 'main';
+
+  // Log buffer
+  const logMessages: string[] = [];
+
+  // -------------------------------------------------------------------
+  // Build sandbox globals
+  // -------------------------------------------------------------------
+
+  const sandbox: SandboxGlobals = {
     args,
-    phases: [],
-    totalAgentCount: 0,
-    currentPhase: 'main',
+    budget: {
+      total: null,
+      spent: () => 0,
+      remaining: () => Infinity,
+    },
+
+    // ── agent() ──────────────────────────────────────────────────
+    async agent(prompt: string, opts) {
+      if (totalAgentCount >= MAX_TOTAL_AGENTS) {
+        throw new Error(
+          `Workflow agent limit reached (${MAX_TOTAL_AGENTS} total calls).`,
+        );
+      }
+      totalAgentCount++;
+
+      // Check for cached result (checkpoint / resume)
+      const cached = checkpoint.get(prompt);
+      if (cached !== null) {
+        return cached;
+      }
+
+      // Real execution — rate-limited through the concurrency controller
+      const result = await controller.enqueue(() =>
+        runWorkflowAgent({
+          prompt,
+          agentSpawn,
+          agentType: opts?.agentType ?? 'general-purpose',
+          model: opts?.model,
+          effort: opts?.effort,
+          isolation: opts?.isolation,
+          schema: opts?.schema,
+          label: opts?.label,
+        }),
+      );
+
+      // Cache the result for future resume
+      checkpoint.set(prompt, result);
+
+      return result;
+    },
+
+    // ── parallel() ───────────────────────────────────────────────
+    async parallel(thunks) {
+      return controller.parallel(thunks.map(t => async () => t()));
+    },
+
+    // ── pipeline() ───────────────────────────────────────────────
+    async pipeline(items, ...stages) {
+      return executePipeline(
+        items,
+        stages as Array<(item: unknown, index: number) => Promise<unknown>>,
+        controller,
+      );
+    },
+
+    // ── phase() ─────────────────────────────────────────────────
+    phase(title: string) {
+      if (currentPhase !== title) {
+        currentPhase = title;
+        // Update or add phase
+        const existing = phases.find(p => p.title === title);
+        if (!existing) {
+          phases.push({ title, agentCount: 0, completedCount: 0 });
+        }
+      }
+    },
+
+    // ── log() ───────────────────────────────────────────────────
+    log(message: string) {
+      logMessages.push(message);
+    },
   };
 
+  // -------------------------------------------------------------------
+  // Execute the workflow
+  // -------------------------------------------------------------------
+
   try {
-    const result = await executeWorkflowScript(script, context);
+    const result = await executeWorkflow(script, sandbox);
+
+    // Persist checkpoint data
+    checkpoint.save();
 
     const duration = Date.now() - startTime;
-    const phaseSummary = result.phases
-      .map(p => `  - ${p.title}: ${p.agentCount} agents`)
+
+    // Merge phases from runtime with our own
+    const mergedPhases = result.phases.length > 0 ? result.phases : phases;
+
+    const phaseSummary = mergedPhases
+      .map(p => `  - ${p.title}: ${p.agentCount} agents (${p.completedCount} completed)`)
       .join('\n');
 
     const summary = [
       `Workflow completed in ${(duration / 1000).toFixed(1)}s.`,
-      `${context.totalAgentCount} agents used.`,
+      `${result.totalAgentCount} agents used.`,
       phaseSummary ? `\nPhases:\n${phaseSummary}` : '',
+      logMessages.length > 0
+        ? `\nLogs:\n${logMessages.map(m => `  ${m}`).join('\n')}`
+        : '',
       '',
       'Results:',
-      ...result.results.slice(0, 10).map((r, i) => `${i + 1}. ${r.slice(0, 500)}`),
+      ...result.results.slice(0, 20).map((r, i) => `${i + 1}. ${r.slice(0, 500)}`),
     ].join('\n');
 
     return {
@@ -331,12 +179,15 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       isError: false,
       duration,
       metadata: {
-        agentCount: context.totalAgentCount,
-        phases: result.phases,
+        agentCount: result.totalAgentCount,
+        phases: mergedPhases,
         resultCount: result.results.length,
+        cachedCalls: checkpoint.currentCallIndex - result.totalAgentCount + agentCounter.count,
       },
     };
   } catch (err) {
+    checkpoint.save();
+
     return {
       content: `Workflow failed: ${err instanceof Error ? err.message : String(err)}`,
       isError: true,

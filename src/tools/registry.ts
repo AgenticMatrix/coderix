@@ -32,6 +32,7 @@ import askUserQuestionPlugin from './ask-user-question/index.js';
 import enterPlanModePlugin from './enter-plan-mode/index.js';
 import exitPlanModePlugin from './exit-plan-mode/index.js';
 import notebookEditPlugin from './notebook-edit/index.js';
+import workflowPlugin from '../agents/workflow/index.js';
 
 // ── Known tool names (for tools without executors yet) ─────────────────
 const KNOWN_TOOL_NAMES: string[] = [
@@ -74,6 +75,7 @@ export const plugins: ToolPlugin[] = [
   enterPlanModePlugin,
   exitPlanModePlugin,
   notebookEditPlugin,
+  workflowPlugin,
 ];
 
 // Build lookup tables
