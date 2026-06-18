@@ -16,7 +16,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { AgentRegistry } from '../core/agent-registry.js';
 import type { AgentDefinitionsResult } from '../core/types.js';
-import { exploreAgent, planAgent, generalPurposeAgent, verificationAgent, coderGuideAgent, statuslineSetupAgent } from './builtin/index.js';
+import { exploreAgent, planAgent, generalPurposeAgent, verificationAgent, coderixGuideAgent, statuslineSetupAgent } from './builtin/index.js';
 import { getCoordinatorAgents } from './builtin/coordinator-agents.js';
 import { loadAgentsFromDir, getActiveAgents } from './loader.js';
 import { loadPluginAgents } from './plugin-loader.js';
@@ -45,7 +45,7 @@ export async function buildAgentRegistry(cwd: string): Promise<{
   registry.register(planAgent);
   registry.register(generalPurposeAgent);
   registry.register(verificationAgent);
-  registry.register(coderGuideAgent);
+  registry.register(coderixGuideAgent);
   registry.register(statuslineSetupAgent);
 
   // Layer 2: plugin agents
