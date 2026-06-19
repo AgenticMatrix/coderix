@@ -50,6 +50,9 @@ import {
   consumeManualCompactRequest,
 } from './compactor.js';
 import { classifyError } from './error-recovery.js';
+import { loadCodeAgentContext } from './context-loader.js';
+import { loadMemoryPrompt } from '../memory/prompt-builder.js';
+import { loadMemoryConfig } from '../memory/config.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -340,9 +343,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         messages,
         tokenCountWithEstimation(messages),
         contextBudget,
-        { sessionId, cwd, hookManager, callModel },
+        { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode() },
         abortController.signal,
-        { count: 0 }, // bypass circuit breaker
+        { count: 0 },
       );
     }
 
@@ -898,7 +901,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           messages,
           tokenCountWithEstimation(messages),
           contextBudget,
-          { sessionId, cwd, hookManager, callModel },
+          { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode() },
           abortController.signal,
           compactFailures,
         );
@@ -1077,6 +1080,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           cwd,
           hookManager,
           callModel,
+          systemPrompt,
+          permissionMode: permissionEngine.getMode(),
         },
         abortController.signal,
         compactFailures,
@@ -1098,11 +1103,13 @@ async function* runCompaction(
     cwd: string;
     hookManager?: HookManager;
     callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
+    systemPrompt: SystemPrompt;
+    permissionMode: PermissionMode;
   },
   signal: AbortSignal,
   compactFailures: { count: number },
 ): AsyncGenerator<QueryMessage, Message[]> {
-  const { sessionId, cwd, hookManager, callModel } = ctx;
+  const { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode } = ctx;
   const MAX_AUTOCOMPACT_FAILURES = 3;
 
   // ── PreCompact hook ──────────────────────────────────────────────
@@ -1238,12 +1245,14 @@ async function* runCompaction(
           ...llmResult.messagesToKeep,
         ];
 
-        // Post-compact restoration: re-inject context marker
-        const ctxMsg: Message = {
-          role: 'system',
-          content: `[Context restored after compaction]\nWorking directory: ${cwd}\nSystem prompt preserved from session start.`,
-        };
-        messages.push(ctxMsg);
+        // ── Post-compact restoration ─────────────────────────────
+        // Re-inject context that was lost when old messages were pruned.
+        const restoreMessages = await buildRestoreContext(
+          cwd,
+          systemPrompt,
+          permissionMode,
+        );
+        messages.push(...restoreMessages);
 
         const afterTokens = tokenCountWithEstimation(messages);
         yield {
@@ -1300,6 +1309,75 @@ async function* runCompaction(
     `Context compacted: ${currentTokens} → ${afterTokens} tokens (${strategy}${droppedCount > 0 ? `, dropped ${droppedCount} messages` : ''})`,
     { beforeTokens: currentTokens, afterTokens, strategy, droppedMessages: droppedCount },
   ).catch(() => {});
+
+  return messages;
+}
+
+// ---------------------------------------------------------------------------
+// Post-compact context restoration
+// ---------------------------------------------------------------------------
+
+/**
+ * Build context messages to restore after LLM compaction prunes old messages.
+ * Re-injects:
+ *   1. CODERIX.md (project + user)
+ *   2. Memory context (from memory files)
+ *   3. Plan mode reminder (if applicable)
+ *
+ * These are normally part of the system prompt, but the model may lose
+ * awareness after a large context shift. Re-injecting as explicit messages
+ * at the conversation tail ensures they're in the attention window.
+ */
+async function buildRestoreContext(
+  cwd: string,
+  _systemPrompt: SystemPrompt,
+  permissionMode: PermissionMode,
+): Promise<Message[]> {
+  const messages: Message[] = [];
+
+  // ── 1. CODERIX.md context ────────────────────────────────────────
+  try {
+    const ctx = loadCodeAgentContext(cwd);
+    const parts: string[] = ['[Context restored after compaction]'];
+
+    if (ctx.projectContext) {
+      parts.push('\n## Project context (CODERIX.md)');
+      parts.push(ctx.projectContext.slice(0, 3000));
+    }
+    if (ctx.userContext) {
+      parts.push('\n## User context (~/.coderix/CODERIX.md)');
+      parts.push(ctx.userContext.slice(0, 2000));
+    }
+
+    if (parts.length > 1) {
+      messages.push({ role: 'system', content: parts.join('\n') });
+    }
+  } catch {
+    // Best-effort — CODERIX.md may not exist
+  }
+
+  // ── 2. Memory context ────────────────────────────────────────────
+  try {
+    const memoryConfig = loadMemoryConfig();
+    const memoryPrompt = await loadMemoryPrompt(cwd, memoryConfig);
+    if (memoryPrompt) {
+      messages.push({
+        role: 'system',
+        content: `[Memory context restored]\n${memoryPrompt.slice(0, 3000)}`,
+      });
+    }
+  } catch {
+    // Best-effort — memory may be disabled
+  }
+
+  // ── 3. Plan mode reminder ────────────────────────────────────────
+  if (permissionMode === 'plan') {
+    messages.push({
+      role: 'system',
+      content:
+        '[Reminder] You are still in plan mode. Explore and design — do not modify files or run commands that change state. Use ExitPlanMode when ready to implement.',
+    });
+  }
 
   return messages;
 }
