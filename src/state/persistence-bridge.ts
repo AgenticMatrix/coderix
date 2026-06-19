@@ -2,9 +2,9 @@
  * Persistence bridge — subscribes to AppState changes and persists
  * relevant slices to disk with debounce.
  *
- * Modeled after claude-code-best's approach: the bridge is an external
- * subscriber to the store, not a React component.  It calls the existing
- * low-level I/O functions in cli/history.ts, cli/config.ts, etc.
+ * The bridge is an external subscriber to the store, not a React component.
+ * It calls the existing low-level I/O functions in cli/history.ts and
+ * cli/config.ts.
  */
 import type { Store } from './store.js';
 import type { AppState } from './AppState.js';

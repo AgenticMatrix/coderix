@@ -7,8 +7,6 @@
  *   Layer 2: plugin
  *   Layer 3: userSettings   (~/.coderix/agents/)
  *   Layer 4: projectSettings (<project>/.coder/agents/)
- *
- * Adapted from claude-code-best's loadAgentsDir.ts.
  */
 
 import { readdir, readFile, stat } from 'fs/promises';
@@ -287,7 +285,7 @@ function parseToolList(value: unknown): string[] | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Priority-based deduplication (claude-code-best getActiveAgentsFromList)
+// Priority-based deduplication
 // ---------------------------------------------------------------------------
 
 /**

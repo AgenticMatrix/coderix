@@ -43,14 +43,7 @@ export function validateMemoryFrontmatter(
   const description =
     typeof data.description === 'string' ? data.description.trim() : '';
 
-  // type: try top-level first, then metadata.type (Claude Code compat)
-  let type = parseMemoryType(data.type);
-  if (!type) {
-    const meta = data.metadata;
-    if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
-      type = parseMemoryType((meta as Record<string, unknown>).type);
-    }
-  }
+  const type = parseMemoryType(data.type);
 
   if (!name || !description || !type) {
     return null;
@@ -72,25 +65,6 @@ export function validateMemoryFrontmatter(
     }
     if (Object.keys(meta).length > 0) {
       fm.metadata = meta;
-    }
-  }
-
-  // originSessionId: top-level or metadata.originSessionId (Claude Code compat)
-  const originId = data.originSessionId;
-  if (typeof originId === 'string' && originId.length > 0) {
-    fm.originSessionId = originId;
-  } else if (fm.metadata) {
-    const metaId = fm.metadata.originSessionId;
-    if (typeof metaId === 'string' && metaId.length > 0) {
-      fm.originSessionId = metaId;
-    }
-  }
-
-  // node_type from metadata (Claude Code internal marker)
-  if (fm.metadata) {
-    const nt = fm.metadata.node_type;
-    if (typeof nt === 'string' && nt.length > 0) {
-      fm.nodeType = nt;
     }
   }
 

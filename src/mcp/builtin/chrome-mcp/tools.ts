@@ -1,8 +1,7 @@
 /**
  * Chrome Use MCP — Tool Schemas
  *
- * 18 tools matching claude-code-best's @ant/claude-for-chrome-mcp tool set.
- * All tools operate within the browser viewport via CDP.
+ * 18 browser automation tools operating within the browser viewport via CDP.
  */
 
 import type { ComputerAction } from './types.js';

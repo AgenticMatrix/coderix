@@ -134,12 +134,9 @@ export function extractCommandTokens(entries: ParseEntry[]): string[] {
 /**
  * Extract the multi-word command key from tokens for whitelist lookup.
  *
- * For example, tokens ["git", "diff", "--name-only"] returns "git diff".
- * tokens ["docker", "ps"] returns "docker ps".
- * tokens ["ls", "-la"] returns "ls".
- *
- * This mirrors the command-key scheme in claude-code-best's
- * readOnlyCommandValidation.ts.
+ * Example: tokens ["git", "diff", "--name-only"] → "git diff"
+ *          tokens ["docker", "ps"] → "docker ps"
+ *          tokens ["ls", "-la"] → "ls"
  */
 export function extractCommandKey(tokens: string[]): string {
   if (tokens.length === 0) return '';

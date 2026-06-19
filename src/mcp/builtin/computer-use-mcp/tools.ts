@@ -1,9 +1,8 @@
 /**
  * Computer Use MCP — Tool Schemas
  *
- * 24 tools matching claude-code-best's @ant/computer-use-mcp tool set.
- * Computer Use controls the macOS desktop (not browser viewport).
- * All coordinates are in screen pixels.
+ * 24 desktop automation tools controlling the macOS desktop via accessibility
+ * APIs. All coordinates are in screen pixels.
  */
 
 const COORD_DESC =

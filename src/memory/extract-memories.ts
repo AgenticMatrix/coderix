@@ -9,9 +9,6 @@
  *   - The conversation messages since the last extraction
  *   - The existing memory file manifest
  *   - Restricted instructions: only extract truly new, non-derivable information
- *
- * Based on the claude-code-best extractMemories pattern, adapted for
- * Coderix's provider-agnostic architecture.
  */
 
 import type { Message } from '../core/types.js';

@@ -12,7 +12,8 @@
  * Commands that provide arbitrary code execution.
  * Any command starting with one of these is classified as CODE_EXEC.
  *
- * Matches claude-code-best's CROSS_PLATFORM_CODE_EXEC + shell extras.
+ * Covers interpreters (python, node, ruby, etc.), package runners
+ * (npx, bunx), shells (bash -c, sh -c), and remote execution (ssh).
  */
 export const CODE_EXEC_INTERPRETERS: readonly string[] = [
   // Interpreters

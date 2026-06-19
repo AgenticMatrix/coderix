@@ -5,8 +5,6 @@
  * from the current project state. Code patterns, architecture, git history,
  * and file structure are derivable (via grep/git/CODERIX.md) and should NOT
  * be saved as memories.
- *
- * Based on the claude-code-best memory taxonomy.
  */
 
 // ---------------------------------------------------------------------------
@@ -30,10 +28,6 @@ export interface MemoryFrontmatter {
   description: string;
   type: MemoryType;
   metadata?: Record<string, unknown>;
-  /** Session UUID that created this memory (Claude Code compat). */
-  originSessionId?: string;
-  /** Claude Code internal marker (e.g. "memory"). */
-  nodeType?: string;
 }
 
 // ---------------------------------------------------------------------------

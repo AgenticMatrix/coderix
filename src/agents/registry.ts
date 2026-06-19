@@ -5,11 +5,9 @@
  *
  * Registration order determines override priority (last write wins):
  *   Layer 1: built-in (lowest priority)
- *   Layer 2: plugin agents (future)
+ *   Layer 2: plugin agents
  *   Layer 3: user-level agents   (~/.coderix/agents/*.md)
  *   Layer 4: project-level agents (<cwd>/.coder/agents/*.md)
- *
- * Adapted from claude-code-best's loadAgentsDir + getBuiltInAgents.
  */
 
 import { homedir } from 'os';

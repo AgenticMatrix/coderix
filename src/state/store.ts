@@ -1,10 +1,9 @@
 /**
  * Generic publish/subscribe store with immutable update semantics.
  *
- * Modeled after claude-code-best's createStore — a non-React, framework-
- * agnostic state container.  React consumers use useSyncExternalStore via
- * AppStateContext; pure-TS consumers (tools, agents) call getState/setState
- * directly through injected references.
+ * A non-React, framework-agnostic state container. React consumers use
+ * useSyncExternalStore via AppStateContext; pure-TS consumers (tools,
+ * agents) call getState/setState directly through injected references.
  */
 export interface Store<T> {
   getState(): T;

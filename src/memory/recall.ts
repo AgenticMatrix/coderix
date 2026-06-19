@@ -6,9 +6,6 @@
  * as system-reminder context messages.
  *
  * Provider-agnostic: pure text processing, no LLM calls.
- *
- * Based on the claude-code-best findRelevantMemories pattern, adapted for
- * Coderix's architecture.
  */
 
 import { readFile } from 'fs/promises';

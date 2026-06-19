@@ -1,9 +1,9 @@
 /**
  * Flag validation for read-only command whitelisting.
  *
- * Ported from claude-code-best's readOnlyCommandValidation.ts.
- * Validates that command flags/arguments are within the set of
- * known-safe flags defined in the read-only whitelist.
+ * Validates that command flags and their arguments conform to expected types
+ * defined in the read-only whitelist. This is the security boundary that
+ * prevents malicious flag injection through seemingly-safe commands.
  */
 
 // ── Flag argument types ─────────────────────────────────────────────
@@ -45,8 +45,8 @@ export interface ExternalCommandConfig {
   ) => boolean;
 
   /**
-   * When false, the tool does NOT respect POSIX `--` end-of-options.
-   * validateFlags will continue checking flags after `--` instead of breaking.
+   * When false, the tool does NOT honor POSIX `--` end-of-options.
+   * The validator continues checking flags after `--` instead of stopping.
    * Default: true (most tools respect `--`).
    */
   respectsDoubleDash?: boolean;
@@ -54,13 +54,13 @@ export interface ExternalCommandConfig {
 
 // ── Flag pattern ────────────────────────────────────────────────────
 
-/** Regex pattern to match valid flag names (letters, digits, underscores, hyphens). */
+/** Pattern for a valid flag token: starts with `-` followed by a letter, digit, `_`, or `-`. */
 export const FLAG_PATTERN = /^-[a-zA-Z0-9_-]/;
 
 // ── Argument validation ─────────────────────────────────────────────
 
 /**
- * Validate a flag argument based on its expected type.
+ * Validate a flag argument against its expected type.
  */
 export function validateFlagArgument(
   value: string,
@@ -68,11 +68,11 @@ export function validateFlagArgument(
 ): boolean {
   switch (argType) {
     case 'none':
-      return false; // Should not have been called for 'none' type
+      return false;
     case 'number':
       return /^\d+$/.test(value);
     case 'string':
-      return true; // Any string including empty is valid
+      return true;
     case 'char':
       return value.length === 1;
     case '{}':
@@ -84,20 +84,85 @@ export function validateFlagArgument(
   }
 }
 
+// ── Flag token parsing helpers ──────────────────────────────────────
+
+interface ParsedFlag {
+  /** The full flag including dashes, e.g. "--sort" or "-n" */
+  raw: string;
+  /** The flag name without leading dashes and inline value, e.g. "sort" or "n" */
+  name: string;
+  /** Whether the original token contained `=` (e.g., "--sort=refname") */
+  hasInlineValue: boolean;
+  /** The value after `=`, if present; empty string if `--flag=` */
+  inlineValue: string;
+}
+
+/**
+ * Decompose a flag token into its components.
+ *
+ * Handles:
+ *   --flag=value  → { name: "--flag", hasInlineValue: true, inlineValue: "value" }
+ *   --flag=       → { name: "--flag", hasInlineValue: true, inlineValue: "" }
+ *   -n5           → { name: "-n", hasInlineValue: true, inlineValue: "5" }
+ *   --verbose     → { name: "--verbose", hasInlineValue: false, inlineValue: "" }
+ */
+function parseFlagToken(token: string): ParsedFlag {
+  // Long option with equals: --flag=value
+  if (token.startsWith('--') && token.includes('=')) {
+    const idx = token.indexOf('=');
+    return {
+      raw: token,
+      name: token.slice(0, idx),
+      hasInlineValue: true,
+      inlineValue: token.slice(idx + 1),
+    };
+  }
+
+  // Short option with attached value: -n5, -A20
+  if (
+    token.startsWith('-') &&
+    !token.startsWith('--') &&
+    token.length > 2
+  ) {
+    // Check if the remainder could be a numeric arg (e.g., -A20, -n5)
+    const remainder = token.slice(2);
+    if (/^\d+$/.test(remainder)) {
+      return {
+        raw: token,
+        name: token.slice(0, 2),
+        hasInlineValue: true,
+        inlineValue: remainder,
+      };
+    }
+    // Otherwise it's bundled short flags like -la
+  }
+
+  return {
+    raw: token,
+    name: token,
+    hasInlineValue: false,
+    inlineValue: '',
+  };
+}
+
 // ── Flag validation ─────────────────────────────────────────────────
 
 /**
- * Validates the flags/arguments portion of a tokenized command against a config.
+ * Validate flags/arguments of a tokenized command against a whitelist config.
  *
- * This is the flag-walking loop. It advances through tokens checking each
- * flag against the safeFlags map and validating argument types.
+ * Walks through tokens after the command name, checking each flag against
+ * the safeFlags map and validating argument types. Rejects unknown flags,
+ * missing required arguments, and type-mismatched argument values.
  *
- * Ported from claude-code-best's validateFlags() with the same parser-differential
- * fixes for security-critical edge cases.
+ * Handles edge cases:
+ *   - POSIX `--` end-of-options marker (unless config disables it)
+ *   - Inline values with `=` (including empty: `-E=`)
+ *   - Combined short flags (`-la`)
+ *   - Numeric shorthand for specific commands (git -<number>)
  *
- * @param tokens - Pre-tokenized string tokens (from command-tokenizer.ts)
- * @param startIndex - Where to start validating (after command tokens, e.g. 2 for "git diff")
- * @param config - The safe flags config for this command
+ * @param tokens - Pre-tokenized string tokens from command-tokenizer
+ * @param startIndex - Where to start validating (after command tokens)
+ * @param config - The safe flags configuration for this command
  * @param options - Command-specific handling
  * @returns true if all flags are valid, false otherwise
  */
@@ -106,177 +171,143 @@ export function validateFlags(
   startIndex: number,
   config: ExternalCommandConfig,
   options?: {
-    /** The first token (for command-specific handling like git numeric shorthand). */
     commandName?: string;
-    /** Raw command string passed to additionalCommandIsDangerousCallback. */
     rawCommand?: string;
   },
 ): boolean {
-  let i = startIndex;
+  const cmdName = options?.commandName;
+  const respectsEndOfOptions = config.respectsDoubleDash !== false;
 
-  while (i < tokens.length) {
-    const token = tokens[i];
-    if (!token) {
-      i++;
+  let pos = startIndex;
+
+  while (pos < tokens.length) {
+    const token = tokens[pos];
+    if (token === undefined) {
+      pos++;
       continue;
     }
 
-    // `--` end-of-options
+    // ── End-of-options marker ──────────────────────────────────
     if (token === '--') {
-      // SECURITY: Only break if the tool respects POSIX `--` (default: true).
-      // Tools like pyright don't respect `--` — they treat it as a file path
-      // and continue processing subsequent tokens as flags. Breaking here
-      // would let `pyright -- --createstub os` auto-approve a file-write flag.
-      if (config.respectsDoubleDash !== false) {
-        i++;
-        break; // Everything after -- is positional arguments
+      if (respectsEndOfOptions) {
+        // Everything after -- is positional, skip validation
+        break;
       }
-      // Tool doesn't respect --: treat as positional arg, keep validating
-      i++;
+      // Tool does not honor -- (e.g., pyright): keep validating
+      pos++;
       continue;
     }
 
-    // Flag token (starts with -)
+    // ── Flag token ─────────────────────────────────────────────
     if (token.startsWith('-') && token.length > 1 && FLAG_PATTERN.test(token)) {
-      // Handle --flag=value format
-      // SECURITY: Track whether the token CONTAINS `=` separately from
-      // whether the value is non-empty. `-E=` has `hasEquals=true` but
-      // `inlineValue=''` (falsy). Without `hasEquals`, the falsy check
-      // would fall through to "consume next token" — but GNU getopt
-      // for short options with mandatory arg sees `-E=` as `-E` with
-      // ATTACHED arg `=` (it doesn't strip `=` for short options).
-      // Parser differential: validator advances 2 tokens, GNU advances 1.
-      //
-      // Fix: when hasEquals is true, use inlineValue (even if empty) as the
-      // provided arg. validateFlagArgument('', 'EOF') → false → rejected.
-      const hasEquals = token.includes('=');
-      const [flag, ...valueParts] = token.split('=');
-      const inlineValue = valueParts.join('=');
+      const parsed = parseFlagToken(token);
 
-      if (!flag) {
-        return false;
-      }
-
-      const flagArgType = config.safeFlags[flag];
-
-      if (!flagArgType) {
-        // Special case: git commands support -<number> as shorthand for -n <number>
-        if (options?.commandName === 'git' && /^-\d+$/.test(flag)) {
-          // This is equivalent to -n flag which is safe for git log/diff/show
-          i++;
-          continue;
-        }
-
-        // Handle flags with directly attached numeric arguments (e.g., -A20, -B10)
-        // Only apply this special handling to grep and rg commands
-        if (
-          (options?.commandName === 'grep' || options?.commandName === 'rg') &&
-          !flag.startsWith('--') &&
-          flag.length > 2
-        ) {
-          const potentialFlag = flag.substring(0, 2); // e.g., '-A' from '-A20'
-          const potentialValue = flag.substring(2); // e.g., '20' from '-A20'
-
-          if (config.safeFlags[potentialFlag] && /^\d+$/.test(potentialValue)) {
-            const attachedArgType = config.safeFlags[potentialFlag];
-            if (attachedArgType === 'number' || attachedArgType === 'string') {
-              if (validateFlagArgument(potentialValue, attachedArgType)) {
-                i++;
-                continue;
-              } else {
-                return false;
-              }
-            }
+      // ── Attached numeric argument (e.g., -A20 on grep/rg) ──
+      if (
+        parsed.hasInlineValue &&
+        parsed.name.length === 2 &&
+        cmdName &&
+        (cmdName === 'grep' || cmdName === 'rg')
+      ) {
+        const argType = config.safeFlags[parsed.name];
+        if (argType && (argType === 'number' || argType === 'string')) {
+          if (validateFlagArgument(parsed.inlineValue, argType)) {
+            pos++;
+            continue;
           }
-        }
-
-        // Handle combined single-letter flags like -la
-        // SECURITY: We must NOT allow any bundled flag that takes an argument.
-        // GNU getopt bundling semantics: when an arg-taking option appears LAST
-        // in a bundle with no trailing chars, the NEXT argv element is consumed
-        // as its argument. Our handler doesn't model this — reject any bundle
-        // containing an arg-taking flag.
-        if (!flag.startsWith('--') && flag.length > 2) {
-          for (let j = 1; j < flag.length; j++) {
-            const singleFlag = '-' + flag[j];
-            const flagType = config.safeFlags[singleFlag];
-            if (!flagType) {
-              return false; // One of the combined flags is not safe
-            }
-            // SECURITY: Bundled flags must be no-arg type. An arg-taking flag
-            // in a bundle consumes the NEXT token in GNU getopt, which our
-            // handler doesn't model. Reject to avoid parser differential.
-            if (flagType !== 'none') {
-              return false; // Arg-taking flag in a bundle — cannot safely validate
-            }
-          }
-          i++;
-          continue;
-        }
-
-        return false; // Unknown flag
-      }
-
-      // Validate flag arguments
-      if (flagArgType === 'none') {
-        // SECURITY: hasEquals covers `-FLAG=` (empty inline). Without it,
-        // `-FLAG=` with 'none' type would pass (inlineValue='' is falsy).
-        if (hasEquals) {
-          return false; // Flag should not have a value
-        }
-        i++;
-      } else {
-        let argValue: string;
-        // SECURITY: Use hasEquals (not inlineValue truthiness). `-E=` must
-        // NOT consume next token — the user explicitly provided empty value.
-        if (hasEquals) {
-          argValue = inlineValue;
-          i++;
-        } else {
-          // Check if next token is the argument
-          if (
-            i + 1 >= tokens.length ||
-            (tokens[i + 1] &&
-              tokens[i + 1]!.startsWith('-') &&
-              tokens[i + 1]!.length > 1 &&
-              FLAG_PATTERN.test(tokens[i + 1]!))
-          ) {
-            return false; // Missing required argument
-          }
-          argValue = tokens[i + 1] || '';
-          i += 2;
-        }
-
-        // Defense-in-depth: For string arguments, reject values that start with '-'
-        // This prevents type confusion attacks where a flag marked as 'string'
-        // but actually takes no arguments could be used to inject dangerous flags.
-        // Exception: git's --sort flag can have values starting with '-' for reverse sorting.
-        if (flagArgType === 'string' && argValue.startsWith('-')) {
-          // Special case: git's --sort flag allows - prefix for reverse sorting
-          if (
-            flag === '--sort' &&
-            options?.commandName === 'git' &&
-            /^-[a-zA-Z]/.test(argValue)
-          ) {
-            // This looks like a reverse sort (e.g., -refname, -version:refname)
-            // Allow it
-          } else {
-            return false;
-          }
-        }
-
-        // Validate argument based on type
-        if (!validateFlagArgument(argValue, flagArgType)) {
           return false;
         }
       }
+
+      // ── Git numeric shorthand: -<number> = -n <number> ──────
+      if (
+        cmdName === 'git' &&
+        /^-\d+$/.test(token)
+      ) {
+        pos++;
+        continue;
+      }
+
+      // ── Combined short flags (e.g., -la = -l -a) ───────────
+      if (
+        !parsed.name.startsWith('--') &&
+        parsed.name.length > 2 &&
+        !parsed.hasInlineValue
+      ) {
+        // Validate each letter as a separate flag
+        for (let j = 1; j < parsed.name.length; j++) {
+          const singleFlag = '-' + parsed.name[j];
+          const flagType = config.safeFlags[singleFlag];
+          if (flagType === undefined) return false;
+          // Reject any bundled flag that takes an argument —
+          // the next token could be ambiguous in a bundle.
+          if (flagType !== 'none') return false;
+        }
+        pos++;
+        continue;
+      }
+
+      // ── Look up flag in whitelist ───────────────────────────
+      const flagArgType = config.safeFlags[parsed.name];
+      if (flagArgType === undefined) return false;
+
+      // ── No-argument flag ────────────────────────────────────
+      if (flagArgType === 'none') {
+        // Reject `--flag=` (explicit empty value for no-arg flag)
+        if (parsed.hasInlineValue) return false;
+        pos++;
+        continue;
+      }
+
+      // ── Argument-requiring flag ─────────────────────────────
+      let argValue: string;
+      let advanceBy: number;
+
+      if (parsed.hasInlineValue) {
+        // Use the inline value (even if empty): --flag=value or --flag=
+        argValue = parsed.inlineValue;
+        advanceBy = 1;
+      } else {
+        // Consume the next token as the argument value
+        const nextToken = tokens[pos + 1];
+        const nextIsFlag =
+          nextToken !== undefined &&
+          nextToken.startsWith('-') &&
+          nextToken.length > 1 &&
+          FLAG_PATTERN.test(nextToken);
+
+        if (pos + 1 >= tokens.length || (nextIsFlag && pos + 2 > tokens.length)) {
+          return false; // Missing required argument
+        }
+
+        argValue = nextToken ?? '';
+        advanceBy = 2;
+      }
+
+      // ── Defense: reject values starting with `-` for string args ─
+      // This prevents a flag typed as 'string' (but actually no-arg)
+      // from being exploited by passing a flag as its "value".
+      // Exception: git --sort allows `-` prefix for reverse sorting.
+      if (flagArgType === 'string' && argValue.startsWith('-')) {
+        if (
+          parsed.name !== '--sort' ||
+          cmdName !== 'git' ||
+          !/^-[a-zA-Z]/.test(argValue)
+        ) {
+          return false;
+        }
+      }
+
+      if (!validateFlagArgument(argValue, flagArgType)) return false;
+
+      pos += advanceBy;
     } else {
-      // Non-flag argument (like revision specs, file paths, etc.) — this is allowed
-      i++;
+      // Non-flag argument (revision, path, etc.) — allowed
+      pos++;
     }
   }
 
-  // If there's an additional dangerous callback, run it now
+  // ── Post-validation callback ─────────────────────────────────
   if (config.additionalCommandIsDangerousCallback) {
     const args = tokens.slice(startIndex);
     if (config.additionalCommandIsDangerousCallback(options?.rawCommand ?? '', args)) {

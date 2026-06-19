@@ -9,9 +9,6 @@
  *   4. HOW to save (two-step: Write file + update MEMORY.md index)
  *   5. WHEN to access memories
  *   6. HOW to verify memory claims before acting on them
- *
- * Based on the claude-code-best memory prompt design (memdir/memoryTypes.ts),
- * adapted for Coderix's provider-agnostic architecture.
  */
 
 import {
