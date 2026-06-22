@@ -353,7 +353,7 @@ body {
 .status-session {
   font-size: 11px;
   opacity: 0.6;
-  max-width: 120px;
+  max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

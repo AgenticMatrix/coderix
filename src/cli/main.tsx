@@ -21,6 +21,8 @@ interface CliArgs {
   print?: string;
   query?: string;
   gateway: boolean;
+  acp: boolean;
+  acpPort?: number;
   chromeMcp: boolean;
   chromeMcpPort?: number;
   computerUseMcp: boolean;
@@ -32,6 +34,7 @@ function parseCliArgs(argv: string[]): CliArgs {
     version: false,
     setup: false,
     gateway: false,
+    acp: false,
     chromeMcp: false,
     computerUseMcp: false,
   };
@@ -44,6 +47,8 @@ function parseCliArgs(argv: string[]): CliArgs {
       case '--model': case '-m': args.model = argv[i + 1]; if (args.model && !args.model.startsWith('-')) i++; else args.model = ''; break;
       case '--setup': case 'setup': args.setup = true; break;
       case '--gateway': case '-g': args.gateway = true; break;
+      case '--acp': args.acp = true; break;
+      case '--acp-port': args.acpPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.acpPort)) i++; break;
       case '--print': case '-p': args.print = argv[i + 1] ?? ''; if (args.print) i++; break;
       case '--chrome-mcp': args.chromeMcp = true; break;
       case '--chrome-mcp-port': args.chromeMcpPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.chromeMcpPort)) i++; break;
@@ -194,6 +199,8 @@ async function main(): Promise<void> {
 
   // ── Gateway mode ──────────────────────────────────────────────
   if (cliArgs.gateway) { const { startGateway } = await import('../gateway/server.js'); await startGateway(); return; }
+
+  if (cliArgs.acp) { const { startAcpServer } = await import('../acp/server.js'); await startAcpServer(cliArgs.acpPort); return; }
 
   // ── TUI mode ──────────────────────────────────────────────────
   let config; try { config = loadConfig(); } catch (err) { process.stderr.write(`Config error: ${(err as Error).message}\n`); process.exit(1); }

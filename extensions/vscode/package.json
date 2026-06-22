@@ -57,6 +57,21 @@
           ],
           "default": "ask",
           "description": "Permission mode for tool execution"
+        },
+        "coder.acpMode": {
+          "type": "string",
+          "enum": [
+            "gateway",
+            "stdio",
+            "websocket"
+          ],
+          "default": "stdio",
+          "description": "Protocol mode: 'stdio'/'websocket' (ACP) or 'gateway' (legacy JSON-RPC)"
+        },
+        "coder.acpPort": {
+          "type": "number",
+          "default": 0,
+          "description": "WebSocket port for ACP mode (0 = use stdio instead)"
         }
       }
     }
