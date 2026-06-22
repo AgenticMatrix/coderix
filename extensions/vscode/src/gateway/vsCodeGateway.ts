@@ -154,7 +154,7 @@ export class VSCodeGatewayClient {
     try { await this.rpc('interrupt'); } catch {}
   }
 
-  async createSession(): Promise<void> {
+  async createSession(_silent?: boolean): Promise<void> {
     try {
       const result = await this.rpc('session.create');
       this.sessionId = result?.sessionId || '';

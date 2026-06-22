@@ -9,10 +9,21 @@ import type { ExtensionContext, WebviewPanel } from 'vscode';
 import { window, ViewColumn, Uri, workspace } from 'vscode';
 import type { WebviewOutboundMessage, WebviewInboundMessage } from '../types/webviewProtocol';
 import type { VSCodeGatewayClient } from '../gateway/vsCodeGateway';
+import type { AcpClient } from '../acp/acpClient';
+
+type GatewayLike = {
+  submitPrompt(text: string): Promise<void>;
+  interrupt(): Promise<void>;
+  createSession(silent?: boolean): Promise<void>;
+  resumeSession(id: string): Promise<void>;
+  listSessions(): void;
+  handleApproval(requestId: string, allowed: boolean): void;
+  dispose(): void;
+};
 
 export class WebviewManager {
   private panel: WebviewPanel | null = null;
-  private gateway: VSCodeGatewayClient | null = null;
+  private gateway: GatewayLike | null = null;
   private context: ExtensionContext;
 
   constructor(context: ExtensionContext) {
@@ -75,10 +86,18 @@ export class WebviewManager {
     );
   }
 
-  async getGateway(): Promise<VSCodeGatewayClient> {
+  async getGateway(): Promise<GatewayLike> {
     if (!this.gateway) {
-      const { VSCodeGatewayClient } = await import('../gateway/vsCodeGateway');
-      this.gateway = new VSCodeGatewayClient((msg: WebviewOutboundMessage) => this.postMessage(msg));
+      const config = workspace.getConfiguration('coder');
+      const acpMode = config.get<string>('acpMode') ?? 'stdio';
+
+      if (acpMode === 'stdio') {
+        const { AcpClient } = await import('../acp/acpClient');
+        this.gateway = new AcpClient((msg: WebviewOutboundMessage) => this.postMessage(msg));
+      } else {
+        const { VSCodeGatewayClient } = await import('../gateway/vsCodeGateway');
+        this.gateway = new VSCodeGatewayClient((msg: WebviewOutboundMessage) => this.postMessage(msg));
+      }
     }
     return this.gateway;
   }
@@ -118,7 +137,7 @@ export class WebviewManager {
           gw.handleApproval(msg.requestId, msg.allowed);
           break;
         case 'newSession':
-          gw.createSession();
+          gw.createSession(false);
           break;
         case 'selectSession':
           gw.resumeSession(msg.sessionId);

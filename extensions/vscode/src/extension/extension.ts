@@ -20,7 +20,7 @@ export function activate(context: ExtensionContext): void {
     }),
     commands.registerCommand('coder.chat.newSession', async () => {
       const gw = await webviewManager?.getGateway();
-      gw?.createSession();
+      gw?.createSession(false);
       window.showInformationMessage('New Coder session created.');
     }),
     window.onDidChangeActiveColorTheme(() => sendTheme()),
