@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { createElement, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import { ShellTimeDisplay, formatDuration } from '../../tools/shared/ShellTimeDisplay.js';
 import type { ToolUseRenderer } from '../../tools/types.js';
@@ -13,10 +14,10 @@ export const AgentMessageRenderer: ToolUseRenderer = (props) => {
   const summary = message.length > 80 ? message.slice(0, 77) + '...' : message;
 
   if (props.state === 'pending') {
-    return React.createElement(
+    return createElement(
       Box,
       { flexDirection: 'column', borderStyle: 'round', borderColor: 'grey', paddingX: 1, width: '90%' },
-      React.createElement(Text, { dimColor: true }, `💬 agent-message → ${agentId}: ${summary || '...'}`),
+      createElement(Text, { dimColor: true }, `💬 agent-message → ${agentId}: ${summary || '...'}`),
     );
   }
 
@@ -68,20 +69,20 @@ export const AgentMessageRenderer: ToolUseRenderer = (props) => {
     : isExecuting ? elapsed : undefined;
 
   // ── Progress line ───────────────────────────────────────────
-  let progressNode: React.ReactNode = null;
+  let progressNode: ReactNode = null;
   if (isExecuting) {
     if (liveStats && liveStats.turnCount > 0) {
-      progressNode = React.createElement(
+      progressNode = createElement(
         Text,
         { color: 'yellow' },
         `  ${liveStats.turnCount} LLM turns, ${liveStats.toolCount} tools used.`,
       );
     } else {
-      progressNode = React.createElement(Text, { color: 'yellow' }, '  Continuing conversation...');
+      progressNode = createElement(Text, { color: 'yellow' }, '  Continuing conversation...');
     }
   }
 
-  return React.createElement(
+  return createElement(
     Box,
     {
       flexDirection: 'column',
@@ -91,10 +92,10 @@ export const AgentMessageRenderer: ToolUseRenderer = (props) => {
       width: '90%',
     },
     // Header: icon + label | duration
-    React.createElement(
+    createElement(
       Box,
       { flexDirection: 'row', justifyContent: 'space-between' },
-      React.createElement(
+      createElement(
         Text,
         { bold: true, color: 'cyan' },
         isExecuting
@@ -103,30 +104,30 @@ export const AgentMessageRenderer: ToolUseRenderer = (props) => {
       ),
       displayDuration !== undefined
         ? isExecuting
-          ? React.createElement(Text, { dimColor: true }, `⏱ ${formatDuration(displayDuration)}`)
-          : React.createElement(ShellTimeDisplay, { durationMs: displayDuration })
+          ? createElement(Text, { dimColor: true }, `⏱ ${formatDuration(displayDuration)}`)
+          : createElement(ShellTimeDisplay, { durationMs: displayDuration })
         : null,
     ),
     // Message summary
-    React.createElement(Text, { dimColor: true }, summary),
+    createElement(Text, { dimColor: true }, summary),
     // Progress indicator
     progressNode,
     // Done: show result content
-    isDone && resultLines.length > 0 && React.createElement(
+    isDone && resultLines.length > 0 && createElement(
       Box,
       { paddingLeft: 1, flexDirection: 'column', marginTop: 0 },
       ...displayLines.map((line, i) =>
-        React.createElement(Text, { key: i, color: 'white' }, line),
+        createElement(Text, { key: i, color: 'white' }, line),
       ),
-      tooLong && React.createElement(
+      tooLong && createElement(
         Text,
         { dimColor: true },
         `... ${resultLines.length - RESULT_COLLAPSE} more lines (Ctrl+D to detail)`,
       ),
     ),
-    isDone && resultLines.length === 0 && React.createElement(Text, { color: 'green' }, '  Done'),
+    isDone && resultLines.length === 0 && createElement(Text, { color: 'green' }, '  Done'),
     // Error
     props.state === 'error' && props.result?.isError &&
-      React.createElement(Text, { color: 'red' }, `  Error: ${(props.result.content as string).slice(0, 100)}`),
+      createElement(Text, { color: 'red' }, `  Error: ${(props.result.content as string).slice(0, 100)}`),
   );
 };

@@ -1,17 +1,17 @@
-import React from 'react';
+import { createElement } from 'react';
 import { Box, Text } from 'ink';
 import type { ToolUseRenderer } from '../../tools/types.js';
 
 export const AgentReadRenderer: ToolUseRenderer = (props) => {
   if (props.state === 'pending') {
-    return React.createElement(
+    return createElement(
       Box,
       { flexDirection: 'column', borderStyle: 'round', borderColor: 'grey', paddingX: 1, width: '90%' },
-      React.createElement(Text, { dimColor: true }, `agent-read: ${props.input.list_all ? 'listing all' : `query ${props.input.agent_id ?? '?'}`}`),
+      createElement(Text, { dimColor: true }, `agent-read: ${props.input.list_all ? 'listing all' : `query ${props.input.agent_id ?? '?'}`}`),
     );
   }
 
-  return React.createElement(
+  return createElement(
     Box,
     {
       flexDirection: 'column',
@@ -20,10 +20,10 @@ export const AgentReadRenderer: ToolUseRenderer = (props) => {
       paddingX: 1,
       width: '90%',
     },
-    React.createElement(Text, { bold: true, color: 'cyan' }, 'agent-read'),
+    createElement(Text, { bold: true, color: 'cyan' }, 'agent-read'),
     props.input.list_all
-      ? React.createElement(Text, { dimColor: true }, 'Listing all sub-agents')
-      : React.createElement(Text, { dimColor: true }, `Querying: ${props.input.agent_id ?? '?'}`),
-    props.state === 'done' && props.result && React.createElement(Text, {}, props.result.content.slice(0, 200)),
+      ? createElement(Text, { dimColor: true }, 'Listing all sub-agents')
+      : createElement(Text, { dimColor: true }, `Querying: ${props.input.agent_id ?? '?'}`),
+    props.state === 'done' && props.result && createElement(Text, {}, props.result.content.slice(0, 200)),
   );
 };

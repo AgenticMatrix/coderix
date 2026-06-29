@@ -8,6 +8,15 @@
  *  - On-change callback for live tool updates
  */
 
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+function getCoderixEntryScript(): string {
+  // Reconstruct the path to bin/coderix.js from this source file's location
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  return resolve(__dirname, '..', '..', 'bin', 'coderix.js');
+}
+
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { ToolPlugin } from '../tools/types.js';
@@ -101,6 +110,7 @@ export class McpManager {
    */
   private async initializeBuiltinServers(): Promise<void> {
     const existingNames = new Set(this.connections.keys());
+    const entryScript = getCoderixEntryScript();
 
     // ── Chrome Use MCP ──────────────────────────────────────────────
     const chromeMcpName = 'coder-chrome-mcp';
@@ -108,7 +118,7 @@ export class McpManager {
       const config: ScopedServerConfig = {
         type: 'stdio',
         command: process.execPath,
-        args: ['--chrome-mcp'],
+        args: [entryScript, '--chrome-mcp'],
         scope: 'local',
       };
       await this.connectAndDiscover(chromeMcpName, config);
@@ -120,7 +130,7 @@ export class McpManager {
       const config: ScopedServerConfig = {
         type: 'stdio',
         command: process.execPath,
-        args: ['--computer-use-mcp'],
+        args: [entryScript, '--computer-use-mcp'],
         scope: 'local',
       };
       await this.connectAndDiscover(cuMcpName, config);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { createElement, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { getSubAgentRegistry } from '../../agents/agent-spawn/registry-ref.js';
 import type { ContentBlock } from '../../core/types.js';
@@ -49,11 +49,11 @@ export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAg
   });
 
   if (!agent) {
-    return React.createElement(
+    return createElement(
       Box,
       { flexDirection: 'column', padding: 1 },
-      React.createElement(Text, { color: 'red' }, `Sub-agent not found: ${agentId}`),
-      React.createElement(Text, { dimColor: true }, 'Press Esc to go back'),
+      createElement(Text, { color: 'red' }, `Sub-agent not found: ${agentId}`),
+      createElement(Text, { dimColor: true }, 'Press Esc to go back'),
     );
   }
 
@@ -66,10 +66,10 @@ export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAg
     const roleLabel = msg.role === 'assistant' ? 'Coder' : msg.role === 'user' ? 'User' : 'System';
     const roleColor = msg.role === 'assistant' ? 'green' : msg.role === 'user' ? 'cyan' : 'grey';
 
-    return React.createElement(
+    return createElement(
       Box,
       { key: i, flexDirection: 'column', marginBottom: 1 },
-      React.createElement(
+      createElement(
         Text,
         { bold: true, color: roleColor },
         `${roleLabel}:`,
@@ -77,44 +77,44 @@ export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAg
       ...blocks.map((block, j) => {
         if (block.type === 'text' && block.text) {
           const text = block.text.slice(0, 300);
-          return React.createElement(
+          return createElement(
             Box,
             { key: j, paddingLeft: 2 },
-            React.createElement(Text, { color: 'white' }, text + (block.text.length > 300 ? '...' : '')),
+            createElement(Text, { color: 'white' }, text + (block.text.length > 300 ? '...' : '')),
           );
         }
         if (block.type === 'tool_use') {
           const toolName = block.name ?? 'tool';
-          return React.createElement(
+          return createElement(
             Box,
             { key: j, paddingLeft: 2 },
-            React.createElement(Text, { dimColor: true, color: 'yellow' }, `  ⚙ ${toolName}`),
+            createElement(Text, { dimColor: true, color: 'yellow' }, `  ⚙ ${toolName}`),
           );
         }
         if (block.type === 'tool_result') {
           const content = typeof block.content === 'string' ? block.content : '';
           const summary = content.slice(0, 80);
-          return React.createElement(
+          return createElement(
             Box,
             { key: j, paddingLeft: 2 },
-            React.createElement(Text, { dimColor: true }, `  ↓ ${summary}${content.length > 80 ? '...' : ''}`),
+            createElement(Text, { dimColor: true }, `  ↓ ${summary}${content.length > 80 ? '...' : ''}`),
           );
         }
         if (block.type === 'thinking' && block.thinking) {
           const thinking = block.thinking.slice(0, 120);
-          return React.createElement(
+          return createElement(
             Box,
             { key: j, paddingLeft: 2 },
-            React.createElement(Text, { dimColor: true, color: 'grey' }, `  💭 ${thinking}${block.thinking.length > 120 ? '...' : ''}`),
+            createElement(Text, { dimColor: true, color: 'grey' }, `  💭 ${thinking}${block.thinking.length > 120 ? '...' : ''}`),
           );
         }
         return null;
       }),
       blocks.length === 0 && typeof msg.content === 'string' && msg.content
-        ? React.createElement(
+        ? createElement(
             Box,
             { paddingLeft: 2 },
-            React.createElement(Text, { color: 'white' }, msg.content.slice(0, 300)),
+            createElement(Text, { color: 'white' }, msg.content.slice(0, 300)),
           )
         : null,
     );
@@ -127,7 +127,7 @@ export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAg
     : agent.status === 'stopped' ? 'stopped'
     : agent.status;
 
-  return React.createElement(
+  return createElement(
     Box,
     {
       flexDirection: 'column',
@@ -137,57 +137,57 @@ export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAg
       width: '90%',
     },
     // Header
-    React.createElement(
+    createElement(
       Box,
       { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 },
-      React.createElement(
+      createElement(
         Text,
         { bold: true, color: 'cyan' },
         `${icon} ${agent.agentType} (${agent.id}) — ${agent.turnCount} turns, ${agent.toolCount} tools`,
       ),
-      React.createElement(Text, { dimColor: true }, 'Esc or Ctrl+T to go back | Type to follow up'),
+      createElement(Text, { dimColor: true }, 'Esc or Ctrl+T to go back | Type to follow up'),
     ),
     // Prompt + status
-    React.createElement(
+    createElement(
       Box,
       { marginBottom: 1 },
-      React.createElement(Text, { dimColor: true }, `Prompt: ${agent.prompt.slice(0, 120)}${agent.prompt.length > 120 ? '...' : ''}`),
+      createElement(Text, { dimColor: true }, `Prompt: ${agent.prompt.slice(0, 120)}${agent.prompt.length > 120 ? '...' : ''}`),
     ),
-    React.createElement(
+    createElement(
       Box,
       { marginBottom: 1 },
-      React.createElement(Text, { color: agent.status === 'running' ? 'yellow' : 'grey' }, `Status: ${statusLabel}`),
+      createElement(Text, { color: agent.status === 'running' ? 'yellow' : 'grey' }, `Status: ${statusLabel}`),
     ),
     // Divider
-    React.createElement(
+    createElement(
       Box,
       { marginBottom: 1 },
-      React.createElement(Text, { dimColor: true }, '─'.repeat(40)),
+      createElement(Text, { dimColor: true }, '─'.repeat(40)),
     ),
     // Transcript messages
     ...transcript.map((msg, i) => renderMessage(msg, i)),
     // Empty state
-    transcript.length === 0 && React.createElement(Text, { dimColor: true }, '(no transcript available)'),
+    transcript.length === 0 && createElement(Text, { dimColor: true }, '(no transcript available)'),
     // Spacing
-    React.createElement(Box, { height: 1 }),
+    createElement(Box, { height: 1 }),
     // Input area
     canSend && onSendMessage && !sending
-      ? React.createElement(
+      ? createElement(
           Box,
           { flexDirection: 'column' },
-          React.createElement(Text, { dimColor: true }, '─'.repeat(40)),
-          React.createElement(
+          createElement(Text, { dimColor: true }, '─'.repeat(40)),
+          createElement(
             Box,
             null,
-            React.createElement(Text, { color: 'cyan' }, '> '),
-            React.createElement(Text, null, inputText),
+            createElement(Text, { color: 'cyan' }, '> '),
+            createElement(Text, null, inputText),
           ),
-          React.createElement(Text, { dimColor: true }, 'Enter to send | Esc to go back'),
+          createElement(Text, { dimColor: true }, 'Enter to send | Esc to go back'),
         )
       : sending
-        ? React.createElement(Text, { dimColor: true, color: 'yellow' }, 'Sending message...')
+        ? createElement(Text, { dimColor: true, color: 'yellow' }, 'Sending message...')
         : agent.status === 'running'
-          ? React.createElement(Text, { dimColor: true }, 'Agent is running — wait for completion before sending follow-up.')
+          ? createElement(Text, { dimColor: true }, 'Agent is running — wait for completion before sending follow-up.')
           : null,
   );
 }
