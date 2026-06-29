@@ -8,6 +8,8 @@
  *  - On-change callback for live tool updates
  */
 
+import { existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import type { ToolPlugin } from '../tools/types.js';
 import {
   loadEnabledMcpConfigs,
@@ -128,7 +130,6 @@ export class McpManager {
   /** Check if Chrome, Chromium, or Edge is installed on the system. */
   private isChromeAvailable(): boolean {
     if (process.platform === 'darwin') {
-      const { existsSync } = require('node:fs');
       const candidates = [
         '/Applications/Google Chrome.app',
         '/Applications/Chromium.app',
@@ -139,13 +140,12 @@ export class McpManager {
     }
     if (process.platform === 'linux') {
       try {
-        require('node:child_process').execSync('which google-chrome chromium chromium-browser microsoft-edge 2>/dev/null', { stdio: 'pipe' });
+        execSync('which google-chrome chromium chromium-browser microsoft-edge 2>/dev/null', { stdio: 'pipe' });
         return true;
       } catch { return false; }
     }
     // Windows
     if (process.platform === 'win32') {
-      const { existsSync } = require('node:fs');
       const candidates = [
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',

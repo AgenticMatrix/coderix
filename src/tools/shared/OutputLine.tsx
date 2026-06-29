@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import { Text } from 'ink';
 
 export interface OutputLineProps {
@@ -57,13 +57,13 @@ export function OutputLine({ line, isStderr }: OutputLineProps): React.ReactNode
   const jsonLines = formatted.split('\n');
   if (jsonLines.length > 1) {
     return (
-      <React.Fragment>
+      <>
         {jsonLines.map((l, i) => (
           <Text key={i} color={color} dimColor={isStderr && color === 'yellow'}>
             {l || ' '}
           </Text>
         ))}
-      </React.Fragment>
+      </>
     );
   }
 
