@@ -89,6 +89,7 @@ if ! command -v node &> /dev/null; then
     echo "  - Official: https://nodejs.org/"
     exit 1
   fi
+fi
 
 NODE_VERSION=$(node -v | sed 's/v//')
 NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
