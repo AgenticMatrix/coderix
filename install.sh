@@ -42,17 +42,53 @@ echo ""
 NODE_MIN_VERSION=22
 
 if ! command -v node &> /dev/null; then
-  echo -e "${RED}ERROR: Node.js is not installed.${NC}"
+  echo -e "${YELLOW}Node.js is not installed. Attempting automatic installation...${NC}"
   echo ""
-  echo "Coderix requires Node.js >= ${NODE_MIN_VERSION}."
-  echo "Install it from: https://nodejs.org/"
-  echo ""
-  echo "Or use a version manager:"
-  echo "  - nvm:  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
-  echo "  - fnm:  curl -fsSL https://fnm.vercel.app/install | bash"
-  echo "  - brew: brew install node"
-  exit 1
-fi
+
+  AUTO_INSTALLED=false
+
+  if ! $AUTO_INSTALLED && command -v fnm &> /dev/null; then
+    echo -e "${CYAN}fnm detected. Installing Node.js ${NODE_MIN_VERSION}...${NC}"
+    fnm install ${NODE_MIN_VERSION} && fnm use ${NODE_MIN_VERSION} && AUTO_INSTALLED=true
+  fi
+
+  if ! $AUTO_INSTALLED && [ -s "$HOME/.nvm/nvm.sh" ]; then
+    echo -e "${CYAN}nvm detected. Installing Node.js ${NODE_MIN_VERSION}...${NC}"
+    . "$HOME/.nvm/nvm.sh" && nvm install ${NODE_MIN_VERSION} && nvm use ${NODE_MIN_VERSION} && AUTO_INSTALLED=true
+  fi
+
+  if ! $AUTO_INSTALLED && command -v brew &> /dev/null; then
+    echo -e "${CYAN}Homebrew detected. Installing Node.js ${NODE_MIN_VERSION}...${NC}"
+    brew install node@${NODE_MIN_VERSION} && AUTO_INSTALLED=true
+  fi
+
+  if ! $AUTO_INSTALLED; then
+    echo -e "${CYAN}No version manager found. Attempting to install fnm...${NC}"
+    if command -v curl &> /dev/null; then
+      curl -fsSL https://fnm.vercel.app/install | bash
+      FNM_PATH="$HOME/.local/share/fnm"
+      [ -d "$HOME/.fnm" ] && FNM_PATH="$HOME/.fnm"
+      if [ -f "$FNM_PATH/fnm" ]; then
+        export PATH="$FNM_PATH:$PATH"
+        eval "$(fnm env)"
+        fnm install ${NODE_MIN_VERSION} && fnm use ${NODE_MIN_VERSION} && AUTO_INSTALLED=true
+      fi
+    fi
+  fi
+
+  if $AUTO_INSTALLED; then
+    NODE_VERSION=$(node -v | sed "s/v//")
+    echo -e "${GREEN}Node.js v${NODE_VERSION} installed successfully${NC}"
+  else
+    echo -e "${RED}ERROR: Could not automatically install Node.js >= ${NODE_MIN_VERSION}.${NC}"
+    echo ""
+    echo "Please install Node.js ${NODE_MIN_VERSION}+ manually:"
+    echo "  - fnm:  curl -fsSL https://fnm.vercel.app/install | bash"
+    echo "  - nvm:  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
+    echo "  - brew: brew install node@${NODE_MIN_VERSION}"
+    echo "  - Official: https://nodejs.org/"
+    exit 1
+  fi
 
 NODE_VERSION=$(node -v | sed 's/v//')
 NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
