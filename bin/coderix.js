@@ -11,8 +11,9 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mainPath = resolve(__dirname, '..', 'src', 'cli', 'main.tsx');
+const tsxPath = resolve(__dirname, '..', 'node_modules', '.bin', 'tsx');
 
-const child = spawn('npx', ['tsx', mainPath, ...process.argv.slice(2)], {
+const child = spawn(process.execPath, [tsxPath, mainPath, ...process.argv.slice(2)], {
   stdio: 'inherit',
   env: process.env,
 });
