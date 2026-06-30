@@ -486,6 +486,7 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
     messageCount: 0,
     toolCount: 0,
     abortController: subAbortController,
+    notified: false,
   });
 
   const result = await runAgentLoop({

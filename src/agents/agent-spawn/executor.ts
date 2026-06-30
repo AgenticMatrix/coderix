@@ -25,6 +25,7 @@ import {
   hasWorktreeChanges,
 } from '../../utils/worktree.js';
 import { writeAgentOutput } from './output-writer.js';
+import { spawnTeammate } from './spawn-teammate.js';
 
 const DEFAULT_MAX_TURNS = 20;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -76,6 +77,16 @@ async function enrichAgentPrompt(
     // If assembly fails, fall back to the raw agent prompt
   }
   return agentPrompt;
+}
+
+/**
+ * Whether fork subagent mode is enabled.
+ * Controlled by CODERIX_FORK_SUBAGENT env var or settings.
+ */
+function isForkSubagentEnabled(): boolean {
+  if (process.env.CODERIX_FORK_SUBAGENT === '0') return false;
+  // Fork is enabled by default (matches upstream behavior)
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,30 +236,20 @@ async function cleanupAgentWorktree(wt: WorktreeCleanup, hookManager?: import('.
 }
 
 // ---------------------------------------------------------------------------
-// Execute
+// Standard subagent path — explicit agent_type
 // ---------------------------------------------------------------------------
 
-export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
-  const agentSpawn = options.agentSpawn;
-  if (!agentSpawn) {
-    return {
-      content: 'Agent requires agentSpawn context.',
-      isError: true,
-    };
-  }
-
-  const agentTypeInput = input.agent_type as string | undefined;
+async function executeStandardSubagent(
+  input: Record<string, unknown>,
+  agentSpawn: AgentSpawnContext,
+  options: { cwd?: string; sessionId?: string },
+): Promise<ToolResult> {
+  const agentTypeInput = input.agent_type as string;
   const prompt = input.prompt as string;
   const modelOverride = input.model as string | undefined;
   const backgroundOverride = input.background as boolean | undefined;
   const isolation = input.isolation as 'worktree' | undefined;
 
-  // ── Fork mode: no agent_type → inherit parent context ───────────────
-  if (!agentTypeInput) {
-    return executeFork(prompt, modelOverride, backgroundOverride, isolation, agentSpawn, options.sessionId);
-  }
-
-  // ── Explicit agent_type path ────────────────────────────────────────
   const agentDef = agentSpawn.agentRegistry?.get(agentTypeInput);
   if (!agentDef) {
     const available = agentSpawn.agentRegistry?.list().map(a => a.agentType).join(', ') ?? 'none';
@@ -378,6 +379,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     messageCount: 0,
     toolCount: 0,
     abortController: subAbortController,
+    notified: false,
   });
 
   if (isBackground) {
@@ -400,7 +402,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         initialMessages,
         cwd: worktreePath ?? effectiveCwd,
       }).then(async result => {
-        // Worktree cleanup
         let cleanupNote = '';
         if (worktreePath) {
           cleanupNote = await cleanupAgentWorktree({
@@ -412,29 +413,21 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         const compressed = compressTranscript(result.transcript);
         const elapsed = (Date.now() - result.startTime) / 1000;
 
-        // Write full result to disk
         let outputPath: string | undefined;
         if (bgSessionId) {
           try {
             outputPath = await writeAgentOutput(bgSessionId, agentId, {
-              status,
-              agentType,
-              prompt,
+              status, agentType, prompt,
               turnCount: result.assistantTurnCount,
-              toolCount: result.toolCount,
-              elapsed,
-              result: compressed,
-              error: result.error,
+              toolCount: result.toolCount, elapsed,
+              result: compressed, error: result.error,
               transcript: result.transcript,
             });
-          } catch {
-            // Non-fatal: notification still works without disk output
-          }
+          } catch { /* Non-fatal */ }
         }
 
         agentSpawn.subAgentRegistry.update(agentId, {
-          status,
-          finishedAt: Date.now(),
+          status, finishedAt: Date.now(),
           turnCount: result.assistantTurnCount,
           messageCount: result.transcript.length,
           toolCount: result.toolCount,
@@ -446,7 +439,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
-        // Attempt worktree cleanup even on crash
         if (worktreePath) {
           await cleanupAgentWorktree({
             worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
@@ -454,8 +446,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         }
         const errorMsg = err instanceof Error ? err.message : String(err);
         agentSpawn.subAgentRegistry.update(agentId, {
-          status: 'error',
-          finishedAt: Date.now(),
+          status: 'error', finishedAt: Date.now(),
           error: errorMsg,
         });
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
@@ -470,11 +461,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     };
   }
 
-  // ── Sync path (existing behavior) ──────────────────────────────────
+  // ── Sync path ──────────────────────────────────────────────────
   const subContext: SubagentContext = createSubagentContext(
-    agentId,
-    agentType,
-    agentDef.source === 'built-in',
+    agentId, agentType, agentDef.source === 'built-in',
   );
 
   const result = await runWithAgentContext(subContext, () =>
@@ -489,7 +478,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     }),
   );
 
-  // Worktree cleanup
   let cleanupNote = '';
   if (worktreePath) {
     cleanupNote = await cleanupAgentWorktree({
@@ -501,8 +489,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const compressed = compressTranscript(result.transcript);
 
   agentSpawn.subAgentRegistry.update(agentId, {
-    status,
-    finishedAt: Date.now(),
+    status, finishedAt: Date.now(),
     turnCount: result.assistantTurnCount,
     messageCount: result.transcript.length,
     toolCount: result.toolCount,
@@ -525,8 +512,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     isError: false,
     duration: Date.now() - result.startTime,
     metadata: {
-      agentId,
-      agentType,
+      agentId, agentType,
       turnCount: result.assistantTurnCount,
       messageCount: result.transcript.length,
       toolCount: result.toolCount,
@@ -534,7 +520,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       worktreePath,
     },
   };
-};
+}
 
 // ---------------------------------------------------------------------------
 // Fork execution — inherit parent context
@@ -614,7 +600,6 @@ async function executeFork(
   // Inherit parent's full conversation context for cache-identical prefixes
   const parentSession = agentSpawn.sessionManager.getActive();
   const parentMessages = parentSession?.messages ?? [];
-  // Take up to 50 recent messages for reasonable context inheritance
   const recentMessages = parentMessages.slice(-50);
 
   const userPrompt = `[Forked from parent agent]\n\n${prompt}`;
@@ -634,16 +619,13 @@ async function executeFork(
     messageCount: 0,
     toolCount: 0,
     abortController: subAbortController,
+    notified: false,
   });
 
   if (isBackground) {
     const spawnTime = Date.now();
     const forkBgSessionId = bgSessionId;
-    const forkBgContext: SubagentContext = createSubagentContext(
-      agentId,
-      'fork',
-      true,
-    );
+    const forkBgContext: SubagentContext = createSubagentContext(agentId, 'fork', true);
 
     runWithAgentContext(forkBgContext, () => {
       runAgentLoop({
@@ -662,24 +644,17 @@ async function executeFork(
         const compressed = compressTranscript(result.transcript);
         const elapsed = (Date.now() - result.startTime) / 1000;
 
-        // Write full result to disk
         let outputPath: string | undefined;
         if (forkBgSessionId) {
           try {
             outputPath = await writeAgentOutput(forkBgSessionId, agentId, {
-              status,
-              agentType: 'fork',
-              prompt,
+              status, agentType: 'fork', prompt,
               turnCount: result.assistantTurnCount,
-              toolCount: result.toolCount,
-              elapsed,
-              result: compressed,
-              error: result.error,
+              toolCount: result.toolCount, elapsed,
+              result: compressed, error: result.error,
               transcript: result.transcript,
             });
-          } catch {
-            // Non-fatal
-          }
+          } catch { /* Non-fatal */ }
         }
 
         agentSpawn.subAgentRegistry.update(agentId, {
@@ -694,18 +669,18 @@ async function executeFork(
         });
 
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
-    }).catch(async err => {
-      if (worktreePath) {
-        await cleanupAgentWorktree({
-          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-        }, agentSpawn.hookManager).catch(() => {});
-      }
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status: 'error', finishedAt: Date.now(),
-        error: err instanceof Error ? err.message : String(err),
+      }).catch(async err => {
+        if (worktreePath) {
+          await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager).catch(() => {});
+        }
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status: 'error', finishedAt: Date.now(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       });
-      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
-    });
     });
 
     return {
@@ -717,11 +692,7 @@ async function executeFork(
   }
 
   // Sync fork
-  const forkContext: SubagentContext = createSubagentContext(
-    agentId,
-    'fork',
-    true,
-  );
+  const forkContext: SubagentContext = createSubagentContext(agentId, 'fork', true);
 
   const result = await runWithAgentContext(forkContext, () =>
     runAgentLoop({
@@ -732,7 +703,6 @@ async function executeFork(
     }),
   );
 
-  // Worktree cleanup
   let cleanupNote = '';
   if (worktreePath) {
     cleanupNote = await cleanupAgentWorktree({
@@ -776,3 +746,55 @@ async function executeFork(
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Execute — 3-path routing
+// ---------------------------------------------------------------------------
+
+export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
+  const agentSpawn = options.agentSpawn;
+  if (!agentSpawn) {
+    return {
+      content: 'Agent requires agentSpawn context.',
+      isError: true,
+    };
+  }
+
+  const agentTypeInput = input.agent_type as string | undefined;
+  const prompt = input.prompt as string;
+  const modelOverride = input.model as string | undefined;
+  const backgroundOverride = input.background as boolean | undefined;
+  const isolation = input.isolation as 'worktree' | undefined;
+  const teamName = input.team_name as string | undefined;
+  const agentName = input.name as string | undefined;
+
+  // ── Path 1: Swarm teammate — team_name + name = process-level teammate ─
+  if (teamName && agentName) {
+    return spawnTeammate({
+      teamName,
+      agentName,
+      prompt,
+      model: modelOverride,
+      background: backgroundOverride ?? true,
+      isolation,
+      agentSpawn,
+      agentType: agentTypeInput || 'general-purpose',
+      agentDef: agentTypeInput
+        ? agentSpawn.agentRegistry?.get(agentTypeInput) ?? null
+        : null,
+      cwd: options.cwd ?? process.cwd(),
+      sessionId: options.sessionId,
+    });
+  }
+
+  // ── Path 2: Fork mode — no agent_type → inherit parent context ────
+  if (!agentTypeInput && isForkSubagentEnabled()) {
+    return executeFork(prompt, modelOverride, backgroundOverride, isolation, agentSpawn, options.sessionId);
+  }
+
+  // ── Path 3: Standard subagent — explicit agent_type ───────────────
+  return executeStandardSubagent(input, agentSpawn, {
+    cwd: options.cwd,
+    sessionId: options.sessionId,
+  });
+};

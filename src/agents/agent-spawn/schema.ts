@@ -2,50 +2,52 @@ import type { ToolSchema } from '../../tools/types.js';
 
 export const schema: ToolSchema = {
   name: 'Agent',
-  description: `Spawn a sub-agent to handle a specific subtask. The sub-agent can
-use tools to accomplish its task and returns a text summary of its findings.
-Multiple sub-agents can run concurrently for parallel work.
-Sub-agents cannot spawn further sub-agents (depth limit = 1).
+  description: `Launch a new agent to handle complex, multi-step tasks. Each agent type has
+specific capabilities and tools available to it.
 
-Use this for:
-- Parallel codebase exploration
-- Delegating well-scoped implementation tasks
-- Independent research that can run concurrently
+Three spawn paths:
+- Standard: provide agent_type to launch a pre-defined sub-agent
+- Fork: omit agent_type to fork the parent with full context (faster, shares prompt cache)
+- Swarm teammate: provide team_name + name to spawn a process-level teammate
+  (tmux/iTerm2/in-process backends — requires CODERIX_EXPERIMENTAL_AGENT_TEAMS)
 
-The sub-agent will work autonomously and return a text summary. Use TaskGet
-to check on a running sub-agent's progress and TaskStop to cancel it.
-If agent_type is omitted, the sub-agent inherits the parent's context (fork mode).`,
+Sub-agents cannot spawn further sub-agents (depth limit = 1).`,
+
   input_schema: {
     type: 'object',
     properties: {
       agent_type: {
         type: 'string',
-        description: 'The type of sub-agent. "explore" is read-only search. "general-purpose" has full tool access. Omit to fork the parent agent with full context.',
+        description: 'The type of sub-agent. "explore" is read-only search, "plan" is architecture design, "general-purpose" has full tool access. Omit to fork the parent agent with full context.',
       },
       prompt: {
         type: 'string',
-        description: 'The task description for the sub-agent. Be specific about what to accomplish.',
+        description: 'The task for the agent to perform. Be specific and include all necessary context.',
       },
       model: {
         type: 'string',
-        description: 'Optional model override for the sub-agent.',
+        description: 'Optional model override for this agent.',
       },
       background: {
         type: 'boolean',
-        description: 'When true, the sub-agent runs in the background without blocking the main loop. Use TaskGet to check progress and results.',
+        description: 'When true, the agent runs in the background. Use TaskGet to check progress. Defaults to true for swarm teammates.',
       },
       team_name: {
         type: 'string',
-        description: 'Optional: team name when spawning as a team member. Enables SendMessage for inter-team communication.',
+        description: 'Team name when spawning as a swarm teammate. Requires name to also be set. Enables SendMessage for inter-team communication.',
       },
-      member_name: {
+      name: {
         type: 'string',
-        description: 'Optional: member display name within the team. Used as the sender identity for SendMessage.',
+        description: 'Member display name within the team. Used as the sender identity for SendMessage and as the addressable name for inter-team communication.',
+      },
+      mode: {
+        type: 'string',
+        description: 'Permission mode override for this agent (default: "auto").',
       },
       isolation: {
         type: 'string',
         enum: ['worktree'],
-        description: 'Isolation mode. "worktree" creates a temporary git worktree for this sub-agent, isolating all file operations from the main working directory. The worktree is automatically cleaned up when the agent completes (if no changes were made).',
+        description: 'Isolation mode. "worktree" creates a temporary git worktree for this agent, isolating all file operations from the main working directory. The worktree is automatically cleaned up when the agent completes (if no changes were made).',
       },
     },
     required: ['prompt'],
