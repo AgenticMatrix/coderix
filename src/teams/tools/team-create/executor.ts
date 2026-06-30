@@ -20,7 +20,7 @@ export const execute: ToolExecutor = async (input, options) => {
   const existing = await loadTeamConfig(name);
   if (existing) {
     return {
-      content: `Team '${name}' already exists. Use team-status to view it, or team-dispatch to activate its members.`,
+      content: `Team '${name}' already exists. Use Agent(team_name: "${name}", name: "<member>") to spawn members, or SendMessage to communicate with them.`,
       isError: true,
     };
   }
@@ -47,10 +47,10 @@ export const execute: ToolExecutor = async (input, options) => {
 
   const memberList = members.length > 0
     ? `\n\nMembers:\n${members.map(m => `  - ${m.name} (${m.agentType}): ${m.task}`).join('\n')}`
-    : '\n\nNo members defined yet. Add them with team-create or activate directly with team-dispatch.';
+    : '\n\nNo members defined yet. Spawn members with Agent(team_name: "${name}", name: "<member>").';
 
   return {
-    content: `Team '${name}' created.${memberList}\n\nUse team-dispatch to activate members, team-status to monitor progress.`,
+    content: `Team '${name}' created.${memberList}\n\nUse Agent(team_name: "${name}", name: "<member>") to spawn members. Use TaskGet/TaskList to monitor progress, SendMessage to communicate.`,
     isError: false,
     metadata: { teamName: name, memberCount: members.length },
   };

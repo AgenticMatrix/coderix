@@ -29,7 +29,7 @@ import type { SubAgentRegistry } from './subagent-registry.js';
 import type { AgentRegistry } from './agent-registry.js';
 import { getAgentRole, getCoordinatorSystemContext } from '../teams/coordinator-mode.js';
 import { drainUnreadMessages } from '../teams/team-mailbox.js';
-import { execute as executeAgentMessage } from '../agents/agent-message/executor.js';
+import { execute as executeSendMessage } from '../teams/tools/team-message/executor.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../cli/config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { AppState } from '../state/AppState.js';
@@ -409,7 +409,7 @@ export class QueryEngine {
       return { content: 'Sub-agent infrastructure not available.', isError: true };
     }
 
-    return executeAgentMessage(
+    return executeSendMessage(
       { agent_id: agentId, message },
       {
         sessionId: sessionManager.getActive().id,
