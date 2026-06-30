@@ -18,9 +18,7 @@ import taskUpdatePlugin from './task-update/index.js';
 import taskListPlugin from './task-list/index.js';
 import taskGetPlugin from './task-get/index.js';
 import agentSpawnPlugin from '../agents/agent-spawn/index.js';
-import agentReadPlugin from '../agents/agent-read/index.js';
-import agentStopPlugin from '../agents/agent-stop/index.js';
-import agentMessagePlugin from '../agents/agent-message/index.js';
+import sendMessagePlugin from '../agents/agent-message/index.js';
 import teamCreatePlugin from '../teams/tools/team-create/index.js';
 import teamDispatchPlugin from '../teams/tools/team-dispatch/index.js';
 import teamStatusPlugin from '../teams/tools/team-status/index.js';
@@ -62,9 +60,7 @@ export const plugins: ToolPlugin[] = [
   taskListPlugin,
   taskGetPlugin,
   agentSpawnPlugin,
-  agentReadPlugin,
-  agentStopPlugin,
-  agentMessagePlugin,
+  sendMessagePlugin,
   teamCreatePlugin,
   teamDispatchPlugin,
   teamStatusPlugin,

@@ -33,7 +33,7 @@ function buildAgentSpawn(overrides: Partial<AgentSpawnContext> = {}): AgentSpawn
   };
 }
 
-describe('agent-spawn background execution', () => {
+describe('Agent tool background execution', () => {
   it('should return immediately for background agent with placeholder result', async () => {
     const agentSpawn = buildAgentSpawn();
 

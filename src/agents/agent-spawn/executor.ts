@@ -231,7 +231,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const agentSpawn = options.agentSpawn;
   if (!agentSpawn) {
     return {
-      content: 'agent-spawn requires agentSpawn context.',
+      content: 'Agent requires agentSpawn context.',
       isError: true,
     };
   }
@@ -669,7 +669,7 @@ async function executeFork(
     });
 
     return {
-      content: `Fork agent ${agentId} spawned in background. Use agent-read to check progress.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
+      content: `Fork agent ${agentId} spawned in background. Use TaskGet to check progress.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
       isError: false,
       duration: Date.now() - spawnTime,
       metadata: { agentId, agentType: 'fork', background: true, worktreePath },

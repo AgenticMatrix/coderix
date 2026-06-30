@@ -25,8 +25,8 @@ const ALL_TOOLS: ToolDefinition[] = [
   td('bash'), td('read'), td('write'), td('edit'), td('glob'), td('grep'),
   td('web-fetch'), td('web-search'), td('todo-write'),
   td('TaskCreate'), td('TaskUpdate'), td('TaskList'), td('TaskGet'),
-  td('agent-spawn'), td('agent-message'), td('agent-stop'), td('agent-read'),
-  td('ask-user-question'), td('task-output'), td('exit-plan-mode'),
+  td('Agent'), td('SendMessage'), td('TaskStop'),
+  td('ask-user-question'), td('TaskOutput'), td('exit-plan-mode'),
 ];
 
 describe('ALL_AGENT_DISALLOWED_TOOLS', () => {
@@ -34,13 +34,13 @@ describe('ALL_AGENT_DISALLOWED_TOOLS', () => {
     expect(ALL_AGENT_DISALLOWED_TOOLS).toBe(GLOBAL_DISALLOWED_FOR_SUBAGENTS);
   });
 
-  it('should include agent-spawn (prevent recursive sub-agents)', () => {
-    expect(ALL_AGENT_DISALLOWED_TOOLS.has('agent-spawn')).toBe(true);
+  it('should include Agent (prevent recursive sub-agents)', () => {
+    expect(ALL_AGENT_DISALLOWED_TOOLS.has('Agent')).toBe(true);
   });
 
-  it('should include agent-message and agent-stop', () => {
-    expect(ALL_AGENT_DISALLOWED_TOOLS.has('agent-message')).toBe(true);
-    expect(ALL_AGENT_DISALLOWED_TOOLS.has('agent-stop')).toBe(true);
+  it('should include SendMessage and TaskStop', () => {
+    expect(ALL_AGENT_DISALLOWED_TOOLS.has('SendMessage')).toBe(true);
+    expect(ALL_AGENT_DISALLOWED_TOOLS.has('TaskStop')).toBe(true);
   });
 
   it('should include ask-user-question', () => {
@@ -51,8 +51,8 @@ describe('ALL_AGENT_DISALLOWED_TOOLS', () => {
 describe('filterToolsForAgent', () => {
   it('should remove globally disallowed tools for all agent types', () => {
     const result = filterToolsForAgent(ALL_TOOLS, agentDef());
-    expect(result.find(t => t.name === 'agent-spawn')).toBeUndefined();
-    expect(result.find(t => t.name === 'agent-message')).toBeUndefined();
+    expect(result.find(t => t.name === 'Agent')).toBeUndefined();
+    expect(result.find(t => t.name === 'SendMessage')).toBeUndefined();
     expect(result.find(t => t.name === 'ask-user-question')).toBeUndefined();
   });
 
@@ -83,7 +83,7 @@ describe('filterToolsForAgent', () => {
       disallowedTools: ['write', 'edit'],
     }));
     // Globals still removed
-    expect(result.find(t => t.name === 'agent-spawn')).toBeUndefined();
+    expect(result.find(t => t.name === 'Agent')).toBeUndefined();
     // Agent-specific also removed
     expect(result.find(t => t.name === 'write')).toBeUndefined();
     expect(result.find(t => t.name === 'edit')).toBeUndefined();

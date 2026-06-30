@@ -69,11 +69,11 @@ export const execute: ToolExecutor = async (input, options) => {
 
   const results: Array<{ name: string; agentId: string; agentType: string; task: string }> = [];
 
-  // Spawn each member via the existing agent-spawn tool as background agents
+  // Spawn each member via the existing Agent tool as background agents
   for (const member of toDispatch) {
     try {
       const result = await executeTool(
-        'agent-spawn',
+        'Agent',
         {
           agent_type: member.agentType,
           prompt: buildTeamMemberPrompt(teamName, member, config),
@@ -122,7 +122,7 @@ export const execute: ToolExecutor = async (input, options) => {
     `Dispatched ${results.length} member(s) from '${teamName}' in ${modeText} mode:`,
     ...results.map(r => `  - **${r.name}** (${r.agentType}) → \`${r.agentId}\`: ${r.task}`),
     '',
-    'Use team-status to monitor progress, agent-read to check individual results.',
+    'Use team-status to monitor progress, TaskGet to check individual results.',
   ];
 
   return {

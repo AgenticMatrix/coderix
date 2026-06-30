@@ -8,7 +8,7 @@
  *   - Worktree isolation (isolation)
  *   - Custom agent type (agentType)
  *
- * Reuses the same sub-agent infrastructure as agent-spawn:
+ * Reuses the same sub-agent infrastructure as the Agent tool:
  *   - Tool filtering (filterToolsForAgent / GLOBAL_DISALLOWED_FOR_SUBAGENTS)
  *   - Permission engine (AUTO mode)
  *   - Session / checkpoint managers

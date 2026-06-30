@@ -141,7 +141,7 @@ export const verificationAgent: BuiltInAgentDefinition = {
     'TaskList',
     'TaskGet',
   ],
-  disallowedTools: ['write', 'edit', 'NotebookEdit', 'agent-spawn'],
+  disallowedTools: ['write', 'edit', 'NotebookEdit', 'Agent'],
   model: 'inherit',
   background: true,
   maxTurns: 25,

@@ -4,7 +4,7 @@ import { execute } from './executor.js';
 import { AgentMessageRenderer } from './renderer.js';
 
 const agentMessagePlugin: ToolPlugin = {
-  name: 'agent-message',
+  name: 'SendMessage',
   schema,
   executor: execute,
   useRenderer: AgentMessageRenderer,

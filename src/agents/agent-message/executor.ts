@@ -34,7 +34,7 @@ function compressTranscript(messages: Message[]): string {
 export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
   const agentSpawn = options.agentSpawn;
   if (!agentSpawn) {
-    return { content: 'agent-message requires agentSpawn context.', isError: true };
+    return { content: 'SendMessage requires agentSpawn context.', isError: true };
   }
 
   const agentId = input.agent_id as string;
@@ -49,14 +49,14 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   if (!agent) {
     return {
-      content: `Sub-agent not found: ${agentId}. Use agent-read with list_all=true to see available agents.`,
+      content: `Sub-agent not found: ${agentId}. Use TaskGet to list available agents.`,
       isError: true,
     };
   }
 
   if (agent.status === 'running') {
     return {
-      content: `Cannot message running agent ${agentId}. Wait for it to complete, or use agent-stop to cancel it first.`,
+      content: `Cannot message running agent ${agentId}. Wait for it to complete, or use TaskStop to cancel it first.`,
       isError: true,
     };
   }

@@ -12,13 +12,12 @@ import type { ToolDefinition, AgentDefinition } from '../core/types.js';
 /** Always removed from sub-agent tool sets. Enforces depth-limit=1 and
  *  prevents sub-agents from interacting with the user or spawning more agents. */
 export const GLOBAL_DISALLOWED_FOR_SUBAGENTS = new Set([
-  'agent-spawn',
-  'agent-message',
-  'agent-stop',
-  'agent-read',
+  'Agent',
+  'SendMessage',
+  'TaskStop',
+  'TaskGet',
+  'TaskOutput',
   'ask-user-question',
-  'task-stop',
-  'task-output',
   'exit-plan-mode',
   'enter-plan-mode',
   'cron-create',
@@ -63,11 +62,10 @@ export function filterToolsForAgent(
  *  The coordinator is an orchestrator — it delegates work to sub-agents
  *  and teams. It should NOT have direct filesystem or code-editing tools. */
 export const COORDINATOR_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
-  'agent-spawn',
-  'agent-message',
-  'agent-stop',
-  'agent-read',
-  'task-stop',
+  'Agent',
+  'SendMessage',
+  'TaskStop',
+  'TaskGet',
   'team-create',
   'team-dispatch',
   'team-status',

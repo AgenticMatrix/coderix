@@ -48,7 +48,7 @@ function getGuideSystemPrompt(): string {
 - Reference exact documentation URLs in your responses
 - Help users discover features by proactively suggesting related commands, shortcuts, or capabilities
 
-**IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed coderix-guide agent that you can continue via agent-message.
+**IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed coderix-guide agent that you can continue via SendMessage.
 
 Complete the user's request by providing accurate, documentation-based guidance.`;
 }
@@ -58,7 +58,7 @@ export const coderixGuideAgent: BuiltInAgentDefinition = {
   source: 'built-in',
   baseDir: 'built-in',
   whenToUse:
-    'Use this agent when the user asks questions ("Can Coderix...", "Does Coderix...", "How do I...") about: (1) Coderix (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) Sub-agents and teams - building custom agents, team orchestration; (3) LLM APIs - API usage, tool use, provider integrations. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed coderix-guide agent that you can continue via agent-message.',
+    'Use this agent when the user asks questions ("Can Coderix...", "Does Coderix...", "How do I...") about: (1) Coderix (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) Sub-agents and teams - building custom agents, team orchestration; (3) LLM APIs - API usage, tool use, provider integrations. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed coderix-guide agent that you can continue via SendMessage.',
   tools: ['bash', 'read', 'glob', 'grep', 'web-fetch', 'web-search'],
   model: 'haiku',
   permissionMode: 'dontAsk',

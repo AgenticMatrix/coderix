@@ -4,7 +4,7 @@ import type { BuiltInAgentDefinition } from '../../core/types.js';
  * Synthetic agent definition for the fork path.
  *
  * Not registered in the agent registry — used only when `agent_type` is omitted
- * from the agent-spawn input, triggering the fork path. The fork inherits the
+ * from the Agent input, triggering the fork path. The fork inherits the
  * parent's full tool pool (minus globally-disallowed tools) and the parent's
  * already-rendered system prompt bytes to share the prompt cache.
  */

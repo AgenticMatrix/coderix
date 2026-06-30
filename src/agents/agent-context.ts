@@ -114,7 +114,7 @@ export function getAgentLogName(): string | undefined {
 }
 
 /**
- * Create a SubagentContext for an agent-spawn operation.
+ * Create a SubagentContext for an Agent operation.
  */
 export function createSubagentContext(
   agentId: string,

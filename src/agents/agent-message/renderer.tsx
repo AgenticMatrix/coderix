@@ -17,7 +17,7 @@ export const AgentMessageRenderer: ToolUseRenderer = (props) => {
     return createElement(
       Box,
       { flexDirection: 'column', borderStyle: 'round', borderColor: 'grey', paddingX: 1, width: '90%' },
-      createElement(Text, { dimColor: true }, `💬 agent-message → ${agentId}: ${summary || '...'}`),
+      createElement(Text, { dimColor: true }, `💬 SendMessage → ${agentId}: ${summary || '...'}`),
     );
   }
 
@@ -99,8 +99,8 @@ export const AgentMessageRenderer: ToolUseRenderer = (props) => {
         Text,
         { bold: true, color: 'cyan' },
         isExecuting
-          ? `${SPINNER_FRAMES[spinnerIdx]} agent-message → ${agentId}`
-          : `💬 agent-message → ${agentId}`,
+          ? `${SPINNER_FRAMES[spinnerIdx]} SendMessage → ${agentId}`
+          : `💬 SendMessage → ${agentId}`,
       ),
       displayDuration !== undefined
         ? isExecuting

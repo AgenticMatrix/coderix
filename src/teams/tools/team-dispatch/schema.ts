@@ -3,7 +3,7 @@ import type { ToolSchema } from '../../../tools/types.js';
 export const schema: ToolSchema = {
   name: 'team-dispatch',
   description:
-    'Activate team members by spawning them as background sub-agents. Members with "pending" status are spawned using the agent-spawn tool. After dispatch, use team-status to monitor progress. Each dispatched member gets a real agentId from the SubAgentRegistry, enabling agent-read and agent-stop.',
+    'Activate team members by spawning them as background sub-agents. Members with "pending" status are spawned using the Agent tool. After dispatch, use team-status to monitor progress. Each dispatched member gets a real agentId from the SubAgentRegistry, enabling TaskGet and TaskStop.',
   input_schema: {
     type: 'object',
     properties: {

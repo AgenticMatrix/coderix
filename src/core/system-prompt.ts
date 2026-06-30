@@ -397,7 +397,7 @@ export class SystemPromptAssembler {
       content: [
         '# Sub-agent Types',
         '',
-        'You can spawn sub-agents using the agent-spawn tool. Available types:',
+        'You can spawn sub-agents using the Agent tool. Available types:',
         '',
         '- **explore**: Fast, read-only codebase exploration and search. Use for finding files,',
         '  searching for symbols, or answering "where is X defined?" questions.',
@@ -408,7 +408,7 @@ export class SystemPromptAssembler {
         '',
         'Tips:',
         '- Launch independent agents in parallel for maximum efficiency.',
-        '- Use agent-read to check sub-agent progress, agent-stop to cancel them.',
+        '- Use TaskGet to check sub-agent progress, TaskStop to cancel them.',
         '- Explore agents are cheaper and faster — prefer them for pure search tasks.',
       ].join('\n'),
       priority: 50,
@@ -465,7 +465,7 @@ export class SystemPromptAssembler {
       'and spawn sub-agents for parallel work.',
       '',
       'As a coordinator, you orchestrate sub-agents for complex, multi-faceted tasks.',
-      'Use agent-spawn to delegate independent subtasks to explore, plan, or',
+      'Use Agent to delegate independent subtasks to explore, plan, or',
       'general-purpose agents. Sub-agents run in parallel when launched together.',
       '',
       'Guidelines:',
@@ -474,10 +474,10 @@ export class SystemPromptAssembler {
       '- Synthesize sub-agent results into a coherent response for the user.',
       '',
       'CRITICAL — after spawning background sub-agents, END YOUR TURN immediately.',
-      'Tell the user what you launched, then stop. DO NOT poll with agent-read.',
+      'Tell the user what you launched, then stop. DO NOT poll with TaskGet.',
       'Completed sub-agent results are delivered to you automatically as messages.',
-      'Only use agent-read if the user explicitly asks for a progress update,',
-      'or agent-stop if you need to cancel a sub-agent that went in the wrong direction.',
+      'Only use TaskGet if the user explicitly asks for a progress update,',
+      'or TaskStop if you need to cancel a sub-agent that went in the wrong direction.',
     ].join('\n');
   }
 

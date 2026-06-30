@@ -1,7 +1,7 @@
 /**
  * Lightweight in-memory tracker for background tasks.
  *
- * Both the bash tool (run_in_background) and agent-spawn (background)
+ * Both the bash tool (run_in_background) and Agent (background)
  * register tasks here so TaskOutput / TaskStop can query and control them.
  */
 

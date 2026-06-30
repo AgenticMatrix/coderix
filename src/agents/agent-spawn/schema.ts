@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../../tools/types.js';
 
 export const schema: ToolSchema = {
-  name: 'agent-spawn',
+  name: 'Agent',
   description: `Spawn a sub-agent to handle a specific subtask. The sub-agent can
 use tools to accomplish its task and returns a text summary of its findings.
 Multiple sub-agents can run concurrently for parallel work.
@@ -12,8 +12,8 @@ Use this for:
 - Delegating well-scoped implementation tasks
 - Independent research that can run concurrently
 
-The sub-agent will work autonomously and return a text summary. Use agent-read
-to check on a running sub-agent's progress and agent-stop to cancel it.
+The sub-agent will work autonomously and return a text summary. Use TaskGet
+to check on a running sub-agent's progress and TaskStop to cancel it.
 If agent_type is omitted, the sub-agent inherits the parent's context (fork mode).`,
   input_schema: {
     type: 'object',
@@ -32,7 +32,7 @@ If agent_type is omitted, the sub-agent inherits the parent's context (fork mode
       },
       background: {
         type: 'boolean',
-        description: 'When true, the sub-agent runs in the background without blocking the main loop. Use agent-read to check progress and results.',
+        description: 'When true, the sub-agent runs in the background without blocking the main loop. Use TaskGet to check progress and results.',
       },
       team_name: {
         type: 'string',

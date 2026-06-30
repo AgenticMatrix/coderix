@@ -59,30 +59,16 @@ function seedAgent(registry: SubAgentRegistry, id: string, overrides: Partial<{ 
 }
 
 // ---------------------------------------------------------------------------
-// agent-read
+// TaskGet (sub-agent query, former agent-read)
 // ---------------------------------------------------------------------------
 
-describe('agent-read executor', () => {
-  it('should require agentSpawn context', async () => {
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
-    const result = await execute({}, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
-    expect(result.isError).toBe(true);
-    expect(result.content).toContain('agentSpawn');
-  });
-
-  it('should return error when no agent_id or list_all', async () => {
-    const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
-    const result = await execute({}, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
-    expect(result.isError).toBe(true);
-  });
-
+describe('TaskGet executor (sub-agent queries)', () => {
   it('should list all agents when list_all=true', async () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-abc', { status: 'done', result: 'Done result' });
     seedAgent(agentSpawn.subAgentRegistry, 'sub-def', { status: 'running' });
 
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
+    const { execute } = await import('../../src/tools/task-get/executor.js');
     const result = await execute({ list_all: true }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.isError).toBe(false);
@@ -95,16 +81,16 @@ describe('agent-read executor', () => {
 
   it('should return empty list when no agents', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
+    const { execute } = await import('../../src/tools/task-get/executor.js');
     const result = await execute({ list_all: true }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.content).toBe('No sub-agents found.');
   });
 
-  it('should return single agent details by id', async () => {
+  it('should return single agent details by agent_id', async () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-xyz', { status: 'done', result: 'Full result text here' });
 
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
+    const { execute } = await import('../../src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'sub-xyz' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.isError).toBe(false);
@@ -117,7 +103,7 @@ describe('agent-read executor', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-run', { status: 'running' });
 
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
+    const { execute } = await import('../../src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'sub-run' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.content).toContain('Still running');
@@ -127,7 +113,7 @@ describe('agent-read executor', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-err', { status: 'error', error: 'Something broke' });
 
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
+    const { execute } = await import('../../src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'sub-err' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.content).toContain('Something broke');
@@ -135,7 +121,7 @@ describe('agent-read executor', () => {
 
   it('should return error for unknown agent_id', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/agents/agent-read/executor.js');
+    const { execute } = await import('../../src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'nonexistent' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.isError).toBe(true);
     expect(result.content).toContain('not found');
@@ -143,42 +129,50 @@ describe('agent-read executor', () => {
 });
 
 // ---------------------------------------------------------------------------
-// agent-stop
+// TaskStop (sub-agent stopping, former agent-stop)
 // ---------------------------------------------------------------------------
 
-describe('agent-stop executor', () => {
-  it('should require agentSpawn context', async () => {
-    const { execute } = await import('../../src/agents/agent-stop/executor.js');
-    const result = await execute({ agent_id: 'sub-1' }, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
-    expect(result.isError).toBe(true);
-    expect(result.content).toContain('agentSpawn');
-  });
-
+describe('TaskStop executor (sub-agent stop)', () => {
   it('should return error for unknown agent', async () => {
-    const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/agents/agent-stop/executor.js');
-    const result = await execute({ agent_id: 'nonexistent' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
+    const { execute } = await import('../../src/tools/task-stop/executor.js');
+    const result = await execute(
+      { task_id: 'nonexistent' },
+      { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
+    );
     expect(result.isError).toBe(true);
-    expect(result.content).toContain('not found');
+    expect(result.content).toContain('No running task');
   });
 
   it('should return message when agent is already done', async () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-done', { status: 'done' });
 
-    const { execute } = await import('../../src/agents/agent-stop/executor.js');
-    const result = await execute({ agent_id: 'sub-done' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
+    // Use setSubAgentRegistry to make it available to task-stop
+    const { setSubAgentRegistry } = await import('../../src/agents/agent-spawn/registry-ref.js');
+    setSubAgentRegistry(agentSpawn.subAgentRegistry);
 
-    expect(result.isError).toBe(false);
-    expect(result.content).toContain('already done');
+    const { execute } = await import('../../src/tools/task-stop/executor.js');
+    const result = await execute(
+      { task_id: 'sub-done' },
+      { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain('not running');
   });
 
   it('should stop a running agent', async () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-running', { status: 'running' });
 
-    const { execute } = await import('../../src/agents/agent-stop/executor.js');
-    const result = await execute({ agent_id: 'sub-running' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
+    const { setSubAgentRegistry } = await import('../../src/agents/agent-spawn/registry-ref.js');
+    setSubAgentRegistry(agentSpawn.subAgentRegistry);
+
+    const { execute } = await import('../../src/tools/task-stop/executor.js');
+    const result = await execute(
+      { task_id: 'sub-running' },
+      { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
+    );
 
     expect(result.isError).toBe(false);
     expect(result.content).toContain('stopped');
@@ -186,10 +180,10 @@ describe('agent-stop executor', () => {
 });
 
 // ---------------------------------------------------------------------------
-// agent-message
+// SendMessage (former agent-message)
 // ---------------------------------------------------------------------------
 
-describe('agent-message executor', () => {
+describe('SendMessage executor', () => {
   it('should require agentSpawn context', async () => {
     const { execute } = await import('../../src/agents/agent-message/executor.js');
     const result = await execute({}, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });

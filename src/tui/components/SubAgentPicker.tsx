@@ -53,7 +53,7 @@ export function SubAgentPicker({ onSelect, onCancel }: SubAgentPickerProps) {
       <Box borderStyle="double" borderColor="cyan" flexDirection="column" paddingX={1}>
         <Text bold color="cyan">Sub-agents</Text>
         <Text dimColor>No sub-agents in this session.</Text>
-        <Text dimColor>Sub-agents are created when the main agent uses agent-spawn.</Text>
+        <Text dimColor>Sub-agents are created when the main agent uses the Agent tool.</Text>
         <Text dimColor>Press Esc to close.</Text>
       </Box>
     );

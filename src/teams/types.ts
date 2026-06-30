@@ -3,7 +3,7 @@
  *
  * A Team is a persistent coordination wrapper around Sub-agents.
  * Team members have **identity** (human-readable names, mailboxes)
- * while still using the existing SubAgentRegistry / agent-spawn
+ * while still using the existing SubAgentRegistry / Agent tool
  * infrastructure for execution.
  */
 

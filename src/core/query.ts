@@ -1060,7 +1060,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     turnCount++;
 
     // If this is the coordinator and background sub-agents are still
-    // running, end turn to prevent polling with agent-read.
+    // running, end turn to prevent polling with TaskGet.
     if (agentRole === 'coordinator' && config.subAgentRegistry) {
       const running = config.subAgentRegistry.list().filter(a => a.status === 'running');
       if (running.length > 0) {

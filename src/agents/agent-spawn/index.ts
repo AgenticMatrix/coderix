@@ -5,7 +5,7 @@ import { AgentSpawnRenderer } from './renderer.js';
 import { AgentSpawnResultRenderer } from './result-renderer.js';
 
 const agentSpawnPlugin: ToolPlugin = {
-  name: 'agent-spawn',
+  name: 'Agent',
   schema,
   executor: execute,
   useRenderer: AgentSpawnRenderer,

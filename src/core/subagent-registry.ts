@@ -2,7 +2,7 @@
  * SubAgentRegistry — Central in-memory registry for sub-agent lifecycle.
  *
  * Tracks running and completed sub-agents so the main agent can query
- * status via agent-read, stop them via agent-stop, and retrieve results.
+ * status via TaskGet, stop them via TaskStop, and retrieve results.
  */
 
 import type { Message } from './types.js';
