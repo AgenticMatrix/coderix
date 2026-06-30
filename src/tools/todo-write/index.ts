@@ -5,7 +5,7 @@ import { TodoWriteRenderer } from './renderer.js';
 import { isTodoV2Enabled } from '../../tasks/store.js';
 
 const todoWritePlugin: ToolPlugin = {
-  name: 'todo-write',
+  name: 'TodoWrite',
   schema,
   executor: execute,
   useRenderer: TodoWriteRenderer,

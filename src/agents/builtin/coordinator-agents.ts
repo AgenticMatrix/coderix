@@ -27,7 +27,7 @@ export const coordinatorAgent: BuiltInAgentDefinition = {
     'team-dispatch',
     'team-status',
     'team-message',
-    'todo-write',
+    'TodoWrite',
     'TaskCreate',
     'TaskUpdate',
     'TaskList',

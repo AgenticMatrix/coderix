@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'todo-write',
+  name: 'TodoWrite',
   description: 'Create and manage a structured task list.',
   input_schema: {
     type: 'object',
