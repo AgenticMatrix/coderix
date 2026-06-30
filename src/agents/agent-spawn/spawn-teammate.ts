@@ -174,6 +174,37 @@ export async function spawnTeammate(
       notified: false,
     });
 
+    // For in-process backend: actually run the agent loop. Pane backends
+    // (tmux/iTerm2) spawn a separate process that runs its own loop.
+    if (backendType === 'in-process') {
+      // Dynamic import to break circular dependency with executor.ts
+      const { execute: agentExecute } = await import('./executor.js');
+      const effectiveAgentType = input.agentDef?.agentType ?? agentType;
+
+      // Fire-and-forget: run the agent as a background sub-agent
+      agentExecute(
+        {
+          agent_type: effectiveAgentType,
+          prompt,
+          model,
+          background: true,
+          isolation: input.isolation,
+          team_name: teamName,
+          member_name: agentName,
+        },
+        {
+          cwd: input.cwd,
+          sessionId: input.sessionId,
+          allowMutation: true,
+          maxOutput: 200_000,
+          bashTimeout: 120_000,
+          agentSpawn,
+        },
+      ).catch(() => {
+        // Background fire-and-forget — errors surfaced via SubAgentRegistry
+      });
+    }
+
     const paneNote = backendType !== 'in-process'
       ? `\nThe teammate is running in a ${backendType} pane — switch to it to interact directly.`
       : '\nThe teammate is running in-process. Use SendMessage from team_name + to to communicate.';
