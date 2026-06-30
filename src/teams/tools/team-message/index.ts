@@ -1,14 +1,21 @@
 import type { ToolPlugin } from '../../../tools/types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
-import { TeamMessageRenderer } from './renderer.js';
+import { SendMessageRenderer } from './renderer.js';
 
-const teamMessagePlugin: ToolPlugin = {
-  name: 'team-message',
+const sendMessagePlugin: ToolPlugin = {
+  name: 'SendMessage',
   schema,
   executor: execute,
-  useRenderer: TeamMessageRenderer,
+  useRenderer: SendMessageRenderer,
   paramSummary: (input) => {
+    const hasAgentId = !!(input.agent_id as string);
+    if (hasAgentId) {
+      const agentId = input.agent_id as string;
+      const msg = input.message as string;
+      const preview = msg ? (msg.length > 20 ? msg.slice(0, 17) + '...' : msg) : '';
+      return `→ ${agentId}${preview ? ': ' + preview : ''} (resume)`;
+    }
     const to = input.to as string;
     const text = input.text as string;
     if (!to) return undefined;
@@ -17,4 +24,4 @@ const teamMessagePlugin: ToolPlugin = {
   },
 };
 
-export default teamMessagePlugin;
+export default sendMessagePlugin;

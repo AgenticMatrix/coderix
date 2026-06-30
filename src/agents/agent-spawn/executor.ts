@@ -281,7 +281,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     }
   }
 
-  // Team member: register team-message tool for inter-team communication
+  // Team member: register SendMessage tool for inter-team communication
   const teamName = input.team_name as string | undefined;
   const memberName = input.member_name as string | undefined;
   if (teamName && memberName) {

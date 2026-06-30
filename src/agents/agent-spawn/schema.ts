@@ -36,11 +36,11 @@ If agent_type is omitted, the sub-agent inherits the parent's context (fork mode
       },
       team_name: {
         type: 'string',
-        description: 'Optional: team name when spawning as a team member. Enables the team-message tool for inter-team communication.',
+        description: 'Optional: team name when spawning as a team member. Enables SendMessage for inter-team communication.',
       },
       member_name: {
         type: 'string',
-        description: 'Optional: member display name within the team. Used as the sender identity for team-message.',
+        description: 'Optional: member display name within the team. Used as the sender identity for SendMessage.',
       },
       isolation: {
         type: 'string',

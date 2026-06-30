@@ -4,7 +4,7 @@ import { execute } from './executor.js';
 import { TeamCreateRenderer } from './renderer.js';
 
 const teamCreatePlugin: ToolPlugin = {
-  name: 'team-create',
+  name: 'TeamCreate',
   schema,
   executor: execute,
   useRenderer: TeamCreateRenderer,

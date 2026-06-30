@@ -67,8 +67,6 @@ export const COORDINATOR_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
   'TaskStop',
   'TaskGet',
   'Sleep',
-  'team-create',
-  'team-dispatch',
-  'team-status',
-  'team-message',
+  'TeamCreate',
+  'TeamDelete',
 ]);

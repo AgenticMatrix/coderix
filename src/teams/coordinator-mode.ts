@@ -54,8 +54,8 @@ async function buildTeamContextBlock(config: TeamConfig): Promise<string> {
   }
 
   lines.push('');
-  lines.push('Use team-status to check detailed status, team-message to communicate with members,');
-  lines.push('and team-dispatch to activate pending members.');
+  lines.push('Use TaskGet/TaskList to check member status, SendMessage to communicate with members,');
+  lines.push('and Agent tool with team_name + name parameters to spawn new members.');
 
   return lines.join('\n');
 }

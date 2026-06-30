@@ -19,11 +19,9 @@ import taskListPlugin from './task-list/index.js';
 import taskGetPlugin from './task-get/index.js';
 import sleepPlugin from './sleep/index.js';
 import agentSpawnPlugin from '../agents/agent-spawn/index.js';
-import sendMessagePlugin from '../agents/agent-message/index.js';
+import sendMessagePlugin from '../teams/tools/team-message/index.js';
 import teamCreatePlugin from '../teams/tools/team-create/index.js';
-import teamDispatchPlugin from '../teams/tools/team-dispatch/index.js';
-import teamStatusPlugin from '../teams/tools/team-status/index.js';
-import teamMessagePlugin from '../teams/tools/team-message/index.js';
+import teamDeletePlugin from '../teams/tools/team-delete/index.js';
 import taskOutputPlugin from './task-output/index.js';
 import taskStopPlugin from './task-stop/index.js';
 import skillPlugin from './skill/index.js';
@@ -64,9 +62,7 @@ export const plugins: ToolPlugin[] = [
   agentSpawnPlugin,
   sendMessagePlugin,
   teamCreatePlugin,
-  teamDispatchPlugin,
-  teamStatusPlugin,
-  teamMessagePlugin,
+  teamDeletePlugin,
   taskOutputPlugin,
   taskStopPlugin,
   skillPlugin,
@@ -78,6 +74,21 @@ export const plugins: ToolPlugin[] = [
   enterWorktreePlugin,
   exitWorktreePlugin,
 ];
+
+// ── Backward-compatible aliases ───────────────────────────────────────
+
+/** Map legacy kebab-case tool names to current canonical names. */
+const TOOL_ALIASES: Record<string, string> = {
+  'team-create': 'TeamCreate',
+  'team-message': 'SendMessage',
+  'team-dispatch': '',    // removed — use Agent tool instead
+  'team-status': '',      // removed — use TaskGet/TaskList instead
+  'Task': 'Agent',        // legacy Agent tool alias
+};
+
+function resolveName(name: string): string {
+  return TOOL_ALIASES[name] ?? name;
+}
 
 // Build lookup tables
 const schemaByName = new Map<string, ToolPlugin['schema']>();
@@ -145,6 +156,12 @@ const EXECUTOR_DEFAULTS: ResolvedExecutorOptions = {
   setPermissionMode: undefined,
 };
 
+/** Remove the agent-message SendMessage alias (deprecated — use unified SendMessage). */
+const REMOVED_TOOLS: Record<string, string> = {
+  'team-dispatch': 'team-dispatch has been removed. Spawn teammates via the Agent tool with team_name + name parameters.',
+  'team-status': 'team-status has been removed. Use TaskGet or TaskList to check agent statuses.',
+};
+
 /**
  * Execute a tool by name with the given input.
  * Returns a ToolResult with content and isError flag.
@@ -154,20 +171,27 @@ export async function executeTool(
   input: Record<string, unknown>,
   options?: ExecutorOptions,
 ): Promise<ToolResult> {
+  const resolvedName = resolveName(toolName);
   const opts: ResolvedExecutorOptions = { ...EXECUTOR_DEFAULTS, ...options };
-  const fn = executorByName.get(toolName);
+
+  // Handle removed tools (check original name before alias resolution)
+  if (toolName in REMOVED_TOOLS) {
+    return { content: REMOVED_TOOLS[toolName], isError: true };
+  }
+
+  const fn = executorByName.get(resolvedName);
 
   if (!fn) {
     return {
-      content: `Unknown tool: ${toolName}. Available: ${[...executorByName.keys()].join(', ')}`,
+      content: `Unknown tool: ${resolvedName}. Available: ${[...executorByName.keys()].join(', ')}`,
       isError: true,
     };
   }
 
-  const enabled = isEnabledByName.get(toolName);
+  const enabled = isEnabledByName.get(resolvedName);
   if (enabled && !enabled()) {
     return {
-      content: `Tool ${toolName} is disabled in the current mode.`,
+      content: `Tool ${resolvedName} is disabled in the current mode.`,
       isError: true,
     };
   }
@@ -184,17 +208,21 @@ export async function executeTool(
 
 /** Check if a tool name has an executor registered and is enabled. */
 export function hasExecutor(toolName: string): boolean {
-  if (!executorByName.has(toolName)) return false;
-  const enabled = isEnabledByName.get(toolName);
+  if (toolName in REMOVED_TOOLS) return false;
+  const resolved = resolveName(toolName);
+  if (!executorByName.has(resolved)) return false;
+  const enabled = isEnabledByName.get(resolved);
   return !enabled || enabled();
 }
 
 /** Look up a tool-use renderer by name. Falls back to GenericToolRenderer. */
 export function getToolUseRenderer(toolName: string): ToolUseRenderer {
-  return useRendererByName.get(toolName) ?? GenericToolRenderer;
+  const resolved = resolveName(toolName);
+  return useRendererByName.get(resolved) ?? GenericToolRenderer;
 }
 
 /** Look up a tool-result renderer by name. Falls back to GenericToolResultRenderer. */
 export function getToolResultRenderer(toolName: string): ToolResultRenderer {
-  return resultRendererByName.get(toolName) ?? GenericToolResultRenderer;
+  const resolved = resolveName(toolName);
+  return resultRendererByName.get(resolved) ?? GenericToolResultRenderer;
 }
