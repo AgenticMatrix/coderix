@@ -96,7 +96,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
       joinedAt: Date.now(),
     };
 
-    addMemberToTeam(config.teamName, member);
+    await addMemberToTeam(config.teamName, member);
 
     // 5. Send initial prompt to teammate's mailbox
     sendToMailbox(config.teamName, config.agentName, {

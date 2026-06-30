@@ -67,7 +67,7 @@ export class InProcessBackend implements TeammateExecutor {
     this.activeTeammates.set(config.agentId, { ctx });
 
     // Register in team file
-    addMemberToTeam(config.teamName, {
+    await addMemberToTeam(config.teamName, {
       agentId: config.agentId,
       name: config.agentName,
       agentType: config.agentType,
@@ -153,7 +153,7 @@ export class InProcessBackend implements TeammateExecutor {
     }
 
     // Update team file
-    updateMemberInTeam(teammate.ctx.teamName, agentId, {
+    await updateMemberInTeam(teammate.ctx.teamName, agentId, {
       status: 'stopped',
       finishedAt: Date.now(),
     });

@@ -1,112 +1,75 @@
 /**
- * Team file helpers — read/write team configuration on disk.
+ * Swarm team helpers — thin delegation layer over team-store.
  *
- * Team files are stored at ~/.coderix/teams/{team_name}/team.json
- * Unlike the mailbox, the team file is only written by the leader,
- * so no file locking is needed.
+ * All swarm code reads/writes the same config.json that TeamCreate manages.
+ * Delegates to team-store.ts for all file I/O so there is a single source of
+ * truth. Extra swarm-specific fields (backendType, paneId, etc.) are carried
+ * in the member objects and survive JSON round-trips because the TeamMember
+ * interface is not strict — extra keys are preserved.
  */
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { homedir } from 'node:os';
+import type { TeamConfig, TeamMember } from '../../teams/types.js';
+import {
+  loadTeamConfig,
+  saveTeamConfig,
+  addTeamMember as storeAddMember,
+  updateTeamMember as storeUpdateMember,
+} from '../../teams/team-store.js';
 
 // ---------------------------------------------------------------------------
-// Types (mirrors teams/types.ts but extends for swarm-specific fields)
+// Swarm-extended types (superset of TeamMember)
 // ---------------------------------------------------------------------------
 
-export interface SwarmTeamMember {
-  agentId: string;
-  name: string;
-  agentType: string;
-  model?: string;
-  color?: string;
-  status: 'pending' | 'running' | 'done' | 'error' | 'stopped' | 'idle';
+export interface SwarmTeamMember extends TeamMember {
   prompt?: string;
   backendType?: string;
   paneId?: string;
   sessionId?: string;
   worktreePath?: string;
-  joinedAt: number;
   finishedAt?: number;
 }
 
-export interface SwarmTeamConfig {
-  name: string;
-  description: string;
-  createdAt: number;
-  leadAgentId?: string;
-  leadSessionId?: string;
-  members: SwarmTeamMember[];
-}
-
-// ---------------------------------------------------------------------------
-// Paths
-// ---------------------------------------------------------------------------
-
-function teamFilePath(teamName: string): string {
-  const sanitized = teamName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'unnamed';
-  return join(homedir(), '.coderix', 'teams', sanitized, 'team.json');
-}
+export type SwarmTeamConfig = TeamConfig;
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-export function loadTeamFile(teamName: string): SwarmTeamConfig | null {
-  try {
-    const path = teamFilePath(teamName);
-    if (!existsSync(path)) return null;
-    const raw = readFileSync(path, 'utf-8');
-    return JSON.parse(raw) as SwarmTeamConfig;
-  } catch {
-    return null;
-  }
+export async function loadTeamFile(teamName: string): Promise<SwarmTeamConfig | null> {
+  return loadTeamConfig(teamName);
 }
 
-export function saveTeamFile(config: SwarmTeamConfig): void {
-  const path = teamFilePath(config.name);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(config, null, 2), 'utf-8');
+export async function saveTeamFile(config: SwarmTeamConfig): Promise<void> {
+  await saveTeamConfig(config);
 }
 
-export function addMemberToTeam(
+export async function addMemberToTeam(
   teamName: string,
   member: SwarmTeamMember,
-): SwarmTeamConfig {
-  const config = loadTeamFile(teamName);
-  if (!config) {
-    throw new Error(`Team '${teamName}' not found`);
-  }
-  // Replace existing member with same name, or append new
-  const idx = config.members.findIndex(m => m.name === member.name);
-  if (idx >= 0) {
-    config.members[idx] = member;
-  } else {
-    config.members.push(member);
-  }
-  saveTeamFile(config);
-  return config;
+): Promise<SwarmTeamConfig> {
+  // SwarmTeamMember is a superset of TeamMember — extra fields survive
+  // JSON serialisation and won't break TeamCreate's reader.
+  await storeAddMember(teamName, member as TeamMember);
+  // Re-read for the latest state (addTeamMember writes under a lock)
+  const updated = await loadTeamConfig(teamName);
+  if (!updated) throw new Error(`Team '${teamName}' disappeared after member add`);
+  return updated;
 }
 
-export function updateMemberInTeam(
+export async function updateMemberInTeam(
   teamName: string,
   agentId: string,
   patch: Partial<SwarmTeamMember>,
-): SwarmTeamConfig | null {
-  const config = loadTeamFile(teamName);
-  if (!config) return null;
-  const member = config.members.find(m => m.agentId === agentId);
-  if (!member) return null;
-  Object.assign(member, patch);
-  saveTeamFile(config);
-  return config;
+): Promise<SwarmTeamConfig | null> {
+  return storeUpdateMember(teamName, agentId, patch as Partial<TeamMember>);
 }
 
-export function getMemberFromTeam(
+export async function getMemberFromTeam(
   teamName: string,
   agentName: string,
-): SwarmTeamMember | null {
-  const config = loadTeamFile(teamName);
+): Promise<SwarmTeamMember | null> {
+  const config = await loadTeamConfig(teamName);
   if (!config) return null;
-  return config.members.find(m => m.name === agentName) ?? null;
+  const m = config.members.find(m => m.name === agentName);
+  return (m as SwarmTeamMember) ?? null;
 }
