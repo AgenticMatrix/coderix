@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { listTeams, loadTeamConfig } from '../../teams/team-store.js';
 import { getSubAgentRegistry } from '../../agents/agent-spawn/registry-ref.js';
 import type { TeamMember } from '../../teams/types.js';
+import type { SubAgentRecord } from '../../core/subagent-registry.js';
 
 const AGENT_ICONS: Record<string, string> = {
   explore: '\u{1F50D}',
@@ -29,6 +30,23 @@ interface SelectableMember {
   teamName: string;
 }
 
+function agentToMember(agent: SubAgentRecord): TeamMember {
+  const statusMap: Record<string, TeamMember['status']> = {
+    running: 'running',
+    done: 'done',
+    error: 'error',
+    stopped: 'stopped',
+  };
+  return {
+    agentId: agent.id,
+    name: agent.name || agent.agentType,
+    agentType: agent.agentType,
+    status: statusMap[agent.status] ?? 'done',
+    task: agent.prompt.slice(0, 80),
+    joinedAt: agent.createdAt,
+  };
+}
+
 interface TeamAgentPickerProps {
   onSelect: (agentId: string) => void;
   onCancel: () => void;
@@ -51,12 +69,18 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
   useEffect(() => {
     async function load() {
       const registry = getSubAgentRegistry();
-      const names = await listTeams();
       const result: SelectableMember[] = [];
+      const teamAgentIds = new Set<string>();
+
+      // Team members from disk configs
+      const names = await listTeams();
       for (const name of names) {
         const cfg = await loadTeamConfig(name);
         if (!cfg) continue;
         for (const m of cfg.members) {
+          if (m.agentId && !m.agentId.startsWith('pending-')) {
+            teamAgentIds.add(m.agentId);
+          }
           if (
             (m.status === 'running' || m.status === 'done') &&
             !m.agentId.startsWith('pending-') &&
@@ -66,6 +90,19 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
           }
         }
       }
+
+      // Solo agents from registry (not part of any team)
+      if (registry) {
+        for (const agent of registry.list()) {
+          if (
+            !teamAgentIds.has(agent.id) &&
+            (agent.status === 'running' || agent.status === 'done')
+          ) {
+            result.push({ member: agentToMember(agent), teamName: 'solo' });
+          }
+        }
+      }
+
       setMembers(result);
     }
     load();
@@ -105,9 +142,8 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
     return (
       <Box borderStyle="double" borderColor="cyan" flexDirection="column" paddingX={1}>
         <Text bold color="cyan">Team Members</Text>
-        <Text dimColor>No selectable team members.</Text>
-        <Text dimColor>Create a team with team-create, then dispatch members with team-dispatch.</Text>
-        <Text dimColor>Active members will appear here automatically.</Text>
+        <Text dimColor>No selectable members.</Text>
+        <Text dimColor>Sub-agents and team members will appear here when they are running.</Text>
         <Text>{' '}</Text>
         <Text dimColor>Press Esc to close.</Text>
       </Box>

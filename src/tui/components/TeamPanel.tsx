@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { listTeams, loadTeamConfig } from '../../teams/team-store.js';
 import { getSubAgentRegistry } from '../../agents/agent-spawn/registry-ref.js';
 import type { TeamConfig, TeamMember } from '../../teams/types.js';
+import type { SubAgentRecord } from '../../core/subagent-registry.js';
 
 interface TeamPanelProps {
   dismissed: boolean;
@@ -38,6 +39,23 @@ function memberLabel(m: TeamMember): string {
   return `${m.name} ${task}`.slice(0, 60);
 }
 
+function agentToMember(agent: SubAgentRecord): TeamMember {
+  const statusMap: Record<string, TeamMember['status']> = {
+    running: 'running',
+    done: 'done',
+    error: 'error',
+    stopped: 'stopped',
+  };
+  return {
+    agentId: agent.id,
+    name: agent.name || agent.agentType,
+    agentType: agent.agentType,
+    status: statusMap[agent.status] ?? 'done',
+    task: agent.prompt.slice(0, 80),
+    joinedAt: agent.createdAt,
+  };
+}
+
 /**
  * Team status panel pinned above the input box.
  * Read-only display — press Ctrl+J to open the TeamAgentPicker
@@ -57,6 +75,8 @@ export function TeamPanel({ dismissed, onDismissReset }: TeamPanelProps) {
         const registry = getSubAgentRegistry();
         const names = await listTeams();
         const loaded: TeamConfig[] = [];
+        const teamAgentIds = new Set<string>();
+
         for (const name of names) {
           const cfg = await loadTeamConfig(name);
           if (cfg) {
@@ -67,11 +87,35 @@ export function TeamPanel({ dismissed, onDismissReset }: TeamPanelProps) {
               if (m.status === 'done' || m.status === 'error' || m.status === 'stopped') return false;
               return registry ? registry.get(m.agentId) !== undefined : false;
             });
+            for (const m of cfg.members) {
+              if (m.agentId && !m.agentId.startsWith('pending-')) {
+                teamAgentIds.add(m.agentId);
+              }
+            }
             if (liveMembers.length > 0) {
               loaded.push({ ...cfg, members: liveMembers });
             }
           }
         }
+
+        // Solo agents from registry (not part of any team)
+        if (registry) {
+          const soloMembers: TeamMember[] = [];
+          for (const agent of registry.list()) {
+            if (!teamAgentIds.has(agent.id) && agent.status === 'running') {
+              soloMembers.push(agentToMember(agent));
+            }
+          }
+          if (soloMembers.length > 0) {
+            loaded.push({
+              name: 'solo',
+              description: 'Directly spawned agents',
+              createdAt: Date.now(),
+              members: soloMembers,
+            });
+          }
+        }
+
         if (!active) return;
 
         const fp = loaded.map(c => `${c.name}:${c.members.map(m => `${m.name}:${m.status}:${m.agentId}`).join(',')}`).join('|');
