@@ -1,15 +1,21 @@
 import type { ToolExecutor, ToolResult } from '../../../tools/types.js';
-import type { Message, ContentBlock } from '../../../core/types.js';
+import type { Message, ContentBlock, AgentSpawnContext } from '../../../core/types.js';
 import type { SystemPrompt } from '../../../core/system-prompt.js';
 import { ToolRegistry } from '../../../core/tool-registry.js';
 import { PermissionEngine } from '../../../core/permission.js';
 import { PermissionMode } from '../../../core/types.js';
 import { SessionManager } from '../../../core/session.js';
 import { CheckpointManager } from '../../../core/checkpoint.js';
-import { filterToolsForAgent } from '../../../agents/tool-filtering.js';
+import { filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../../../agents/tool-filtering.js';
 import { query } from '../../../core/query.js';
 import { loadTeamConfig } from '../../team-store.js';
 import { sendMessage } from '../../team-mailbox.js';
+import {
+  readAgentMetadata,
+  getAgentTranscript,
+  saveAgentTranscript,
+  writeAgentMetadata,
+} from '../../../agents/agent-persistence.js';
 
 const MAX_RESUME_TURNS = 15;
 const CONTEXT_BUDGET = 120_000;
@@ -88,7 +94,7 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
 
 async function handleSubAgentResume(
   input: Record<string, unknown>,
-  options: { agentSpawn?: { subAgentRegistry: { get(id: string): any; update(id: string, patch: any): void }; agentRegistry?: { get(type: string): any }; toolRegistry: ToolRegistry; callModel: any; hookManager: any } },
+  options: { agentSpawn?: AgentSpawnContext },
 ): Promise<ToolResult> {
   const agentSpawn = options.agentSpawn;
   if (!agentSpawn) {
@@ -103,13 +109,45 @@ async function handleSubAgentResume(
   }
 
   const registry = agentSpawn.subAgentRegistry;
-  const agent = registry.get(agentId);
+  let agent = registry.get(agentId);
 
+  // ── Disk fallback: try loading agent from disk (cross-session resume) ─
   if (!agent) {
-    return {
-      content: `Sub-agent '${agentId}' not found. Use TaskGet to list available agents.`,
-      isError: true,
-    };
+    const meta = await readAgentMetadata(agentId);
+    const diskTranscript = await getAgentTranscript(agentId);
+
+    if (!meta || !diskTranscript) {
+      return {
+        content: [
+          `Agent '${agentId}' not found in registry or on disk.`,
+          'The agent may have been cleaned up or never existed.',
+          'Use TaskGet to list available agents.',
+        ].join('\n'),
+        isError: true,
+      };
+    }
+
+    // Re-register in memory
+    const diskAbortController = new AbortController();
+    registry.register({
+      id: agentId,
+      name: `${meta.agentType}-${agentId}`,
+      agentType: (meta.agentType as any) || 'general-purpose',
+      status: 'stopped',
+      prompt: meta.description ?? '',
+      createdAt: meta.createdAt,
+      turnCount: diskTranscript.filter((m: Message) => m.role === 'assistant').length,
+      messageCount: diskTranscript.length,
+      toolCount: 0,
+      abortController: diskAbortController,
+      notified: true,
+      transcript: diskTranscript,
+    });
+
+    agent = registry.get(agentId);
+    if (!agent) {
+      return { content: `Failed to re-register agent '${agentId}' from disk.`, isError: true };
+    }
   }
 
   if (agent.status === 'running') {
@@ -128,11 +166,11 @@ async function handleSubAgentResume(
     { role: 'user', content: message },
   ];
 
-  // Recreate sub-agent tooling
+  // Recreate sub-agent tooling — use resume-specific filtering
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
   const filteredDefs = agentDef
-    ? filterToolsForAgent(parentDefs, agentDef)
-    : parentDefs;
+    ? filterToolsForResumedAgent(parentDefs, agentDef)
+    : parentDefs.filter(t => !GLOBAL_DISALLOWED_FOR_SUBAGENTS.has(t.name));
   const subToolRegistry = new ToolRegistry();
   for (const def of filteredDefs) {
     const registration = agentSpawn.toolRegistry.get(def.name);
@@ -152,12 +190,32 @@ async function handleSubAgentResume(
 
   const subCheckpointManager = new CheckpointManager();
 
-  const systemPromptText = agentDef?.getSystemPrompt() ?? [
-    'You are a sub-agent worker spawned by Coderix to complete a specific task.',
-    'Complete the task efficiently using the tools available to you.',
-    'You CANNOT spawn additional sub-agents.',
-    'Do not ask the user questions -- you operate autonomously.',
-  ].join('\n');
+  // Build system prompt with env enrichment when possible
+  let systemPromptText: string;
+  if (agentDef && agentSpawn.systemPromptAssembler) {
+    try {
+      const workerPrompt = await agentSpawn.systemPromptAssembler.assemble({
+        cwd: process.cwd(),
+        permissionMode: 'auto',
+        agentRole: 'worker',
+      });
+      const envPart = workerPrompt.parts.find(p => p.name === 'env_info');
+      const permPart = workerPrompt.parts.find(p => p.name === 'permission_mode');
+      const extra = [envPart?.content, permPart?.content].filter(Boolean).join('\n\n');
+      systemPromptText = extra
+        ? agentDef.getSystemPrompt() + '\n\n' + extra
+        : agentDef.getSystemPrompt();
+    } catch {
+      systemPromptText = agentDef.getSystemPrompt();
+    }
+  } else {
+    systemPromptText = agentDef?.getSystemPrompt() ?? [
+      'You are a sub-agent worker spawned by Coderix to complete a specific task.',
+      'Complete the task efficiently using the tools available to you.',
+      'You CANNOT spawn additional sub-agents.',
+      'Do not ask the user questions — you operate autonomously.',
+    ].join('\n');
+  }
 
   const workerPrompt: SystemPrompt = {
     prompt: systemPromptText,
@@ -186,8 +244,8 @@ async function handleSubAgentResume(
       sessionManager: subSessionManager,
       checkpointManager: subCheckpointManager,
       abortController: subAbortController,
-      maxTurns: MAX_RESUME_TURNS,
-      contextBudget: CONTEXT_BUDGET,
+      maxTurns: agentDef?.maxTurns ?? MAX_RESUME_TURNS,
+      contextBudget: agentDef?.contextBudget ?? CONTEXT_BUDGET,
       compactThreshold: 0.7,
       maxToolConcurrency: MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
@@ -221,20 +279,28 @@ async function handleSubAgentResume(
       }
     }
 
-    const result = compressTranscript(newTranscript);
+    const cumulativeTranscript = [...transcript, ...newTranscript];
+    const resultText = compressTranscript(newTranscript);
 
     registry.update(agentId, {
       status: subAbortController.signal.aborted ? 'stopped' : 'done',
       finishedAt: Date.now(),
       turnCount: agent.turnCount + assistantTurnCount,
-      messageCount: transcript.length + newTranscript.length,
+      messageCount: cumulativeTranscript.length,
       toolCount: agent.toolCount + toolCount,
-      result,
-      transcript: [...transcript, ...newTranscript],
+      result: resultText,
+      transcript: cumulativeTranscript,
     });
 
+    // Persist updated transcript to disk
+    saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
+    writeAgentMetadata(agentId, {
+      agentType, worktreePath: undefined, description: agent.prompt,
+      createdAt: agent.createdAt, finishedAt: Date.now(),
+    }).catch(() => {});
+
     return {
-      content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${assistantTurnCount} LLM turns, +${toolCount} tools.\n\n${result}`,
+      content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${assistantTurnCount} LLM turns, +${toolCount} tools.\n\n${resultText}`,
       isError: false,
       duration: Date.now() - startTime,
       metadata: {
@@ -275,7 +341,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   }
 
   if (hasAgentId) {
-    return handleSubAgentResume(input, options as any);
+    return handleSubAgentResume(input, options as unknown as { agentSpawn?: AgentSpawnContext });
   }
 
   if (hasTeamName) {

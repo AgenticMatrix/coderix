@@ -5,11 +5,13 @@ export const schema: ToolSchema = {
   description: `Launch a new agent to handle complex, multi-step tasks. Each agent type has
 specific capabilities and tools available to it.
 
-Three spawn paths:
+Four spawn paths:
 - Standard: provide agent_type to launch a pre-defined sub-agent
 - Fork: omit agent_type to fork the parent with full context (faster, shares prompt cache)
 - Swarm teammate: provide team_name + name to spawn a process-level teammate
   (tmux/iTerm2/in-process backends — requires CODERIX_EXPERIMENTAL_AGENT_TEAMS)
+- Resume: provide agent_id + resume=true to continue a stopped/completed agent
+  (restores full conversation transcript and toolset)
 
 Sub-agents cannot spawn further sub-agents (depth limit = 1).`,
 
@@ -48,6 +50,14 @@ Sub-agents cannot spawn further sub-agents (depth limit = 1).`,
         type: 'string',
         enum: ['worktree'],
         description: 'Isolation mode. "worktree" creates a temporary git worktree for this agent, isolating all file operations from the main working directory. The worktree is automatically cleaned up when the agent completes (if no changes were made).',
+      },
+      agent_id: {
+        type: 'string',
+        description: 'ID of a previously stopped or completed agent to resume. Requires resume: true. The agent continues with its full conversation transcript and original toolset. Use TaskGet to find available agent IDs.',
+      },
+      resume: {
+        type: 'boolean',
+        description: 'When true, resume the agent identified by agent_id instead of creating a new one. The agent picks up where it left off with all prior context.',
       },
     },
     required: ['prompt'],

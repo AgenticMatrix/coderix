@@ -19,8 +19,9 @@ export const forkAgent: BuiltInAgentDefinition = {
     'Fork agent — inherits the parent agent\'s full context including conversation history, system prompt, and tool set. Used when no specific agent_type is specified.',
   tools: '*', // All parent tools pass through (minus globally-disallowed)
   model: 'inherit',
-  maxTurns: 20,
+  maxTurns: 200,
   contextBudget: 120_000,
+  permissionMode: 'bubble',
   getSystemPrompt: () => {
     // The fork path passes the parent's already-rendered system prompt bytes
     // directly via agentSpawn.renderedSystemPrompt. Re-assembling here could

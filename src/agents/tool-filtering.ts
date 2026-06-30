@@ -58,6 +58,30 @@ export function filterToolsForAgent(
   return filtered;
 }
 
+/** Filter tools for a resumed agent. Skips the global disallowed layer
+ *  (already applied during the initial spawn) and only applies agent-specific
+ *  filtering. This preserves the agent's original effective toolset. */
+export function filterToolsForResumedAgent(
+  parentTools: ToolDefinition[],
+  agentDef: AgentDefinition,
+): ToolDefinition[] {
+  let filtered = parentTools;
+
+  // Apply agent-specific disallowedTools (skip global — already filtered)
+  if (agentDef.disallowedTools && agentDef.disallowedTools.length > 0) {
+    const disallowed = new Set(agentDef.disallowedTools);
+    filtered = filtered.filter(t => !disallowed.has(t.name));
+  }
+
+  // Apply whitelist (skip if undefined or the sentinel '*')
+  if (agentDef.tools && agentDef.tools !== '*') {
+    const allowed = new Set(agentDef.tools);
+    filtered = filtered.filter(t => allowed.has(t.name));
+  }
+
+  return filtered;
+}
+
 /** Tools allowed for the coordinator in coordinator mode.
  *  The coordinator is an orchestrator — it delegates work to sub-agents
  *  and teams. It should NOT have direct filesystem or code-editing tools. */

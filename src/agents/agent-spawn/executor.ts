@@ -1,12 +1,13 @@
 import type { ToolExecutor, ToolResult } from '../../tools/types.js';
 import type { Message, ContentBlock, AgentSpawnContext, ToolContext } from '../../core/types.js';
 import type { SystemPrompt, SystemPromptAssembler } from '../../core/system-prompt.js';
+import type { SubAgentRecord } from '../../core/subagent-registry.js';
 import { ToolRegistry } from '../../core/tool-registry.js';
 import { PermissionEngine } from '../../core/permission.js';
 import { PermissionMode, RiskLevel } from '../../core/types.js';
 import { SessionManager } from '../../core/session.js';
 import { CheckpointManager } from '../../core/checkpoint.js';
-import { filterToolsForAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../tool-filtering.js';
+import { filterToolsForAgent, filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../tool-filtering.js';
 import { query } from '../../core/query.js';
 import teamMessagePlugin from '../../teams/tools/team-message/index.js';
 import {
@@ -26,6 +27,12 @@ import {
 } from '../../utils/worktree.js';
 import { writeAgentOutput } from './output-writer.js';
 import { spawnTeammate } from './spawn-teammate.js';
+import {
+  writeAgentMetadata,
+  readAgentMetadata,
+  getAgentTranscript,
+  saveAgentTranscript,
+} from '../agent-persistence.js';
 
 const DEFAULT_MAX_TURNS = 20;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -87,6 +94,116 @@ function isForkSubagentEnabled(): boolean {
   if (process.env.CODERIX_FORK_SUBAGENT === '0') return false;
   // Fork is enabled by default (matches upstream behavior)
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Fork helpers
+// ---------------------------------------------------------------------------
+
+const FORK_BOILERPLATE_TAG = 'fork-boilerplate';
+const FORK_PLACEHOLDER_RESULT = 'Fork started -- processing in background';
+
+/** Detect if the current conversation is already inside a fork child,
+ *  preventing recursive forking (fork-of-fork). */
+function isInForkChild(messages: Message[]): boolean {
+  for (const msg of messages) {
+    const content = typeof msg.content === 'string'
+      ? msg.content
+      : Array.isArray(msg.content)
+        ? msg.content.map(b => (b as { text?: string }).text ?? '').join(' ')
+        : '';
+    if (content.includes(`<${FORK_BOILERPLATE_TAG}>`)) return true;
+  }
+  return false;
+}
+
+/** Build the fork boilerplate directive injected into every fork child.
+ *  Contains non-negotiable rules and a structured output format. */
+function buildForkChildMessage(prompt: string): string {
+  return [
+    `<${FORK_BOILERPLATE_TAG}>`,
+    'You are a fork of the parent agent with full context and tools.',
+    '',
+    'Non-negotiable rules:',
+    '1. Do NOT spawn sub-agents or teammates — you are the worker',
+    '2. Do NOT have a conversation — just complete the task',
+    '3. Use tools directly, do not ask for clarification',
+    '4. Commit any code changes before reporting back',
+    '5. Work independently — do not wait for the parent',
+    '6. Be thorough — the parent is waiting for your complete result',
+    '7. Search broadly first, then narrow down',
+    '8. Report concrete findings, not vague summaries',
+    '9. If you encounter errors, try alternative approaches before giving up',
+    '',
+    'Output format:',
+    'Scope: <one sentence summarizing what was asked>',
+    'Result: <key findings or deliverables>',
+    'Key files: <relevant file paths examined or modified>',
+    'Files changed: <list of modified files with commit hash if applicable>',
+    'Issues: <any blockers, errors, or unresolved items>',
+    `</${FORK_BOILERPLATE_TAG}>`,
+    '',
+    `Your directive: ${prompt}`,
+  ].join('\n');
+}
+
+/** Build cache-identical fork messages so parallel forks share the prompt cache.
+ *  Collects all tool_use blocks from the parent's assistant message and creates
+ *  identical placeholder tool_result blocks, then appends the child directive. */
+function buildForkedMessages(
+  prompt: string,
+  parentMessages: Message[],
+): Message[] {
+  // Find the last assistant message to extract tool_use blocks
+  const lastAssistant = [...parentMessages].reverse().find(m => m.role === 'assistant');
+  if (!lastAssistant || !Array.isArray(lastAssistant.content)) {
+    // Fallback: parent's last messages + fork directive
+    const recentMessages = parentMessages.slice(-50);
+    return [
+      ...recentMessages,
+      { role: 'user' as const, content: buildForkChildMessage(prompt) },
+    ];
+  }
+
+  const blocks = lastAssistant.content as ContentBlock[];
+  const toolUseBlocks = blocks.filter(b => b.type === 'tool_use');
+
+  if (toolUseBlocks.length === 0) {
+    const recentMessages = parentMessages.slice(-50);
+    return [
+      ...recentMessages,
+      { role: 'user' as const, content: buildForkChildMessage(prompt) },
+    ];
+  }
+
+  // Build placeholder tool_results with identical text (cache-sharing key)
+  const placeholderBlocks: ContentBlock[] = toolUseBlocks.map(tu => ({
+    type: 'tool_result' as const,
+    tool_use_id: (tu as { id?: string }).id ?? '',
+    content: FORK_PLACEHOLDER_RESULT,
+  }));
+
+  // One user message with all placeholder results + fork directive
+  const forkMessage: Message = {
+    role: 'user',
+    content: [
+      ...placeholderBlocks,
+      { type: 'text' as const, text: buildForkChildMessage(prompt) },
+    ],
+  };
+
+  return [forkMessage];
+}
+
+/** Worktree path-translation notice injected when fork uses worktree isolation. */
+function buildWorktreeNotice(parentCwd: string, worktreeCwd: string): string {
+  return [
+    'Note: You are running in an isolated git worktree.',
+    `Parent working directory: ${parentCwd}`,
+    `Your working directory: ${worktreeCwd}`,
+    'Use your worktree path for all file operations.',
+    'When referencing files in your report, use paths relative to your working directory.',
+  ].join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -437,6 +554,13 @@ async function executeStandardSubagent(
           outputPath,
         });
 
+        // Persist to disk for cross-session resume
+        writeAgentMetadata(agentId, {
+          agentType, worktreePath, description: prompt,
+          model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+        }).catch(() => {});
+        saveAgentTranscript(agentId, result.transcript).catch(() => {});
+
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
         if (worktreePath) {
@@ -498,6 +622,13 @@ async function executeStandardSubagent(
     error: result.error,
   });
 
+  // Persist to disk for cross-session resume
+  writeAgentMetadata(agentId, {
+    agentType, worktreePath, description: prompt,
+    model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+  }).catch(() => {});
+  saveAgentTranscript(agentId, result.transcript).catch(() => {});
+
   if (result.error) {
     return {
       content: `Sub-agent ${agentId} (${agentType}) error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
@@ -538,6 +669,16 @@ async function executeFork(
   const agentId = `fork-${shortId()}`;
   const subAbortController = new AbortController();
   const isBackground = backgroundOverride ?? false;
+
+  // ── Recursion guard ──────────────────────────────────────────────────
+  const parentSession = agentSpawn.sessionManager.getActive();
+  const parentMessages: Message[] = parentSession?.messages ?? [];
+  if (isInForkChild(parentMessages)) {
+    return {
+      content: 'Cannot fork from a fork child. Fork depth is limited to 1. Use a standard sub-agent (specify agent_type) or complete the current fork task first.',
+      isError: true,
+    };
+  }
 
   // ── Worktree isolation ──────────────────────────────────────────────
   let worktreePath: string | undefined;
@@ -593,20 +734,20 @@ async function executeFork(
   }
 
   const effectiveModel = modelOverride;
-  const effectiveMaxTurns = DEFAULT_MAX_TURNS;
+  const effectiveMaxTurns = 200;  // Fork agents get generous turn budget
   const effectiveContextBudget = DEFAULT_CONTEXT_BUDGET;
   const cwd = worktreePath ?? process.cwd();
 
-  // Inherit parent's full conversation context for cache-identical prefixes
-  const parentSession = agentSpawn.sessionManager.getActive();
-  const parentMessages = parentSession?.messages ?? [];
-  const recentMessages = parentMessages.slice(-50);
+  // Build cache-identical fork messages for prompt cache sharing
+  const initialMessages: Message[] = buildForkedMessages(prompt, parentMessages);
 
-  const userPrompt = `[Forked from parent agent]\n\n${prompt}`;
-  const initialMessages: Message[] = [
-    ...recentMessages,
-    { role: 'user', content: userPrompt },
-  ];
+  // Inject worktree path-translation notice when isolated
+  if (worktreePath) {
+    initialMessages.push({
+      role: 'user',
+      content: buildWorktreeNotice(process.cwd(), worktreePath),
+    });
+  }
 
   agentSpawn.subAgentRegistry.register({
     id: agentId,
@@ -668,6 +809,13 @@ async function executeFork(
           outputPath,
         });
 
+        // Persist to disk for cross-session resume
+        writeAgentMetadata(agentId, {
+          agentType: 'fork', worktreePath, description: prompt,
+          model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+        }).catch(() => {});
+        saveAgentTranscript(agentId, result.transcript).catch(() => {});
+
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
         if (worktreePath) {
@@ -723,6 +871,13 @@ async function executeFork(
     error: result.error,
   });
 
+  // Persist to disk for cross-session resume
+  writeAgentMetadata(agentId, {
+    agentType: 'fork', worktreePath, description: prompt,
+    model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+  }).catch(() => {});
+  saveAgentTranscript(agentId, result.transcript).catch(() => {});
+
   if (result.error) {
     return {
       content: `Fork agent ${agentId} error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
@@ -748,7 +903,202 @@ async function executeFork(
 }
 
 // ---------------------------------------------------------------------------
-// Execute — 3-path routing
+// Agent resume — continue a stopped/completed agent
+// ---------------------------------------------------------------------------
+
+async function executeResume(
+  agentId: string,
+  prompt: string,
+  agentSpawn: AgentSpawnContext,
+  options: { cwd?: string; sessionId?: string },
+): Promise<ToolResult> {
+  // ── Look up agent in registry ────────────────────────────────────────
+  let agent = agentSpawn.subAgentRegistry.get(agentId);
+
+  // ── Fallback: try loading from disk (cross-session resume) ──────────
+  if (!agent) {
+    const meta = await readAgentMetadata(agentId);
+    const transcript = await getAgentTranscript(agentId);
+
+    if (!meta || !transcript) {
+      return {
+        content: [
+          `Agent '${agentId}' not found in registry or on disk.`,
+          'The agent may have been cleaned up or never existed.',
+          'Use TaskGet to list available agents.',
+        ].join('\n'),
+        isError: true,
+      };
+    }
+
+    // Validate worktree still exists (for worktree agents)
+    let worktreePath: string | undefined;
+    if (meta.worktreePath) {
+      try {
+        const { stat } = await import('node:fs/promises');
+        await stat(meta.worktreePath);
+        worktreePath = meta.worktreePath;
+      } catch {
+        // Worktree was removed externally — run in current cwd
+      }
+    }
+
+    // Re-register in memory
+    const abortController = new AbortController();
+    agentSpawn.subAgentRegistry.register({
+      id: agentId,
+      name: `${meta.agentType}-${agentId}`,
+      agentType: (meta.agentType as SubAgentRecord['agentType']) || 'general-purpose',
+      status: 'stopped',
+      prompt: meta.description ?? '',
+      createdAt: meta.createdAt,
+      turnCount: transcript.filter(m => m.role === 'assistant').length,
+      messageCount: transcript.length,
+      toolCount: 0,
+      abortController,
+      notified: true,
+      transcript,
+    });
+
+    agent = agentSpawn.subAgentRegistry.get(agentId);
+    if (!agent) {
+      return { content: `Failed to re-register agent '${agentId}' from disk.`, isError: true };
+    }
+  }
+
+  // ── Validate state ───────────────────────────────────────────────────
+  if (agent.status === 'running') {
+    return {
+      content: `Cannot resume running agent '${agentId}'. Wait for it to complete, or use TaskStop to cancel it first.`,
+      isError: true,
+    };
+  }
+
+  const transcript = agent.transcript ?? [];
+  const agentType = agent.agentType;
+
+  // ── Look up agent definition ─────────────────────────────────────────
+  const agentDef = agentSpawn.agentRegistry?.get(agentType);
+  const effectiveMaxTurns = agentDef?.maxTurns ?? 15;
+
+  // ── Build resumed messages ───────────────────────────────────────────
+  const resumedMessages: Message[] = [
+    ...transcript,
+    { role: 'user', content: prompt },
+  ];
+
+  // ── Build filtered tool registry ─────────────────────────────────────
+  const parentDefs = agentSpawn.toolRegistry.getDefinitions();
+  const filteredDefs = agentDef
+    ? filterToolsForResumedAgent(parentDefs, agentDef)
+    : parentDefs.filter(t => !GLOBAL_DISALLOWED_FOR_SUBAGENTS.has(t.name));
+  const subToolRegistry = new ToolRegistry();
+  for (const def of filteredDefs) {
+    const registration = agentSpawn.toolRegistry.get(def.name);
+    if (registration) {
+      subToolRegistry.register(def, registration.execute);
+    }
+  }
+
+  // ── Build system prompt (with env enrichment) ────────────────────────
+  let systemPromptText: string;
+  if (agentDef) {
+    systemPromptText = agentSpawn.systemPromptAssembler
+      ? await enrichAgentPrompt(agentDef.getSystemPrompt(), agentSpawn.systemPromptAssembler)
+      : agentDef.getSystemPrompt();
+  } else {
+    systemPromptText = [
+      'You are a sub-agent worker spawned by Coderix to complete a specific task.',
+      'Complete the task efficiently using the tools available to you.',
+      'You CANNOT spawn additional sub-agents.',
+      'Do not ask the user questions — you operate autonomously.',
+    ].join('\n');
+  }
+
+  // Inject memory if enabled
+  if (agentDef && isAgentMemoryEnabled() && agentDef.memory) {
+    const memoryPrompt = await loadAgentMemoryPrompt(
+      agentType,
+      agentDef.memory,
+      options.cwd ?? process.cwd(),
+    );
+    if (memoryPrompt) {
+      systemPromptText = memoryPrompt + '\n\n' + systemPromptText;
+    }
+  }
+
+  const cwd = options.cwd ?? process.cwd();
+  const subAbortController = new AbortController();
+
+  // ── Update registry status ──────────────────────────────────────────
+  agentSpawn.subAgentRegistry.update(agentId, {
+    status: 'running',
+    abortController: subAbortController,
+  });
+
+  // ── Run agent loop ──────────────────────────────────────────────────
+  const result = await runAgentLoop({
+    agentId,
+    agentType,
+    prompt,
+    agentSpawn,
+    systemPromptText,
+    effectiveModel: undefined,  // Use default model
+    effectiveMaxTurns,
+    effectiveContextBudget: agentDef?.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+    initialMessages: resumedMessages,
+    subToolRegistry,
+    subAbortController,
+    cwd,
+  });
+
+  const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+  const compressed = compressTranscript(result.transcript);
+  const cumulativeTranscript = [...transcript, ...result.transcript];
+
+  // ── Update registry ─────────────────────────────────────────────────
+  agentSpawn.subAgentRegistry.update(agentId, {
+    status,
+    finishedAt: Date.now(),
+    turnCount: agent.turnCount + result.assistantTurnCount,
+    messageCount: cumulativeTranscript.length,
+    toolCount: agent.toolCount + result.toolCount,
+    result: compressed,
+    transcript: cumulativeTranscript,
+    error: result.error,
+  });
+
+  // Persist updated transcript to disk
+  saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
+  writeAgentMetadata(agentId, {
+    agentType, worktreePath: undefined, description: agent.prompt,
+    createdAt: agent.createdAt, finishedAt: Date.now(),
+  }).catch(() => {});
+
+  if (result.error) {
+    return {
+      content: `Sub-agent ${agentId} (${agentType}) resume error after ${result.assistantTurnCount} turns: ${result.error}`,
+      isError: true,
+      duration: Date.now() - result.startTime,
+      metadata: { agentId, agentType, resumed: true, error: result.error },
+    };
+  }
+
+  return {
+    content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${result.assistantTurnCount} LLM turns, +${result.toolCount} tools.\n\n${compressed}`,
+    isError: false,
+    duration: Date.now() - result.startTime,
+    metadata: {
+      agentId, agentType, resumed: true,
+      turnCount: result.assistantTurnCount, toolCount: result.toolCount,
+      totalTurns: agent.turnCount + result.assistantTurnCount,
+      duration: Date.now() - result.startTime,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Execute — 4-path routing
 // ---------------------------------------------------------------------------
 
 export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
@@ -767,6 +1117,8 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const isolation = input.isolation as 'worktree' | undefined;
   const teamName = input.team_name as string | undefined;
   const agentName = input.name as string | undefined;
+  const agentIdInput = input.agent_id as string | undefined;
+  const resumeFlag = input.resume as boolean | undefined;
 
   // ── Path 1: Swarm teammate — team_name + name = process-level teammate ─
   if (teamName && agentName) {
@@ -783,6 +1135,14 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         ? agentSpawn.agentRegistry?.get(agentTypeInput) ?? null
         : null,
       cwd: options.cwd ?? process.cwd(),
+      sessionId: options.sessionId,
+    });
+  }
+
+  // ── Path 2.5: Resume — agent_id + resume flag ───────────────────
+  if (agentIdInput && resumeFlag) {
+    return executeResume(agentIdInput, prompt, agentSpawn, {
+      cwd: options.cwd,
       sessionId: options.sessionId,
     });
   }
