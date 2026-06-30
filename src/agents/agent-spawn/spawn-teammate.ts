@@ -7,9 +7,13 @@
  * and returns a result to the caller.
  */
 
+import { readdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import type { ToolResult } from '../../tools/types.js';
 import type { AgentDefinition, AgentSpawnContext } from '../../core/types.js';
-import { loadTeamConfig } from '../../teams/team-store.js';
+import { loadTeamConfig, teamDir, listTeams } from '../../teams/team-store.js';
 import { getTeammateExecutor } from '../../utils/swarm/backends/registry.js';
 import { buildTeammateCliArgs, buildForwardEnv } from '../../utils/swarm/spawnUtils.js';
 import { addMemberToTeam } from '../../utils/swarm/teamHelpers.js';
@@ -88,8 +92,27 @@ export async function spawnTeammate(
   // ── Validate team exists ────────────────────────────────────────────
   const config = await loadTeamConfig(teamName);
   if (!config) {
+    const dir = teamDir(teamName);
+    let dirContents = '(directory does not exist)';
+    try {
+      const entries = await readdir(dir);
+      dirContents = entries.length > 0 ? entries.join(', ') : '(empty directory)';
+    } catch {
+      // Directory doesn't exist
+    }
+
+    const teams = await listTeams();
+    const available = teams.length > 0
+      ? `\n\nAvailable teams: ${teams.join(', ')}`
+      : '\n\nNo teams exist yet. Create one with TeamCreate.';
+
     return {
-      content: `Team '${teamName}' not found. Create it first with TeamCreate, then spawn members via the Agent tool with team_name + name.`,
+      content: [
+        `Team '${teamName}' not found at ${dir}.`,
+        `Directory contents: ${dirContents}${available}`,
+        '',
+        `Create it with: TeamCreate(name: "${teamName}", description: "...")`,
+      ].join('\n'),
       isError: true,
     };
   }
