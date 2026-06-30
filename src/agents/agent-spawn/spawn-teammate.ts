@@ -1,15 +1,19 @@
 /**
- * Swarm teammate spawn — Phase 3 backend dispatch.
+ * Swarm teammate spawn — real backend dispatch (Phase 3).
  *
  * When team_name + name are both present on the Agent tool call,
- * the executor routes here. This stub returns a placeholder result;
- * Phase 3 will fill in the actual tmux/iTerm2/in-process backends.
+ * the executor routes here. Selects a backend (tmux / iTerm2 / in-process),
+ * spawns the teammate, registers it in the team file and SubAgentRegistry,
+ * and returns a result to the caller.
  */
 
 import type { ToolResult } from '../../tools/types.js';
 import type { AgentDefinition, AgentSpawnContext } from '../../core/types.js';
-import { addTeamMember, loadTeamConfig } from '../../teams/team-store.js';
-import type { TeamMember } from '../../teams/types.js';
+import { loadTeamConfig } from '../../teams/team-store.js';
+import { getTeammateExecutor } from '../../utils/swarm/backends/registry.js';
+import { buildTeammateCliArgs, buildForwardEnv } from '../../utils/swarm/spawnUtils.js';
+import { addMemberToTeam } from '../../utils/swarm/teamHelpers.js';
+import type { BackendType } from '../../utils/swarm/backends/types.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,22 +37,55 @@ export interface TeammateSpawnResult {
   agentId: string;
   teamName: string;
   agentName: string;
-  backend: 'in-process' | 'tmux' | 'iterm2' | 'stub';
+  backend: BackendType;
 }
 
 // ---------------------------------------------------------------------------
-// Stub implementation
+// Gate
 // ---------------------------------------------------------------------------
+
+function isSwarmEnabled(): boolean {
+  return process.env.CODERIX_EXPERIMENTAL_AGENT_TEAMS === '1' ||
+    process.env.CODERIX_EXPERIMENTAL_AGENT_TEAMS === 'true';
+}
+
+// ---------------------------------------------------------------------------
+// Spawn
+// ---------------------------------------------------------------------------
+
+function shortId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+const TEAMMATE_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+  '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+  '#BB8FCE', '#85C1E9', '#F8C471', '#82E0AA',
+];
 
 export async function spawnTeammate(
   input: TeammateSpawnInput,
 ): Promise<ToolResult> {
   const {
     teamName, agentName, prompt, model, agentType,
-    agentSpawn, isolation,
+    agentSpawn,
   } = input;
 
-  // Load the team config
+  // ── Gate check ──────────────────────────────────────────────────────
+  if (!isSwarmEnabled()) {
+    return {
+      content: [
+        'Swarm teammates are experimental. To enable:',
+        '  export CODERIX_EXPERIMENTAL_AGENT_TEAMS=1',
+        '',
+        'To spawn a standard sub-agent instead, omit team_name and use:',
+        `  Agent(agent_type: "${agentType}", prompt: "...")`,
+      ].join('\n'),
+      isError: true,
+    };
+  }
+
+  // ── Validate team exists ────────────────────────────────────────────
   const config = await loadTeamConfig(teamName);
   if (!config) {
     return {
@@ -57,62 +94,84 @@ export async function spawnTeammate(
     };
   }
 
-  // Check if this member name already exists in the team
+  // ── Check duplicate ─────────────────────────────────────────────────
   const existing = config.members.find(m => m.name === agentName);
   if (existing && existing.status === 'running') {
     return {
-      content: `Team member '${agentName}' is already running in team '${teamName}' (agentId: ${existing.agentId}). Use SendMessage with agent_id=${existing.agentId} to communicate with it.`,
+      content: `Team member '${agentName}' is already running in team '${teamName}' (agentId: ${existing.agentId}). Use SendMessage to communicate with it.`,
       isError: true,
     };
   }
 
-  // For now, swarm backends (tmux/iTerm2/in-process) are not yet implemented.
-  // Phase 3 will add the actual backend dispatch here.
-  // We fall back to standard sub-agent spawning with team registration.
+  // ── Generate identity ───────────────────────────────────────────────
+  const agentId = `swarm-${shortId()}`;
+  const colorIndex = Math.floor(Math.random() * TEAMMATE_COLORS.length);
+  const color = TEAMMATE_COLORS[colorIndex];
 
-  const member: TeamMember = {
-    agentId: '',
-    name: agentName,
-    agentType: input.agentDef?.agentType ?? agentType ?? 'general-purpose',
-    model,
-    status: 'pending',
-    task: prompt,
-    joinedAt: Date.now(),
-  };
+  // ── Get executor ────────────────────────────────────────────────────
+  const executor = getTeammateExecutor(agentSpawn);
+  const backendType = executor.backend.type;
 
+  // ── Build spawn config ──────────────────────────────────────────────
+  const cliArgs = buildTeammateCliArgs({ agentId, agentName, teamName, agentColor: color, agentType, model });
+  const env = buildForwardEnv({
+    CODERIX_EXPERIMENTAL_AGENT_TEAMS: '1',
+    CODERIX_AGENT_ID: agentId,
+    CODERIX_AGENT_NAME: agentName,
+    CODERIX_TEAM_NAME: teamName,
+    CODERIX_AGENT_COLOR: color,
+  });
+
+  // ── Spawn via executor ──────────────────────────────────────────────
   try {
-    await addTeamMember(teamName, member);
+    const result = await executor.spawn({
+      agentId,
+      agentName,
+      teamName,
+      agentType: input.agentDef?.agentType ?? agentType,
+      prompt,
+      model,
+      color,
+      cwd: input.cwd,
+      cliArgs,
+      env,
+    });
+
+    // Register in SubAgentRegistry for TUI visibility
+    const subAbortController = new AbortController();
+    agentSpawn.subAgentRegistry.register({
+      id: agentId,
+      name: `${agentName} (${teamName})`,
+      agentType: agentType as 'explore' | 'plan' | 'general-purpose',
+      status: 'running',
+      prompt,
+      createdAt: Date.now(),
+      turnCount: 0,
+      messageCount: 0,
+      toolCount: 0,
+      abortController: subAbortController,
+      notified: false,
+    });
+
+    const paneNote = backendType !== 'in-process'
+      ? `\nThe teammate is running in a ${backendType} pane — switch to it to interact directly.`
+      : '\nThe teammate is running in-process. Use SendMessage from team_name + to to communicate.';
+
+    return {
+      content: `Teammate '${agentName}' (${agentId}) spawned in team '${teamName}' via ${backendType} backend.${paneNote}`,
+      isError: false,
+      metadata: {
+        agentId,
+        teamName,
+        agentName,
+        agentType,
+        backend: backendType,
+      },
+    };
   } catch (err) {
     return {
-      content: `Failed to register teammate '${agentName}' in team '${teamName}': ${(err as Error).message}`,
+      content: `Failed to spawn teammate '${agentName}': ${(err as Error).message}`,
       isError: true,
     };
   }
-
-  // TODO (Phase 3): Dispatch to swarm backend (tmux/iTerm2/in-process)
-  // For now return a stub that tells the user swarm backends are coming
-
-  const backendHint = process.env.CODERIX_EXPERIMENTAL_AGENT_TEAMS === '1'
-    ? 'Swarm backend is enabled experimentally but not yet implemented.'
-    : 'Swarm backends (tmux/iTerm2/in-process) are not yet available.';
-
-  return {
-    content: [
-      `Teammate '${agentName}' registered in team '${teamName}'.`,
-      '',
-      backendHint,
-      '',
-      'To spawn this teammate as a standard sub-agent instead, use:',
-      `  Agent(agent_type: "${agentType}", prompt: "${prompt.slice(0, 80)}${prompt.length > 80 ? '...' : ''}")`,
-      '',
-      'Set CODERIX_EXPERIMENTAL_AGENT_TEAMS=1 to enable the swarm backend when available.',
-    ].join('\n'),
-    isError: false,
-    metadata: {
-      teamName,
-      agentName,
-      agentType: agentType,
-      backend: 'stub',
-    },
-  };
 }
