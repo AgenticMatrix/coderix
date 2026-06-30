@@ -37,6 +37,12 @@ export {
 // Tool helpers
 export { buildMcpToolName, parseMcpToolName } from './mcp-tool.js';
 
+// Resource tools
+export {
+  createListMcpResourcesPlugin,
+  createReadMcpResourcePlugin,
+} from './mcp-resource-tools.js';
+
 // Connection
 export { connectToServer, CONNECT_TIMEOUT_MS } from './connection.js';
 

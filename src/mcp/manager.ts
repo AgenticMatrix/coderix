@@ -18,6 +18,10 @@ import {
 } from './config-loader.js';
 import { connectToServer } from './connection.js';
 import { discoverTools, discoverResources } from './discovery.js';
+import {
+  createListMcpResourcesPlugin,
+  createReadMcpResourcePlugin,
+} from './mcp-resource-tools.js';
 import { discoverMcpSkills } from './mcp-skills.js';
 import type {
   ServerConnection,
@@ -352,6 +356,14 @@ export class McpManager {
   /** Get skills for a specific server. */
   getServerSkills(name: string): McpSkill[] {
     return this.serverSkills.get(name) ?? [];
+  }
+
+  /** Get ToolPlugin wrappers for MCP resource operations. */
+  getResourcePlugins(): ToolPlugin[] {
+    return [
+      createListMcpResourcesPlugin(this),
+      createReadMcpResourcePlugin(this),
+    ];
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────
