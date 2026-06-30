@@ -259,7 +259,7 @@ export class QueryEngine {
       if (notifications.length > 0) {
         const contextBlock: ContentBlock = {
           type: 'text',
-          text: '[Background agent results]\n' + notifications.join('\n\n'),
+          text: '<background-agent-notifications>\n' + notifications.join('\n\n') + '\n</background-agent-notifications>',
         };
         this.config.sessionManager.addMessage({
           role: 'user',

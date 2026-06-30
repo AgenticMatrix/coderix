@@ -108,4 +108,70 @@ describe('SubAgentRegistry notifications', () => {
     // Second drain should be empty
     expect(registry.drainNotifications()).toEqual([]);
   });
+
+  it('should produce structured <task-notification> via notifyAgentCompletion', () => {
+    const registry = new SubAgentRegistry();
+    registry.register({
+      id: 'sub-xyz',
+      name: 'explore-sub-xyz',
+      agentType: 'explore',
+      status: 'done',
+      prompt: 'Find all test files',
+      createdAt: Date.now() - 10_000,
+      finishedAt: Date.now(),
+      turnCount: 3,
+      messageCount: 12,
+      toolCount: 5,
+      result: 'Found 8 test files in ./tests/',
+      abortController: new AbortController(),
+    });
+
+    const notification = registry.notifyAgentCompletion('sub-xyz');
+    expect(notification).not.toBeNull();
+    expect(notification!).toContain('<task-notification>');
+    expect(notification!).toContain('<task_id>sub-xyz</task_id>');
+    expect(notification!).toContain('<agent_type>explore</agent_type>');
+    expect(notification!).toContain('<status>completed</status>');
+    expect(notification!).toContain('<turns>3</turns>');
+    expect(notification!).toContain('<tools_used>5</tools_used>');
+    expect(notification!).toContain('<result>Found 8 test files in ./tests/</result>');
+    expect(notification!).toContain('</task-notification>');
+
+    const drained = registry.drainNotifications();
+    expect(drained).toHaveLength(1);
+    expect(drained[0]).toBe(notification);
+
+    // Second call should be a no-op (deduplication)
+    const second = registry.notifyAgentCompletion('sub-xyz');
+    expect(second).toBeNull();
+    expect(registry.drainNotifications()).toEqual([]);
+  });
+
+  it('should produce error status for errored agents', () => {
+    const registry = new SubAgentRegistry();
+    registry.register({
+      id: 'sub-err',
+      name: 'plan-sub-err',
+      agentType: 'plan',
+      status: 'error',
+      prompt: 'Plan the refactor',
+      createdAt: Date.now() - 5_000,
+      finishedAt: Date.now(),
+      turnCount: 1,
+      messageCount: 3,
+      toolCount: 2,
+      error: 'API key expired',
+      abortController: new AbortController(),
+    });
+
+    const notification = registry.notifyAgentCompletion('sub-err');
+    expect(notification).not.toBeNull();
+    expect(notification!).toContain('<status>failed</status>');
+    expect(notification!).toContain('<error>API key expired</error>');
+  });
+
+  it('should return null for unknown agent', () => {
+    const registry = new SubAgentRegistry();
+    expect(registry.notifyAgentCompletion('nonexistent')).toBeNull();
+  });
 });

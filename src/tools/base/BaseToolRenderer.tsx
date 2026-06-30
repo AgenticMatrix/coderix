@@ -30,6 +30,7 @@ const TOOL_ICONS: Record<string, string> = {
   'Agent': '🧭',
   'TaskStop': '🛑',
   'SendMessage': '💬',
+  'Sleep': '😴',
   skill: '⚡',
   cron: '⏰',
   lsp: '🔍',

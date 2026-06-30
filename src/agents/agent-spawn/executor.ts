@@ -24,6 +24,7 @@ import {
   removeAgentWorktree,
   hasWorktreeChanges,
 } from '../../utils/worktree.js';
+import { writeAgentOutput } from './output-writer.js';
 
 const DEFAULT_MAX_TURNS = 20;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -244,7 +245,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // ── Fork mode: no agent_type → inherit parent context ───────────────
   if (!agentTypeInput) {
-    return executeFork(prompt, modelOverride, backgroundOverride, isolation, agentSpawn);
+    return executeFork(prompt, modelOverride, backgroundOverride, isolation, agentSpawn, options.sessionId);
   }
 
   // ── Explicit agent_type path ────────────────────────────────────────
@@ -382,6 +383,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   if (isBackground) {
     // ── Async path: fire-and-forget ─────────────────────────────────
     const spawnTime = Date.now();
+    const bgSessionId = options.sessionId;
     const bgContext: SubagentContext = createSubagentContext(
       agentId,
       agentType,
@@ -408,6 +410,27 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
         const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
         const compressed = compressTranscript(result.transcript);
+        const elapsed = (Date.now() - result.startTime) / 1000;
+
+        // Write full result to disk
+        let outputPath: string | undefined;
+        if (bgSessionId) {
+          try {
+            outputPath = await writeAgentOutput(bgSessionId, agentId, {
+              status,
+              agentType,
+              prompt,
+              turnCount: result.assistantTurnCount,
+              toolCount: result.toolCount,
+              elapsed,
+              result: compressed,
+              error: result.error,
+              transcript: result.transcript,
+            });
+          } catch {
+            // Non-fatal: notification still works without disk output
+          }
+        }
 
         agentSpawn.subAgentRegistry.update(agentId, {
           status,
@@ -418,13 +441,10 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
           result: compressed,
           transcript: result.transcript,
           error: result.error,
+          outputPath,
         });
 
-        // Push notification for the next main-loop turn
-        const summary = result.error
-          ? `Background agent ${agentId} (${agentType}) failed after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`
-          : `Background agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`;
-        agentSpawn.subAgentRegistry.pushNotification(summary);
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
         // Attempt worktree cleanup even on crash
         if (worktreePath) {
@@ -438,9 +458,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
           finishedAt: Date.now(),
           error: errorMsg,
         });
-        agentSpawn.subAgentRegistry.pushNotification(
-          `Background agent ${agentId} (${agentType}) crashed: ${errorMsg}`,
-        );
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       });
     });
 
@@ -528,6 +546,7 @@ async function executeFork(
   backgroundOverride: boolean | undefined,
   isolation: 'worktree' | undefined,
   agentSpawn: AgentSpawnContext,
+  bgSessionId?: string,
 ): Promise<ToolResult> {
   const agentType = 'fork';
   const agentId = `fork-${shortId()}`;
@@ -619,6 +638,7 @@ async function executeFork(
 
   if (isBackground) {
     const spawnTime = Date.now();
+    const forkBgSessionId = bgSessionId;
     const forkBgContext: SubagentContext = createSubagentContext(
       agentId,
       'fork',
@@ -640,6 +660,27 @@ async function executeFork(
         }
         const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
         const compressed = compressTranscript(result.transcript);
+        const elapsed = (Date.now() - result.startTime) / 1000;
+
+        // Write full result to disk
+        let outputPath: string | undefined;
+        if (forkBgSessionId) {
+          try {
+            outputPath = await writeAgentOutput(forkBgSessionId, agentId, {
+              status,
+              agentType: 'fork',
+              prompt,
+              turnCount: result.assistantTurnCount,
+              toolCount: result.toolCount,
+              elapsed,
+              result: compressed,
+              error: result.error,
+              transcript: result.transcript,
+            });
+          } catch {
+            // Non-fatal
+          }
+        }
 
         agentSpawn.subAgentRegistry.update(agentId, {
           status, finishedAt: Date.now(),
@@ -649,12 +690,10 @@ async function executeFork(
           result: compressed,
           transcript: result.transcript,
           error: result.error,
+          outputPath,
         });
 
-        const summary = result.error
-          ? `Fork agent ${agentId} failed after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`
-          : `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`;
-        agentSpawn.subAgentRegistry.pushNotification(summary);
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
     }).catch(async err => {
       if (worktreePath) {
         await cleanupAgentWorktree({
@@ -665,6 +704,7 @@ async function executeFork(
         status: 'error', finishedAt: Date.now(),
         error: err instanceof Error ? err.message : String(err),
       });
+      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
     });
     });
 

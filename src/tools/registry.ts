@@ -17,6 +17,7 @@ import taskCreatePlugin from './task-create/index.js';
 import taskUpdatePlugin from './task-update/index.js';
 import taskListPlugin from './task-list/index.js';
 import taskGetPlugin from './task-get/index.js';
+import sleepPlugin from './sleep/index.js';
 import agentSpawnPlugin from '../agents/agent-spawn/index.js';
 import sendMessagePlugin from '../agents/agent-message/index.js';
 import teamCreatePlugin from '../teams/tools/team-create/index.js';
@@ -59,6 +60,7 @@ export const plugins: ToolPlugin[] = [
   taskUpdatePlugin,
   taskListPlugin,
   taskGetPlugin,
+  sleepPlugin,
   agentSpawnPlugin,
   sendMessagePlugin,
   teamCreatePlugin,

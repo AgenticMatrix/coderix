@@ -25,6 +25,10 @@ export interface SubAgentRecord {
   transcript?: Message[];
   error?: string;
   abortController: AbortController;
+  /** Prevents duplicate notifications for the same completion event. */
+  notified: boolean;
+  /** Path to the on-disk output file (written for background agents). */
+  outputPath?: string;
 }
 
 export class SubAgentRegistry {
@@ -49,6 +53,7 @@ export class SubAgentRegistry {
   }
 
   register(record: SubAgentRecord): void {
+    record.notified = record.notified ?? false;
     this.agents.set(record.id, record);
     this._flushToAppState();
   }
@@ -88,7 +93,54 @@ export class SubAgentRegistry {
     }
   }
 
-  /** Push a notification for a completed background agent. */
+  /**
+   * Build and enqueue a structured <task-notification> for a completed
+   * background agent.  Idempotent — a second call for the same agent is
+   * silently ignored.
+   */
+  notifyAgentCompletion(agentId: string): string | null {
+    const agent = this.agents.get(agentId);
+    if (!agent || agent.notified) return null;
+
+    agent.notified = true;
+    this._flushToAppState();
+
+    const elapsed = ((agent.finishedAt ?? Date.now()) - agent.createdAt) / 1000;
+    const status = agent.status === 'error' ? 'failed' : agent.status === 'stopped' ? 'killed' : 'completed';
+
+    const lines: string[] = [
+      '<task-notification>',
+      `  <task_id>${agent.id}</task_id>`,
+      `  <agent_type>${agent.agentType}</agent_type>`,
+      `  <status>${status}</status>`,
+      `  <turns>${agent.turnCount}</turns>`,
+      `  <tools_used>${agent.toolCount}</tools_used>`,
+      `  <elapsed>${elapsed.toFixed(1)}s</elapsed>`,
+    ];
+
+    if (agent.error) {
+      lines.push(`  <error>${agent.error}</error>`);
+    }
+
+    if (agent.outputPath) {
+      lines.push(`  <output_path>${agent.outputPath}</output_path>`);
+    }
+
+    if (agent.result) {
+      lines.push(`  <result>${agent.result.slice(0, 2000)}</result>`);
+    }
+
+    lines.push('</task-notification>');
+
+    const notification = lines.join('\n');
+    this._pendingNotifications.push(notification);
+    return notification;
+  }
+
+  /**
+   * @deprecated Use notifyAgentCompletion(agentId) for structured
+   * notifications with deduplication.
+   */
   pushNotification(notification: string): void {
     this._pendingNotifications.push(notification);
   }

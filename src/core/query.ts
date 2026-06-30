@@ -1040,15 +1040,17 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     // Placed AFTER tool_use/tool_result pair to avoid breaking the API
     // requirement that tool_use blocks must have tool_result blocks in
     // the immediately following message.
+    let notificationJustDrained = false;
     if (config.subAgentRegistry) {
       const agentNotifications = config.subAgentRegistry.drainNotifications();
       if (agentNotifications.length > 0) {
+        notificationJustDrained = true;
         const resultMsg = {
           role: 'user' as const,
           content: [
             {
               type: 'text' as const,
-              text: '[Background agent results]\n' + agentNotifications.join('\n\n'),
+              text: '<background-agent-notifications>\n' + agentNotifications.join('\n\n') + '\n</background-agent-notifications>',
             },
           ],
         };
@@ -1061,9 +1063,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
     // If this is the coordinator and background sub-agents are still
     // running, end turn to prevent polling with TaskGet.
+    // Exception: if a notification was just drained (e.g. after Sleep woke
+    // early), continue the turn so the model can process the results.
     if (agentRole === 'coordinator' && config.subAgentRegistry) {
       const running = config.subAgentRegistry.list().filter(a => a.status === 'running');
-      if (running.length > 0) {
+      if (running.length > 0 && !notificationJustDrained) {
         return;
       }
     }
