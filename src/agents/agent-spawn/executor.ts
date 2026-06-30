@@ -242,7 +242,7 @@ async function cleanupAgentWorktree(wt: WorktreeCleanup, hookManager?: import('.
 async function executeStandardSubagent(
   input: Record<string, unknown>,
   agentSpawn: AgentSpawnContext,
-  options: { cwd?: string; sessionId?: string },
+  options: { cwd?: string; sessionId?: string; agentId?: string },
 ): Promise<ToolResult> {
   const agentTypeInput = input.agent_type as string;
   const prompt = input.prompt as string;
@@ -260,7 +260,7 @@ async function executeStandardSubagent(
   }
 
   const agentType = agentTypeInput;
-  const agentId = `sub-${shortId()}`;
+  const agentId = options.agentId ?? `sub-${shortId()}`;
   const subAbortController = new AbortController();
   const isBackground = backgroundOverride ?? agentDef.background ?? false;
 
@@ -796,5 +796,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   return executeStandardSubagent(input, agentSpawn, {
     cwd: options.cwd,
     sessionId: options.sessionId,
+    agentId: options.agentId,
   });
 };

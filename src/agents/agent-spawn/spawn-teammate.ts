@@ -181,7 +181,9 @@ export async function spawnTeammate(
       const { execute: agentExecute } = await import('./executor.js');
       const effectiveAgentType = input.agentDef?.agentType ?? agentType;
 
-      // Fire-and-forget: run the agent as a background sub-agent
+      // Fire-and-forget: run the agent as a background sub-agent.
+      // Pass the swarm agentId so executeStandardSubagent reuses the same
+      // SubAgentRegistry entry instead of creating a new one.
       agentExecute(
         {
           agent_type: effectiveAgentType,
@@ -199,9 +201,15 @@ export async function spawnTeammate(
           maxOutput: 200_000,
           bashTimeout: 120_000,
           agentSpawn,
+          agentId,
         },
-      ).catch(() => {
-        // Background fire-and-forget — errors surfaced via SubAgentRegistry
+      ).catch((err) => {
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status: 'error',
+          finishedAt: Date.now(),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       });
     }
 

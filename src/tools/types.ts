@@ -50,12 +50,14 @@ export interface ExecutorOptions {
   setAppState?: (partial: Partial<AppState>) => void;
   /** Switch permission mode (for enter/exit-plan-mode tools). */
   setPermissionMode?: (mode: string) => void;
+  /** Override the generated agentId (used by swarm teammate spawn). */
+  agentId?: string;
 }
 
 /** Executor options with all core fields resolved (non-optional) but
  *  agentSpawn, sessionId, getAppState, setAppState kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState' | 'setPermissionMode'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState' | 'setPermissionMode'>;
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState' | 'setPermissionMode' | 'agentId'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'getAppState' | 'setAppState' | 'setPermissionMode' | 'agentId'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,
