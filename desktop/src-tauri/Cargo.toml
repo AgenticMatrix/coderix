@@ -2,10 +2,10 @@
 name = "coderix-desktop"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.77"
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"

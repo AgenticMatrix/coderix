@@ -2,7 +2,6 @@
   "name": "coderix",
   "version": "0.1.0",
   "description": "Coderix — A fully open-source AI programming assistant for the terminal",
-  "type": "module",
   "bin": {
     "coderix": "./bin/coderix.js"
   },
@@ -20,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.102.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "chrome-remote-interface": "^0.34.0",
+    "electron": "^35.7.5",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
     "ink": "^7.0.5",
