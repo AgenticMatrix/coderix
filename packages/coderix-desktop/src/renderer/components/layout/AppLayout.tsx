@@ -64,7 +64,10 @@ export function AppLayout({
   statusBarProps,
 }: AppLayoutProps): React.ReactElement {
   return (
-    <div className="h-screen flex flex-col bg-[var(--color-bg-primary)] overflow-hidden">
+    <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
+      <IconSidebar />
+
+      <div className="flex-1 flex flex-col min-w-0">
       {/* Header bar — draggable titlebar for frameless window */}
       <header
         className="titlebar-drag flex items-center h-10 px-4 flex-shrink-0
@@ -103,9 +106,6 @@ export function AppLayout({
 
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Icon Sidebar — 65px fixed left icon bar */}
-        <IconSidebar />
-
         {/* Sidebar — WeChat-style frosted glass with subtle right border */}
         <AnimatePresence initial={false}>
           {sidebarVisible && (
@@ -156,6 +156,7 @@ export function AppLayout({
 
       {/* Status bar */}
       <StatusBar {...statusBarProps} />
+      </div>{/* closes flex-1 flex-col min-w-0 */}
     </div>
   );
 }

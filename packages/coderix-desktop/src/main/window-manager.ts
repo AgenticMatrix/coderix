@@ -96,7 +96,7 @@ export function createWindowManager(): WindowManager {
         title: 'Coderix',
         // ── macOS Native Look ──────────────────────────────────────────
         titleBarStyle: 'hidden',
-        trafficLightPosition: { x: 8, y: 14 },
+        trafficLightPosition: { x: 4, y: 14 },
         vibrancy: 'under-window',
         visualEffectState: 'active',
         backgroundColor: '#FFFFFF',

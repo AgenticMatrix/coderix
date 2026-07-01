@@ -133,7 +133,7 @@ async function initQueryEngine(): Promise<void> {
     sessionManager: new SessionManager(),
     toolRegistry: new ToolRegistry(),
     // callModel stub — throws a clear error until real provider is configured
-    callModel: (async () => {
+    callModel: (async (_params: unknown) => {
       throw new Error('Model client not initialized. Please configure an API key in Settings.');
     }) as unknown as QueryEngineConfig['callModel'],
   };
