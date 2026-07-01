@@ -95,7 +95,8 @@ export function createWindowManager(): WindowManager {
         minHeight: DEFAULT_WINDOW_OPTIONS.minHeight,
         title: 'Coderix',
         // ── macOS Native Look ──────────────────────────────────────────
-        titleBarStyle: 'hiddenInset',
+        titleBarStyle: 'hidden',
+        trafficLightPosition: { x: 12, y: 14 },
         vibrancy: 'under-window',
         visualEffectState: 'active',
         backgroundColor: '#FFFFFF',

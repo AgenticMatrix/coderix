@@ -64,8 +64,47 @@ export function AppLayout({
 }: AppLayoutProps): React.ReactElement {
   return (
     <div className="h-screen flex flex-col bg-[var(--color-bg-primary)] overflow-hidden">
+      {/* Header bar — draggable titlebar for frameless window */}
+      <header
+        className="titlebar-drag flex items-center h-10 px-4 flex-shrink-0
+                   bg-[var(--color-bg-primary)] border-b border-[var(--color-separator)]
+                   select-none z-[var(--z-sticky)]"
+      >
+        {/* Spacer for macOS traffic light buttons (~70px) */}
+        <div className="w-[70px] flex-shrink-0" />
+
+        {/* App name */}
+        <span className="text-[13px] font-semibold text-[var(--color-text-secondary)] tracking-tight">
+          Coderix
+        </span>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Window action buttons — no-drag so they remain clickable */}
+        <div className="titlebar-no-drag flex items-center gap-1">
+          {/* Sidebar toggle */}
+          <button
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
+                       text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                       hover:bg-[var(--color-bg-tertiary)] transition-colors"
+            onClick={() => window.dispatchEvent(new CustomEvent('coderix:toggle-sidebar'))}
+            title="Toggle Sidebar (⌘B)"
+            aria-label="Toggle Sidebar"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
+              <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
+              <path d="M5.5 2.5v10" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Icon Sidebar — 65px fixed left icon bar */}
+        <IconSidebar />
+
         {/* Sidebar — WeChat-style frosted glass with subtle right border */}
         <AnimatePresence initial={false}>
           {sidebarVisible && (

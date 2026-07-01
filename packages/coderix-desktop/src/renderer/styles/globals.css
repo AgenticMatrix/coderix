@@ -524,6 +524,28 @@ table {
   -webkit-app-region: drag;
 }
 
+/* Titlebar drag region — container is draggable, interactive children are not */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-drag > * {
+  -webkit-app-region: drag;
+}
+
+.titlebar-drag button,
+.titlebar-drag input,
+.titlebar-drag select,
+.titlebar-drag textarea,
+.titlebar-drag a,
+.titlebar-drag [role="button"] {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* --------------------------------------------------------------------------
    9. Tailwind CSS Directives
    -------------------------------------------------------------------------- */

@@ -169,6 +169,16 @@ export function App(): React.ReactElement {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleSidebar, toggleDetailPanel, toggleTerminal, setTheme, theme]);
 
+  // ── Header bar custom events ──────────────────────────────────────────
+  useEffect(() => {
+    function handleToggleSidebar(): void {
+      toggleSidebar();
+    }
+
+    window.addEventListener('coderix:toggle-sidebar', handleToggleSidebar);
+    return () => window.removeEventListener('coderix:toggle-sidebar', handleToggleSidebar);
+  }, [toggleSidebar]);
+
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
     (id: string) => {
