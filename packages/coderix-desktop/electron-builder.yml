@@ -1,0 +1,71 @@
+appId: com.coderix.desktop
+productName: Coderix
+copyright: Copyright © 2026 Coderix Contributors
+
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - package.json
+
+extraResources:
+  - from: ../coderix-core/dist
+    to: core
+    filter:
+      - '**/*'
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+  notarize:
+    teamId: ${APPLE_TEAM_ID}
+  extendInfo:
+    NSHighResolutionCapable: true
+    NSSupportsAutomaticGraphicsSwitching: true
+
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+
+linux:
+  icon: assets/icons
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+  category: Development
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/node-pty/**'

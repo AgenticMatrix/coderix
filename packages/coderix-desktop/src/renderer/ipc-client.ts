@@ -1,0 +1,365 @@
+/**
+ * Coderix Desktop — IPC Client (Adaptation Layer)
+ *
+ * Bridges the preload's nested `window.coderixAPI.*` to the flat functional
+ * API used by stores and components. Handles type mapping between the
+ * preload's event shapes and the renderer's TypeScript types.
+ *
+ * Architecture:
+ *   Preload (window.coderixAPI.xxx.yyy)  ←→  ipc-client.ts  ←→  Stores / Components
+ *                    ↑                              ↑                      ↑
+ *           contextBridge API               Adaptation layer         submitQuery(), etc.
+ */
+
+import type { StreamBlock, PermissionRequest, TokenUsage, SessionInfo } from './types.js';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type StreamEventCallback = (event: any) => void;
+type PermissionReqCallback = (req: any) => void;
+type StateChangeCallback = (change: any) => void;
+
+// ---------------------------------------------------------------------------
+// Timeout Configuration
+// ---------------------------------------------------------------------------
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+async function invokeWithTimeout<T>(
+  channel: string,
+  fn: () => Promise<unknown>,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`IPC call "${channel}" timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    ),
+  );
+  const result = await Promise.race([fn(), timeout]);
+  return result as T;
+}
+
+// ===========================================================================
+//  Query & Streaming
+// ===========================================================================
+
+/** Submit a user query to the AI engine. */
+export async function submitQuery(query: string, sessionId?: string): Promise<unknown> {
+  return invokeWithTimeout('query:submit', () =>
+    window.coderixAPI.query.submit(query, sessionId),
+  );
+}
+
+/**
+ * Subscribe to streaming content blocks.
+ *
+ * The preload emits raw stream events (blockStart / blockDelta / blockStop /
+ * toolState / toolResult) via `onStreamEvent`. This function accumulates them
+ * into `StreamBlock` objects and emits each update via the callback.
+ *
+ * Returns an unsubscribe function.
+ */
+export function onStreamBlock(callback: (block: StreamBlock) => void): () => void {
+  // Internal map: stream index → partially built StreamBlock
+  const blockMap = new Map<number, StreamBlock>();
+
+  const unsub = window.coderixAPI.onStreamEvent((event: any) => {
+    switch (event.type) {
+      // ── Block Start ──────────────────────────────────────────
+      case 'blockStart': {
+        const cb = event.content_block as {
+          type?: string;
+          name?: string;
+          id?: string;
+        };
+        const rendererType = mapBlockType(cb.type);
+
+        const block: StreamBlock = {
+          type: rendererType,
+          state: 'pending',
+        };
+
+        if (cb.type === 'tool_use') {
+          block.toolName = cb.name;
+          block.toolId = cb.id;
+        }
+
+        blockMap.set(event.index, block);
+        // Emit initial block (stores need the ID for tool_use correlation)
+        callback({ ...block });
+        break;
+      }
+
+      // ── Block Delta ──────────────────────────────────────────
+      case 'blockDelta': {
+        const existing = blockMap.get(event.index);
+        if (!existing) break;
+
+        const delta = event.delta as {
+          text?: string;
+          partial_json?: string;
+          thinking?: string;
+        };
+
+        // Accumulate text content
+        if (delta.text !== undefined) {
+          existing.content = (existing.content ?? '') + delta.text;
+        } else if (delta.thinking !== undefined) {
+          existing.content = (existing.content ?? '') + delta.thinking;
+        } else if (delta.partial_json !== undefined) {
+          // For tool_use, accumulate partial JSON as input string
+          const prev = (existing.toolInput as { __raw?: string })?.__raw ?? '';
+          existing.toolInput = { __raw: prev + delta.partial_json };
+        }
+
+        callback({ ...existing });
+        break;
+      }
+
+      // ── Block Stop ───────────────────────────────────────────
+      case 'blockStop': {
+        const existing = blockMap.get(event.index);
+        if (!existing) break;
+
+        existing.state = 'done';
+        callback({ ...existing });
+        blockMap.delete(event.index);
+        break;
+      }
+
+      // ── Tool State (from execution lifecycle) ────────────────
+      case 'toolState': {
+        const stateMap: Record<string, StreamBlock['state']> = {
+          pending: 'pending',
+          executing: 'executing',
+          done: 'done',
+          error: 'error',
+        };
+
+        // Find the tool_use block by toolUseId
+        for (const [, block] of blockMap) {
+          if (block.toolId === event.toolUseId) {
+            block.state = stateMap[event.state] ?? 'pending';
+            if (event.toolName) block.toolName = event.toolName;
+            callback({ ...block });
+            break;
+          }
+        }
+        break;
+      }
+
+      // ── Tool Result ──────────────────────────────────────────
+      case 'toolResult': {
+        const resultBlock: StreamBlock = {
+          type: 'tool_result',
+          toolId: event.toolUseId,
+          content:
+            typeof event.result === 'string'
+              ? event.result
+              : JSON.stringify(event.result),
+          state: 'done',
+        };
+        callback(resultBlock);
+        break;
+      }
+
+      // done / error are handled by separate callbacks below
+      default:
+        break;
+    }
+  });
+
+  return unsub;
+}
+
+/**
+ * Map Anthropic content block types to renderer StreamBlock types.
+ */
+function mapBlockType(
+  anthropicType: string | undefined,
+): StreamBlock['type'] {
+  switch (anthropicType) {
+    case 'text':
+      return 'text';
+    case 'tool_use':
+      return 'tool_use';
+    case 'tool_result':
+      return 'tool_result';
+    case 'thinking':
+      return 'thinking';
+    case 'system':
+    case 'server_tool_use':
+    case 'web_search_tool_use':
+      return 'system';
+    default:
+      return 'text';
+  }
+}
+
+/**
+ * Subscribe to stream completion.
+ * Filters `onStreamEvent` for `{ type: 'done' }` events.
+ * Returns an unsubscribe function.
+ */
+export function onStreamDone(callback: () => void): () => void {
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'done') {
+      callback();
+    }
+  });
+}
+
+/**
+ * Subscribe to stream errors.
+ * Filters `onStreamEvent` for `{ type: 'error' }` events.
+ * Returns an unsubscribe function.
+ */
+export function onStreamError(callback: (error: string) => void): () => void {
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'error') {
+      callback(event.message);
+    }
+  });
+}
+
+// ===========================================================================
+//  Session Management
+// ===========================================================================
+
+/** List all sessions. */
+export async function listSessions(): Promise<SessionInfo[]> {
+  return invokeWithTimeout<SessionInfo[]>('session:list', () =>
+    window.coderixAPI.session.list(),
+  );
+}
+
+/** Fork an existing session into a new one. */
+export async function forkSession(id: string): Promise<unknown> {
+  return invokeWithTimeout('session:fork', () => window.coderixAPI.session.fork(id));
+}
+
+/** Delete a session permanently. */
+export async function deleteSession(id: string): Promise<unknown> {
+  return invokeWithTimeout('session:delete', () =>
+    window.coderixAPI.session.delete(id),
+  );
+}
+
+// ===========================================================================
+//  Permissions
+// ===========================================================================
+
+/**
+ * Approve a pending permission request.
+ * @param toolUseId — matches the `toolUseId` field from the permission request event
+ */
+export async function approvePermission(toolUseId: string): Promise<unknown> {
+  return invokeWithTimeout('permission:approve', () =>
+    window.coderixAPI.permission.approve(toolUseId),
+  );
+}
+
+/**
+ * Deny a pending permission request.
+ * @param toolUseId — matches the `toolUseId` field from the permission request event
+ */
+export async function denyPermission(toolUseId: string): Promise<unknown> {
+  return invokeWithTimeout('permission:deny', () =>
+    window.coderixAPI.permission.deny(toolUseId),
+  );
+}
+
+/**
+ * Subscribe to permission requests.
+ *
+ * The preload emits: `{ toolUseId, toolName, toolInput, riskLevel, description }`
+ * The renderer expects: `{ id, toolName, toolInput, message? }`
+ *
+ * This adapter renames: toolUseId → id, description → message.
+ *
+ * Returns an unsubscribe function.
+ */
+export function onPermissionRequest(
+  callback: (req: PermissionRequest) => void,
+): () => void {
+  return window.coderixAPI.onPermissionRequest((preloadReq: any) => {
+    callback({
+      id: preloadReq.toolUseId,
+      toolName: preloadReq.toolName,
+      toolInput: preloadReq.toolInput as Record<string, unknown>,
+      message: preloadReq.description,
+    });
+  });
+}
+
+// ===========================================================================
+//  Config
+// ===========================================================================
+
+/** Get the full config object. */
+export async function getConfig(): Promise<Record<string, unknown>> {
+  return invokeWithTimeout<Record<string, unknown>>('config:get', () =>
+    window.coderixAPI.config.get(),
+  );
+}
+
+/** Set a specific config key. */
+export async function setConfig(key: string, value: unknown): Promise<unknown> {
+  return invokeWithTimeout('config:set', () =>
+    window.coderixAPI.config.set(key, value),
+  );
+}
+
+// ===========================================================================
+//  App Lifecycle
+// ===========================================================================
+
+/** Get the current app version string. */
+export async function getAppVersion(): Promise<string> {
+  return invokeWithTimeout<string>('app:version', () =>
+    window.coderixAPI.app.getVersion(),
+  );
+}
+
+/** Gracefully quit the application. */
+export function quitApp(): void {
+  window.coderixAPI.app.quit();
+}
+
+// ===========================================================================
+//  Token Usage
+// ===========================================================================
+
+/**
+ * Subscribe to real-time token usage updates.
+ *
+ * The preload emits `onStateChange` with `{ type: 'tokenUsage', data: {...} }`
+ * where data contains: `{ inputTokens, outputTokens, cacheReadInputTokens,
+ * cacheCreationInputTokens, totalCost }`.
+ *
+ * This adapter maps it to the renderer's `TokenUsage` shape:
+ * `{ inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, cost }`.
+ *
+ * Returns an unsubscribe function.
+ */
+export function onTokenUsage(callback: (stats: TokenUsage) => void): () => void {
+  return window.coderixAPI.onStateChange((change: any) => {
+    if (change.type !== 'tokenUsage') return;
+
+    const raw = change.data as {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadInputTokens?: number;
+      cacheCreationInputTokens?: number;
+      totalCost?: number;
+    };
+
+    callback({
+      inputTokens: raw.inputTokens,
+      outputTokens: raw.outputTokens,
+      cacheReadTokens: raw.cacheReadInputTokens,
+      cacheWriteTokens: raw.cacheCreationInputTokens,
+      cost: raw.totalCost,
+    });
+  });
+}

@@ -1,0 +1,213 @@
+/* ==========================================================================
+   StatusBar.module.css — Compact Bottom Status Bar (WeChat × Apple Style)
+   Agent status, token usage, cost, git branch, command palette hint
+   ========================================================================== */
+
+/* Status bar root */
+.statusbar {
+  display: flex;
+  align-items: center;
+  height: var(--statusbar-height);
+  padding: 0 var(--space-4);
+  gap: var(--space-3);
+  font-size: var(--text-footnote);
+  font-family: var(--font-sans);
+  background: var(--color-bg-secondary);
+  border-top: 1px solid var(--color-separator);
+  color: var(--color-text-secondary);
+  user-select: none;
+  -webkit-user-select: none;
+  flex-shrink: 0;
+}
+
+/* Individual status item */
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  white-space: nowrap;
+}
+
+.status-item-icon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.status-item-label {
+  color: var(--color-text-secondary);
+}
+
+.status-item-value {
+  font-weight: var(--font-medium);
+  color: var(--color-text-primary);
+}
+
+/* Vertical divider between items */
+.divider {
+  width: 1px;
+  height: 12px;
+  background: var(--color-separator);
+  flex-shrink: 0;
+}
+
+/* Agent status indicator */
+.agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  height: 18px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-caption2);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+/* Status dot */
+.agent-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Status variants */
+.status-idle {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+}
+
+.status-idle .agent-status-dot {
+  background: var(--color-text-tertiary);
+}
+
+.status-thinking {
+  background: var(--color-info-muted);
+  color: var(--color-info);
+}
+
+.status-thinking .agent-status-dot {
+  background: var(--color-info);
+  animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
+.status-executing {
+  background: var(--color-warning-muted);
+  color: var(--color-warning);
+}
+
+.status-executing .agent-status-dot {
+  background: var(--color-warning);
+  animation: pulse-subtle 1s ease-in-out infinite;
+}
+
+.status-waiting {
+  background: var(--color-warning-muted);
+  color: var(--color-warning);
+}
+
+.status-waiting .agent-status-dot {
+  background: var(--color-warning);
+}
+
+.status-error {
+  background: var(--color-danger-muted);
+  color: var(--color-danger);
+}
+
+.status-error .agent-status-dot {
+  background: var(--color-danger);
+}
+
+/* Token metrics */
+.token-values {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.token-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.token-item.in .token-item-value {
+  color: var(--color-info);
+}
+
+.token-item.out .token-item-value {
+  color: var(--color-success);
+}
+
+.token-item-value {
+  font-weight: var(--font-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cost indicator */
+.cost-value {
+  font-weight: var(--font-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Spacer — pushes right-side items to end */
+.spacer {
+  flex: 1;
+}
+
+/* Right-side items */
+.statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Git branch */
+.git-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-caption1);
+  color: var(--color-text-tertiary);
+}
+
+/* Command palette hint */
+.cmd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-caption1);
+  color: var(--color-text-tertiary);
+}
+
+.cmd-hint:hover {
+  color: var(--color-text-secondary);
+  cursor: default;
+}
+
+/* Interactive clickable items */
+.clickable {
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.clickable:hover {
+  color: var(--color-text-primary);
+}
+
+/* Progress bar for streaming */
+.stream-progress {
+  height: 2px;
+  background: var(--color-brand);
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  opacity: 0.8;
+}

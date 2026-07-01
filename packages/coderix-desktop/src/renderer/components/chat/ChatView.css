@@ -1,0 +1,545 @@
+/* ==========================================================================
+   ChatView — WeChat / Apple Messages Style
+   iMessage-style bubbles, code blocks, thinking blocks, smooth scroll
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Chat Container
+   -------------------------------------------------------------------------- */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg-primary);
+}
+
+/* Scrollable message area */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-4) var(--space-4);
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Empty state */
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-3);
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+.chat-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+}
+
+.chat-empty-title {
+  font-size: var(--text-headline);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+}
+
+.chat-empty-subtitle {
+  font-size: var(--text-body);
+  color: var(--color-text-tertiary);
+  max-width: 320px;
+  text-align: center;
+  line-height: var(--leading-relaxed);
+}
+
+/* --------------------------------------------------------------------------
+   2. Message Wrapper & Bubbles (iMessage style)
+   -------------------------------------------------------------------------- */
+
+/* Each message row */
+.message-row {
+  display: flex;
+  margin-bottom: var(--space-1);
+  padding: var(--space-0) var(--space-2);
+}
+
+/* User message — right aligned, blue/green bubble */
+.message-row.user {
+  justify-content: flex-end;
+}
+
+/* Assistant message — left aligned, gray bubble */
+.message-row.assistant {
+  justify-content: flex-start;
+}
+
+/* System message — centered, muted */
+.message-row.system {
+  justify-content: center;
+}
+
+/* === Message Bubble === */
+.message-bubble {
+  max-width: 72%;
+  padding: var(--space-2-5) var(--space-3-5);
+  font-size: var(--text-body);
+  line-height: var(--leading-relaxed);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  position: relative;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+/* User bubble — blue (Apple) or green (WeChat) accent */
+.message-bubble.user {
+  background-color: var(--bubble-user-bg);
+  color: var(--bubble-user-text);
+  border-radius: var(--bubble-radius-user);
+  margin-left: var(--space-12);
+}
+
+/* Assistant bubble — light/dark gray */
+.message-bubble.assistant {
+  background-color: var(--bubble-assistant-bg);
+  color: var(--bubble-assistant-text);
+  border-radius: var(--bubble-radius-assistant);
+  margin-right: var(--space-12);
+}
+
+/* System bubble — subtle chip */
+.message-bubble.system {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-caption1);
+  font-weight: var(--font-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  max-width: 320px;
+}
+
+/* First message in a group — bigger top radius */
+.message-row.user + .message-row.user .message-bubble.user,
+.message-row.assistant + .message-row.assistant .message-bubble.assistant {
+  /* consecutive same-author messages get tighter spacing */
+  margin-top: 0;
+}
+
+.message-row.user + .message-row.assistant,
+.message-row.assistant + .message-row.user {
+  margin-top: var(--space-3);
+}
+
+/* Streaming message animation */
+.message-bubble.streaming {
+  opacity: 0.95;
+}
+
+/* --------------------------------------------------------------------------
+   3. Message Bubble — Inline Markdown Content
+   -------------------------------------------------------------------------- */
+
+/* Code blocks inside bubbles */
+.message-bubble pre {
+  margin: var(--space-2) 0;
+  padding: var(--space-3);
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-size: var(--text-footnote);
+  line-height: var(--leading-code);
+}
+
+.message-bubble pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Inline code */
+.message-bubble code {
+  padding: var(--space-0) var(--space-1);
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-footnote);
+  font-family: var(--font-mono);
+}
+
+/* User bubble inline code — darker overlay */
+.message-bubble.user code {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Links inside bubbles */
+.message-bubble a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message-bubble.user a {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.message-bubble.assistant a {
+  color: var(--color-link);
+}
+
+/* Blockquote inside bubbles */
+.message-bubble blockquote {
+  border-left: 3px solid;
+  padding-left: var(--space-3);
+  margin: var(--space-2) 0;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.message-bubble.user blockquote {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.message-bubble.assistant blockquote {
+  border-color: var(--color-brand);
+}
+
+/* Lists inside bubbles */
+.message-bubble ul,
+.message-bubble ol {
+  margin: var(--space-1) 0;
+  padding-left: var(--space-5);
+}
+
+.message-bubble ul {
+  list-style-type: disc;
+}
+
+.message-bubble ol {
+  list-style-type: decimal;
+}
+
+.message-bubble li {
+  margin-bottom: var(--space-0);
+}
+
+/* Headings inside bubbles */
+.message-bubble h1 { font-size: var(--text-title2); font-weight: var(--font-bold); margin: var(--space-3) 0 var(--space-2); }
+.message-bubble h2 { font-size: var(--text-title3); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1-5); }
+.message-bubble h3 { font-size: var(--text-headline); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1); }
+
+/* Table container in bubbles */
+.message-bubble .table-wrapper {
+  overflow-x: auto;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Horizontal rule */
+.message-bubble hr {
+  margin: var(--space-3) 0;
+  border: none;
+  border-top: 1px solid;
+  opacity: 0.2;
+}
+
+.message-bubble.user hr {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.message-bubble.assistant hr {
+  border-color: var(--color-separator);
+}
+
+/* Paragraph spacing in bubbles */
+.message-bubble p {
+  margin: 0;
+}
+
+.message-bubble p + p {
+  margin-top: var(--space-2);
+}
+
+/* --------------------------------------------------------------------------
+   4. Tool Call & Thinking Cards (inside chat)
+   -------------------------------------------------------------------------- */
+
+/* Thinking toggle — collapsible by default */
+.chat-thinking-block {
+  margin: var(--space-1) 0;
+}
+
+.chat-thinking-block .thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1-5) var(--space-3);
+  font-size: var(--text-subhead);
+  font-weight: var(--font-medium);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default);
+  border: none;
+}
+
+.chat-thinking-block .thinking-toggle:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.chat-thinking-block .thinking-toggle-icon {
+  display: flex;
+  align-items: center;
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.chat-thinking-block .thinking-toggle-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.chat-thinking-block .thinking-content {
+  padding: var(--space-3) var(--space-3);
+  margin: var(--space-1) var(--space-2) 0;
+  background: var(--color-bg-secondary);
+  border-left: 2px solid var(--color-info);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: var(--text-subhead);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  line-height: var(--leading-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+/* --------------------------------------------------------------------------
+   5. Streaming Indicator
+   -------------------------------------------------------------------------- */
+
+/* Typing dots in assistant bubble */
+.typing-indicator {
+  display: inline-flex;
+  gap: 3px;
+  padding: var(--space-1) 0;
+  align-items: center;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-text-tertiary);
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Blinking cursor during streaming */
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 1px;
+  background-color: var(--color-brand);
+  vertical-align: text-bottom;
+  animation: typewriter-cursor 1s steps(1) infinite;
+}
+
+/* --------------------------------------------------------------------------
+   6. Scroll-to-bottom button
+   -------------------------------------------------------------------------- */
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-1-5) var(--space-4);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-full);
+  font-size: var(--text-footnote);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: all var(--duration-fast) var(--ease-default);
+  z-index: var(--z-sticky);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.scroll-bottom-btn:hover {
+  background: var(--color-bg-quaternary);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   7. Message timestamp & meta
+   -------------------------------------------------------------------------- */
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: 0 var(--space-1);
+  font-size: var(--text-caption1);
+  color: var(--color-text-tertiary);
+}
+
+.message-row.user .message-meta {
+  justify-content: flex-end;
+}
+
+.message-row.assistant .message-meta {
+  justify-content: flex-start;
+}
+
+/* Model badge on assistant messages */
+.model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0) var(--space-1-5);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  font-size: var(--text-caption2);
+  font-weight: var(--font-medium);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* --------------------------------------------------------------------------
+   8. Composer area (bottom input bar)
+   -------------------------------------------------------------------------- */
+.chat-composer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--color-separator);
+  background: var(--color-bg-primary);
+}
+
+.chat-composer .composer-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+  transition: border-color var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default);
+}
+
+.chat-composer .composer-input-wrapper:focus-within {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-muted);
+}
+
+.chat-composer .composer-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-family: var(--font-sans);
+  line-height: var(--leading-normal);
+  resize: none;
+  max-height: 120px;
+}
+
+.chat-composer .composer-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.chat-composer .composer-shortcut-hint {
+  font-size: var(--text-caption1);
+  color: var(--color-text-tertiary);
+  padding: var(--space-0) var(--space-1-5);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  background: var(--color-bg-secondary);
+  white-space: nowrap;
+}
+
+.chat-composer .composer-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  color: var(--color-text-inverse);
+  border: none;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default),
+              transform var(--duration-fast) var(--ease-default);
+  flex-shrink: 0;
+}
+
+.chat-composer .composer-send-btn:hover {
+  background: var(--color-brand-hover);
+  transform: scale(1.05);
+}
+
+.chat-composer .composer-send-btn:active {
+  background: var(--color-brand-active);
+  transform: scale(0.97);
+}
+
+.chat-composer .composer-send-btn:disabled {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* --------------------------------------------------------------------------
+   9. Responsive / Small adjustments
+   -------------------------------------------------------------------------- */
+
+/* On narrow panels, reduce bubble max-width */
+@media (max-width: 480px) {
+  .message-bubble {
+    max-width: 88%;
+  }
+}
+
+/* Reduce spacing when sidebar/detail are visible */
+.chat-messages.compact {
+  padding: var(--space-3) var(--space-3);
+}

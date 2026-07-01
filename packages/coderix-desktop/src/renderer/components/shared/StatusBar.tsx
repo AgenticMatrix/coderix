@@ -1,0 +1,130 @@
+import React from 'react';
+import { Cpu, ArrowUp, ArrowDown, DollarSign, GitBranch, Command } from 'lucide-react';
+import { Badge } from './Badge';
+import styles from './StatusBar.module.css';
+
+export interface StatusBarProps {
+  /** Current model name */
+  model?: string;
+  /** Tokens used */
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Cost in USD */
+  cost?: number;
+  /** Git branch */
+  gitBranch?: string;
+  /** Agent status */
+  agentStatus?: 'idle' | 'thinking' | 'executing' | 'waiting' | 'error';
+  /** Additional CSS classes */
+  className?: string;
+}
+
+function formatTokens(num: number): string {
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
+  return String(num);
+}
+
+function formatCost(cost: number): string {
+  if (cost >= 1) return `$${cost.toFixed(2)}`;
+  if (cost >= 0.01) return `$${cost.toFixed(2)}`;
+  return '<$0.01';
+}
+
+const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { label: string; color: string }> = {
+  idle: { label: 'Idle', color: 'bg-[var(--color-text-tertiary)]' },
+  thinking: { label: 'Thinking…', color: 'bg-[var(--color-info)] animate-pulse' },
+  executing: { label: 'Executing…', color: 'bg-[var(--color-warning)] animate-pulse' },
+  waiting: { label: 'Waiting for input…', color: 'bg-[var(--color-warning)]' },
+  error: { label: 'Error', color: 'bg-[var(--color-danger)]' },
+};
+
+export function StatusBar({
+  model = 'sonnet 4.5',
+  inputTokens,
+  outputTokens,
+  cost,
+  gitBranch,
+  agentStatus = 'idle',
+  className = '',
+}: StatusBarProps): React.ReactElement {
+  const status = statusConfig[agentStatus];
+
+  return (
+    <div
+      className={`
+        h-8 flex items-center px-4 gap-4 text-xs
+        bg-[var(--color-bg-secondary)] border-t border-[var(--color-separator)]
+        select-none font-sans text-[var(--color-text-secondary)]
+        ${className}
+      `}
+    >
+      {/* Model */}
+      <div className="flex items-center gap-1.5">
+        <Cpu size={12} className="text-[var(--color-text-tertiary)]" />
+        <span className="text-[var(--color-text-primary)] font-medium">{model}</span>
+      </div>
+
+      {/* Divider */}
+      <div className="w-px h-3 bg-[var(--color-separator)]" />
+
+      {/* Token usage */}
+      {(inputTokens !== undefined || outputTokens !== undefined) && (
+        <>
+          <div className="flex items-center gap-3">
+            {inputTokens !== undefined && (
+              <span className="inline-flex items-center gap-1">
+                <ArrowUp size={10} className="text-[var(--color-text-tertiary)]" />
+                <span>{formatTokens(inputTokens)}</span>
+              </span>
+            )}
+            {outputTokens !== undefined && (
+              <span className="inline-flex items-center gap-1">
+                <ArrowDown size={10} className="text-[var(--color-text-tertiary)]" />
+                <span>{formatTokens(outputTokens)}</span>
+              </span>
+            )}
+          </div>
+          <div className="w-px h-3 bg-[var(--color-separator)]" />
+        </>
+      )}
+
+      {/* Cost */}
+      {cost !== undefined && (
+        <>
+          <span className="inline-flex items-center gap-1">
+            <DollarSign size={10} className="text-[var(--color-text-tertiary)]" />
+            <span>{formatCost(cost)}</span>
+          </span>
+          <div className="w-px h-3 bg-[var(--color-separator)]" />
+        </>
+      )}
+
+      {/* Agent status */}
+      <Badge variant={agentStatus === 'error' ? 'danger' : agentStatus === 'executing' ? 'warning' : 'default'} dot size="sm">
+        {status.label}
+      </Badge>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Git branch */}
+      {gitBranch && (
+        <>
+          <span className="inline-flex items-center gap-1">
+            <GitBranch size={10} className="text-[var(--color-text-tertiary)]" />
+            <span>{gitBranch}</span>
+          </span>
+          <div className="w-px h-3 bg-[var(--color-separator)]" />
+        </>
+      )}
+
+      {/* Command palette hint */}
+      <span className="inline-flex items-center gap-1 text-[var(--color-text-tertiary)]">
+        <Command size={10} />
+        <span>K commands</span>
+      </span>
+    </div>
+  );
+}
+
+StatusBar.displayName = 'StatusBar';

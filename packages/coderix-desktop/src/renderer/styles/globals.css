@@ -1,0 +1,525 @@
+/* ==========================================================================
+   Coderix Global Styles — WeChat × Apple Desktop Design System
+   "微信苹果桌面风": Clean, minimalist, frosted glass, SF-style typography
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Theme Variables — Dark Mode (default, matching Claude Code)
+   -------------------------------------------------------------------------- */
+:root {
+  /* === Brand / Accent Colors === */
+  /* Apple Blue accent (primary) */
+  --color-brand:                 #007AFF;
+  --color-brand-hover:           #0066D6;
+  --color-brand-active:          #0056B8;
+  --color-brand-muted:           rgba(0, 122, 255, 0.12);
+
+  /* WeChat Green accent (secondary / success emphasis) */
+  --color-wechat-green:          #07C160;
+  --color-wechat-green-hover:    #06AD56;
+  --color-wechat-green-muted:    rgba(7, 193, 96, 0.12);
+
+  /* === Backgrounds (dark theme) === */
+  --color-bg-primary:            #1C1C1E;   /* main content background */
+  --color-bg-secondary:          #2C2C2E;   /* secondary surfaces */
+  --color-bg-tertiary:           #3A3A3C;   /* elevated surfaces / inputs */
+  --color-bg-quaternary:         #48484A;   /* highest elevation */
+
+  /* Glass / Vibrancy backgrounds */
+  --glass-bg-sidebar:            rgba(28, 28, 30, 0.85);
+  --glass-bg-toolbar:            rgba(28, 28, 30, 0.72);
+  --glass-bg-overlay:            rgba(28, 28, 30, 0.55);
+
+  /* === Text Colors === */
+  --color-text-primary:          #F5F5F7;   /* primary text — high contrast */
+  --color-text-secondary:        #98989D;   /* secondary text */
+  --color-text-tertiary:         #636366;   /* tertiary / placeholder text */
+  --color-text-quaternary:       #48484A;   /* disabled / muted */
+  --color-text-inverse:          #1C1C1E;   /* text on accent bg */
+
+  /* === Semantic Colors === */
+  --color-success:               #30D158;   /* green */
+  --color-success-muted:         rgba(48, 209, 88, 0.12);
+  --color-warning:               #FFD60A;   /* yellow */
+  --color-warning-muted:         rgba(255, 214, 10, 0.12);
+  --color-danger:                #FF453A;   /* red */
+  --color-danger-muted:          rgba(255, 69, 58, 0.12);
+  --color-info:                  #64D2FF;   /* blue (for informational) */
+  --color-info-muted:            rgba(100, 210, 255, 0.12);
+
+  /* === Borders / Separators === */
+  --color-separator:             rgba(255, 255, 255, 0.08);
+  --color-separator-strong:      rgba(255, 255, 255, 0.12);
+  --color-border:                rgba(255, 255, 255, 0.1);
+  --color-border-focus:          rgba(0, 122, 255, 0.5);
+
+  /* === Code / Terminal === */
+  --color-code-bg:               #262629;
+  --color-code-text:             #F5F5F7;
+  --color-terminal-bg:           #161618;
+  --color-terminal-text:         #F5F5F7;
+
+  /* === Links === */
+  --color-link:                  #64D2FF;
+  --color-link-hover:            #8FE3FF;
+
+  /* === Message Bubbles === */
+  --bubble-user-bg:              #007AFF;
+  --bubble-user-text:            #FFFFFF;
+  --bubble-assistant-bg:         #2C2C2E;
+  --bubble-assistant-text:       #F5F5F7;
+
+  /* === Scrollbar === */
+  --scrollbar-track:             transparent;
+  --scrollbar-thumb:             rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb-hover:       rgba(255, 255, 255, 0.25);
+
+  /* === Selection === */
+  --selection-bg:                rgba(0, 122, 255, 0.3);
+  --selection-text:              #FFFFFF;
+}
+
+/* --------------------------------------------------------------------------
+   2. Light Theme
+   -------------------------------------------------------------------------- */
+[data-theme="light"] {
+  /* === Brand / Accent === */
+  --color-brand:                 #007AFF;
+  --color-brand-hover:           #0066D6;
+  --color-brand-active:          #0056B8;
+  --color-brand-muted:           rgba(0, 122, 255, 0.1);
+
+  --color-wechat-green:          #07C160;
+  --color-wechat-green-hover:    #06AD56;
+  --color-wechat-green-muted:    rgba(7, 193, 96, 0.1);
+
+  /* === Backgrounds (Apple system grays) === */
+  --color-bg-primary:            #FFFFFF;
+  --color-bg-secondary:          #F2F2F7;  /* systemGroupedBackground */
+  --color-bg-tertiary:           #E5E5EA;  /* systemGray5 */
+  --color-bg-quaternary:         #D1D1D6;  /* systemGray4 */
+
+  /* Glass / Vibrancy */
+  --glass-bg-sidebar:            rgba(242, 242, 247, 0.85);
+  --glass-bg-toolbar:            rgba(242, 242, 247, 0.72);
+  --glass-bg-overlay:            rgba(242, 242, 247, 0.55);
+
+  /* === Text Colors === */
+  --color-text-primary:          #1C1C1E;   /* almost black */
+  --color-text-secondary:        #6C6C70;   /* systemGray */
+  --color-text-tertiary:         #AEAEB2;   /* systemGray2 */
+  --color-text-quaternary:       #D1D1D6;   /* systemGray4 */
+  --color-text-inverse:          #FFFFFF;
+
+  /* === Semantic Colors (adjusted for light bg) === */
+  --color-success:               #34C759;
+  --color-success-muted:         rgba(52, 199, 89, 0.1);
+  --color-warning:               #FF9F0A;
+  --color-warning-muted:         rgba(255, 159, 10, 0.1);
+  --color-danger:                #FF3B30;
+  --color-danger-muted:          rgba(255, 59, 48, 0.1);
+  --color-info:                  #007AFF;
+  --color-info-muted:            rgba(0, 122, 255, 0.1);
+
+  /* === Borders / Separators === */
+  --color-separator:             rgba(0, 0, 0, 0.06);
+  --color-separator-strong:      rgba(0, 0, 0, 0.1);
+  --color-border:                rgba(0, 0, 0, 0.08);
+  --color-border-focus:          rgba(0, 122, 255, 0.4);
+
+  /* === Code / Terminal === */
+  --color-code-bg:               #F2F2F7;
+  --color-code-text:             #1C1C1E;
+  --color-terminal-bg:           #1C1C1E;
+  --color-terminal-text:         #F5F5F7;
+
+  /* === Links === */
+  --color-link:                  #007AFF;
+  --color-link-hover:            #0066D6;
+
+  /* === Message Bubbles === */
+  --bubble-user-bg:              #007AFF;
+  --bubble-user-text:            #FFFFFF;
+  --bubble-assistant-bg:         #E5E5EA;  /* systemGray5 */
+  --bubble-assistant-text:       #1C1C1E;
+
+  /* === Scrollbar === */
+  --scrollbar-track:             transparent;
+  --scrollbar-thumb:             rgba(0, 0, 0, 0.2);
+  --scrollbar-thumb-hover:       rgba(0, 0, 0, 0.35);
+
+  /* === Selection === */
+  --selection-bg:                rgba(0, 122, 255, 0.25);
+  --selection-text:              #FFFFFF;
+}
+
+/* --------------------------------------------------------------------------
+   3. Base Reset & Global Styles
+   -------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-size: 14px;
+  line-height: 1.45;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+
+  /* Prevent text size adjustment on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  font-family: var(--font-sans);
+  font-weight: var(--font-regular);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* Remove default button styles */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+/* Input reset */
+input,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+/* Links */
+a {
+  color: var(--color-link);
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+a:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+/* Focus ring for accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Remove list styles */
+ul, ol {
+  list-style: none;
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Code block defaults */
+code {
+  font-family: var(--font-mono);
+}
+
+pre {
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+/* Table defaults */
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* --------------------------------------------------------------------------
+   4. Scrollbar Styling (thin, subtle — Apple/WeChat style)
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* --------------------------------------------------------------------------
+   5. Glass / Vibrancy Utility Classes
+   -------------------------------------------------------------------------- */
+
+/* Frosted glass sidebar (NSVisualEffectView vibrancy simulation) */
+.glass-sidebar {
+  background: var(--glass-bg-sidebar);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Toolbar-level glass */
+.glass-toolbar {
+  background: var(--glass-bg-toolbar);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+
+/* Overlay glass for modals/popovers */
+.glass-overlay {
+  background: var(--glass-bg-overlay);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+/* Generic glass */
+.glass {
+  background: var(--glass-bg-sidebar);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+}
+
+/* --------------------------------------------------------------------------
+   6. Animation Keyframes
+   -------------------------------------------------------------------------- */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes typewriter-cursor {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. Utility Animation Classes
+   -------------------------------------------------------------------------- */
+.animate-fade-in {
+  animation: fadeIn var(--duration-normal) var(--ease-default) both;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight var(--duration-normal) var(--ease-default) both;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft var(--duration-normal) var(--ease-default) both;
+}
+
+.animate-slide-in-up {
+  animation: slideInUp var(--duration-normal) var(--ease-default) both;
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--duration-normal) var(--ease-default) both;
+}
+
+/* Typewriter blinking cursor */
+.typing-cursor::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background-color: var(--color-brand);
+  vertical-align: text-bottom;
+  animation: typewriter-cursor 1s steps(1) infinite;
+}
+
+/* Shimmer loading skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-tertiary) 0%,
+    var(--color-bg-quaternary) 50%,
+    var(--color-bg-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* --------------------------------------------------------------------------
+   8. Common Utility Classes
+   -------------------------------------------------------------------------- */
+
+/* Truncate text */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* No drag (for Electron window drag regions) */
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
