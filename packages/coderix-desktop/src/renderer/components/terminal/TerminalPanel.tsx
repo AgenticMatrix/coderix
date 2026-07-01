@@ -63,12 +63,12 @@ export default function TerminalPanel({
     <div
       className="terminal-panel"
       style={{
-        height: isOpen ? '35%' : '0px',
+        flex: isOpen ? '0 0 35%' : '0 0 0px',
         minHeight: isOpen ? '120px' : '0px',
         overflow: 'hidden',
-        transition: 'height 250ms cubic-bezier(0, 0, 0.58, 1)',
+        transition: 'flex 250ms cubic-bezier(0, 0, 0.58, 1), min-height 250ms cubic-bezier(0, 0, 0.58, 1)',
         borderTop: isOpen
-          ? '1px solid var(--color-separator, rgba(255,255,255,0.08))'
+          ? '1px solid var(--color-separator, rgba(0,0,0,0.08))'
           : 'none',
         display: 'flex',
         flexDirection: 'column',
@@ -85,15 +85,15 @@ export default function TerminalPanel({
             padding: '4px 12px',
             height: '28px',
             flexShrink: 0,
-            background: 'var(--color-bg-secondary, #2c2c2e)',
-            borderBottom: '1px solid var(--color-separator, rgba(255,255,255,0.08))',
+            background: 'var(--color-bg-secondary, #F2F2F7)',
+            borderBottom: '1px solid var(--color-separator, rgba(0,0,0,0.08))',
           }}
         >
           <span
             style={{
               fontSize: '11px',
               fontWeight: 600,
-              color: 'var(--color-text-secondary, #98989d)',
+              color: 'var(--color-text-secondary, #6C6C70)',
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
             }}
@@ -105,7 +105,7 @@ export default function TerminalPanel({
             style={{
               background: 'none',
               border: 'none',
-              color: 'var(--color-text-tertiary, #636366)',
+              color: 'var(--color-text-tertiary, #AEAEB2)',
               cursor: 'pointer',
               fontSize: '14px',
               padding: '2px 6px',

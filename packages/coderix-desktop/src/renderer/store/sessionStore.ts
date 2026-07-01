@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { SessionSummary } from './types.js';
+import { listSessions, forkSession as ipcForkSession, deleteSession as ipcDeleteSession } from '../ipc-client.js';
 
 export interface SessionState {
   sessions: SessionSummary[];
@@ -32,9 +33,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   loadSessions: async () => {
     set({ isLoading: true, error: null });
     try {
-      const sessions = await window.coderixAPI.session.list();
+      const sessions = await listSessions();
       // Normalize: the preload returns unknown, but we expect SessionInfo[]
-      const normalized: SessionSummary[] = (sessions as Array<{
+      const normalized: SessionSummary[] = (sessions as unknown as Array<{
         id: string;
         title: string;
         turnCount: number;
@@ -85,7 +86,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   forkSession: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      const result = await window.coderixAPI.session.fork(id);
+      const result = await ipcForkSession(id);
       const newSession = result as { id: string; title: string };
       set((state) => ({
         sessions: [
@@ -117,7 +118,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     }));
 
     try {
-      await window.coderixAPI.session.delete(id);
+      await ipcDeleteSession(id);
     } catch (err) {
       // Rollback on failure
       const message = err instanceof Error ? err.message : 'Failed to delete session';

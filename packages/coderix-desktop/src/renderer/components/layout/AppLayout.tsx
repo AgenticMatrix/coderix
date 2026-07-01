@@ -65,7 +65,7 @@ export function AppLayout({
   return (
     <div className="h-screen flex flex-col bg-[var(--color-bg-primary)] overflow-hidden">
       {/* Main content area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar — WeChat-style frosted glass with subtle right border */}
         <AnimatePresence initial={false}>
           {sidebarVisible && (

@@ -160,8 +160,8 @@ export default function Terminal({
         height: '100%',
         borderRadius: 'var(--radius-lg, 8px)',
         overflow: 'hidden',
-        // macOS translucent bg + blur
-        background: 'rgba(28, 28, 30, 0.85)',
+        // macOS translucent bg + blur — terminal stays dark for readability
+        background: 'var(--color-terminal-bg, #1C1C1E)',
         backdropFilter: 'saturate(180%) blur(20px)',
         WebkitBackdropFilter: 'saturate(180%) blur(20px)',
       }}

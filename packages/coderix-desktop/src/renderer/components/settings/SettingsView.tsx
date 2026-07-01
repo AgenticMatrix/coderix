@@ -90,7 +90,7 @@ export default function SettingsView(): React.ReactElement {
     providers: defaultProviders,
     defaultModel: 'claude-sonnet-4-20250514',
     defaultPermissionMode: 'ask',
-    theme: 'dark',
+    theme: 'light',
     mcpServers: [],
   });
   const [saving, setSaving] = useState(false);

@@ -13,10 +13,30 @@
 
 import type { StreamBlock, PermissionRequest, TokenUsage, SessionInfo } from './types.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type StreamEventCallback = (event: any) => void;
-type PermissionReqCallback = (req: any) => void;
-type StateChangeCallback = (change: any) => void;
+// ---------------------------------------------------------------------------
+// Safety: Preload API Guard
+// ---------------------------------------------------------------------------
+
+/**
+ * The `window.coderixAPI` object is injected by the preload script via
+ * `contextBridge.exposeInMainWorld`. In development mode, there is a race
+ * condition between React's initial render and the preload script loading.
+ *
+ * If the API is not yet available, all calls MUST fail gracefully instead
+ * of throwing a TypeError that crashes the renderer.
+ */
+function getAPI(): NonNullable<typeof window.coderixAPI> {
+  if (!window.coderixAPI) {
+    throw new Error(
+      '[IPC] window.coderixAPI is not available — the preload script has not loaded yet. ' +
+        'This is expected during the initial render frame in development mode.',
+    );
+  }
+  return window.coderixAPI;
+}
+
+/** No-op unsubscribe for when the preload API is unavailable. */
+const NOOP_UNSUB = (): void => {};
 
 // ---------------------------------------------------------------------------
 // Timeout Configuration
@@ -46,7 +66,7 @@ async function invokeWithTimeout<T>(
 /** Submit a user query to the AI engine. */
 export async function submitQuery(query: string, sessionId?: string): Promise<unknown> {
   return invokeWithTimeout('query:submit', () =>
-    window.coderixAPI.query.submit(query, sessionId),
+    getAPI().query.submit(query, sessionId),
   );
 }
 
@@ -60,6 +80,12 @@ export async function submitQuery(query: string, sessionId?: string): Promise<un
  * Returns an unsubscribe function.
  */
 export function onStreamBlock(callback: (block: StreamBlock) => void): () => void {
+  // Guard: preload may not have loaded yet during initial React mount
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+
   // Internal map: stream index → partially built StreamBlock
   const blockMap = new Map<number, StreamBlock>();
 
@@ -202,6 +228,10 @@ function mapBlockType(
  * Returns an unsubscribe function.
  */
 export function onStreamDone(callback: () => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'done') {
       callback();
@@ -215,6 +245,10 @@ export function onStreamDone(callback: () => void): () => void {
  * Returns an unsubscribe function.
  */
 export function onStreamError(callback: (error: string) => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'error') {
       callback(event.message);
@@ -229,19 +263,19 @@ export function onStreamError(callback: (error: string) => void): () => void {
 /** List all sessions. */
 export async function listSessions(): Promise<SessionInfo[]> {
   return invokeWithTimeout<SessionInfo[]>('session:list', () =>
-    window.coderixAPI.session.list(),
+    getAPI().session.list(),
   );
 }
 
 /** Fork an existing session into a new one. */
 export async function forkSession(id: string): Promise<unknown> {
-  return invokeWithTimeout('session:fork', () => window.coderixAPI.session.fork(id));
+  return invokeWithTimeout('session:fork', () => getAPI().session.fork(id));
 }
 
 /** Delete a session permanently. */
 export async function deleteSession(id: string): Promise<unknown> {
   return invokeWithTimeout('session:delete', () =>
-    window.coderixAPI.session.delete(id),
+    getAPI().session.delete(id),
   );
 }
 
@@ -255,7 +289,7 @@ export async function deleteSession(id: string): Promise<unknown> {
  */
 export async function approvePermission(toolUseId: string): Promise<unknown> {
   return invokeWithTimeout('permission:approve', () =>
-    window.coderixAPI.permission.approve(toolUseId),
+    getAPI().permission.approve(toolUseId),
   );
 }
 
@@ -265,7 +299,7 @@ export async function approvePermission(toolUseId: string): Promise<unknown> {
  */
 export async function denyPermission(toolUseId: string): Promise<unknown> {
   return invokeWithTimeout('permission:deny', () =>
-    window.coderixAPI.permission.deny(toolUseId),
+    getAPI().permission.deny(toolUseId),
   );
 }
 
@@ -282,6 +316,10 @@ export async function denyPermission(toolUseId: string): Promise<unknown> {
 export function onPermissionRequest(
   callback: (req: PermissionRequest) => void,
 ): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
   return window.coderixAPI.onPermissionRequest((preloadReq: any) => {
     callback({
       id: preloadReq.toolUseId,
@@ -299,14 +337,14 @@ export function onPermissionRequest(
 /** Get the full config object. */
 export async function getConfig(): Promise<Record<string, unknown>> {
   return invokeWithTimeout<Record<string, unknown>>('config:get', () =>
-    window.coderixAPI.config.get(),
+    getAPI().config.get(),
   );
 }
 
 /** Set a specific config key. */
 export async function setConfig(key: string, value: unknown): Promise<unknown> {
   return invokeWithTimeout('config:set', () =>
-    window.coderixAPI.config.set(key, value),
+    getAPI().config.set(key, value),
   );
 }
 
@@ -317,12 +355,16 @@ export async function setConfig(key: string, value: unknown): Promise<unknown> {
 /** Get the current app version string. */
 export async function getAppVersion(): Promise<string> {
   return invokeWithTimeout<string>('app:version', () =>
-    window.coderixAPI.app.getVersion(),
+    getAPI().app.getVersion(),
   );
 }
 
 /** Gracefully quit the application. */
 export function quitApp(): void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — cannot quit');
+    return;
+  }
   window.coderixAPI.app.quit();
 }
 
@@ -343,6 +385,10 @@ export function quitApp(): void {
  * Returns an unsubscribe function.
  */
 export function onTokenUsage(callback: (stats: TokenUsage) => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
   return window.coderixAPI.onStateChange((change: any) => {
     if (change.type !== 'tokenUsage') return;
 

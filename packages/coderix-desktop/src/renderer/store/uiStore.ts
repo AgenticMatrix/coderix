@@ -36,7 +36,7 @@ export const useUIStore = create<UIState>()((set) => ({
   detailPanelOpen: false,
   terminalOpen: false,
   permissionMode: 'ask',
-  theme: 'dark',
+  theme: 'light',
 
   toggleSidebar: () => {
     set((state) => ({ sidebarOpen: !state.sidebarOpen }));

@@ -98,19 +98,22 @@ export function createWindowManager(): WindowManager {
         titleBarStyle: 'hiddenInset',
         vibrancy: 'under-window',
         visualEffectState: 'active',
-        backgroundColor: '#1c1c1e',
+        backgroundColor: '#FFFFFF',
         // ── Tab support (macOS) ────────────────────────────────────────
         tabbingIdentifier: 'coderix-main',
         // ── Show only when ready ───────────────────────────────────────
         show: false,
         webPreferences: {
-          preload: join(__dirname, '../preload/index.js'),
+          preload: join(__dirname, '../preload/index.mjs'),
           contextIsolation: true,
           nodeIntegration: false,
           sandbox: false, // false so preload can use Node APIs
           webviewTag: false,
         },
       });
+
+      // Log preload path for debugging
+      console.log('[Coderix] Preload path:', join(__dirname, '../preload/index.mjs'));
 
       // Restore position if saved
       if (state.x !== undefined && state.y !== undefined) {

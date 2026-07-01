@@ -264,14 +264,11 @@ export function App(): React.ReactElement {
       >
         {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Chat area */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <ChatView
-              messages={chatViewMessages}
-              isEmpty={isEmpty}
-              isStreaming={isStreaming}
-            />
-          </div>
+          <ChatView
+            messages={chatViewMessages}
+            isEmpty={isEmpty}
+            isStreaming={isStreaming}
+          />
 
           {/* Composer — fixed at bottom of chat */}
           <Composer

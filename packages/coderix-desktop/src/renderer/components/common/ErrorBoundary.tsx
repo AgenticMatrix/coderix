@@ -35,8 +35,8 @@ export class ErrorBoundary extends Component<Props, State> {
           justifyContent: 'center',
           height: '100vh',
           padding: '16px',
-          background: '#1C1C1E',
-          color: '#fff',
+          background: 'var(--color-bg-primary, #FFFFFF)',
+          color: 'var(--color-text-primary, #1D1D1F)',
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}>
           <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </h2>
           <p style={{
             fontSize: '13px',
-            color: '#98989d',
+            color: 'var(--color-text-secondary, #6E6E73)',
             marginBottom: '16px',
             maxWidth: '400px',
             textAlign: 'center',
@@ -55,8 +55,8 @@ export class ErrorBoundary extends Component<Props, State> {
             onClick={this.handleRetry}
             style={{
               padding: '8px 16px',
-              background: '#0A84FF',
-              color: '#fff',
+              background: 'var(--color-brand, #007AFF)',
+              color: '#ffffff',
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',

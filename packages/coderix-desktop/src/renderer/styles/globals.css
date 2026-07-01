@@ -4,91 +4,17 @@
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. Theme Variables — Dark Mode (default, matching Claude Code)
+   1. Theme Variables — Light Mode (default, Apple HIG)
    -------------------------------------------------------------------------- */
 :root {
-  /* === Brand / Accent Colors === */
-  /* Apple Blue accent (primary) */
-  --color-brand:                 #007AFF;
-  --color-brand-hover:           #0066D6;
-  --color-brand-active:          #0056B8;
-  --color-brand-muted:           rgba(0, 122, 255, 0.12);
-
-  /* WeChat Green accent (secondary / success emphasis) */
-  --color-wechat-green:          #07C160;
-  --color-wechat-green-hover:    #06AD56;
-  --color-wechat-green-muted:    rgba(7, 193, 96, 0.12);
-
-  /* === Backgrounds (dark theme) === */
-  --color-bg-primary:            #1C1C1E;   /* main content background */
-  --color-bg-secondary:          #2C2C2E;   /* secondary surfaces */
-  --color-bg-tertiary:           #3A3A3C;   /* elevated surfaces / inputs */
-  --color-bg-quaternary:         #48484A;   /* highest elevation */
-
-  /* Glass / Vibrancy backgrounds */
-  --glass-bg-sidebar:            rgba(28, 28, 30, 0.85);
-  --glass-bg-toolbar:            rgba(28, 28, 30, 0.72);
-  --glass-bg-overlay:            rgba(28, 28, 30, 0.55);
-
-  /* === Text Colors === */
-  --color-text-primary:          #F5F5F7;   /* primary text — high contrast */
-  --color-text-secondary:        #98989D;   /* secondary text */
-  --color-text-tertiary:         #636366;   /* tertiary / placeholder text */
-  --color-text-quaternary:       #48484A;   /* disabled / muted */
-  --color-text-inverse:          #1C1C1E;   /* text on accent bg */
-
-  /* === Semantic Colors === */
-  --color-success:               #30D158;   /* green */
-  --color-success-muted:         rgba(48, 209, 88, 0.12);
-  --color-warning:               #FFD60A;   /* yellow */
-  --color-warning-muted:         rgba(255, 214, 10, 0.12);
-  --color-danger:                #FF453A;   /* red */
-  --color-danger-muted:          rgba(255, 69, 58, 0.12);
-  --color-info:                  #64D2FF;   /* blue (for informational) */
-  --color-info-muted:            rgba(100, 210, 255, 0.12);
-
-  /* === Borders / Separators === */
-  --color-separator:             rgba(255, 255, 255, 0.08);
-  --color-separator-strong:      rgba(255, 255, 255, 0.12);
-  --color-border:                rgba(255, 255, 255, 0.1);
-  --color-border-focus:          rgba(0, 122, 255, 0.5);
-
-  /* === Code / Terminal === */
-  --color-code-bg:               #262629;
-  --color-code-text:             #F5F5F7;
-  --color-terminal-bg:           #161618;
-  --color-terminal-text:         #F5F5F7;
-
-  /* === Links === */
-  --color-link:                  #64D2FF;
-  --color-link-hover:            #8FE3FF;
-
-  /* === Message Bubbles === */
-  --bubble-user-bg:              #007AFF;
-  --bubble-user-text:            #FFFFFF;
-  --bubble-assistant-bg:         #2C2C2E;
-  --bubble-assistant-text:       #F5F5F7;
-
-  /* === Scrollbar === */
-  --scrollbar-track:             transparent;
-  --scrollbar-thumb:             rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover:       rgba(255, 255, 255, 0.25);
-
-  /* === Selection === */
-  --selection-bg:                rgba(0, 122, 255, 0.3);
-  --selection-text:              #FFFFFF;
-}
-
-/* --------------------------------------------------------------------------
-   2. Light Theme
-   -------------------------------------------------------------------------- */
-[data-theme="light"] {
   /* === Brand / Accent === */
+  /* Apple Blue accent (primary) */
   --color-brand:                 #007AFF;
   --color-brand-hover:           #0066D6;
   --color-brand-active:          #0056B8;
   --color-brand-muted:           rgba(0, 122, 255, 0.1);
 
+  /* WeChat Green accent (secondary / success emphasis) */
   --color-wechat-green:          #07C160;
   --color-wechat-green-hover:    #06AD56;
   --color-wechat-green-muted:    rgba(7, 193, 96, 0.1);
@@ -99,7 +25,7 @@
   --color-bg-tertiary:           #E5E5EA;  /* systemGray5 */
   --color-bg-quaternary:         #D1D1D6;  /* systemGray4 */
 
-  /* Glass / Vibrancy */
+  /* Glass / Vibrancy backgrounds */
   --glass-bg-sidebar:            rgba(242, 242, 247, 0.85);
   --glass-bg-toolbar:            rgba(242, 242, 247, 0.72);
   --glass-bg-overlay:            rgba(242, 242, 247, 0.55);
@@ -150,6 +76,80 @@
 
   /* === Selection === */
   --selection-bg:                rgba(0, 122, 255, 0.25);
+  --selection-text:              #FFFFFF;
+}
+
+/* --------------------------------------------------------------------------
+   2. Dark Theme
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  /* === Brand / Accent Colors === */
+  --color-brand:                 #007AFF;
+  --color-brand-hover:           #0066D6;
+  --color-brand-active:          #0056B8;
+  --color-brand-muted:           rgba(0, 122, 255, 0.12);
+
+  --color-wechat-green:          #07C160;
+  --color-wechat-green-hover:    #06AD56;
+  --color-wechat-green-muted:    rgba(7, 193, 96, 0.12);
+
+  /* === Backgrounds === */
+  --color-bg-primary:            #1C1C1E;
+  --color-bg-secondary:          #2C2C2E;
+  --color-bg-tertiary:           #3A3A3C;
+  --color-bg-quaternary:         #48484A;
+
+  /* Glass / Vibrancy */
+  --glass-bg-sidebar:            rgba(28, 28, 30, 0.85);
+  --glass-bg-toolbar:            rgba(28, 28, 30, 0.72);
+  --glass-bg-overlay:            rgba(28, 28, 30, 0.55);
+
+  /* === Text Colors === */
+  --color-text-primary:          #F5F5F7;
+  --color-text-secondary:        #98989D;
+  --color-text-tertiary:         #636366;
+  --color-text-quaternary:       #48484A;
+  --color-text-inverse:          #1C1C1E;
+
+  /* === Semantic Colors === */
+  --color-success:               #30D158;
+  --color-success-muted:         rgba(48, 209, 88, 0.12);
+  --color-warning:               #FFD60A;
+  --color-warning-muted:         rgba(255, 214, 10, 0.12);
+  --color-danger:                #FF453A;
+  --color-danger-muted:          rgba(255, 69, 58, 0.12);
+  --color-info:                  #64D2FF;
+  --color-info-muted:            rgba(100, 210, 255, 0.12);
+
+  /* === Borders / Separators === */
+  --color-separator:             rgba(255, 255, 255, 0.08);
+  --color-separator-strong:      rgba(255, 255, 255, 0.12);
+  --color-border:                rgba(255, 255, 255, 0.1);
+  --color-border-focus:          rgba(0, 122, 255, 0.5);
+
+  /* === Code / Terminal === */
+  --color-code-bg:               #262629;
+  --color-code-text:             #F5F5F7;
+  --color-terminal-bg:           #161618;
+  --color-terminal-text:         #F5F5F7;
+
+  /* === Links === */
+  --color-link:                  #64D2FF;
+  --color-link-hover:            #8FE3FF;
+
+  /* === Message Bubbles === */
+  --bubble-user-bg:              #007AFF;
+  --bubble-user-text:            #FFFFFF;
+  --bubble-assistant-bg:         #2C2C2E;
+  --bubble-assistant-text:       #F5F5F7;
+
+  /* === Scrollbar === */
+  --scrollbar-track:             transparent;
+  --scrollbar-thumb:             rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb-hover:       rgba(255, 255, 255, 0.25);
+
+  /* === Selection === */
+  --selection-bg:                rgba(0, 122, 255, 0.3);
   --selection-text:              #FFFFFF;
 }
 
@@ -523,3 +523,9 @@ table {
 .drag-region {
   -webkit-app-region: drag;
 }
+
+/* --------------------------------------------------------------------------
+   9. Tailwind CSS Directives
+   -------------------------------------------------------------------------- */
+@tailwind components;
+@tailwind utilities;
