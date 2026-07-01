@@ -52,7 +52,11 @@ cd coderix
 ### Development
 
 ```bash
-npm run dev
+# CLI terminal client
+npm run dev:cli
+
+# Electron desktop app
+npm run dev:desk
 ```
 
 ### Configure

@@ -2,6 +2,7 @@ import React, { type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResizablePanel } from '../shared/ResizablePanel';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
+import { IconSidebar } from '../sidebar/IconSidebar';
 
 export interface AppLayoutProps {
   /** Sidebar content */
