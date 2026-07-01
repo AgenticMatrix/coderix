@@ -3,6 +3,7 @@
  * Coderix — CLI Entry Point
  *
  * Flags: --help, --version, --model, --setup, --print, --gateway
+ *        --desktop [--desktop-port <port>]
  *        --chrome-mcp [--chrome-mcp-port <port>]
  *        --computer-use-mcp
  * Dynamic imports keep TUI deps (react/ink) out of gateway/print modes.
@@ -21,6 +22,8 @@ interface CliArgs {
   print?: string;
   query?: string;
   gateway: boolean;
+  desktop: boolean;
+  desktopPort?: number;
   acp: boolean;
   acpPort?: number;
   chromeMcp: boolean;
@@ -34,6 +37,7 @@ function parseCliArgs(argv: string[]): CliArgs {
     version: false,
     setup: false,
     gateway: false,
+    desktop: false,
     acp: false,
     chromeMcp: false,
     computerUseMcp: false,
@@ -47,6 +51,8 @@ function parseCliArgs(argv: string[]): CliArgs {
       case '--model': case '-m': args.model = argv[i + 1]; if (args.model && !args.model.startsWith('-')) i++; else args.model = ''; break;
       case '--setup': case 'setup': args.setup = true; break;
       case '--gateway': case '-g': args.gateway = true; break;
+      case '--desktop': case '-d': args.desktop = true; break;
+      case '--desktop-port': args.desktopPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.desktopPort)) i++; break;
       case '--acp': args.acp = true; break;
       case '--acp-port': args.acpPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.acpPort)) i++; break;
       case '--print': case '-p': args.print = argv[i + 1] ?? ''; if (args.print) i++; break;
@@ -178,7 +184,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
+  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
 
   if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; console.log(`coderix ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}`); process.exit(0); }
 
@@ -200,6 +206,14 @@ async function main(): Promise<void> {
 
   // ── Gateway mode ──────────────────────────────────────────────
   if (cliArgs.gateway) { const { startGateway } = await import('../gateway/server.js'); await startGateway(); return; }
+
+  // ── Desktop mode (WebSocket gateway for Tauri app) ────────────
+  if (cliArgs.desktop) {
+    const { startDesktopGateway } = await import('../gateway/desktop.js');
+    const port = cliArgs.desktopPort ?? 9754;
+    await startDesktopGateway({ port, cwd: process.cwd() });
+    return;
+  }
 
   if (cliArgs.acp) { const { startAcpServer } = await import('../acp/server.js'); await startAcpServer(cliArgs.acpPort); return; }
 
