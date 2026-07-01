@@ -105,6 +105,7 @@ async function initMcpAndGetPlugins(cwd: string): Promise<any[]> {
     const manager = new McpManager(cwd);
     await manager.initialize();
     const plugins = manager.getToolPlugins();
+    const resourcePlugins = manager.getResourcePlugins();
     if (plugins.length > 0) {
       process.stderr.write(`[MCP] Loaded ${plugins.length} tool(s) from ${manager.getConnectedServerNames().length} server(s)\n`);
       const failed = manager.getFailedServerNames();
@@ -112,7 +113,7 @@ async function initMcpAndGetPlugins(cwd: string): Promise<any[]> {
         process.stderr.write(`[MCP] Warning: ${failed.length} server(s) failed to connect: ${failed.join(', ')}\n`);
       }
     }
-    return plugins;
+    return [...plugins, ...resourcePlugins];
   } catch (err) {
     // MCP is optional — don't block startup on errors
     process.stderr.write(`[MCP] Initialization failed: ${(err as Error).message}\n`);

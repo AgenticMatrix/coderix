@@ -180,33 +180,33 @@ describe('TaskStop executor (sub-agent stop)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// SendMessage (former agent-message)
+// SendMessage (team-message executor, sub-agent resume mode)
 // ---------------------------------------------------------------------------
 
 describe('SendMessage executor', () => {
-  it('should require agentSpawn context', async () => {
-    const { execute } = await import('../../src/agents/agent-message/executor.js');
+  it('should require agent_id or team_name', async () => {
+    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
     const result = await execute({}, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.isError).toBe(true);
-    expect(result.content).toContain('agentSpawn');
+    expect(result.content).toContain('agent_id');
   });
 
-  it('should require agent_id and message', async () => {
+  it('should require message along with agent_id', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/agents/agent-message/executor.js');
+    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
 
     const r1 = await execute({}, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(r1.isError).toBe(true);
-    expect(r1.content).toContain('required');
+    expect(r1.content).toContain('agent_id');
 
     const r2 = await execute({ agent_id: 'sub-1' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(r2.isError).toBe(true);
-    expect(r2.content).toContain('required');
+    expect(r2.content).toContain('message');
   });
 
   it('should return error for unknown agent', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/agents/agent-message/executor.js');
+    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
     const result = await execute(
       { agent_id: 'nonexistent', message: 'Hello' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
@@ -219,7 +219,7 @@ describe('SendMessage executor', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-running', { status: 'running' });
 
-    const { execute } = await import('../../src/agents/agent-message/executor.js');
+    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
     const result = await execute(
       { agent_id: 'sub-running', message: 'Hello' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
