@@ -55,7 +55,10 @@ cd coderix
 # CLI terminal client
 npm run dev:cli
 
-# Electron desktop app
+# Electron desktop app (one-click, auto-frees port)
+./start_desk.sh
+
+# Electron desktop app (manual)
 npm run dev:desk
 ```
 
