@@ -46,7 +46,7 @@ function radioSelect(
       }
       firstRender = false;
 
-      stdout.write(`\x1B[K${title}\n`);
+      stdout.write(`\x1B[K\x1B[1m${title}\x1B[22m\n`);
       options.forEach((opt, i) => {
         const marker = i === selected ? '\x1B[1m●\x1B[0m' : '○';
         stdout.write(`\x1B[K  ${marker} ${opt}\n`);
@@ -530,7 +530,7 @@ export async function handleSetupFlag(): Promise<void> {
   {
     const rl = readline.createInterface({ input: stdin, output: stdout });
     const maxTokens = await new Promise<number>(resolve => {
-      rl.question('Max output tokens [32768]: ', answer => {
+      rl.question('\x1b[1mMax output tokens [32768]:\x1b[22m ', answer => {
         const trimmed = answer.trim();
         resolve(trimmed ? parseInt(trimmed, 10) || 32768 : 32768);
       });
