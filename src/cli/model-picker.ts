@@ -368,16 +368,14 @@ export async function runInteractiveModelSetup(
       if (!selectedModel) {
         console.log('No model selected. You can configure one later.\n');
       } else {
-        // Always offer to configure/change pricing
+        // Always offer to configure/change pricing via arrow-key selector
         const hasPrice = typeof skipModel !== 'string' && skipModel.price != null;
-        const readline = await import('node:readline');
-        const rl = readline.createInterface({ input: stdin, output: stdout });
-        const prompt = hasPrice
-          ? '\n  Change pricing for this model? (y/N): '
-          : '\n  Configure pricing for this model? (y/N): ';
-        const answer = await new Promise<string>(resolve => rl.question(prompt, resolve));
-        rl.close();
-        if (answer.trim().toLowerCase() === 'y') {
+        const title = hasPrice
+          ? 'Change pricing for this model?'
+          : 'Configure pricing for this model?';
+        const defaultIdx = hasPrice ? 1 : 0; // No if price exists, Yes otherwise
+        const choice = await radioSelect(['Yes', 'No'], defaultIdx, title, stdin, stdout);
+        if (choice === 0) {
           const price = await promptModelPricing(stdin, stdout);
           selectedProvider.model[0] = {
             name: selectedModel,
@@ -390,16 +388,14 @@ export async function runInteractiveModelSetup(
       selectedModel = getModelName(existingModel);
       modelDone = true;
 
-      // Always offer to configure/change pricing
+      // Always offer to configure/change pricing via arrow-key selector
       const hasPrice = typeof existingModel !== 'string' && existingModel.price != null;
-      const readline = await import('node:readline');
-      const rl = readline.createInterface({ input: stdin, output: stdout });
-      const prompt = hasPrice
-        ? '\n  Change pricing for this model? (y/N): '
-        : '\n  Configure pricing for this model? (y/N): ';
-      const answer = await new Promise<string>(resolve => rl.question(prompt, resolve));
-      rl.close();
-      if (answer.trim().toLowerCase() === 'y') {
+      const title = hasPrice
+        ? 'Change pricing for this model?'
+        : 'Configure pricing for this model?';
+      const defaultIdx = hasPrice ? 1 : 0; // No if price exists, Yes otherwise
+      const choice = await radioSelect(['Yes', 'No'], defaultIdx, title, stdin, stdout);
+      if (choice === 0) {
         const price = await promptModelPricing(stdin, stdout);
         selectedProvider.model[selectedModelIdx] = {
           name: selectedModel,
