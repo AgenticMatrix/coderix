@@ -150,6 +150,7 @@ export async function runInteractiveModelSetup(
 
   // ── Step 1: Provider selection ────────────────────────────────────
   let providerDone = false;
+  let isNewProvider = false;
   while (!providerDone) {
     let providerActiveIdx = modelList.findIndex(m => m.provider === defaultProvider);
     if (providerActiveIdx < 0) providerActiveIdx = 0;
@@ -189,6 +190,7 @@ export async function runInteractiveModelSetup(
       };
       modelList.push(selectedProvider);
       providerDone = true;
+      isNewProvider = true;
     } else if (selectedProviderIdx === modelList.length + 1) {
       // Remove provider
       const removeProviderOptions = modelList.map(m => m.provider ?? 'unknown');
@@ -235,7 +237,8 @@ export async function runInteractiveModelSetup(
   console.log(`Selected provider: ${selectedProvider.provider}\n`);
 
   // ── Provider config: base_url + api_key + proxy ──────────────────
-  {
+  if (!isNewProvider) {
+    {
     const currentUrl = selectedProvider.base_url ?? '(not set)';
     console.log(`Base URL: ${currentUrl}`);
     const readline = await import('node:readline');
@@ -248,8 +251,10 @@ export async function runInteractiveModelSetup(
     } else {
       console.log('  Keeping current URL.\n');
     }
-  }
-  {
+    }
+
+    // ── API Key ──────────────────────────────────────────────────
+    {
     const currentToken = selectedProvider.auth_token_env ?? '';
     let displayToken: string;
     if (!currentToken) {
@@ -272,8 +277,10 @@ export async function runInteractiveModelSetup(
     } else {
       console.log('  Keeping current token.\n');
     }
-  }
-  {
+    }
+
+    // ── Proxy ───────────────────────────────────────────────────
+    {
     const currentProxy = selectedProvider.proxy ?? 'None (no proxy)';
     console.log(`Proxy: ${currentProxy}`);
     const readline = await import('node:readline');
@@ -289,7 +296,8 @@ export async function runInteractiveModelSetup(
     } else {
       console.log('  Keeping current proxy.\n');
     }
-  }
+    }
+  } // end if (!isNewProvider)
 
   // ── Step 2: Model selection ─────────────────────────────────────
   const currentDefaultModel = defaultModel.split('/')[1] ?? (getModelName(selectedProvider.model[0] ?? '') || '');
