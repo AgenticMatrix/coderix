@@ -93,6 +93,44 @@ function radioSelect(
 }
 
 // ---------------------------------------------------------------------------
+// promptModelPricing — interactive pricing configuration for a single model
+// ---------------------------------------------------------------------------
+
+async function promptModelPricing(
+  stdin: typeof process.stdin,
+  stdout: typeof process.stdout,
+): Promise<ModelItem['price']> {
+  const readline = await import('node:readline');
+
+  console.log('\n  Configure pricing (per 1M tokens):');
+  const currencyIdx = await radioSelect(
+    ['人民币 (CNY)', '美元 (USD)', '欧元 (EUR)', '英镑 (GBP)', '日元 (JPY)'],
+    0,
+    '  Currency:',
+    stdin,
+    stdout,
+  );
+  const currencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY'];
+  const currency = currencies[currencyIdx]!;
+
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  const inputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Input price (cache miss): ', resolve))) || 0;
+  const cachePrice = parseFloat(await new Promise<string>(resolve => rl.question('  Cache read input price: ', resolve))) || 0;
+  const outputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Output price: ', resolve))) || 0;
+  const maxContext = parseInt(await new Promise<string>(resolve => rl.question('  Max context tokens [1000000]: ', resolve)), 10) || 1000000;
+  rl.close();
+
+  return {
+    input: inputPrice,
+    cache_read_input: cachePrice,
+    output: outputPrice,
+    currency,
+    unit: 1000000,
+    max_context: maxContext,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // runInteractiveModelSetup
 // ---------------------------------------------------------------------------
 
@@ -279,38 +317,15 @@ export async function runInteractiveModelSetup(
 
     if (selectedModelIdx === selectedProvider.model.length) {
       const readline = await import('node:readline');
-      let rl = readline.createInterface({ input: stdin, output: stdout });
+      const rl = readline.createInterface({ input: stdin, output: stdout });
       const name = await new Promise<string>(resolve => rl.question('Enter model name (e.g. my-model-v1): ', resolve));
       rl.close();
 
-      console.log('\n  Configure pricing (per 1M tokens):');
-      const currencyIdx = await radioSelect(
-        ['人民币 (CNY)', '美元 (USD)', '欧元 (EUR)', '英镑 (GBP)', '日元 (JPY)'],
-        0,
-        '  Currency:',
-        stdin,
-        stdout,
-      );
-      const currencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY'];
-      const currency = currencies[currencyIdx]!;
-
-      rl = readline.createInterface({ input: stdin, output: stdout });
-      const inputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Input price (cache miss): ', resolve))) || 0;
-      const cachePrice = parseFloat(await new Promise<string>(resolve => rl.question('  Cache read input price: ', resolve))) || 0;
-      const outputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Output price: ', resolve))) || 0;
-      const maxContext = parseInt(await new Promise<string>(resolve => rl.question('  Max context tokens [1000000]: ', resolve)), 10) || 1000000;
-      rl.close();
+      const price = await promptModelPricing(stdin, stdout);
       const modelName = name.trim();
       selectedProvider.model.push({
         name: modelName,
-        price: {
-          input: inputPrice,
-          cache_read_input: cachePrice,
-          output: outputPrice,
-          currency,
-          unit: 1000000,
-          max_context: maxContext,
-        },
+        price,
       } as ModelItem);
       selectedModel = modelName;
       modelDone = true;
@@ -346,14 +361,51 @@ export async function runInteractiveModelSetup(
         continue;
       }
     } else if (selectedModelIdx === selectedProvider.model.length + 2) {
-      selectedModel = getModelName(selectedProvider.model[0] ?? '') || '';
+      // Skip: use first model or nothing
+      const skipModel = selectedProvider.model[0];
+      selectedModel = skipModel ? getModelName(skipModel) : '';
       modelDone = true;
       if (!selectedModel) {
         console.log('No model selected. You can configure one later.\n');
+      } else {
+        // Always offer to configure/change pricing
+        const hasPrice = typeof skipModel !== 'string' && skipModel.price != null;
+        const readline = await import('node:readline');
+        const rl = readline.createInterface({ input: stdin, output: stdout });
+        const prompt = hasPrice
+          ? '\n  Change pricing for this model? (y/N): '
+          : '\n  Configure pricing for this model? (y/N): ';
+        const answer = await new Promise<string>(resolve => rl.question(prompt, resolve));
+        rl.close();
+        if (answer.trim().toLowerCase() === 'y') {
+          const price = await promptModelPricing(stdin, stdout);
+          selectedProvider.model[0] = {
+            name: selectedModel,
+            price,
+          };
+        }
       }
     } else {
-      selectedModel = getModelName(selectedProvider.model[selectedModelIdx]!);
+      const existingModel = selectedProvider.model[selectedModelIdx]!;
+      selectedModel = getModelName(existingModel);
       modelDone = true;
+
+      // Always offer to configure/change pricing
+      const hasPrice = typeof existingModel !== 'string' && existingModel.price != null;
+      const readline = await import('node:readline');
+      const rl = readline.createInterface({ input: stdin, output: stdout });
+      const prompt = hasPrice
+        ? '\n  Change pricing for this model? (y/N): '
+        : '\n  Configure pricing for this model? (y/N): ';
+      const answer = await new Promise<string>(resolve => rl.question(prompt, resolve));
+      rl.close();
+      if (answer.trim().toLowerCase() === 'y') {
+        const price = await promptModelPricing(stdin, stdout);
+        selectedProvider.model[selectedModelIdx] = {
+          name: selectedModel,
+          price,
+        };
+      }
     }
   }
 
