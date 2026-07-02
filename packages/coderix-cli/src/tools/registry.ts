@@ -32,6 +32,7 @@ import { AskUserQuestionRenderer } from './ask-user-question/renderer.js';
 import { EnterPlanModeRenderer } from './enter-plan-mode/renderer.js';
 import { ExitPlanModeRenderer } from './exit-plan-mode/renderer.js';
 import { NotebookEditRenderer } from './notebook-edit/renderer.js';
+import { AgentRenderer } from './agent/renderer.js';
 
 // ── Tool-result renderers ───────────────────────────────────────────────
 import { BashResultRenderer } from './bash/result-renderer.js';
@@ -86,6 +87,7 @@ useRendererByName.set('AskUserQuestion', AskUserQuestionRenderer);
 useRendererByName.set('EnterPlanMode', EnterPlanModeRenderer);
 useRendererByName.set('ExitPlanMode', ExitPlanModeRenderer);
 useRendererByName.set('NotebookEdit', NotebookEditRenderer);
+useRendererByName.set('Agent', AgentRenderer);
 
 resultRendererByName.set('bash', BashResultRenderer);
 resultRendererByName.set('glob', GlobResultRenderer);
