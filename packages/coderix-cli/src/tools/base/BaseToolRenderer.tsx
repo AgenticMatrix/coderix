@@ -3,8 +3,6 @@ import type { ToolUseRendererProps } from '../types.js';
 import { useToolTimer } from '../shared/useToolTimer.js';
 
 const STATE_ICON: Record<string, string> = {
-  pending: '⬜',
-  executing: '●',
   done: '●',
   error: '❌',
 };
@@ -41,14 +39,16 @@ export function BaseToolRenderer({
 }: ToolUseRendererProps) {
   const borderColor = riskLevel ? RISK_COLOR[riskLevel] : 'grey';
   const isExecuting = state === 'executing';
+  const isPending = state === 'pending';
   const isDone = state === 'done';
 
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
-  const statusIcon = isExecuting
+  const active = isExecuting || isPending;
+  const statusIcon = active
     ? (blinkOn ? '●' : '○')
     : STATE_ICON[state];
-  const statusColor = isExecuting ? 'yellow' : isDone ? 'green' : state === 'error' ? 'red' : 'grey';
+  const statusColor = active ? 'yellow' : isDone ? 'green' : state === 'error' ? 'red' : 'grey';
 
   return (
     <Box
@@ -66,11 +66,8 @@ export function BaseToolRenderer({
             {paramSummary ? (
               <Text dimColor> · {paramSummary}</Text>
             ) : null}
-            {isExecuting ? (
-              <Text dimColor color="yellow"> running {elapsedSecs}s</Text>
-            ) : null}
-            {state === 'pending' ? (
-              <Text dimColor> (pending)</Text>
+            {(isExecuting || isPending) ? (
+              <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
             ) : null}
           </Text>
         </Box>

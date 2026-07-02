@@ -8,8 +8,9 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
   const block = (props.input.block as boolean) ?? true;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
+  const isPending = props.state === 'pending';
   const isError = props.state === 'error';
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   const meta = props.result?.metadata;
   const description = meta?.description as string | undefined;
@@ -67,7 +68,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
   }
 
   // Executing / pending state — show blinking indicator for blocking mode
-  const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
+  const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -77,8 +78,8 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
         <Text dimColor>(</Text>
         <Text>{summary}</Text>
         <Text dimColor>)</Text>
-        {isExecuting ? (
-          <Text dimColor color="yellow"> waiting {elapsedSecs}s</Text>
+        {(isExecuting || isPending) ? (
+          <Text dimColor color="yellow"> {isExecuting ? 'waiting' : 'pending'} {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

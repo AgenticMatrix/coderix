@@ -7,8 +7,9 @@ export function TaskGetRenderer(props: ToolUseRendererProps): React.ReactNode {
   const taskId = props.input.taskId as string | undefined;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
+  const isPending = props.state === 'pending';
   const isError = props.state === 'error';
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   const meta = props.result?.metadata;
   const subject = meta?.subject as string | undefined;
@@ -69,7 +70,7 @@ export function TaskGetRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
 
   // Executing / pending state
-  const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
+  const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -77,8 +78,8 @@ export function TaskGetRenderer(props: ToolUseRendererProps): React.ReactNode {
         <Text color="yellow">{indicator} </Text>
         <Text bold>TaskGet</Text>
         {taskId ? <Text dimColor> · #{taskId}</Text> : null}
-        {isExecuting ? (
-          <Text dimColor color="yellow"> running {elapsedSecs}s</Text>
+        {(isExecuting || isPending) ? (
+          <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

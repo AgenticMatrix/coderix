@@ -7,8 +7,9 @@ export function TaskCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   const subject = props.input.subject as string | undefined;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
+  const isPending = props.state === 'pending';
   const isError = props.state === 'error';
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   // Extract result metadata for inline display
   const taskId = props.result?.metadata?.taskId as string | undefined;
@@ -47,7 +48,7 @@ export function TaskCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   }
 
   // Executing state — show blinking indicator
-  const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
+  const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
   const indicatorColor = 'yellow';
 
   return (
@@ -56,8 +57,8 @@ export function TaskCreateRenderer(props: ToolUseRendererProps): React.ReactNode
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>TaskCreate</Text>
         {subject ? <Text dimColor> · {subject}</Text> : null}
-        {isExecuting ? (
-          <Text dimColor color="yellow"> running {elapsedSecs}s</Text>
+        {(isExecuting || isPending) ? (
+          <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

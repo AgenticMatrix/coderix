@@ -7,8 +7,9 @@ export function TaskStopRenderer(props: ToolUseRendererProps): React.ReactNode {
   const taskId = props.input.task_id as string | undefined;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
+  const isPending = props.state === 'pending';
   const isError = props.state === 'error';
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   const meta = props.result?.metadata;
   const description = meta?.description as string | undefined;
@@ -53,7 +54,7 @@ export function TaskStopRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
 
   // Executing / pending state
-  const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
+  const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -62,8 +63,8 @@ export function TaskStopRenderer(props: ToolUseRendererProps): React.ReactNode {
         <Text bold>TaskStop</Text>
         {taskId ? <Text dimColor> · {taskId}</Text> : null}
         {taskType ? <Text dimColor> ({taskType})</Text> : null}
-        {isExecuting ? (
-          <Text dimColor color="yellow"> stopping {elapsedSecs}s</Text>
+        {(isExecuting || isPending) ? (
+          <Text dimColor color="yellow"> {isExecuting ? 'stopping' : 'pending'} {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>
