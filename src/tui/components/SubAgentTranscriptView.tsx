@@ -1,4 +1,4 @@
-import { createElement, useState } from 'react';
+import { createElement, useState, type ReactElement } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { getSubAgentRegistry } from '../../agents/agent-spawn/registry-ref.js';
 import type { ContentBlock } from '../../core/types.js';
@@ -16,7 +16,7 @@ interface SubAgentTranscriptViewProps {
   onSendMessage?: (agentId: string, message: string) => void;
 }
 
-export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAgentTranscriptViewProps) {
+export function SubAgentTranscriptView({ agentId, onBack, onSendMessage }: SubAgentTranscriptViewProps): ReactElement {
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
 

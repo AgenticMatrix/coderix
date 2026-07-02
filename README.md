@@ -52,7 +52,14 @@ cd coderix
 ### Development
 
 ```bash
-npm run dev
+# CLI terminal client
+npm run dev:cli
+
+# Electron desktop app (one-click, auto-frees port)
+./start_desk.sh
+
+# Electron desktop app (manual)
+npm run dev:desk
 ```
 
 ### Configure

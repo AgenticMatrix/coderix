@@ -1,0 +1,192 @@
+/* ==========================================================================
+   Coderix Design Tokens — WeChat × Apple Design System
+   "微信苹果桌面风": WeChat's clean minimalism + Apple's refined aesthetics
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Spacing Scale (4px base, following Apple's 4pt grid)
+   -------------------------------------------------------------------------- */
+:root {
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Sidebar specific */
+  --sidebar-width: 260px;
+  --sidebar-min-width: 200px;
+  --sidebar-max-width: 400px;
+
+  /* Detail panel */
+  --detail-width: 380px;
+  --detail-min-width: 280px;
+  --detail-max-width: 600px;
+
+  /* Status bar */
+  --statusbar-height: 32px;
+
+  /* Layout */
+  --app-border-width: 1px;
+}
+
+/* --------------------------------------------------------------------------
+   2. Border Radius Scale (Apple-style soft rounded corners)
+   -------------------------------------------------------------------------- */
+:root {
+  --radius-none: 0px;
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* Message bubble radius — WeChat/Apple style */
+  --bubble-radius-user: 16px 16px 4px 16px;
+  --bubble-radius-assistant: 16px 16px 16px 4px;
+  --bubble-radius-first: 16px 16px 4px 16px;
+  --bubble-radius-last: 16px 16px 16px 4px;
+}
+
+/* --------------------------------------------------------------------------
+   3. Shadow Scale (subtle, low-opacity — Apple style)
+   -------------------------------------------------------------------------- */
+:root {
+  --shadow-none: none;
+
+  /* Subtle elevation */
+  --shadow-xs: 0px 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* Card / surface shadow */
+  --shadow-sm: 0px 1px 3px rgba(0, 0, 0, 0.06),
+               0px 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* Dropdown / popover */
+  --shadow-md: 0px 4px 12px rgba(0, 0, 0, 0.08),
+               0px 1px 3px rgba(0, 0, 0, 0.04);
+
+  /* Modal / dialog */
+  --shadow-lg: 0px 8px 24px rgba(0, 0, 0, 0.12),
+               0px 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* Toast / notification */
+  --shadow-xl: 0px 16px 48px rgba(0, 0, 0, 0.16),
+               0px 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* Dark mode — shadows are more subtle */
+}
+
+[data-theme="dark"] {
+  --shadow-xs: 0px 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0px 1px 3px rgba(0, 0, 0, 0.3),
+               0px 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0px 4px 12px rgba(0, 0, 0, 0.4),
+               0px 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0px 8px 24px rgba(0, 0, 0, 0.5),
+               0px 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0px 16px 48px rgba(0, 0, 0, 0.6),
+               0px 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* --------------------------------------------------------------------------
+   4. Typography Scale (SF Pro / system-ui, Apple style)
+   -------------------------------------------------------------------------- */
+:root {
+  /* Font family */
+  --font-sans: 'SF Pro Display', 'SF Pro Text', -apple-system,
+               BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue',
+               'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+               sans-serif;
+
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code',
+               'Menlo', 'Monaco', 'Consolas', monospace;
+
+  --font-emoji: 'Apple Color Emoji', 'Segoe UI Emoji';
+
+  /* Font sizes (Apple type scale) */
+  --text-caption2: 10px;   /* tiny labels */
+  --text-caption1: 11px;   /* captions */
+  --text-footnote: 12px;   /* footnotes / small UI */
+  --text-subhead: 13px;    /* secondary UI text */
+  --text-body: 14px;       /* body text — primary reading size */
+  --text-headline: 16px;   /* headlines / emphasis */
+  --text-title3: 18px;     /* smaller titles */
+  --text-title2: 20px;     /* medium titles */
+  --text-title1: 24px;     /* large titles */
+  --text-large-title: 28px; /* page titles */
+
+  /* Font weights */
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* Line heights */
+  --leading-tight: 1.15;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.6;
+  --leading-code: 1.55;
+
+  /* Letter spacing */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.05em;
+}
+
+/* --------------------------------------------------------------------------
+   5. Z-Index Scale
+   -------------------------------------------------------------------------- */
+:root {
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-sidebar: 300;
+  --z-overlay: 400;
+  --z-modal: 500;
+  --z-toast: 600;
+  --z-tooltip: 700;
+  --z-command-palette: 800;
+}
+
+/* --------------------------------------------------------------------------
+   6. Animation Duration Tokens
+   -------------------------------------------------------------------------- */
+:root {
+  /* Durations — fast and subtle (Apple/WeChat style: snappy, not bouncy) */
+  --duration-instant: 50ms;
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-modal: 350ms;
+
+  /* Easings */
+  --ease-default: cubic-bezier(0, 0, 0.2, 1);      /* Apple default ease-out */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275); /* subtle spring */
+
+  /* Transition presets */
+  --transition-colors: color var(--duration-fast) var(--ease-default),
+                       background-color var(--duration-fast) var(--ease-default),
+                       border-color var(--duration-fast) var(--ease-default);
+
+  --transition-opacity: opacity var(--duration-fast) var(--ease-default);
+
+  --transition-transform: transform var(--duration-normal) var(--ease-default);
+
+  --transition-all: all var(--duration-normal) var(--ease-default);
+}

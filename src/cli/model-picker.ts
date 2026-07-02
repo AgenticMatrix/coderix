@@ -46,7 +46,7 @@ function radioSelect(
       }
       firstRender = false;
 
-      stdout.write(`\x1B[K${title}\n`);
+      stdout.write(`\x1B[K\x1B[1m${title}\x1B[22m\n`);
       options.forEach((opt, i) => {
         const marker = i === selected ? '\x1B[1m●\x1B[0m' : '○';
         stdout.write(`\x1B[K  ${marker} ${opt}\n`);
@@ -93,6 +93,44 @@ function radioSelect(
 }
 
 // ---------------------------------------------------------------------------
+// promptModelPricing — interactive pricing configuration for a single model
+// ---------------------------------------------------------------------------
+
+async function promptModelPricing(
+  stdin: typeof process.stdin,
+  stdout: typeof process.stdout,
+): Promise<ModelItem['price']> {
+  const readline = await import('node:readline');
+
+  console.log('\n  Configure pricing (per 1M tokens):');
+  const currencyIdx = await radioSelect(
+    ['人民币 (CNY)', '美元 (USD)', '欧元 (EUR)', '英镑 (GBP)', '日元 (JPY)'],
+    0,
+    '  Currency:',
+    stdin,
+    stdout,
+  );
+  const currencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY'];
+  const currency = currencies[currencyIdx]!;
+
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  const inputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Input price (cache miss): ', resolve))) || 0;
+  const cachePrice = parseFloat(await new Promise<string>(resolve => rl.question('  Cache read input price: ', resolve))) || 0;
+  const outputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Output price: ', resolve))) || 0;
+  const maxContext = parseInt(await new Promise<string>(resolve => rl.question('  Max context tokens [1000000]: ', resolve)), 10) || 1000000;
+  rl.close();
+
+  return {
+    input: inputPrice,
+    cache_read_input: cachePrice,
+    output: outputPrice,
+    currency,
+    unit: 1000000,
+    max_context: maxContext,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // runInteractiveModelSetup
 // ---------------------------------------------------------------------------
 
@@ -112,6 +150,7 @@ export async function runInteractiveModelSetup(
 
   // ── Step 1: Provider selection ────────────────────────────────────
   let providerDone = false;
+  let isNewProvider = false;
   while (!providerDone) {
     let providerActiveIdx = modelList.findIndex(m => m.provider === defaultProvider);
     if (providerActiveIdx < 0) providerActiveIdx = 0;
@@ -151,6 +190,7 @@ export async function runInteractiveModelSetup(
       };
       modelList.push(selectedProvider);
       providerDone = true;
+      isNewProvider = true;
     } else if (selectedProviderIdx === modelList.length + 1) {
       // Remove provider
       const removeProviderOptions = modelList.map(m => m.provider ?? 'unknown');
@@ -197,7 +237,8 @@ export async function runInteractiveModelSetup(
   console.log(`Selected provider: ${selectedProvider.provider}\n`);
 
   // ── Provider config: base_url + api_key + proxy ──────────────────
-  {
+  if (!isNewProvider) {
+    {
     const currentUrl = selectedProvider.base_url ?? '(not set)';
     console.log(`Base URL: ${currentUrl}`);
     const readline = await import('node:readline');
@@ -210,8 +251,10 @@ export async function runInteractiveModelSetup(
     } else {
       console.log('  Keeping current URL.\n');
     }
-  }
-  {
+    }
+
+    // ── API Key ──────────────────────────────────────────────────
+    {
     const currentToken = selectedProvider.auth_token_env ?? '';
     let displayToken: string;
     if (!currentToken) {
@@ -234,8 +277,10 @@ export async function runInteractiveModelSetup(
     } else {
       console.log('  Keeping current token.\n');
     }
-  }
-  {
+    }
+
+    // ── Proxy ───────────────────────────────────────────────────
+    {
     const currentProxy = selectedProvider.proxy ?? 'None (no proxy)';
     console.log(`Proxy: ${currentProxy}`);
     const readline = await import('node:readline');
@@ -251,7 +296,8 @@ export async function runInteractiveModelSetup(
     } else {
       console.log('  Keeping current proxy.\n');
     }
-  }
+    }
+  } // end if (!isNewProvider)
 
   // ── Step 2: Model selection ─────────────────────────────────────
   const currentDefaultModel = defaultModel.split('/')[1] ?? (getModelName(selectedProvider.model[0] ?? '') || '');
@@ -279,38 +325,15 @@ export async function runInteractiveModelSetup(
 
     if (selectedModelIdx === selectedProvider.model.length) {
       const readline = await import('node:readline');
-      let rl = readline.createInterface({ input: stdin, output: stdout });
+      const rl = readline.createInterface({ input: stdin, output: stdout });
       const name = await new Promise<string>(resolve => rl.question('Enter model name (e.g. my-model-v1): ', resolve));
       rl.close();
 
-      console.log('\n  Configure pricing (per 1M tokens):');
-      const currencyIdx = await radioSelect(
-        ['人民币 (CNY)', '美元 (USD)', '欧元 (EUR)', '英镑 (GBP)', '日元 (JPY)'],
-        0,
-        '  Currency:',
-        stdin,
-        stdout,
-      );
-      const currencies = ['CNY', 'USD', 'EUR', 'GBP', 'JPY'];
-      const currency = currencies[currencyIdx]!;
-
-      rl = readline.createInterface({ input: stdin, output: stdout });
-      const inputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Input price (cache miss): ', resolve))) || 0;
-      const cachePrice = parseFloat(await new Promise<string>(resolve => rl.question('  Cache read input price: ', resolve))) || 0;
-      const outputPrice = parseFloat(await new Promise<string>(resolve => rl.question('  Output price: ', resolve))) || 0;
-      const maxContext = parseInt(await new Promise<string>(resolve => rl.question('  Max context tokens [1000000]: ', resolve)), 10) || 1000000;
-      rl.close();
+      const price = await promptModelPricing(stdin, stdout);
       const modelName = name.trim();
       selectedProvider.model.push({
         name: modelName,
-        price: {
-          input: inputPrice,
-          cache_read_input: cachePrice,
-          output: outputPrice,
-          currency,
-          unit: 1000000,
-          max_context: maxContext,
-        },
+        price,
       } as ModelItem);
       selectedModel = modelName;
       modelDone = true;
@@ -346,14 +369,47 @@ export async function runInteractiveModelSetup(
         continue;
       }
     } else if (selectedModelIdx === selectedProvider.model.length + 2) {
-      selectedModel = getModelName(selectedProvider.model[0] ?? '') || '';
+      // Skip: use first model or nothing
+      const skipModel = selectedProvider.model[0];
+      selectedModel = skipModel ? getModelName(skipModel) : '';
       modelDone = true;
       if (!selectedModel) {
         console.log('No model selected. You can configure one later.\n');
+      } else {
+        // Always offer to configure/change pricing via arrow-key selector
+        const hasPrice = typeof skipModel !== 'string' && skipModel.price != null;
+        const title = hasPrice
+          ? 'Change pricing for this model?'
+          : 'Configure pricing for this model?';
+        const defaultIdx = hasPrice ? 1 : 0; // No if price exists, Yes otherwise
+        const choice = await radioSelect(['Yes', 'No'], defaultIdx, title, stdin, stdout);
+        if (choice === 0) {
+          const price = await promptModelPricing(stdin, stdout);
+          selectedProvider.model[0] = {
+            name: selectedModel,
+            price,
+          };
+        }
       }
     } else {
-      selectedModel = getModelName(selectedProvider.model[selectedModelIdx]!);
+      const existingModel = selectedProvider.model[selectedModelIdx]!;
+      selectedModel = getModelName(existingModel);
       modelDone = true;
+
+      // Always offer to configure/change pricing via arrow-key selector
+      const hasPrice = typeof existingModel !== 'string' && existingModel.price != null;
+      const title = hasPrice
+        ? 'Change pricing for this model?'
+        : 'Configure pricing for this model?';
+      const defaultIdx = hasPrice ? 1 : 0; // No if price exists, Yes otherwise
+      const choice = await radioSelect(['Yes', 'No'], defaultIdx, title, stdin, stdout);
+      if (choice === 0) {
+        const price = await promptModelPricing(stdin, stdout);
+        selectedProvider.model[selectedModelIdx] = {
+          name: selectedModel,
+          price,
+        };
+      }
     }
   }
 
@@ -466,8 +522,6 @@ export async function handleSetupFlag(): Promise<void> {
   }
   settings.model_list = settings.model_list ?? [];
 
-  console.log('\n🔧 Coderix — First Time Setup\n');
-
   // ── Step 1: Theme ───────────────────────────────────────────────
   const themeIdx = await radioSelect(
     ['dark', 'light'],
@@ -484,7 +538,7 @@ export async function handleSetupFlag(): Promise<void> {
   {
     const rl = readline.createInterface({ input: stdin, output: stdout });
     const maxTokens = await new Promise<number>(resolve => {
-      rl.question('Max output tokens [32768]: ', answer => {
+      rl.question('\x1b[1mMax output tokens [32768]:\x1b[22m ', answer => {
         const trimmed = answer.trim();
         resolve(trimmed ? parseInt(trimmed, 10) || 32768 : 32768);
       });

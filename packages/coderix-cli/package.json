@@ -1,0 +1,25 @@
+{
+  "name": "@coderix/cli",
+  "version": "0.1.0",
+  "description": "Coderix CLI — terminal-based AI coding assistant",
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": {
+    "coderix": "./dist/main.js"
+  },
+  "scripts": {
+    "dev": "tsx --watch src/main.tsx",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coderix/core": "workspace:*",
+    "ink": "^7.0.5",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}

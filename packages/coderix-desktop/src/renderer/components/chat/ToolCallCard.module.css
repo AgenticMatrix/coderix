@@ -1,0 +1,288 @@
+/* ==========================================================================
+   ToolCallCard.module.css — Tool Permission / Execution Cards (WeChat × Apple Style)
+   Expandable cards showing tool name, params, results with clear state indication
+   ========================================================================== */
+
+/* Card root */
+.tool-card {
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid;
+  overflow: hidden;
+  background: var(--color-bg-secondary);
+  transition: border-color var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default);
+}
+
+/* State-based border colors */
+.tool-card.pending {
+  border-color: var(--color-separator);
+  opacity: 0.7;
+}
+
+.tool-card.executing {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 1px var(--color-info-muted);
+}
+
+.tool-card.done {
+  border-color: var(--color-success);
+  background: var(--color-success-muted);
+}
+
+.tool-card.error {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 1px var(--color-danger-muted);
+}
+
+/* Destructive / dangerous tool — red warning border */
+.tool-card.destructive {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-danger-muted);
+}
+
+/* === Card Header === */
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  font-family: var(--font-sans);
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-default);
+  min-height: 36px;
+}
+
+.tool-card-header:hover {
+  background: var(--color-bg-tertiary);
+}
+
+/* Expand arrow */
+.expand-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-default);
+  flex-shrink: 0;
+}
+
+.expand-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+/* State icon */
+.state-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.state-icon.pending {
+  color: var(--color-text-tertiary);
+}
+
+.state-icon.executing {
+  color: var(--color-info);
+  animation: spin 1.5s linear infinite;
+}
+
+.state-icon.done {
+  color: var(--color-success);
+}
+
+.state-icon.error {
+  color: var(--color-danger);
+}
+
+/* Tool icon (wrench) */
+.tool-icon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Tool name */
+.tool-name {
+  font-size: var(--text-subhead);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Header spacer */
+.header-spacer {
+  flex: 1;
+}
+
+/* Execution time badge */
+.execution-time {
+  font-size: var(--text-caption2);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* State label badge */
+.state-label {
+  font-size: var(--text-caption2);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  padding: var(--space-0) var(--space-1-5);
+  border-radius: var(--radius-full);
+}
+
+.state-label.pending {
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-tertiary);
+}
+
+.state-label.executing {
+  color: var(--color-info);
+  background: var(--color-info-muted);
+}
+
+.state-label.done {
+  color: var(--color-success);
+  background: var(--color-success-muted);
+}
+
+.state-label.error {
+  color: var(--color-danger);
+  background: var(--color-danger-muted);
+}
+
+/* === Card Expanded Content === */
+.tool-card-body {
+  padding: 0 var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Section labels */
+.section-label {
+  font-size: var(--text-caption2);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  margin-bottom: var(--space-1);
+}
+
+/* Parameters display */
+.params-block {
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-footnote);
+  font-family: var(--font-mono);
+  line-height: var(--leading-code);
+}
+
+.param-row {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-0) 0;
+}
+
+.param-key {
+  color: var(--color-info);
+  font-weight: var(--font-medium);
+  flex-shrink: 0;
+}
+
+.param-value {
+  color: var(--color-text-secondary);
+  word-break: break-all;
+}
+
+/* Result display */
+.result-block {
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-footnote);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-code);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 192px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+/* Confirm / Deny buttons for destructive operations */
+.tool-confirm-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-muted);
+  border-top: 1px solid var(--color-danger);
+}
+
+.tool-confirm-message {
+  flex: 1;
+  font-size: var(--text-footnote);
+  font-weight: var(--font-medium);
+  color: var(--color-danger);
+}
+
+.tool-confirm-btn {
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-footnote);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-sans);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+  border: none;
+}
+
+.tool-confirm-btn.deny {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.tool-confirm-btn.deny:hover {
+  background: var(--color-bg-quaternary);
+}
+
+.tool-confirm-btn.approve {
+  background: var(--color-danger);
+  color: var(--color-text-inverse);
+}
+
+.tool-confirm-btn.approve:hover {
+  background: var(--color-danger);
+  opacity: 0.85;
+}
+
+/* Keyframes */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Pulsing border for executing tools */
+.tool-card.executing {
+  animation: border-pulse 2s ease-in-out infinite;
+}
+
+@keyframes border-pulse {
+  0%, 100% {
+    border-color: var(--color-info);
+  }
+  50% {
+    border-color: rgba(100, 210, 255, 0.4);
+  }
+}

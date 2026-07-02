@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coderix</title>
+  <style>
+    /* Prevent FOUC — set background immediately */
+    html, body { background-color: #FFFFFF; margin: 0; padding: 0; }
+    #root:empty::after {
+      content: '';
+      display: block;
+      width: 24px;
+      height: 24px;
+      margin: calc(50vh - 12px) auto 0;
+      border: 2px solid rgba(0,0,0,0.08);
+      border-top-color: #007AFF;
+      border-radius: 50%;
+      animation: coderix-spin 0.8s linear infinite;
+    }
+    @keyframes coderix-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

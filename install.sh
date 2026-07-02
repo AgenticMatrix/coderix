@@ -1,18 +1,19 @@
 #!/bin/bash
-# install.sh — One-click installer for Coderix
+# install.sh — One-click installer for Coderix (CLI + Desktop)
 #
 # Usage:
 #   # Remote install (from GitHub)
 #   curl -fsSL https://raw.githubusercontent.com/AgenticMatrix/coderix/main/install.sh | bash
 #
 #   # Local development install (run from repo root)
-#   ./install.sh --local
-#   ./install.sh --dev
+#   ./install.sh --local      # CLI only
+#   ./install.sh --desktop    # Desktop Electron app only
+#   ./install.sh --all        # Both CLI and Desktop
 #
 # This script:
-#   1. Checks Node.js >= 22
-#   2. Installs coderix (npm registry or local link)
-#   3. Creates ~/.coder configuration directory
+#   1. Checks Node.js >= 22 + pnpm (for monorepo)
+#   2. Installs coderix dependencies
+#   3. Creates ~/.coderix configuration directory
 #   4. Optionally sets up API keys
 set -euo pipefail
 
@@ -23,15 +24,18 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 LOCAL_INSTALL=false
+DESKTOP_INSTALL=false
 for arg in "$@"; do
   case "$arg" in
     --local|--dev) LOCAL_INSTALL=true ;;
+    --desktop) DESKTOP_INSTALL=true ;;
+    --all) LOCAL_INSTALL=true; DESKTOP_INSTALL=true ;;
   esac
 done
 
 echo -e "${CYAN}"
 echo "╔══════════════════════════════════════════════════╗"
-echo "║       Coderix — One-Click Installer           ║"
+echo "║    Coderix — CLI + Desktop Installer          ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
@@ -156,6 +160,19 @@ if command -v npm &> /dev/null; then
   fi
 fi
 
+# Check pnpm (required for monorepo dev)
+if command -v pnpm &> /dev/null; then
+  PNPM_VERSION=$(pnpm -v)
+  echo -e "pnpm version: ${GREEN}v${PNPM_VERSION}${NC}"
+else
+  echo -e "${YELLOW}pnpm not found. Installing pnpm...${NC}"
+  if command -v npm &> /dev/null; then
+    npm install -g pnpm 2>/dev/null && echo -e "${GREEN}pnpm installed${NC}" || echo -e "${YELLOW}WARNING: Could not install pnpm. Desktop build requires pnpm.${NC}"
+  else
+    echo -e "${YELLOW}WARNING: npm not found, cannot auto-install pnpm.${NC}"
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # 2. Auto-detect local dev install
 # ---------------------------------------------------------------------------
@@ -171,11 +188,11 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 
-if $LOCAL_INSTALL; then
+if $LOCAL_INSTALL || $DESKTOP_INSTALL; then
   echo -e "${CYAN}Local development install detected.${NC}"
 
   if [ -z "${REPO_DIR:-}" ]; then
-    echo -e "${RED}ERROR: --local flag used but not inside coderix repo.${NC}"
+    echo -e "${RED}ERROR: --local/--desktop flag used but not inside coderix repo.${NC}"
     echo "Run this script from the repo root:"
     echo "  git clone https://github.com/AgenticMatrix/coderix.git"
     echo "  cd coderix && ./install.sh --local"
@@ -185,18 +202,45 @@ if $LOCAL_INSTALL; then
   echo -e "Repo directory: ${GREEN}${REPO_DIR}${NC}"
   echo ""
 
-  echo -e "${CYAN}Installing dependencies with npm...${NC}"
-  (cd "${REPO_DIR}" && npm install)
+  # Install root dependencies
+  echo -e "${CYAN}Installing monorepo dependencies...${NC}"
+  (cd "${REPO_DIR}" && pnpm install)
 
-  echo ""
-  echo -e "${CYAN}Building coderix...${NC}"
-  (cd "${REPO_DIR}" && npm run build)
+  if $LOCAL_INSTALL; then
+    echo ""
+    echo -e "${CYAN}Building CLI...${NC}"
+    (cd "${REPO_DIR}" && npm run build 2>/dev/null || pnpm run build:cli 2>/dev/null || echo -e "${YELLOW}CLI build skipped (use: npm run dev:cli)${NC}")
 
-  echo ""
-  echo -e "${CYAN}Linking coderix command globally...${NC}"
-  (cd "${REPO_DIR}" && npm link --force 2>/dev/null || npm link 2>/dev/null || true)
+    echo ""
+    echo -e "${CYAN}Linking coderix command globally...${NC}"
+    (cd "${REPO_DIR}" && npm link --force 2>/dev/null || npm link 2>/dev/null || true)
 
-  echo -e "${GREEN}coderix built and linked locally${NC}"
+    echo -e "${GREEN}CLI built and linked locally${NC}"
+
+	# Detect PATH conflicts: if another coderix (bun, brew, etc.) shadows the npm-linked one
+	NPM_BIN_DIR=$(npm bin -g 2>/dev/null || echo "")
+	RESOLVED_CODERIX=$(command -v coderix 2>/dev/null || echo "")
+	if [ -n "$NPM_BIN_DIR" ] && [ -n "$RESOLVED_CODERIX" ] && [ "$RESOLVED_CODERIX" != "$NPM_BIN_DIR/coderix" ]; then
+	  echo ""
+	  echo -e "${YELLOW}WARNING: Another coderix is shadowing the npm-linked version:${NC}"
+	  echo -e "  Resolved:  ${YELLOW}${RESOLVED_CODERIX}${NC}"
+	  echo -e "  Expected:  ${NPM_BIN_DIR}/coderix"
+	  echo ""
+	  echo -e "${YELLOW}Remove the conflicting version to use the latest build:${NC}"
+	  echo -e "  rm -f ${RESOLVED_CODERIX}"
+	  echo -e "  # Or reorder PATH so ${NPM_BIN_DIR} comes first"
+	fi
+  fi
+
+  if $DESKTOP_INSTALL; then
+    echo ""
+    echo -e "${CYAN}Setting up desktop app...${NC}"
+    (cd "${REPO_DIR}/packages/coderix-desktop" && pnpm install 2>/dev/null || true)
+    echo -e "${GREEN}Desktop app dependencies installed${NC}"
+    echo ""
+    echo -e "  Launch CLI:     ${YELLOW}npm run dev:cli${NC}"
+    echo -e "  Launch Desktop: ${YELLOW}npm run dev:desk${NC}"
+  fi
 
 else
   echo -e "${CYAN}coderix from npm registry...${NC}"
@@ -369,11 +413,20 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo -e "${CYAN}Quick Start:${NC}"
 echo ""
-echo "  # Start an interactive session"
+echo "  # Start CLI interactive session"
 echo "  coderix"
 echo ""
 echo "  # Ask a one-shot question"
 echo "  coderix 'Explain this codebase'"
+echo ""
+if $DESKTOP_INSTALL; then
+echo "  # Launch desktop app (dev mode)"
+echo "  npm run dev:desk"
+echo ""
+fi
+echo -e "${CYAN}Development:${NC}"
+echo "  npm run dev:cli      # CLI dev mode"
+echo "  npm run dev:desk     # Electron desktop dev mode"
 echo ""
 echo -e "${CYAN}Configuration:${NC}"
 echo "  ~/.coderix/               — Configuration directory"

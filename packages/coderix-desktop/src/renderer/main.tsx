@@ -1,0 +1,53 @@
+/**
+ * Coderix Desktop — Renderer Entry Point
+ *
+ * Bootstraps the React application inside the Electron renderer process.
+ * Imports global styles before any component rendering to prevent FOUC.
+ */
+
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import './styles/variables.css';
+import './styles/globals.css';
+
+// ---------------------------------------------------------------------------
+// Type augmentation for the coderixAPI exposed via preload contextBridge
+// ---------------------------------------------------------------------------
+
+declare global {
+  interface Window {
+    coderixAPI: {
+      query: { submit(query: string, sessionId?: string): Promise<{ status: string }>; interrupt(): Promise<{ status: string }> };
+      session: { list(): Promise<unknown[]>; load(sessionId: string): Promise<unknown>; fork(sessionId: string): Promise<unknown>; delete(sessionId: string): Promise<{ status: string }> };
+      permission: { approve(toolUseId: string): Promise<{ status: string }>; deny(toolUseId: string): Promise<{ status: string }>; setMode(mode: string): Promise<{ mode: string }> };
+      fs: { readFile(filePath: string): Promise<{ content: string; path: string }>; writeFile(path: string, content: string): Promise<{ status: string; path: string }>; listDir(dirPath: string): Promise<{ path: string; entries: unknown[] }>; watch(watchPath: string): Promise<{ watcherId: string; path: string }> };
+      terminal: { create(opts?: { cwd?: string; rows?: number; cols?: number }): Promise<{ terminalId: string }>; write(sessionId: string, data: string): void; resize(sessionId: string, rows: number, cols: number): void; destroy(sessionId: string): void; onData(sessionId: string, callback: (data: string) => void): () => void; onExit(sessionId: string, callback: (exitCode: number) => void): () => void };
+      config: { get(): Promise<unknown>; set(key: string, value: unknown): Promise<{ key: string; value: unknown; status: string }>; getModelList(): Promise<unknown[]> };
+      app: { getVersion(): Promise<string>; checkUpdate(): Promise<{ updateAvailable: boolean }>; quit(): void };
+      onStreamEvent(callback: (event: unknown) => void): () => void;
+      onPermissionRequest(callback: (req: unknown) => void): () => void;
+      onStateChange(callback: (change: unknown) => void): () => void;
+      onQuestionRequest(callback: (req: unknown) => void): () => void;
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Mount
+// ---------------------------------------------------------------------------
+
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('Root element #root not found');
+}
+
+const root = createRoot(container);
+root.render(
+  <React.StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </React.StrictMode>,
+);
