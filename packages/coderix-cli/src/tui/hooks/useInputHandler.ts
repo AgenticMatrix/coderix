@@ -114,6 +114,10 @@ export function useInputHandler({
           dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
           return;
         }
+        if (teamPicker) {
+          dispatch({ type: 'HIDE_TEAM_PICKER' });
+          return;
+        }
         if (blocked) return;
         dispatch({ type: 'SET_INPUT', text: '' });
         dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
@@ -168,8 +172,8 @@ export function useInputHandler({
         return;
       }
 
-      // When team picker is shown, suppress all other input
-      // (the TeamAgentPicker component handles arrow keys / Enter)
+      // When team picker is focused, suppress normal input
+      // (the TeamPanel component handles arrow keys / Enter / Escape)
       if (teamPicker) return;
 
       // When an approval overlay is active, suppress normal input.
@@ -312,7 +316,10 @@ export function useInputHandler({
       }
 
       if (key.downArrow) {
-        if (historyIndex === -1) return;
+        if (historyIndex === -1) {
+          dispatch({ type: 'SHOW_TEAM_PICKER' });
+          return;
+        }
         if (historyIndex < history.length - 1) {
           const newIdx = historyIndex + 1;
           dispatch({ type: 'SET_HISTORY_INDEX', index: newIdx });

@@ -31,12 +31,6 @@ const STATUS_COLOR: Record<string, string> = {
   stopped: 'grey',
 };
 
-const AGENT_COLOR: Record<string, string> = {
-  explore: 'blue',
-  plan: 'magenta',
-  'general-purpose': 'cyan',
-};
-
 function memberLabel(m: TeamMember): string {
   const task = m.task ? ` — ${m.task}` : '';
   return `${m.name} ${task}`.slice(0, 60);
@@ -165,9 +159,20 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     return (order[a.status] ?? 2) - (order[b.status] ?? 2);
   });
 
+  // Synthetic "main" entry for returning to the main agent
+  const mainEntry: TeamMember = {
+    agentId: '__main__',
+    name: 'main',
+    agentType: 'main',
+    status: 'done',
+    task: 'Return to main agent',
+    joinedAt: 0,
+  };
+  const displayList = sorted.length > 0 ? [...sorted, mainEntry] : [];
+
   // Keyboard navigation when focused
   useInput((_input, key) => {
-    if (!focused || dismissed || sorted.length === 0) return;
+    if (!focused || dismissed || displayList.length === 0) return;
 
     if (key.escape) {
       onFocusRequest();
@@ -175,8 +180,14 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     }
 
     if (key.return) {
-      const member = sorted[cursorIndex];
-      if (member) onSelect(member.agentId);
+      const member = displayList[cursorIndex];
+      if (member) {
+        if (member.agentId === '__main__') {
+          onFocusRequest();
+        } else {
+          onSelect(member.agentId);
+        }
+      }
       return;
     }
 
@@ -185,7 +196,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       return;
     }
 
-    if (key.downArrow && cursorIndex < sorted.length - 1) {
+    if (key.downArrow && cursorIndex < displayList.length - 1) {
       setCursorIndex(i => i + 1);
       return;
     }
@@ -231,22 +242,39 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         ) : null}
       </Box>
 
-      {sorted.slice(0, 8).map((m, i) => {
+      {displayList.slice(0, 9).map((m, i) => {
+        // "main" entry for returning to the main agent
+        if (m.agentId === '__main__') {
+          const isCursor = focused && cursorIndex === i;
+          return (
+            <Box key="__main__" flexShrink={0}>
+              <Text>
+                <Text color={isCursor ? 'yellow' : undefined}>
+                  {isCursor ? '>' : ' '}
+                </Text>
+                {' '}
+                <Text color="green">● </Text>
+                <Text color={isCursor ? 'yellow' : undefined} bold={isCursor}>main</Text>
+                <Text dimColor> · Return to main agent</Text>
+              </Text>
+            </Box>
+          );
+        }
+
         const icon = STATUS_ICON[m.status] ?? '?';
         const color = STATUS_COLOR[m.status] ?? 'grey';
-        const agentColor = AGENT_COLOR[m.agentType] ?? 'white';
         const label = memberLabel(m);
         const isCursor = focused && cursorIndex === i;
 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
             <Text>
-              <Text color={isCursor ? 'cyan' : undefined} inverse={isCursor}>
+              <Text color={isCursor ? 'yellow' : undefined}>
                 {isCursor ? '>' : ' '}
               </Text>
               {' '}
               <Text color={color}>{icon} </Text>
-              <Text color={agentColor}>{m.agentType}</Text>
+              <Text color={isCursor ? 'yellow' : undefined}>{m.agentType}</Text>
               <Text dimColor> · </Text>
               <Text dimColor={m.status === 'done'}>{label}</Text>
             </Text>
