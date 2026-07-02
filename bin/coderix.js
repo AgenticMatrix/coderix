@@ -14,8 +14,7 @@ const mainPath = resolve(__dirname, '..', 'src', 'cli', 'main.tsx');
 const tsxPath = resolve(__dirname, '..', 'node_modules', '.bin', 'tsx');
 const tsconfigPath = resolve(__dirname, '..', 'tsconfig.json');
 
-const child = spawn(process.execPath, [
-  tsxPath,
+const child = spawn(tsxPath, [
   '--tsconfig',
   tsconfigPath,
   mainPath,
