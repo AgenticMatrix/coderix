@@ -514,8 +514,6 @@ export async function handleSetupFlag(): Promise<void> {
   }
   settings.model_list = settings.model_list ?? [];
 
-  console.log('\n🔧 Coderix — First Time Setup\n');
-
   // ── Step 1: Theme ───────────────────────────────────────────────
   const themeIdx = await radioSelect(
     ['dark', 'light'],
