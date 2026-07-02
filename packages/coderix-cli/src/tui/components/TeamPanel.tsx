@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { listTeams, loadTeamConfig } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamConfig, TeamMember } from '@coderix/core';
@@ -8,6 +8,9 @@ import type { SubAgentRecord } from '@coderix/core';
 interface TeamPanelProps {
   dismissed: boolean;
   onDismissReset?: () => void;
+  focused: boolean;
+  onFocusRequest: () => void;
+  onSelect: (agentId: string) => void;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -61,8 +64,9 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
  * Read-only display — press Ctrl+J to open the TeamAgentPicker
  * for selecting a member to view their transcript.
  */
-export function TeamPanel({ dismissed, onDismissReset }: TeamPanelProps) {
+export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect }: TeamPanelProps) {
   const [configs, setConfigs] = useState<TeamConfig[]>([]);
+  const [cursorIndex, setCursorIndex] = useState(0);
   const prevActiveCount = useRef(0);
   const hiddenTeams = useRef<Set<string>>(new Set());
   const prevFingerprint = useRef('');
@@ -154,19 +158,50 @@ export function TeamPanel({ dismissed, onDismissReset }: TeamPanelProps) {
     };
   }, [dismissed, onDismissReset]);
 
-  if (dismissed) return null;
-
   const visible = configs.filter(c => !hiddenTeams.current.has(c.name));
-  if (visible.length === 0) return null;
-
   const allMembers = visible.flatMap(c => c.members);
-  const hasActive = allMembers.some(m => m.status === 'running' || m.status === 'pending');
-
-  // Sort: running → pending → done → error → stopped
   const sorted = [...allMembers].sort((a, b) => {
     const order: Record<string, number> = { running: 0, pending: 1, done: 2, error: 3, stopped: 4 };
     return (order[a.status] ?? 2) - (order[b.status] ?? 2);
   });
+
+  // Keyboard navigation when focused
+  useInput((_input, key) => {
+    if (!focused || dismissed || sorted.length === 0) return;
+
+    if (key.escape) {
+      onFocusRequest();
+      return;
+    }
+
+    if (key.return) {
+      const member = sorted[cursorIndex];
+      if (member) onSelect(member.agentId);
+      return;
+    }
+
+    if (key.upArrow && cursorIndex > 0) {
+      setCursorIndex(i => i - 1);
+      return;
+    }
+
+    if (key.downArrow && cursorIndex < sorted.length - 1) {
+      setCursorIndex(i => i + 1);
+      return;
+    }
+
+    // Number keys quick-pick
+    const n = parseInt(_input, 10);
+    if (n >= 1 && n <= sorted.length) {
+      const member = sorted[n - 1];
+      if (member) onSelect(member.agentId);
+    }
+  });
+
+  if (dismissed) return null;
+  if (visible.length === 0) return null;
+
+  const hasActive = allMembers.some(m => m.status === 'running' || m.status === 'pending');
 
   const runningCount = allMembers.filter(m => m.status === 'running').length;
   const pendingCount = allMembers.filter(m => m.status === 'pending').length;
@@ -189,22 +224,32 @@ export function TeamPanel({ dismissed, onDismissReset }: TeamPanelProps) {
           <Text dimColor>({visible.length} teams) </Text>
         )}
         <Text dimColor>({parts.join(', ')})</Text>
-        {hasActive && <Text dimColor> — Ctrl+K to pick member</Text>}
+        {focused ? (
+          <Text color="yellow"> — Up/Down navigate · Enter select · Esc defocus</Text>
+        ) : hasActive ? (
+          <Text dimColor> — Ctrl+K to pick member</Text>
+        ) : null}
       </Box>
 
-      {sorted.slice(0, 8).map((m) => {
+      {sorted.slice(0, 8).map((m, i) => {
         const icon = STATUS_ICON[m.status] ?? '?';
         const color = STATUS_COLOR[m.status] ?? 'grey';
         const agentColor = AGENT_COLOR[m.agentType] ?? 'white';
         const label = memberLabel(m);
+        const isCursor = focused && cursorIndex === i;
 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
-            <Text>{'  '}</Text>
-            <Text color={color}>{icon} </Text>
-            <Text color={agentColor}>{m.agentType}</Text>
-            <Text dimColor> · </Text>
-            <Text dimColor={m.status === 'done'}>{label}</Text>
+            <Text>
+              <Text color={isCursor ? 'cyan' : undefined} inverse={isCursor}>
+                {isCursor ? '>' : ' '}
+              </Text>
+              {' '}
+              <Text color={color}>{icon} </Text>
+              <Text color={agentColor}>{m.agentType}</Text>
+              <Text dimColor> · </Text>
+              <Text dimColor={m.status === 'done'}>{label}</Text>
+            </Text>
           </Box>
         );
       })}
