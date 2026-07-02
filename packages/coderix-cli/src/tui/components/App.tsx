@@ -15,7 +15,6 @@ import { SubAgentPicker } from './SubAgentPicker.js';
 import { TaskPanel } from './TaskPanel.js';
 import { TodoPanel } from './TodoPanel.js';
 import { TeamPanel } from './TeamPanel.js';
-import { TeamAgentPicker } from './TeamAgentPicker.js';
 import { MemoryPicker } from './MemoryPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { CommandHint } from './CommandHint.js';
@@ -401,18 +400,6 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
               </Box>
             )}
 
-            {state.teamPicker && (
-              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-                <TeamAgentPicker
-                  onSelect={(agentId) => {
-                    dispatch({ type: 'HIDE_TEAM_PICKER' });
-                    dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
-                  }}
-                  onCancel={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
-                />
-              </Box>
-            )}
-
             {state.memoryPicker && (
               <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
                 <MemoryPicker
@@ -447,11 +434,6 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         onDismissReset={handleTodoDismissReset}
       />
 
-      <TeamPanel
-        dismissed={state.teamPanelDismissed}
-        onDismissReset={handleTeamDismissReset}
-      />
-
       <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
       <InputBox
         inputText={state.inputText}
@@ -474,6 +456,17 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
           maxContext={config.maxContext}
         />
       </Box>
+
+      <TeamPanel
+        dismissed={state.teamPanelDismissed}
+        onDismissReset={handleTeamDismissReset}
+        focused={state.teamPicker}
+        onFocusRequest={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
+        onSelect={(agentId) => {
+          dispatch({ type: 'HIDE_TEAM_PICKER' });
+          dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
+        }}
+      />
     </Box>
   );
 }
