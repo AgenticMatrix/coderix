@@ -12,14 +12,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "dev:desk": "cd desktop && npm run electron:start"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.28.1",
     "@anthropic-ai/sdk": "^0.102.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tauri-apps/cli": "^2.11.4",
     "chrome-remote-interface": "^0.34.0",
-    "electron": "^35.7.5",
+    "electron": "^33.4.11",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
     "ink": "^7.0.5",
@@ -28,6 +30,7 @@
     "shell-quote": "^1.8.4",
     "undici": "^7.27.2",
     "ws": "^8.21.0",
+    "yoga-layout": "^2.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

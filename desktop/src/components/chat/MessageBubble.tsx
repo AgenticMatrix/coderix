@@ -7,15 +7,41 @@ interface MessageBubbleProps {
   message: ChatMessage;
 }
 
+function ToolCard({ block }: { block: ToolUseBlock }) {
+  const [expanded, setExpanded] = useState(false);
+  const stateClass = `tool-card-${block.state}`;
+
+  const icon = {
+    pending: '○', executing: '◉', done: '✓', error: '✕',
+  }[block.state] || '○';
+
+  return (
+    <div className={`tool-card ${stateClass}`}>
+      <div className="tool-card-header" onClick={() => setExpanded(!expanded)}>
+        <span className="tool-card-icon">{icon}</span>
+        <span className="tool-card-name">{block.toolName}</span>
+        {block.duration != null && (
+          <span className="tool-card-duration">{(block.duration / 1000).toFixed(1)}s</span>
+        )}
+        <span className="tool-card-state">{block.state}</span>
+      </div>
+      {expanded && block.result && (
+        <div className="tool-card-body">
+          <CodeBlock code={block.result.content} language="" maxLines={30} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
 
   if (isSystem) {
-    // System messages show tool results
     return (
-      <div className="message-bubble message-system">
+      <div className="message message-system">
         {message.blocks.map((block, i) => {
           if (block.type === 'tool_result') {
             return (
@@ -27,7 +53,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                   )}
                 </div>
                 <div className="tool-result-content">
-                  <CodeBlock code={block.content} language="" maxLines={30} />
+                  <CodeBlock code={block.content.slice(0, 2000)} language="" maxLines={20} />
                 </div>
               </div>
             );
@@ -38,19 +64,19 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     );
   }
 
+  const toolBlocks = message.blocks.filter((b): b is ToolUseBlock => b.type === 'tool_use');
+
   return (
-    <div className={`message-bubble ${isUser ? 'message-user' : 'message-assistant'}`}>
+    <div className={`message ${isUser ? 'message-user' : 'message-assistant'}`}>
+      {/* Role indicator */}
       <div className="message-role">
         {isUser ? 'You' : 'Coderix'}
       </div>
 
-      {/* Thinking section */}
+      {/* Thinking */}
       {message.thinking && (
         <div className="message-thinking">
-          <button
-            className="thinking-toggle"
-            onClick={() => setThinkingExpanded(!thinkingExpanded)}
-          >
+          <button className="thinking-toggle" onClick={() => setThinkingExpanded(!thinkingExpanded)}>
             {thinkingExpanded ? '▾' : '▸'} Thinking
           </button>
           {thinkingExpanded && (
@@ -68,43 +94,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
       )}
 
-      {/* Tool use blocks */}
-      {message.blocks
-        .filter((b): b is ToolUseBlock => b.type === 'tool_use')
-        .map((block) => (
-          <div key={block.toolId} className={`tool-use tool-use-${block.state}`}>
-            <div className="tool-use-header">
-              <span className="tool-use-icon">
-                {block.state === 'pending' && '◷'}
-                {block.state === 'executing' && '⚙'}
-                {block.state === 'done' && '✓'}
-                {block.state === 'error' && '✕'}
-              </span>
-              <span className="tool-use-name">{block.toolName}</span>
-              <span className="tool-use-state">{block.state}</span>
-              {block.duration != null && (
-                <span className="tool-use-duration">
-                  {(block.duration / 1000).toFixed(1)}s
-                </span>
-              )}
-            </div>
-            {block.result && (
-              <div className={`tool-use-result ${block.result.isError ? 'tool-use-result-error' : ''}`}>
-                <CodeBlock
-                  code={block.result.content}
-                  language=""
-                  maxLines={25}
-                />
-              </div>
-            )}
-          </div>
-        ))}
+      {/* Tool use cards */}
+      {toolBlocks.map((block) => (
+        <ToolCard key={block.toolId} block={block} />
+      ))}
 
-      {/* Token usage */}
+      {/* Token info */}
       {message.tokenUsage && (
         <div className="message-token-info">
-          <span title="Input tokens">↑{message.tokenUsage.inputTokens.toLocaleString()}</span>
-          <span title="Output tokens">↓{message.tokenUsage.outputTokens.toLocaleString()}</span>
+          <span>↑{message.tokenUsage.inputTokens.toLocaleString()}</span>
+          <span>↓{message.tokenUsage.outputTokens.toLocaleString()}</span>
         </div>
       )}
     </div>

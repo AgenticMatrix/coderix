@@ -15,7 +15,6 @@ export function ChatView({ onSendMessage, onInterrupt }: ChatViewProps) {
   const inputText = useChatStore((s) => s.inputText);
   const setInputText = useChatStore((s) => s.setInputText);
   const error = useChatStore((s) => s.error);
-  const sessionId = useChatStore((s) => s.sessionId);
 
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || isStreaming) return;
@@ -28,77 +27,41 @@ export function ChatView({ onSendMessage, onInterrupt }: ChatViewProps) {
         e.preventDefault();
         handleSend();
       }
-      if (e.key === 'Escape') {
-        if (isStreaming) {
-          onInterrupt();
-        }
+      if (e.key === 'Escape' && isStreaming) {
+        onInterrupt();
       }
     },
     [handleSend, isStreaming, onInterrupt],
   );
 
-  const handleNewSession = useCallback(async () => {
-    const bridge = getAgentBridge();
-    if (bridge) {
-      await bridge.createSession();
-    }
-  }, []);
-
   return (
     <div className="chat-view">
-      {/* Header */}
-      <div className="chat-header">
-        <div className="chat-header-left">
-          <span className="chat-header-title">Coderix</span>
-          {sessionId && (
-            <span className="chat-header-session" title={sessionId}>
-              {sessionId.slice(0, 8)}...
-            </span>
-          )}
-        </div>
-        <div className="chat-header-right">
-          <button
-            className="btn-icon"
-            onClick={handleNewSession}
-            title="New Session"
-          >
-            + New
-          </button>
-        </div>
-      </div>
-
-      {/* Messages */}
       <MessageList messages={messages} />
 
-      {/* Error banner */}
       {error && (
         <div className="chat-error-banner">
           <span className="chat-error-text">{error}</span>
-          <button
-            className="btn-icon"
-            onClick={() => useChatStore.getState().clearError()}
-          >
-            ✕
-          </button>
+          <button className="btn-icon" onClick={() => useChatStore.getState().clearError()}>✕</button>
         </div>
       )}
 
-      {/* Input area */}
       <div className="chat-input-area">
         {isStreaming && (
           <div className="chat-interrupt-bar">
             <button className="btn-interrupt" onClick={onInterrupt}>
-              ■ Interrupt
+              ■ Stop generating
             </button>
           </div>
         )}
-        <InputBox
-          value={inputText}
-          onChange={setInputText}
-          onSend={handleSend}
-          onKeyDown={handleKeyDown}
-          disabled={isStreaming}
-        />
+        <div className="chat-input-inner">
+          <InputBox
+            value={inputText}
+            onChange={setInputText}
+            onSend={handleSend}
+            onKeyDown={handleKeyDown}
+            disabled={isStreaming}
+          />
+        </div>
       </div>
     </div>
   );

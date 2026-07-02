@@ -6,13 +6,7 @@ interface InputBoxProps {
   disabled?: boolean;
 }
 
-export function InputBox({
-  value,
-  onChange,
-  onSend,
-  onKeyDown,
-  disabled,
-}: InputBoxProps) {
+export function InputBox({ value, onChange, onSend, onKeyDown, disabled }: InputBoxProps) {
   return (
     <div className="input-box">
       <textarea
@@ -20,7 +14,7 @@ export function InputBox({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder={disabled ? 'Waiting for response...' : 'Ask anything... (Enter to send, Shift+Enter for new line)'}
+        placeholder={disabled ? 'Coderix is thinking...' : 'Ask anything — Enter to send'}
         disabled={disabled}
         rows={1}
         autoFocus

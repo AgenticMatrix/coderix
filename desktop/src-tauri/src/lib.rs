@@ -4,9 +4,8 @@ mod sidecar;
 use commands::{window, dialog};
 use sidecar::manager::SidecarManager;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
-/// Application state shared between commands
 pub struct AppState {
     pub sidecar: Mutex<SidecarManager>,
 }
@@ -18,35 +17,22 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        // .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState {
             sidecar: Mutex::new(sidecar_manager),
         })
         .setup(|app| {
-            // Start the coderix backend sidecar
             let handle = app.handle().clone();
+
+            // Start sidecar via managed state
             let state = app.state::<AppState>();
             let mut sidecar = state.sidecar.lock().unwrap();
-
-            let app_handle = handle.clone();
             sidecar.start(move |ready| {
-                // Emit event to frontend when sidecar is ready
-                let _ = app_handle.emit("sidecar-ready", serde_json::json!({
+                let _ = handle.emit("sidecar-ready", serde_json::json!({
                     "port": ready.port,
                 }));
             });
-
-            // Set up window
-            let window = app.get_webview_window("main").unwrap();
-
-            // On close, kill sidecar
-            let state_for_close = app.state::<AppState>();
-            window.on_window_event(move |event| {
-                if let tauri::WindowEvent::Destroyed = event {
-                    let mut sc = state_for_close.sidecar.lock().unwrap();
-                    sc.stop();
-                }
-            });
+            drop(sidecar);
 
             Ok(())
         })

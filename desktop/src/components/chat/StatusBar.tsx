@@ -8,46 +8,29 @@ export function StatusBar() {
   const error = useChatStore((s) => s.error);
 
   const total = totalTokens.inputTokens + totalTokens.outputTokens;
-  const statusColor =
-    connectionStatus === 'connected'
-      ? error
-        ? '#f85149'
-        : isStreaming
-          ? '#58a6ff'
-          : '#3fb950'
-      : '#d2991d';
-
-  const statusIcon =
-    connectionStatus === 'connected' ? '●' : '◐';
+  const statusClass = connectionStatus === 'connected'
+    ? 'connected'
+    : connectionStatus === 'disconnected'
+      ? 'disconnected'
+      : 'connecting';
 
   return (
     <div className="status-bar">
       <div className="status-bar-left">
-        <span className="status-indicator" style={{ color: statusColor }}>
-          {statusIcon}
-        </span>
-        <span className="status-text">
+        <span className={`status-indicator ${statusClass}`}>●</span>
+        <span className="status-model">
           {connectionStatus === 'connected'
-            ? statusText
-            : connectionStatus === 'reconnecting'
-              ? 'Reconnecting...'
-              : 'Connecting...'}
+            ? (isStreaming ? 'Generating...' : statusText)
+            : connectionStatus}
         </span>
         {error && (
-          <span className="status-error" title={error}>
-            ⚠ {error.slice(0, 50)}{error.length > 50 ? '...' : ''}
-          </span>
+          <span className="status-error" title={error}>⚠ {error.slice(0, 50)}</span>
         )}
       </div>
       <div className="status-bar-right">
         {total > 0 && (
-          <span className="status-tokens" title={`Input: ${totalTokens.inputTokens.toLocaleString()} | Output: ${totalTokens.outputTokens.toLocaleString()}`}>
-            Tokens: {total.toLocaleString()}
-          </span>
+          <span className="status-tokens">{total.toLocaleString()} tokens</span>
         )}
-        <span className={`status-connection status-${connectionStatus}`}>
-          {connectionStatus}
-        </span>
       </div>
     </div>
   );

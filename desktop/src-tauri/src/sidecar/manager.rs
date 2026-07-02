@@ -1,9 +1,6 @@
 use std::process::{Child, Command};
-use std::sync::Arc;
-use tokio::sync::Mutex as TokioMutex;
-use anyhow::{Context, Result};
 
-const DEFAULT_PORT: u16 = 9754;
+const DEFAULT_PORT: u16 = 9755;
 
 /// Tracks a running sidecar process
 pub struct SidecarProcess {
