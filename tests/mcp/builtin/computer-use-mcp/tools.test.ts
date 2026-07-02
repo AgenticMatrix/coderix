@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { COMPUTER_TOOLS } from '../../../../src/mcp/builtin/computer-use-mcp/tools.js';
+import { COMPUTER_TOOLS } from '../../../../packages/coderix-core/src/mcp/builtin/computer-use-mcp/tools.js';
 
 describe('COMPUTER_TOOLS', () => {
   it('has 24 tools', () => {

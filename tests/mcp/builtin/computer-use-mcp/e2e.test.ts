@@ -21,7 +21,7 @@ import { execSync } from 'node:child_process';
 
 // Always use tsx for source TypeScript in dev mode.
 const command = 'npx';
-const args = ['tsx', 'src/cli/main.tsx', '--computer-use-mcp'];
+const args = ['tsx', 'packages/coderix-cli/src/cli/main.tsx', '--computer-use-mcp'];
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

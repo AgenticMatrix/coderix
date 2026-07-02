@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { classifyError, computeBackoff, RetryConfig } from '../../src/core/error-recovery.js';
+import { classifyError, computeBackoff, RetryConfig } from '../../packages/coderix-core/src/core/error-recovery.js';
 import {
   MaxTurnsExceededError, BudgetExceededError, StopRequestedError,
   FatalAPIError, ContextOverflowError,
-} from '../../src/core/error-recovery.js';
+} from '../../packages/coderix-core/src/core/error-recovery.js';
 
 describe('classifyError', () => {
   it('should classify rate limit errors', () => {

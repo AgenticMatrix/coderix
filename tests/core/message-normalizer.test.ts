@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeMessagesForAPI,
   MISSING_TOOL_RESULT_PLACEHOLDER,
-} from '../../src/core/message-normalizer.js';
+} from '../../packages/coderix-core/src/core/message-normalizer.js';
 
 // ---------------------------------------------------------------------------
 // Helpers to build test messages

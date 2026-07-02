@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyError, calculateDelay } from '../../src/provider/retry.js';
+import { classifyError, calculateDelay } from '../../packages/coderix-core/src/provider/retry.js';
 
 describe('classifyError (provider)', () => {
   it('should classify rate limit', () => {

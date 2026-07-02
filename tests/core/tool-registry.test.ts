@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { ToolRegistry } from '../../src/core/tool-registry.js';
-import type { ToolDefinition, ToolContext, ToolExecutionResult } from '../../src/core/types.js';
+import { ToolRegistry } from '../../packages/coderix-core/src/core/tool-registry.js';
+import type { ToolDefinition, ToolContext, ToolExecutionResult } from '../../packages/coderix-core/src/core/types.js';
 
 function makeDef(name: string): ToolDefinition {
   return {

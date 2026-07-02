@@ -1,19 +1,19 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { McpManager } from '../../src/mcp/manager.js';
-import type { ServerResource, ServerConnection } from '../../src/mcp/types.js';
+import type { McpManager } from '../../packages/coderix-core/src/mcp/manager.js';
+import type { ServerResource, ServerConnection } from '../../packages/coderix-core/src/mcp/types.js';
 
 // Mock readResource before importing the module under test
-vi.mock('../../src/mcp/discovery.js', () => ({
+vi.mock('../../packages/coderix-core/src/mcp/discovery.js', () => ({
   readResource: vi.fn(),
 }));
 
-const { readResource } = await import('../../src/mcp/discovery.js');
+const { readResource } = await import('../../packages/coderix-core/src/mcp/discovery.js');
 const mockReadResource = vi.mocked(readResource);
 
 import {
   createListMcpResourcesPlugin,
   createReadMcpResourcePlugin,
-} from '../../src/mcp/mcp-resource-tools.js';
+} from '../../packages/coderix-core/src/mcp/mcp-resource-tools.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { filterToolsForAgent, ALL_AGENT_DISALLOWED_TOOLS, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../../src/agents/tool-filtering.js';
-import type { ToolDefinition, AgentDefinition } from '../../src/core/types.js';
+import { filterToolsForAgent, ALL_AGENT_DISALLOWED_TOOLS, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../../packages/coderix-core/src/agents/tool-filtering.js';
+import type { ToolDefinition, AgentDefinition } from '../../packages/coderix-core/src/core/types.js';
 
 function td(name: string): ToolDefinition {
   return {

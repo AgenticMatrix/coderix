@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ConcurrencyController } from '../../src/workflow/concurrency.js';
+import { ConcurrencyController } from '../../packages/coderix-core/src/workflow/concurrency.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

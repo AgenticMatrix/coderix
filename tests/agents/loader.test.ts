@@ -3,8 +3,8 @@ import {
   parseAgentFromMarkdown,
   parseAgentFromJson,
   getActiveAgents,
-} from '../../src/agents/loader.js';
-import type { AgentDefinition } from '../../src/core/types.js';
+} from '../../packages/coderix-core/src/agents/loader.js';
+import type { AgentDefinition } from '../../packages/coderix-core/src/core/types.js';
 
 // ---------------------------------------------------------------------------
 // Markdown parsing

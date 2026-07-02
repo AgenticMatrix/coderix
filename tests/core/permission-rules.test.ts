@@ -2,8 +2,8 @@
  * Tests for permission-rules.ts — rule matching and priority logic.
  */
 import { describe, it, expect } from 'vitest';
-import { PermissionRuleEngine } from '../../src/core/permission-rules.js';
-import type { PermissionRule } from '../../src/core/permission-rules.js';
+import { PermissionRuleEngine } from '../../packages/coderix-core/src/core/permission-rules.js';
+import type { PermissionRule } from '../../packages/coderix-core/src/core/permission-rules.js';
 
 describe('PermissionRuleEngine', () => {
   describe('rule matching', () => {

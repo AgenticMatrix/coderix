@@ -3,16 +3,16 @@
  * Coderix CLI wrapper.
  *
  * Launches the TypeScript entry point via tsx so TypeScript compilation
- * is not required at runtime.
+ * is not required at runtime. The entry point lives in @coderix/cli.
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const mainPath = resolve(__dirname, '..', 'src', 'cli', 'main.tsx');
+const mainPath = resolve(__dirname, '..', 'packages', 'coderix-cli', 'src', 'cli', 'main.tsx');
 const tsxPath = resolve(__dirname, '..', 'node_modules', '.bin', 'tsx');
-const tsconfigPath = resolve(__dirname, '..', 'tsconfig.json');
+const tsconfigPath = resolve(__dirname, '..', 'packages', 'coderix-cli', 'tsconfig.json');
 
 const child = spawn(tsxPath, [
   '--tsconfig',

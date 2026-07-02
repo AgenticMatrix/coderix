@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SubAgentRegistry } from '../../src/core/subagent-registry.js';
-import type { AgentSpawnContext, ToolDefinition, Message } from '../../src/core/types.js';
+import { SubAgentRegistry } from '../../packages/coderix-core/src/core/subagent-registry.js';
+import type { AgentSpawnContext, ToolDefinition, Message } from '../../packages/coderix-core/src/core/types.js';
 
 function makeToolDef(name: string): ToolDefinition {
   return { name, description: `${name} tool`, input_schema: { type: 'object', properties: {} } };
@@ -68,7 +68,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
     seedAgent(agentSpawn.subAgentRegistry, 'sub-abc', { status: 'done', result: 'Done result' });
     seedAgent(agentSpawn.subAgentRegistry, 'sub-def', { status: 'running' });
 
-    const { execute } = await import('../../src/tools/task-get/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-get/executor.js');
     const result = await execute({ list_all: true }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.isError).toBe(false);
@@ -81,7 +81,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
 
   it('should return empty list when no agents', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/tools/task-get/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-get/executor.js');
     const result = await execute({ list_all: true }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.content).toBe('No sub-agents found.');
   });
@@ -90,7 +90,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-xyz', { status: 'done', result: 'Full result text here' });
 
-    const { execute } = await import('../../src/tools/task-get/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'sub-xyz' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.isError).toBe(false);
@@ -103,7 +103,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-run', { status: 'running' });
 
-    const { execute } = await import('../../src/tools/task-get/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'sub-run' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.content).toContain('Still running');
@@ -113,7 +113,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-err', { status: 'error', error: 'Something broke' });
 
-    const { execute } = await import('../../src/tools/task-get/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'sub-err' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
 
     expect(result.content).toContain('Something broke');
@@ -121,7 +121,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
 
   it('should return error for unknown agent_id', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/tools/task-get/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-get/executor.js');
     const result = await execute({ agent_id: 'nonexistent' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.isError).toBe(true);
     expect(result.content).toContain('not found');
@@ -134,7 +134,7 @@ describe('TaskGet executor (sub-agent queries)', () => {
 
 describe('TaskStop executor (sub-agent stop)', () => {
   it('should return error for unknown agent', async () => {
-    const { execute } = await import('../../src/tools/task-stop/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-stop/executor.js');
     const result = await execute(
       { task_id: 'nonexistent' },
       { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
@@ -148,10 +148,10 @@ describe('TaskStop executor (sub-agent stop)', () => {
     seedAgent(agentSpawn.subAgentRegistry, 'sub-done', { status: 'done' });
 
     // Use setSubAgentRegistry to make it available to task-stop
-    const { setSubAgentRegistry } = await import('../../src/agents/agent-spawn/registry-ref.js');
+    const { setSubAgentRegistry } = await import('../../packages/coderix-core/src/agents/agent-spawn/registry-ref.js');
     setSubAgentRegistry(agentSpawn.subAgentRegistry);
 
-    const { execute } = await import('../../src/tools/task-stop/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-stop/executor.js');
     const result = await execute(
       { task_id: 'sub-done' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
@@ -165,10 +165,10 @@ describe('TaskStop executor (sub-agent stop)', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-running', { status: 'running' });
 
-    const { setSubAgentRegistry } = await import('../../src/agents/agent-spawn/registry-ref.js');
+    const { setSubAgentRegistry } = await import('../../packages/coderix-core/src/agents/agent-spawn/registry-ref.js');
     setSubAgentRegistry(agentSpawn.subAgentRegistry);
 
-    const { execute } = await import('../../src/tools/task-stop/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/tools/task-stop/executor.js');
     const result = await execute(
       { task_id: 'sub-running' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
@@ -185,7 +185,7 @@ describe('TaskStop executor (sub-agent stop)', () => {
 
 describe('SendMessage executor', () => {
   it('should require agent_id or team_name', async () => {
-    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
     const result = await execute({}, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.isError).toBe(true);
     expect(result.content).toContain('agent_id');
@@ -193,7 +193,7 @@ describe('SendMessage executor', () => {
 
   it('should require message along with agent_id', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
 
     const r1 = await execute({}, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(r1.isError).toBe(true);
@@ -206,7 +206,7 @@ describe('SendMessage executor', () => {
 
   it('should return error for unknown agent', async () => {
     const agentSpawn = buildAgentSpawn();
-    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
     const result = await execute(
       { agent_id: 'nonexistent', message: 'Hello' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
@@ -219,7 +219,7 @@ describe('SendMessage executor', () => {
     const agentSpawn = buildAgentSpawn();
     seedAgent(agentSpawn.subAgentRegistry, 'sub-running', { status: 'running' });
 
-    const { execute } = await import('../../src/teams/tools/team-message/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
     const result = await execute(
       { agent_id: 'sub-running', message: 'Hello' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },

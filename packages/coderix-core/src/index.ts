@@ -1,0 +1,113 @@
+/**
+ * @coderix/core — Public API
+ *
+ * Framework-agnostic engine for AI coding assistants.
+ * Consumers: @coderix/cli, @coderix/desktop, @coderix/vscode.
+ */
+
+// ── Engine ─────────────────────────────────────────────────────────
+export { QueryEngine } from './core/query-engine.js';
+export type { QueryEngineConfig, QueryEngineEvent } from './core/query-engine.js';
+export { query } from './core/query.js';
+export type { QueryConfig, CallModelParams } from './core/query.js';
+export { ToolRegistry } from './core/tool-registry.js';
+export { PermissionEngine } from './core/permission.js';
+export { SystemPromptAssembler } from './core/system-prompt.js';
+export type { SystemPrompt } from './core/system-prompt.js';
+export { SessionManager } from './core/session.js';
+export { CheckpointManager } from './core/checkpoint.js';
+export { SubAgentRegistry } from './core/subagent-registry.js';
+export type { SubAgentRecord } from './core/subagent-registry.js';
+export { AgentRegistry } from './core/agent-registry.js';
+export { createCallModelFromClient } from './core/provider-adapter.js';
+export { Compactor, requestManualCompact } from './core/compactor.js';
+export { TokenBudget } from './core/token-budget.js';
+export { ToolExecutionQueue } from './core/tool-queue.js';
+
+// ── Core types ─────────────────────────────────────────────────────
+export type {
+  ContentBlock, Message, TextBlock, ToolUseBlock, ToolResultBlock,
+  AssistantMessage, UserMessage, StreamEvent,
+  ContentBlockStartEvent, ContentBlockDeltaEvent, ContentBlockStopEvent,
+  MessageStartEvent, MessageDeltaEvent, MessageStopEvent,
+  StopReason, CompletionUsage, QueryMessage,
+  DeferredPermission, DeferredQuestion, AgentError,
+  AgentDefinition, BaseAgentDefinition, BuiltInAgentDefinition,
+  CustomAgentDefinition, PluginAgentDefinition, AgentDefinitionsResult,
+  AgentSpawnContext, ToolContext, ToolDefinition, ToolExecutionResult,
+  Session, SessionSummary, SessionFilter, SessionStatus, SessionMetadata,
+  TokenUsageSummary, SettingSource, AgentToolFilter,
+} from './core/types.js';
+export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types.js';
+
+// ── Agents ─────────────────────────────────────────────────────────
+export { buildAgentRegistry } from './agents/registry.js';
+export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';
+
+// ── Skills ─────────────────────────────────────────────────────────
+export { getSkillRegistry } from './skills/index.js';
+
+// ── Provider ───────────────────────────────────────────────────────
+export { ProviderRouter } from './provider/router.js';
+export type { SearchResult } from './tools/web-search/search-service.js';
+
+// ── Tools ──────────────────────────────────────────────────────────
+export {
+  getAnthropicTools, getToolMeta, getToolRiskLevel,
+  executeTool, hasExecutor, plugins,
+} from './tools/registry.js';
+export type {
+  ToolPlugin, ToolMeta, ToolSchema, ToolExecutor,
+  ToolResult, ExecutorOptions,
+} from './tools/types.js';
+
+// ── Teams ──────────────────────────────────────────────────────────
+export { getAgentRole, getCoordinatorSystemContext } from './teams/coordinator-mode.js';
+export { drainUnreadMessages } from './teams/team-mailbox.js';
+export { loadTeamConfig, listTeams, resetAllTeams } from './teams/team-store.js';
+export { execute as executeSendMessage } from './teams/tools/team-message/executor.js';
+export type { TeamConfig, TeamMember } from './teams/types.js';
+
+// ── Tasks ──────────────────────────────────────────────────────────
+export type { TrackedTask } from './tasks/task-tracker.js';
+export { getTask } from './tasks/store.js';
+export { getTaskListId, setTaskListId, listTasks, getAgentStatuses } from './tasks/store.js';
+export type { Task } from './tasks/schema.js';
+
+// ── Memory ─────────────────────────────────────────────────────────
+export { loadMemoryConfig } from './memory/config.js';
+export type { MemoryConfig, MemorySettings } from './memory/types.js';
+export { findRelevantMemories, formatRecalledMemories } from './memory/recall.js';
+export { executeExtractMemories, initExtractMemories, drainPendingExtraction } from './memory/extract-memories.js';
+export { scanMemoryFiles, parseMemoryFile } from './memory/frontmatter.js';
+export { loadIndex, cleanStaleEntries } from './memory/memory-index.js';
+export { getMemoryDir } from './memory/memory-directory.js';
+
+// ── Hooks ──────────────────────────────────────────────────────────
+export type { HookManager } from './hooks/index.js';
+
+// ── MCP ────────────────────────────────────────────────────────────
+export { McpManager, discoverTools } from './mcp/index.js';
+export {
+  loadMcpConfigs, projectConfigPath, userConfigPath,
+  addMcpConfig, removeMcpConfig, getMcpConfig,
+  disableServer, enableServer, isServerDisabled,
+} from './mcp/config-loader.js';
+export { startMcpServer } from './mcp/mcp-server.js';
+export type { ServerConfig, ScopedServerConfig } from './mcp/types.js';
+export { StdioServerConfigSchema, HttpServerConfigSchema } from './mcp/types.js';
+export { connectToServer } from './mcp/connection.js';
+export { runChromeMcpServer } from './mcp/builtin/chrome-mcp/index.js';
+export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js';
+
+// ── Config ─────────────────────────────────────────────────────────
+export type { CoderSettings, ModelItem, ModelEntry, ModelPrice, WebSearchConfig, WebBridgeConfig } from './config.js';
+export { inferProvider, getMaxToolConcurrency, loadConfig, loadSettings } from './config.js';
+export type { AppConfig } from './config.js';
+
+// ── State primitives ───────────────────────────────────────────────
+export { createStore } from './state/store.js';
+export type { Store } from './state/store.js';
+export type { CoreState, CoreConfig } from './state/core-state.js';
+export { createSubject, createEventBus } from './state/observable.js';
+export type { Observer, Observable, Subject, EngineEvent, ToolRequestEvent, EventBus } from './state/observable.js';

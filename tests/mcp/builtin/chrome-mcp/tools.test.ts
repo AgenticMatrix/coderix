@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BROWSER_TOOLS } from '../../../../src/mcp/builtin/chrome-mcp/tools.js';
+import { BROWSER_TOOLS } from '../../../../packages/coderix-core/src/mcp/builtin/chrome-mcp/tools.js';
 
 describe('BROWSER_TOOLS', () => {
   it('has 15 tools', () => {

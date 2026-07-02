@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { SubAgentRegistry } from '../../src/core/subagent-registry.js';
+import { SubAgentRegistry } from '../../packages/coderix-core/src/core/subagent-registry.js';
 
 describe('SubAgentRegistry', () => {
   let registry: SubAgentRegistry;

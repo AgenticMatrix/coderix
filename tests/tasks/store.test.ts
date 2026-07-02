@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { createTask, getTask, listTasks, updateTask, resetStore } from '../../src/tasks/store.js';
+import { createTask, getTask, listTasks, updateTask, resetStore } from '../../packages/coderix-core/src/tasks/store.js';
 
 describe('Task store', () => {
   beforeEach(async () => {

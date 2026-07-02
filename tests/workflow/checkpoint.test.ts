@@ -7,7 +7,7 @@ import { existsSync, unlinkSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
-import { CheckpointManager } from '../../src/workflow/checkpoint.js';
+import { CheckpointManager } from '../../packages/coderix-core/src/workflow/checkpoint.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

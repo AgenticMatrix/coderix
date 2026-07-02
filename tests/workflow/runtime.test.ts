@@ -7,8 +7,8 @@ import {
   executeWorkflow,
   extractMeta,
   validateScript,
-} from '../../src/workflow/runtime.js';
-import type { SandboxGlobals } from '../../src/workflow/types.js';
+} from '../../packages/coderix-core/src/workflow/runtime.js';
+import type { SandboxGlobals } from '../../packages/coderix-core/src/workflow/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

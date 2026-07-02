@@ -6,13 +6,13 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentSpawnContext, StreamEvent, AssistantMessage } from '../../src/core/types.js';
-import { ToolRegistry } from '../../src/core/tool-registry.js';
-import { SessionManager } from '../../src/core/session.js';
-import { SubAgentRegistry } from '../../src/core/subagent-registry.js';
-import { AgentRegistry } from '../../src/core/agent-registry.js';
-import { execute } from '../../src/agents/workflow/executor.js';
-import type { ResolvedExecutorOptions } from '../../src/tools/types.js';
+import type { AgentSpawnContext, StreamEvent, AssistantMessage } from '../../packages/coderix-core/src/core/types.js';
+import { ToolRegistry } from '../../packages/coderix-core/src/core/tool-registry.js';
+import { SessionManager } from '../../packages/coderix-core/src/core/session.js';
+import { SubAgentRegistry } from '../../packages/coderix-core/src/core/subagent-registry.js';
+import { AgentRegistry } from '../../packages/coderix-core/src/core/agent-registry.js';
+import { execute } from '../../packages/coderix-core/src/agents/workflow/executor.js';
+import type { ResolvedExecutorOptions } from '../../packages/coderix-core/src/tools/types.js';
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -246,7 +246,7 @@ describe('StructuredOutput (via agent-runner)', () => {
   it('should validate JSON Schema correctly', async () => {
     // Import the validation logic directly to test
     const { runWorkflowAgent } = await import(
-      '../../src/agents/workflow/agent-runner.js'
+      '../../packages/coderix-core/src/agents/workflow/agent-runner.js'
     );
 
     // This is a lightweight test — just verifying the module loads correctly

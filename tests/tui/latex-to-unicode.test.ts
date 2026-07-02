@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderLatex } from '../../src/tui/components/latex-to-unicode.js';
+import { renderLatex } from '../../packages/coderix-cli/src/tui/components/latex-to-unicode.js';
 
 describe('renderLatex', () => {
   describe('Greek letters', () => {

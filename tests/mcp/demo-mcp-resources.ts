@@ -11,12 +11,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js';
 
-import { discoverResources, readResource } from '../../src/mcp/discovery.js';
+import { discoverResources, readResource } from '../../packages/coderix-core/src/mcp/discovery.js';
 import {
   createListMcpResourcesPlugin,
   createReadMcpResourcePlugin,
-} from '../../src/mcp/mcp-resource-tools.js';
-import type { ConnectedServer, ServerResource } from '../../src/mcp/types.js';
+} from '../../packages/coderix-core/src/mcp/mcp-resource-tools.js';
+import type { ConnectedServer, ServerResource } from '../../packages/coderix-core/src/mcp/types.js';
 
 // ── Setup: Create an MCP Server with resources ───────────────────────────
 

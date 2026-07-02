@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   quickSort, mergeSort, heapSort, insertionSort, bubbleSort,
-} from '../src/sort.js';
+} from '../packages/coderix-cli/src/sort.js';
 
 const NUMERIC = [64, 34, 25, 12, 22, 11, 90];
 const SORTED_NUMERIC = [11, 12, 22, 25, 34, 64, 90];

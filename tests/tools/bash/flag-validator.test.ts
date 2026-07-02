@@ -7,7 +7,7 @@ import {
   validateFlags,
   FLAG_PATTERN,
   type ExternalCommandConfig,
-} from '../../../src/tools/bash/flag-validator.js';
+} from '../../../packages/coderix-core/src/tools/bash/flag-validator.js';
 
 describe('FLAG_PATTERN', () => {
   it('should match short flags', () => {

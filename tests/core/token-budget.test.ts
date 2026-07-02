@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { estimateTokens, estimateStringTokens, createTokenBudget, isBudgetExceeded, needsCompaction } from '../../src/core/token-budget.js';
-import type { Message } from '../../src/core/types.js';
+import { estimateTokens, estimateStringTokens, createTokenBudget, isBudgetExceeded, needsCompaction } from '../../packages/coderix-core/src/core/token-budget.js';
+import type { Message } from '../../packages/coderix-core/src/core/types.js';
 
 describe('estimateStringTokens', () => {
   it('should estimate text tokens', () => {

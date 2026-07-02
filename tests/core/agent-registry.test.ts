@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AgentRegistry } from '../../src/core/agent-registry.js';
-import type { AgentDefinition } from '../../src/core/types.js';
+import { AgentRegistry } from '../../packages/coderix-core/src/core/agent-registry.js';
+import type { AgentDefinition } from '../../packages/coderix-core/src/core/types.js';
 
 function makeAgent(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
   return {

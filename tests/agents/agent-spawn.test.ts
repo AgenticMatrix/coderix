@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AgentRegistry } from '../../src/core/agent-registry.js';
-import { SubAgentRegistry } from '../../src/core/subagent-registry.js';
-import { ToolRegistry } from '../../src/core/tool-registry.js';
-import { SessionManager } from '../../src/core/session.js';
-import { SystemPromptAssembler } from '../../src/core/system-prompt.js';
-import type { AgentSpawnContext, ToolDefinition } from '../../src/core/types.js';
+import { AgentRegistry } from '../../packages/coderix-core/src/core/agent-registry.js';
+import { SubAgentRegistry } from '../../packages/coderix-core/src/core/subagent-registry.js';
+import { ToolRegistry } from '../../packages/coderix-core/src/core/tool-registry.js';
+import { SessionManager } from '../../packages/coderix-core/src/core/session.js';
+import { SystemPromptAssembler } from '../../packages/coderix-core/src/core/system-prompt.js';
+import type { AgentSpawnContext, ToolDefinition } from '../../packages/coderix-core/src/core/types.js';
 
 // Import the executor's internal runAgentLoop helper — not directly exported,
 // so we test through the public execute interface.
@@ -49,7 +49,7 @@ describe('Agent tool background execution', () => {
       getSystemPrompt: () => 'You are a background test agent. Say done.',
     });
 
-    const { execute } = await import('../../src/agents/agent-spawn/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/agents/agent-spawn/executor.js');
 
     const startTime = Date.now();
     const result = await execute(
@@ -82,7 +82,7 @@ describe('Agent tool background execution', () => {
       getSystemPrompt: () => 'You are a sync agent.',
     });
 
-    const { execute } = await import('../../src/agents/agent-spawn/executor.js');
+    const { execute } = await import('../../packages/coderix-core/src/agents/agent-spawn/executor.js');
 
     const result = await execute(
       { agent_type: 'sync-agent', prompt: 'Hello', background: true },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchGlob } from '../../src/tools/shared/glob-utils.js';
+import { matchGlob } from '../../packages/coderix-core/src/tools/shared/glob-utils.js';
 
 describe('matchGlob', () => {
   it('should match exact filename', () => {

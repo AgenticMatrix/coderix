@@ -6,8 +6,8 @@ import {
   DEFAULT_MAX_RESULT_SIZE_CHARS,
   MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
   TOOL_RESULTS_DIR,
-} from '../../src/core/tool-result-limiter.js';
-import type { ToolResultBlock } from '../../src/core/types.js';
+} from '../../packages/coderix-core/src/core/tool-result-limiter.js';
+import type { ToolResultBlock } from '../../packages/coderix-core/src/core/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

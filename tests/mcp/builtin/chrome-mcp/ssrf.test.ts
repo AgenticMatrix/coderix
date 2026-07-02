@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isPrivateHost, validateUrl } from '../../../../src/mcp/builtin/chrome-mcp/ssrf.js';
+import { isPrivateHost, validateUrl } from '../../../../packages/coderix-core/src/mcp/builtin/chrome-mcp/ssrf.js';
 
 describe('isPrivateHost', () => {
   it('detects IPv4 loopback', () => {

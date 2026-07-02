@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { PermissionEngine } from '../../src/core/permission.js';
-import { PermissionMode, RiskLevel } from '../../src/core/types.js';
+import { PermissionEngine } from '../../packages/coderix-core/src/core/permission.js';
+import { PermissionMode, RiskLevel } from '../../packages/coderix-core/src/core/types.js';
 
 describe('PermissionEngine', () => {
   let engine: PermissionEngine;

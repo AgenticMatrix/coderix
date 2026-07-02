@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findSlashCommand, listCommandNames, SLASH_COMMANDS } from '../../src/commands/registry.js';
+import { findSlashCommand, listCommandNames, SLASH_COMMANDS } from '../../packages/coderix-cli/src/commands/registry.js';
 
 describe('findSlashCommand', () => {
   it('should find a command by name', () => {

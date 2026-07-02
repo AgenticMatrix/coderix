@@ -4,11 +4,18 @@
   "description": "Coderix CLI — terminal-based AI coding assistant",
   "type": "module",
   "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    }
+  },
   "bin": {
-    "coderix": "./dist/main.js"
+    "coderix": "./dist/cli/main.js"
   },
   "scripts": {
-    "dev": "tsx --watch src/main.tsx",
+    "dev": "tsx --watch src/cli/main.tsx",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },

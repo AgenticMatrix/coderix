@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ConcurrencyController, executePipeline } from '../../src/workflow/concurrency.js';
+import { ConcurrencyController, executePipeline } from '../../packages/coderix-core/src/workflow/concurrency.js';
 
 // ---------------------------------------------------------------------------
 // Tests

@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isSlashCommand, parseSlashCommand } from '../../src/commands/handler.js';
-import { findSlashCommand, SLASH_COMMANDS } from '../../src/commands/registry.js';
+import { isSlashCommand, parseSlashCommand } from '../../packages/coderix-cli/src/commands/handler.js';
+import { findSlashCommand, SLASH_COMMANDS } from '../../packages/coderix-cli/src/commands/registry.js';
 
 describe('ACP Slash Command Detection', () => {
   describe('isSlashCommand', () => {

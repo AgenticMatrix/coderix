@@ -6,9 +6,9 @@
  *   Soft blocks — ALLOWED by security check, classified for permission layer ASK
  */
 import { describe, it, expect } from 'vitest';
-import { createBashSecurityCheck } from '../../../src/tools/bash/security-check.js';
-import { tokenizeCommand, extractCommandTokens } from '../../../src/tools/bash/command-tokenizer.js';
-import { CommandCategory } from '../../../src/tools/bash/command-classifier.js';
+import { createBashSecurityCheck } from '../../../packages/coderix-core/src/tools/bash/security-check.js';
+import { tokenizeCommand, extractCommandTokens } from '../../../packages/coderix-core/src/tools/bash/command-tokenizer.js';
+import { CommandCategory } from '../../../packages/coderix-core/src/tools/bash/command-classifier.js';
 
 const securityCheck = createBashSecurityCheck();
 

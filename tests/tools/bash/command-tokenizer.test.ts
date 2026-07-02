@@ -6,7 +6,7 @@ import {
   tokenizeCommand,
   extractCommandTokens,
   extractCommandKey,
-} from '../../../src/tools/bash/command-tokenizer.js';
+} from '../../../packages/coderix-core/src/tools/bash/command-tokenizer.js';
 
 describe('tokenizeCommand', () => {
   it('should parse simple commands', () => {
