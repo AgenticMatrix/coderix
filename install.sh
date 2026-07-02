@@ -216,6 +216,20 @@ if $LOCAL_INSTALL || $DESKTOP_INSTALL; then
     (cd "${REPO_DIR}" && npm link --force 2>/dev/null || npm link 2>/dev/null || true)
 
     echo -e "${GREEN}CLI built and linked locally${NC}"
+
+	# Detect PATH conflicts: if another coderix (bun, brew, etc.) shadows the npm-linked one
+	NPM_BIN_DIR=$(npm bin -g 2>/dev/null || echo "")
+	RESOLVED_CODERIX=$(command -v coderix 2>/dev/null || echo "")
+	if [ -n "$NPM_BIN_DIR" ] && [ -n "$RESOLVED_CODERIX" ] && [ "$RESOLVED_CODERIX" != "$NPM_BIN_DIR/coderix" ]; then
+	  echo ""
+	  echo -e "${YELLOW}WARNING: Another coderix is shadowing the npm-linked version:${NC}"
+	  echo -e "  Resolved:  ${YELLOW}${RESOLVED_CODERIX}${NC}"
+	  echo -e "  Expected:  ${NPM_BIN_DIR}/coderix"
+	  echo ""
+	  echo -e "${YELLOW}Remove the conflicting version to use the latest build:${NC}"
+	  echo -e "  rm -f ${RESOLVED_CODERIX}"
+	  echo -e "  # Or reorder PATH so ${NPM_BIN_DIR} comes first"
+	fi
   fi
 
   if $DESKTOP_INSTALL; then
