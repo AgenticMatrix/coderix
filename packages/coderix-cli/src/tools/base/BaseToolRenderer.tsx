@@ -15,28 +15,6 @@ const RISK_COLOR: Record<string, string> = {
   destructive: 'red',
 };
 
-const TOOL_ICONS: Record<string, string> = {
-  read: '📖',
-  write: '✏️',
-  edit: '✏️',
-  bash: '⚡',
-  glob: '🔍',
-  grep: '🔎',
-  'web-fetch': '🌐',
-  'web-search': '🔎',
-  'TodoWrite': '📋',
-  'task-create': '📝',
-  'task-update': '📝',
-  'Agent': '🧭',
-  'TaskStop': '🛑',
-  'SendMessage': '💬',
-  'Sleep': '😴',
-  skill: '⚡',
-  cron: '⏰',
-  lsp: '🔍',
-  default: '🔧',
-};
-
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
@@ -62,7 +40,6 @@ export function BaseToolRenderer({
   children,
 }: ToolUseRendererProps) {
   const borderColor = riskLevel ? RISK_COLOR[riskLevel] : 'grey';
-  const icon = TOOL_ICONS[toolName] ?? TOOL_ICONS.default;
   const isExecuting = state === 'executing';
   const isDone = state === 'done';
 
@@ -84,7 +61,7 @@ export function BaseToolRenderer({
           <Text>
             <Text color={statusColor}>{statusIcon} </Text>
             <Text bold color={borderColor}>
-              {icon} {toolName}
+              {toolName}
             </Text>
             {paramSummary ? (
               <Text dimColor> · {paramSummary}</Text>

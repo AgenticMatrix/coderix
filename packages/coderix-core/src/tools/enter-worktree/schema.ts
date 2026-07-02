@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'enter-worktree',
+  name: 'EnterWorktree',
   description:
     `Creates or enters a git worktree — an isolated working directory that shares the same git history. ` +
     `Use this when you need to work in isolation from the main working directory. ` +

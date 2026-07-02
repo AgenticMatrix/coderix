@@ -3,7 +3,7 @@ import { schema } from './schema.js';
 import { execute } from './executor.js';
 
 const exitWorktreePlugin: ToolPlugin = {
-  name: 'exit-worktree',
+  name: 'ExitWorktree',
   schema,
   executor: execute,
   paramSummary: (input) => {

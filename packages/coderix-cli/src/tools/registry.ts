@@ -82,10 +82,10 @@ useRendererByName.set('task_get', TaskGetRenderer);
 useRendererByName.set('task_output', TaskOutputRenderer);
 useRendererByName.set('task_stop', TaskStopRenderer);
 useRendererByName.set('skill', SkillRenderer);
-useRendererByName.set('ask_user_question', AskUserQuestionRenderer);
-useRendererByName.set('enter_plan_mode', EnterPlanModeRenderer);
-useRendererByName.set('exit_plan_mode', ExitPlanModeRenderer);
-useRendererByName.set('notebook_edit', NotebookEditRenderer);
+useRendererByName.set('AskUserQuestion', AskUserQuestionRenderer);
+useRendererByName.set('EnterPlanMode', EnterPlanModeRenderer);
+useRendererByName.set('ExitPlanMode', ExitPlanModeRenderer);
+useRendererByName.set('NotebookEdit', NotebookEditRenderer);
 
 resultRendererByName.set('bash', BashResultRenderer);
 resultRendererByName.set('glob', GlobResultRenderer);

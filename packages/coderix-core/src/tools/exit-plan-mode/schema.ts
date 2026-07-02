@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'exit-plan-mode',
+  name: 'ExitPlanMode',
   description:
     'Exit plan mode: write a plan file and request user approval to begin implementation. The plan content is written to ~/.claude/plans/, and the user reviews it before implementation begins. After approval, switches back to auto mode.',
   input_schema: {

@@ -3,7 +3,7 @@ import { execute } from './executor.js';
 import type { ToolPlugin } from '../types.js';
 
 const exitPlanModePlugin: ToolPlugin = {
-  name: 'exit-plan-mode',
+  name: 'ExitPlanMode',
   schema,
   executor: execute,
 };

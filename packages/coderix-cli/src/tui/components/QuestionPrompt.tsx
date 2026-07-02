@@ -16,6 +16,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [selected, setSelected] = useState<string[]>([]);
+  const [cursorIndex, setCursorIndex] = useState(0);
   const [customText, setCustomText] = useState('');
 
   const q = questions[qIndex]!;
@@ -30,6 +31,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       setAnswers(next);
       setSelected([]);
       setCustomText('');
+      setCursorIndex(0);
       setQIndex(qIndex + 1);
     }
   };
@@ -51,11 +53,21 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       return;
     }
 
-    // Number keys for option selection
+    // Space key toggles selection in multi-select mode
+    if (input === ' ' && q.multiSelect && options.length > 0) {
+      const label = options[cursorIndex]!.label;
+      setSelected(prev =>
+        prev.includes(label) ? prev.filter(s => s !== label) : [...prev, label],
+      );
+      return;
+    }
+
+    // Number keys for quick option selection
     if (options.length > 0 && input) {
       const num = parseInt(input, 10);
       if (num >= 1 && num <= options.length) {
         const label = options[num - 1]!.label;
+        setCursorIndex(num - 1);
         if (q.multiSelect) {
           setSelected(prev =>
             prev.includes(label) ? prev.filter(s => s !== label) : [...prev, label],
@@ -67,17 +79,16 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       }
     }
 
-    // Arrow keys for navigation
+    // Arrow keys move the cursor (toggle in single-select, navigate in multi-select)
     if (options.length > 0 && (key.upArrow || key.downArrow)) {
-      const idx = selected.length > 0 ? options.findIndex(o => o.label === selected[0]) : -1;
-      const newIdx = key.upArrow ? Math.max(0, idx - 1) : Math.min(options.length - 1, idx + 1);
+      const newIdx = key.upArrow
+        ? Math.max(0, cursorIndex - 1)
+        : Math.min(options.length - 1, cursorIndex + 1);
       if (q.multiSelect) {
-        const label = options[newIdx]!.label;
-        setSelected(prev =>
-          prev.includes(label) ? prev.filter(s => s !== label) : [...prev, label],
-        );
+        setCursorIndex(newIdx);
       } else {
         setSelected([options[newIdx]!.label]);
+        setCursorIndex(newIdx);
       }
       return;
     }
@@ -107,17 +118,16 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
 
       {options.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          {q.multiSelect && (
-            <Text dimColor>Select one or more (Enter to confirm):</Text>
-          )}
           {!q.multiSelect && (
             <Text dimColor>Choose one (number or Enter to select):</Text>
           )}
           {options.map((opt, i) => {
             const isSelected = selected.includes(opt.label);
+            const isCursor = cursorIndex === i;
             return (
               <Box key={i}>
-                <Text color={isSelected ? 'green' : 'white'}>
+                <Text color={isCursor ? 'cyan' : isSelected ? 'green' : 'white'}>
+                  {isCursor ? '>' : ' '}{' '}
                   {isSelected ? (q.multiSelect ? '[x]' : '●') : (q.multiSelect ? '[ ]' : '○')}{' '}
                   {i + 1}. {opt.label}
                 </Text>
@@ -137,7 +147,9 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
 
       <Box marginTop={1}>
         <Text dimColor>
-          Enter to submit · Esc to skip
+          {q.multiSelect
+            ? 'Space to select · Enter to submit · Esc to skip'
+            : 'Enter to submit · Esc to skip'}
           {questions.length > 1 ? ` · ${qIndex + 1}/${questions.length}` : ''}
         </Text>
       </Box>

@@ -26,7 +26,7 @@ const ALL_TOOLS: ToolDefinition[] = [
   td('web-fetch'), td('web-search'), td('todo-write'),
   td('TaskCreate'), td('TaskUpdate'), td('TaskList'), td('TaskGet'),
   td('Agent'), td('SendMessage'), td('TaskStop'),
-  td('ask-user-question'), td('TaskOutput'), td('exit-plan-mode'),
+  td('AskUserQuestion'), td('TaskOutput'), td('ExitPlanMode'),
 ];
 
 describe('ALL_AGENT_DISALLOWED_TOOLS', () => {
@@ -44,7 +44,7 @@ describe('ALL_AGENT_DISALLOWED_TOOLS', () => {
   });
 
   it('should include ask-user-question', () => {
-    expect(ALL_AGENT_DISALLOWED_TOOLS.has('ask-user-question')).toBe(true);
+    expect(ALL_AGENT_DISALLOWED_TOOLS.has('AskUserQuestion')).toBe(true);
   });
 });
 
@@ -53,7 +53,7 @@ describe('filterToolsForAgent', () => {
     const result = filterToolsForAgent(ALL_TOOLS, agentDef());
     expect(result.find(t => t.name === 'Agent')).toBeUndefined();
     expect(result.find(t => t.name === 'SendMessage')).toBeUndefined();
-    expect(result.find(t => t.name === 'ask-user-question')).toBeUndefined();
+    expect(result.find(t => t.name === 'AskUserQuestion')).toBeUndefined();
   });
 
   it('should include read/write tools for general-purpose with tools=*', () => {

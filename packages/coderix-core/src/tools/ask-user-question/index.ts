@@ -3,7 +3,7 @@ import { execute } from './executor.js';
 import type { ToolPlugin } from '../types.js';
 
 const askUserQuestionPlugin: ToolPlugin = {
-  name: 'ask-user-question',
+  name: 'AskUserQuestion',
   schema,
   executor: execute,
   paramSummary(input: Record<string, unknown>) {

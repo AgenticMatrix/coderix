@@ -3,7 +3,7 @@ import { schema } from './schema.js';
 import { execute } from './executor.js';
 
 const enterWorktreePlugin: ToolPlugin = {
-  name: 'enter-worktree',
+  name: 'EnterWorktree',
   schema,
   executor: execute,
   paramSummary: (input) => {

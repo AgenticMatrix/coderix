@@ -521,7 +521,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             }
 
             // ── exit-plan-mode: block for user approval ──
-            if (toolBlock.name === 'exit-plan-mode') {
+            if (toolBlock.name === 'ExitPlanMode') {
               const planText = (toolBlock.input as any)?.plan as string ?? '';
               const description = planText
                 ? `Approve plan to exit plan mode and begin implementation?\n\n${planText.slice(0, 500)}${planText.length > 500 ? '...' : ''}`
@@ -530,7 +530,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               let resolve!: (allowed: boolean) => void;
               const promise = new Promise<boolean>((res) => { resolve = res; });
               const deferred = {
-                toolName: toolBlock.name, command: 'exit-plan-mode',
+                toolName: toolBlock.name, command: 'ExitPlanMode',
                 description, toolUseId: toolBlock.id, resolve, promise,
               };
 
@@ -553,7 +553,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             }
 
             // ── ask-user-question: block and wait for user input ──
-            if (toolBlock.name === 'ask-user-question') {
+            if (toolBlock.name === 'AskUserQuestion') {
               const qInput = toolBlock.input as Record<string, unknown>;
               const questions = (qInput?.questions as Array<{
                 question: string; header: string;
@@ -734,7 +734,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 }
 
                 // ── exit-plan-mode: block for user approval ──
-                if (toolBlock.name === 'exit-plan-mode') {
+                if (toolBlock.name === 'ExitPlanMode') {
                   const planText2 = (toolBlock.input as any)?.plan as string ?? '';
                   const desc2 = planText2
                     ? `Approve plan? ${planText2.slice(0, 300)}${planText2.length > 300 ? '...' : ''}`
@@ -743,7 +743,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                   let res2!: (allowed: boolean) => void;
                   const prom2 = new Promise<boolean>((r) => { res2 = r; });
                   const def2 = {
-                    toolName: toolBlock.name, command: 'exit-plan-mode',
+                    toolName: toolBlock.name, command: 'ExitPlanMode',
                     description: desc2, toolUseId: toolBlock.id,
                     resolve: res2, promise: prom2,
                   };
@@ -759,7 +759,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 }
 
                 // ── ask-user-question: block and wait for user input ──
-                if (toolBlock.name === 'ask-user-question') {
+                if (toolBlock.name === 'AskUserQuestion') {
                   const qInput = toolBlock.input as Record<string, unknown>;
                   const questions = (qInput?.questions as Array<{
                     question: string; header: string;

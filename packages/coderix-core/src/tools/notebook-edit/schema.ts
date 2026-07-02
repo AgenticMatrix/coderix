@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'notebook-edit',
+  name: 'NotebookEdit',
   description:
     'Read or modify a Jupyter notebook (.ipynb file). Supports listing cells, reading a cell, replacing cell source, inserting new cells, and deleting cells.',
   input_schema: {

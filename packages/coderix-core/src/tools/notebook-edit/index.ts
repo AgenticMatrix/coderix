@@ -3,7 +3,7 @@ import { execute } from './executor.js';
 import type { ToolPlugin } from '../types.js';
 
 const notebookEditPlugin: ToolPlugin = {
-  name: 'notebook-edit',
+  name: 'NotebookEdit',
   schema,
   executor: execute,
   paramSummary(input: Record<string, unknown>) {

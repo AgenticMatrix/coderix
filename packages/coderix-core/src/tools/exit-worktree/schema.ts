@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'exit-worktree',
+  name: 'ExitWorktree',
   description:
     `Exit the current worktree and optionally remove it. ` +
     `Use action "keep" to leave the worktree intact on disk, or "remove" to delete it. ` +
