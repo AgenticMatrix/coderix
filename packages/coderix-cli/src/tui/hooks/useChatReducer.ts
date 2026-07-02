@@ -482,6 +482,18 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
 export function createInitialState(model: string, inputPrice = 0.5, outputPrice = 2.0, cacheReadPrice = 0.05): ChatState {
   return {
+    sessionId: '',
+    permissionMode: 'auto',
+    config: {
+      cwd: process.cwd(),
+      model,
+      baseUrl: '',
+      apiKey: '',
+      inputPrice,
+      outputPrice,
+      cacheReadPrice,
+      maxContext: 0,
+    },
     messages: [],
     isStreaming: false,
     model,

@@ -1,11 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-import type { AppConfig, Message, ContentBlock, TextBlock, ThinkingBlock, ToolUseBlock, StreamCallbacks } from '../types.js';
+import type { Message, ContentBlock, TextBlock, ThinkingBlock, ToolUseBlock, StreamCallbacks } from '../types.js';
 
 /**
  * Build an Anthropic client from app config.
  */
-export function createClient(config: AppConfig): Anthropic {
+export function createClient(config: { baseUrl: string; apiKey: string }): Anthropic {
   return new Anthropic({
     baseURL: config.baseUrl,
     apiKey: config.apiKey,

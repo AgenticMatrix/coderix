@@ -6,6 +6,8 @@
  * Coderix (35+ tools).
  */
 
+import type { CoreState } from '@coderix/core';
+
 // ── ContentBlock types ──────────────────────────────────────────────
 
 export interface TextBlock {
@@ -144,27 +146,7 @@ export interface Message {
 
 // ── App config ──────────────────────────────────────────────────────
 
-export interface AppConfig {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  /** Provider name (anthropic, openai, deepseek, etc.) */
-  provider?: string;
-  /** HTTP/HTTPS proxy URL */
-  proxy?: string;
-  /** Maximum output tokens */
-  maxTokens?: number;
-  /** Currency code (CNY, USD, etc.) from model price config. */
-  currency?: string;
-  /** Price per 1M input tokens (cache miss). */
-  inputPrice?: number;
-  /** Price per 1M output tokens. */
-  outputPrice?: number;
-  /** Price per 1M cache read/creation input tokens. */
-  cacheReadPrice?: number;
-  /** Maximum context window size in tokens. */
-  maxContext?: number;
-}
+export type { AppConfig } from '@coderix/core';
 
 // ── Approval request ─────────────────────────────────────────────────
 
@@ -195,10 +177,9 @@ export interface TokenUsage {
   cacheReadInputTokens: number;
 }
 
-export interface ChatState {
+export interface ChatState extends CoreState {
   messages: Message[];
   isStreaming: boolean;
-  model: string;
   error: string | null;
   inputText: string;
   cursorPosition: number;

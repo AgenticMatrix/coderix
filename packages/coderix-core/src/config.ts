@@ -8,6 +8,7 @@ import type { MemorySettings } from './memory/types.js';
 // ── App config (inline definition — shared by all core consumers) ───────
 
 export interface AppConfig {
+  cwd: string;
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -15,10 +16,10 @@ export interface AppConfig {
   proxy?: string;
   maxTokens?: number;
   currency?: string;
-  inputPrice?: number;
-  outputPrice?: number;
-  cacheReadPrice?: number;
-  maxContext?: number;
+  inputPrice: number;
+  outputPrice: number;
+  cacheReadPrice: number;
+  maxContext: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,5 +321,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice, outputPrice: resolved.outputPrice, cacheReadPrice: resolved.cacheReadPrice, maxContext: resolved.maxContext };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0 };
 }

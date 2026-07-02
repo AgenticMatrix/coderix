@@ -305,5 +305,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice, outputPrice: resolved.outputPrice, cacheReadPrice: resolved.cacheReadPrice, maxContext: resolved.maxContext };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0 };
 }
