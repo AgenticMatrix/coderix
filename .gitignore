@@ -6,3 +6,4 @@ dist/
 .claude
 packages/coderix-desktop/test-app/
 packages/coderix-desktop/test-e34.js
+packages/coderix-desktop/release/

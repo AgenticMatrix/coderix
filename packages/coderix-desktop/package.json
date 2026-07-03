@@ -2,11 +2,12 @@
   "name": "@coderix/desktop",
   "version": "0.1.0",
   "description": "Coderix Desktop — Electron desktop app for the Coderix AI coding assistant",
-  "main": "dist/main/index.js",
   "type": "module",
+  "main": "dist/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:prod": "electron-vite build --config electron.vite.prod.config.ts",
     "preview": "electron-vite preview",
     "package": "electron-builder",
     "typecheck": "tsc --noEmit"
