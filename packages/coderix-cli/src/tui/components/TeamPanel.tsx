@@ -238,12 +238,12 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
           return (
             <Box key="__main__" flexShrink={0}>
               <Text>
-                <Text color={isCursor ? 'yellow' : undefined}>
+                <Text dimColor={!isCursor} bold={isCursor}>
                   {isCursor ? '>' : ' '}
                 </Text>
                 {' '}
                 <Text color={isViewed ? 'green' : 'grey'}>{isViewed ? '●' : '○'} </Text>
-                <Text color={isCursor ? 'yellow' : undefined} bold={isCursor}>main</Text>
+                <Text bold={isCursor}>main</Text>
                 <Text dimColor> · Return to main agent (Enter toggle, Esc defocus)</Text>
               </Text>
             </Box>
@@ -259,12 +259,12 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
             <Text>
-              <Text color={isCursor ? 'yellow' : undefined}>
+              <Text dimColor={!isCursor} bold={isCursor}>
                 {isCursor ? '>' : ' '}
               </Text>
               {' '}
               <Text color={iconColor}>{icon} </Text>
-              <Text color={isCursor ? 'yellow' : undefined}>{m.agentType}</Text>
+              <Text bold={isCursor}>{m.agentType}</Text>
               <Text dimColor> · </Text>
               <Text dimColor={m.status === 'done'}>{label}</Text>
             </Text>
@@ -280,7 +280,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
 
       {focused && (
         <Box>
-          <Text color="yellow">    Up/Down navigate · Enter select · Esc defocus</Text>
+          <Text dimColor>    Up/Down navigate · Enter select · Esc defocus</Text>
         </Box>
       )}
       {!focused && hasActive && (
