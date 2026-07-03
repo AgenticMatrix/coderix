@@ -1,0 +1,88 @@
+/* ==========================================================================
+   IconSidebar.module.css — Left Icon Bar (Apple × Claude Code Style)
+   65px fixed icon column with tooltip popovers and macOS drag area
+   ========================================================================== */
+
+.iconSidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 65px;
+  flex-shrink: 0;
+  background: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-separator);
+  z-index: 10;
+}
+
+.dragArea {
+  height: 48px;
+  width: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.bottomActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 16px;
+}
+
+.iconButton {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: color 150ms, background-color 150ms;
+}
+
+.iconButton:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.iconButton.active {
+  color: var(--color-brand);
+  background: var(--color-brand-muted, rgba(0, 122, 255, 0.1));
+}
+
+/* Tooltip — slides out from right side of icon */
+.iconButton:hover .tooltip {
+  opacity: 1;
+}
+
+.tooltip {
+  position: absolute;
+  left: 48px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease-in-out;
+  z-index: 100;
+  border: 1px solid var(--color-separator);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}

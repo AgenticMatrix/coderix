@@ -1,6 +1,6 @@
 import React from 'react';
 import { MessageSquare, FolderOpen, Settings } from 'lucide-react';
-import styles from './IconSidebar.module.css';
+import './IconSidebar.css';
 
 interface NavItem {
   id: string;
@@ -17,12 +17,12 @@ export function IconSidebar(): React.ReactElement {
   const [activeNav, setActiveNav] = React.useState('chat');
 
   return (
-    <div className={styles.iconSidebar}>
+    <div className="iconSidebar">
       {/* macOS titlebar drag area */}
-      <div className={styles.dragArea} />
+      <div className="dragArea" />
 
       {/* Navigation icons */}
-      <nav className={styles.nav}>
+      <nav className="nav">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeNav === item.id;
@@ -30,24 +30,24 @@ export function IconSidebar(): React.ReactElement {
             <button
               key={item.id}
               onClick={() => setActiveNav(item.id)}
-              className={`${styles.iconButton} ${isActive ? styles.active : ''}`}
+              className={`icon-button ${isActive ? 'active' : ''}`}
               aria-label={item.label}
             >
               <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
-              <span className={styles.tooltip}>{item.label}</span>
+              <span className="tooltip">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
       {/* Bottom actions */}
-      <div className={styles.bottomActions}>
+      <div className="bottomActions">
         <button
-          className={styles.iconButton}
+          className="iconButton"
           aria-label="Settings"
         >
           <Settings size={20} strokeWidth={2} />
-          <span className={styles.tooltip}>Settings</span>
+          <span className="tooltip">Settings</span>
         </button>
       </div>
     </div>

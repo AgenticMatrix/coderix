@@ -39,6 +39,29 @@ if [ -z "$PLATFORM" ]; then
   PLATFORM="--$(echo "$HOST_PLATFORM" | sed 's/darwin/mac/;s/win32/win/;s/linux/linux/')"
 fi
 
+# ── Copy externalized runtime dependencies ─────────────────────────
+copy_runtime_deps() {
+  local OUT="$1"
+  # undici — externalized because it uses node:sqlite (Node 22+) not in Electron 33
+  for d in "$ROOT_DIR/node_modules/.pnpm/undici@7"*; do
+    if [ -d "$d/node_modules/undici" ]; then
+      mkdir -p "$OUT/node_modules/undici"
+      cp -r "$d/node_modules/undici"/* "$OUT/node_modules/undici/"
+      echo "  ✓ undici"
+      break
+    fi
+  done
+  # @anthropic-ai/sdk — dynamically imported by callModel
+  for d in "$ROOT_DIR/node_modules/.pnpm/@anthropic-ai+sdk@0"*; do
+    if [ -d "$d/node_modules/@anthropic-ai/sdk" ]; then
+      mkdir -p "$OUT/node_modules/@anthropic-ai"
+      cp -r "$d/node_modules/@anthropic-ai/sdk" "$OUT/node_modules/@anthropic-ai/"
+      echo "  ✓ @anthropic-ai/sdk"
+      break
+    fi
+  done
+}
+
 # ── Package based on target platform ──────────────────────────────
 package_linux() {
   local OUT="$PWD/release/${APP_NAME}-${VERSION}-linux-x64"
@@ -55,6 +78,9 @@ package_linux() {
     delete pkg.devDependencies;
     require('fs').writeFileSync('$OUT/package.json', JSON.stringify(pkg, null, 2));
   "
+
+  # Copy externalized runtime deps (not bundled into main.cjs)
+  copy_runtime_deps "$OUT"
 
   # Electron runtime — copy ALL files except the binary itself (renamed)
   for f in "$ELECTRON_DIR/"*; do
@@ -96,6 +122,7 @@ package_mac() {
     delete pkg.devDependencies;
     require('fs').writeFileSync('$OUT/${APP_NAME}.app/Contents/Resources/package.json', JSON.stringify(pkg, null, 2));
   "
+  copy_runtime_deps "$OUT/${APP_NAME}.app/Contents/Resources"
 
   # Electron runtime
   cp "$ELECTRON_DIR/electron" "$OUT/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
@@ -142,6 +169,7 @@ package_win() {
     delete pkg.devDependencies;
     require('fs').writeFileSync('$OUT/package.json', JSON.stringify(pkg, null, 2));
   "
+  copy_runtime_deps "$OUT"
 
   # Electron runtime
   for f in "$ELECTRON_DIR/"*; do
