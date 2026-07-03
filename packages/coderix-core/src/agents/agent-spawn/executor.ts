@@ -751,7 +751,7 @@ async function executeFork(
 
   agentSpawn.subAgentRegistry.register({
     id: agentId,
-    name: `fork-${agentId}`,
+    name: agentId,
     agentType: 'general-purpose',
     status: 'running',
     prompt,
