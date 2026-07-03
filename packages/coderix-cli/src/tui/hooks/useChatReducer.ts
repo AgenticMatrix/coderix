@@ -50,10 +50,16 @@ function coreBlockToTui(block: Record<string, unknown>): ContentBlock {
 /**
  * Convert core transcript messages to TUI Message objects.
  * Core messages have `content: string | ContentBlock[]`.
+ *
+ * Two-pass conversion: first maps all blocks, then injects tool_result
+ * data into the corresponding tool_use blocks so inline renderers
+ * (diffs, command output, etc.) work identically to live streaming.
  */
 export function convertTranscriptToMessages(rawMessages: Array<{ role: string; content: unknown; timestamp?: number }>): Message[] {
   const base = Date.now();
-  return rawMessages.map((raw, i) => {
+
+  // Pass 1: convert raw → TUI messages
+  const messages = rawMessages.map((raw, i) => {
     let blocks: ContentBlock[];
     let textContent: string;
 
@@ -79,6 +85,31 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
       timestamp: raw.timestamp ?? (base + i),
     };
   });
+
+  // Pass 2: find all tool_result blocks and inject results into the
+  // corresponding tool_use blocks so they render inline (diffs, code, etc.)
+  for (const msg of messages) {
+    if (msg.role !== 'user') continue;
+    for (const block of msg.blocks) {
+      if (block.type !== 'tool_result' || !block.toolId) continue;
+      // Find and enrich the matching tool_use block
+      for (const other of messages) {
+        if (other.role !== 'assistant') continue;
+        for (const b of other.blocks) {
+          if (b.type === 'tool_use' && b.toolId === block.toolId) {
+            b.state = 'done';
+            b.result = {
+              content: block.content,
+              isError: block.isError,
+            };
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return messages;
 }
 
 /** Get plain text from Message.blocks for backward compat. */

@@ -119,16 +119,35 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef });
   const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
 
-  // Load sub-agent transcript when entering immersive mode
+  // Load sub-agent transcript when entering immersive mode.
+  // Only loads from registry if no cached messages exist (cache preserves
+  // user messages from previous immersive sessions).
   useEffect(() => {
-    if (state.subAgentView) {
+    if (!state.subAgentView) return;
+    const agentId = state.subAgentView.agentId;
+    // Skip if we already have cached messages (includes user messages)
+    if (state.subAgentMessageCache[agentId]?.length) return;
+
+    const loadTranscript = () => {
       const registry = getSubAgentRegistry();
-      if (!registry) return;
-      const agent = registry.get(state.subAgentView.agentId);
+      if (!registry) return false;
+      const agent = registry.get(agentId);
       if (agent?.transcript && agent.transcript.length > 0) {
         const messages = convertTranscriptToMessages(agent.transcript);
-        dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId: state.subAgentView.agentId, messages });
+        dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
+        return true;
       }
+      return false;
+    };
+
+    if (!loadTranscript()) {
+      // Agent still running — poll until transcript is available
+      const interval = setInterval(() => {
+        if (loadTranscript()) {
+          clearInterval(interval);
+        }
+      }, 500);
+      return () => clearInterval(interval);
     }
   }, [state.subAgentView?.agentId]);
 
