@@ -76,7 +76,6 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const agentType = props.input.agent_type as string | undefined;
   const description = props.input.description as string | undefined;
   const prompt = props.input.prompt as string | undefined;
-  const background = (props.input.background as boolean) ?? false;
   const isolation = props.input.isolation as string | undefined;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
@@ -167,7 +166,6 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
         {showTimer ? (
           <Text dimColor color="yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
-        {background && !isFork ? <Text dimColor> (background)</Text> : null}
         {isolation ? <Text dimColor> isolated: {isolation}</Text> : null}
         {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>

@@ -428,7 +428,7 @@ async function executeStandardSubagent(
   const agentType = agentTypeInput;
   const agentId = options.agentId ?? `sub-${shortId()}`;
   const subAbortController = new AbortController();
-  const isBackground = backgroundOverride ?? agentDef.background ?? false;
+  const isBackground = false;
 
   // Build filtered tool registry from the agent definition
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
