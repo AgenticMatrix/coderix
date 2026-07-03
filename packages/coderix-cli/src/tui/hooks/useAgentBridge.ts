@@ -335,7 +335,8 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     b.toolName !== 'read' && b.toolName !== 'bash' &&
                     b.toolName !== 'glob' && b.toolName !== 'grep' &&
                     b.toolName !== 'web-search' && b.toolName !== 'web-fetch' &&
-                    b.toolName !== 'write' && b.toolName !== 'edit'
+                    b.toolName !== 'write' && b.toolName !== 'edit' &&
+                    b.toolName !== 'Agent'
                   ),
                 );
                 if (tuiBlocks.length > 0) {
@@ -368,6 +369,30 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   } else if (progress.status === 'started') {
                     // Keep in 'pending' state; the message describes what's happening
                   }
+                }
+              }
+
+              // ── Tool completed: dispatch result immediately ─────
+              // Long-running tools (e.g. Agent) complete while other tools
+              // are still executing. Yield the result now so the TUI stops
+              // the timer and shows the green indicator without waiting.
+              if (msg.type === 'system' && msg.subtype === 'tool_completed') {
+                const completed = (msg as Record<string, unknown>).data as {
+                  toolUseId?: string; duration?: number;
+                  content?: string; isError?: boolean;
+                  metadata?: Record<string, unknown>;
+                } | undefined;
+                if (completed?.toolUseId) {
+                  routeDispatch({
+                    type: 'SET_TOOL_USE_RESULT',
+                    toolId: completed.toolUseId,
+                    duration: completed.duration,
+                    result: {
+                      content: completed.content ?? '',
+                      isError: completed.isError ?? false,
+                      metadata: completed.metadata,
+                    },
+                  });
                 }
               }
               break;

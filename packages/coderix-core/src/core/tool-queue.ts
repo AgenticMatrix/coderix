@@ -19,6 +19,7 @@ export class ToolExecutionQueue {
   private pending: Array<{ block: ToolUseBlock; startFn: () => void }> = [];
   private results = new Map<string, ToolResultBlock>();
   private _progress: ToolProgress[] = [];
+  private _completedResults: ToolResultBlock[] = [];
   private _allSettled: Promise<void> | null = null;
   private _resolveAll: (() => void) | null = null;
 
@@ -75,6 +76,14 @@ export class ToolExecutionQueue {
     return drained;
   }
 
+  /** Drain and return tools that completed since last call. */
+  drainCompletedResults(): ToolResultBlock[] {
+    if (this._completedResults.length === 0) return [];
+    const drained = this._completedResults;
+    this._completedResults = [];
+    return drained;
+  }
+
   /** Wait until every running and pending tool has settled. */
   async waitForAll(): Promise<void> {
     if (this.running.size === 0 && this.pending.length === 0) return;
@@ -127,6 +136,7 @@ export class ToolExecutionQueue {
     try {
       const result = await execute(block);
       this.results.set(block.id, result);
+      this._completedResults.push(result);
       this._progress.push({
         toolName: block.name,
         toolUseId: block.id,

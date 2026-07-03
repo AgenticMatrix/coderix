@@ -424,7 +424,7 @@ export class QueryEngine {
               const event = { type: 'error' as const, data: msg.error };
               emit(event);
               yield event;
-            } else if (msg.subtype === 'progress') {
+            } else if (msg.subtype === 'progress' || msg.subtype === 'tool_completed') {
               const event = { type: 'message' as const, data: msg };
               emit(event);
               yield event;

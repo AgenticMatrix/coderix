@@ -207,6 +207,7 @@ export type QueryMessage =
   | { type: 'system'; subtype: 'compact_boundary'; compactMetadata: CompactMetadata }
   | { type: 'system'; subtype: 'error'; error: AgentError }
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
+  | { type: 'system'; subtype: 'tool_completed'; data: { toolUseId: string; duration?: number; content: string | TextBlock[]; isError?: boolean; metadata?: Record<string, unknown> } }
   | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission }
   | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion };
 

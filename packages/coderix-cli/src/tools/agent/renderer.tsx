@@ -77,11 +77,11 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const description = props.input.description as string | undefined;
   const prompt = props.input.prompt as string | undefined;
   const isolation = props.input.isolation as string | undefined;
-  const isDone = props.state === 'done';
-  const isExecuting = props.state === 'executing';
-  const isPending = props.state === 'pending';
+  const hasResult = !!props.result;
+  const isDone = props.state === 'done' || hasResult;
+  const isExecuting = props.state === 'executing' && !hasResult;
+  const isPending = props.state === 'pending' && !hasResult;
   const isError = props.state === 'error';
-  const isFork = !agentType;
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   const label = agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'Fork';
@@ -141,6 +141,12 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const visibleCalls = tooLong ? displayCalls.slice(0, FOLD_THRESHOLD) : displayCalls;
   const hiddenCount = displayCalls.length - FOLD_THRESHOLD;
 
+  const resultContent = props.result?.content;
+  const resultFirstLine = resultContent ? resultContent.split('\n')[0]?.trim() : null;
+  const resultPreview = resultFirstLine
+    ? (resultFirstLine.length > 100 ? resultFirstLine.slice(0, 97) + '...' : resultFirstLine)
+    : null;
+
   if (isError) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -185,6 +191,11 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
           {tooLong && (
             <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
           )}
+        </Box>
+      )}
+      {resultPreview && (
+        <Box marginLeft={1}>
+          <Text dimColor>{resultPreview}</Text>
         </Box>
       )}
     </Box>

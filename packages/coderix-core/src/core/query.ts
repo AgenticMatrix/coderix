@@ -995,6 +995,22 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       for (const pe of queue.drainProgress()) {
         yield { type: 'system', subtype: 'progress', data: pe };
       }
+      // Yield completed tool results immediately so the TUI can update
+      // tool_use block states (stop timers, show results) without waiting
+      // for all parallel tools to settle.
+      for (const cr of queue.drainCompletedResults()) {
+        yield {
+          type: 'system',
+          subtype: 'tool_completed',
+          data: {
+            toolUseId: cr.tool_use_id,
+            duration: cr.duration,
+            content: cr.content,
+            isError: cr.is_error,
+            metadata: cr.metadata,
+          },
+        };
+      }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL));
     }
 
