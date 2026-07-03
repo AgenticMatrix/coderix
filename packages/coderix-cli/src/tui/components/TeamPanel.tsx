@@ -11,25 +11,10 @@ interface TeamPanelProps {
   focused: boolean;
   onFocusRequest: () => void;
   onSelect: (agentId: string) => void;
+  viewedAgentId?: string | null;
 }
 
 const POLL_INTERVAL_MS = 2000;
-
-const STATUS_ICON: Record<string, string> = {
-  pending: '○',
-  running: '◉',
-  done: '●',
-  error: '✕',
-  stopped: '■',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  pending: 'grey',
-  running: 'yellow',
-  done: 'green',
-  error: 'red',
-  stopped: 'grey',
-};
 
 function memberLabel(m: TeamMember): string {
   const task = m.task ? ` — ${m.task}` : '';
@@ -58,7 +43,7 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
  * Read-only display — press Ctrl+J to open the TeamAgentPicker
  * for selecting a member to view their transcript.
  */
-export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect }: TeamPanelProps) {
+export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect, viewedAgentId }: TeamPanelProps) {
   const [configs, setConfigs] = useState<TeamConfig[]>([]);
   const [cursorIndex, setCursorIndex] = useState(0);
   const prevActiveCount = useRef(0);
@@ -246,6 +231,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         // "main" entry for returning to the main agent
         if (m.agentId === '__main__') {
           const isCursor = focused && cursorIndex === i;
+          const isViewed = !viewedAgentId;
           return (
             <Box key="__main__" flexShrink={0}>
               <Text>
@@ -253,7 +239,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
                   {isCursor ? '>' : ' '}
                 </Text>
                 {' '}
-                <Text color="green">● </Text>
+                <Text color={isViewed ? 'green' : 'grey'}>{isViewed ? '●' : '○'} </Text>
                 <Text color={isCursor ? 'yellow' : undefined} bold={isCursor}>main</Text>
                 <Text dimColor> · Return to main agent</Text>
               </Text>
@@ -261,10 +247,11 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
           );
         }
 
-        const icon = STATUS_ICON[m.status] ?? '?';
-        const color = STATUS_COLOR[m.status] ?? 'grey';
-        const label = memberLabel(m);
         const isCursor = focused && cursorIndex === i;
+        const isViewed = viewedAgentId === m.agentId;
+        const icon = isViewed ? '●' : '○';
+        const iconColor = isViewed ? 'green' : 'grey';
+        const label = memberLabel(m);
 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
@@ -273,7 +260,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
                 {isCursor ? '>' : ' '}
               </Text>
               {' '}
-              <Text color={color}>{icon} </Text>
+              <Text color={iconColor}>{icon} </Text>
               <Text color={isCursor ? 'yellow' : undefined}>{m.agentType}</Text>
               <Text dimColor> · </Text>
               <Text dimColor={m.status === 'done'}>{label}</Text>

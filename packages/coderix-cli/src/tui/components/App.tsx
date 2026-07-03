@@ -462,6 +462,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         onDismissReset={handleTeamDismissReset}
         focused={state.teamPicker}
         onFocusRequest={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
+        viewedAgentId={state.subAgentView?.agentId ?? null}
         onSelect={(agentId) => {
           dispatch({ type: 'HIDE_TEAM_PICKER' });
           dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
