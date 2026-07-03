@@ -18,6 +18,7 @@ interface ToolCallSummary {
 }
 
 const POLL_MS = 250;
+const FOLD_THRESHOLD = 5;
 
 export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const agentType = props.input.agent_type as string | undefined;
@@ -85,6 +86,9 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
 
   const displayCalls = liveCallsRef.current.length > 0 ? liveCallsRef.current : doneToolCalls;
+  const tooLong = displayCalls.length > FOLD_THRESHOLD && !props.contentExpanded;
+  const visibleCalls = tooLong ? displayCalls.slice(0, FOLD_THRESHOLD) : displayCalls;
+  const hiddenCount = displayCalls.length - FOLD_THRESHOLD;
 
   if (isError) {
     return (
@@ -117,15 +121,14 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
       </Text>
       {displayCalls.length > 0 && (
         <Box flexDirection="column" marginLeft={2}>
-          {displayCalls.map((tc, i) => {
-            const isLast = i === displayCalls.length - 1;
-            const prefix = isLast ? '└── ' : '├── ';
-            return (
-              <Text key={i} dimColor>
-                {prefix}{tc.name} · {tc.input}
-              </Text>
-            );
-          })}
+          {visibleCalls.map((tc, i) => (
+            <Text key={i} dimColor>
+              {tooLong ? '├── ' : (i === visibleCalls.length - 1 ? '└── ' : '├── ')}{tc.name} · {tc.input}
+            </Text>
+          ))}
+          {tooLong && (
+            <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+          )}
         </Box>
       )}
     </Box>
