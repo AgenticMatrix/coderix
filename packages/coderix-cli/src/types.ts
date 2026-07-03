@@ -300,7 +300,9 @@ export type ChatAction =
   // Paste blocks
   | { type: 'ADD_PASTE_BLOCK'; text: string }
   // Token usage
-  | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage> };
+  | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage> }
+  // Internal: route an action to savedMainMessages when in sub-agent view
+  | { type: 'ROUTE_TO_SAVED_MAIN'; action: ChatAction };
 
 // ── Streaming callbacks (API client → App) ──────────────────────────
 

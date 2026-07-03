@@ -110,21 +110,14 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   const currentSessionRef = useRef<string>('');
   messagesRef.current = state.messages;
 
-  // Ref so useAgentBridge can check whether we're in sub-agent mode
-  // and skip dispatching main-agent events that would contaminate the view.
+  // Ref so useAgentBridge can route dispatches to savedMainMessages
+  // when the user is viewing a sub-agent, keeping the main agent's work
+  // intact while the sub-agent view remains uncontaminated.
   const subAgentViewRef = useRef(state.subAgentView);
   subAgentViewRef.current = state.subAgentView;
 
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef });
   const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
-
-  // Interrupt the main agent when entering sub-agent immersive mode so its
-  // streaming events don't leak into the sub-agent's message list.
-  useEffect(() => {
-    if (state.subAgentView) {
-      engine.interrupt();
-    }
-  }, [state.subAgentView?.agentId]);
 
   // Load sub-agent transcript when entering immersive mode
   useEffect(() => {

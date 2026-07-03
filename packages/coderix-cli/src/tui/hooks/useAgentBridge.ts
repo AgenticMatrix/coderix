@@ -102,8 +102,9 @@ export interface AgentBridgeDeps {
   dispatch: React.Dispatch<ChatAction>;
   setAppState: (partial: Partial<AppState>) => void;
   /** Ref that tracks whether a sub-agent view is currently active.
-   *  When set, main-agent dispatches are skipped to avoid contaminating
-   *  the sub-agent's message list. */
+   *  When set, main-agent dispatches are routed to savedMainMessages
+   *  so the main agent can keep working in the background without
+   *  contaminating the sub-agent's message list. */
   subAgentViewRef: React.MutableRefObject<{ agentId: string } | null | undefined>;
 }
 
@@ -118,9 +119,44 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
   // Map tool_use_id → toolName for identifying read results
   const toolNameMapRef = useRef<Map<string, string>>(new Map());
 
+  // Wrap dispatch so that when the user is viewing a sub-agent, main-agent
+  // message-modifying actions are routed to savedMainMessages instead of
+  // state.messages. This lets the main agent keep running in the background
+  // without contaminating the sub-agent view.
+  // Global UI actions (approval, question, error, mode, etc.) pass through.
+  const routeDispatch = useCallback(
+    (action: ChatAction) => {
+      if (!subAgentViewRef.current) {
+        dispatch(action);
+        return;
+      }
+      // Message-modifying actions: route to savedMainMessages
+      switch (action.type) {
+        case 'ADD_USER_MESSAGE':
+        case 'START_ASSISTANT_RESPONSE':
+        case 'START_BLOCK':
+        case 'APPEND_BLOCK_DELTA':
+        case 'STOP_BLOCK':
+        case 'SET_TOOL_USE_RESULT':
+        case 'UPDATE_BLOCK_STATE':
+        case 'APPEND_ASSISTANT_TEXT':
+        case 'APPEND_ASSISTANT_THINKING':
+        case 'FINISH_ASSISTANT_RESPONSE':
+        case 'INTERRUPT':
+        case 'UPDATE_TOKEN_USAGE':
+          dispatch({ type: 'ROUTE_TO_SAVED_MAIN', action });
+          return;
+        default:
+          // Global UI actions pass through normally
+          dispatch(action);
+      }
+    },
+    [dispatch, subAgentViewRef],
+  );
+
   // ── Delta throttling: batch APPEND_BLOCK_DELTA dispatches to reduce
   //    re-renders during streaming so terminal text selection isn't disrupted.
-  const { pendingDeltasRef, flushDeltas, scheduleFlush } = useDeltaThrottle(dispatch);
+  const { pendingDeltasRef, flushDeltas, scheduleFlush } = useDeltaThrottle(routeDispatch);
 
   /**
    * Run a single agent turn: user input → QueryEngine → dispatch → React render.
@@ -130,9 +166,6 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
       const trimmed = text.trim();
       if (trimmed.length === 0) return;
 
-      // If the user is viewing a sub-agent, don't start a main-agent turn.
-      if (subAgentViewRef.current) return;
-
       // ── Create and dispatch user message ────────────────────
       const userMsg: Message = {
         id: nextMessageId(),
@@ -141,7 +174,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         blocks: [{ type: 'text', content: trimmed } satisfies TextBlock],
         timestamp: Date.now(),
       };
-      dispatch({ type: 'ADD_USER_MESSAGE', message: userMsg });
+      routeDispatch({ type: 'ADD_USER_MESSAGE', message: userMsg });
 
       // ── Agent loop via QueryEngine ──────────────────────────
       try {
@@ -149,9 +182,6 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         let pendingBlocks: TuiContentBlock[] = [];
 
         for await (const event of engine.submitMessage(trimmed)) {
-          // User switched to a sub-agent view — stop dispatching
-          // main-agent events to avoid contaminating the sub-agent view.
-          if (subAgentViewRef.current) continue;
           switch (event.type) {
             // ── Message event (stream_event | assistant | user | progress) ──
             case 'message': {
@@ -170,7 +200,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     // Start a new assistant response
                     currentAssistantId = nextMessageId();
                     pendingBlocks = [];
-                    dispatch({ type: 'START_ASSISTANT_RESPONSE', id: currentAssistantId });
+                    routeDispatch({ type: 'START_ASSISTANT_RESPONSE', id: currentAssistantId });
                     break;
                   }
 
@@ -184,7 +214,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     if (tuiBlock.type === 'tool_use' && tuiBlock.toolId) {
                       toolNameMapRef.current.set(tuiBlock.toolId, tuiBlock.toolName);
                     }
-                    dispatch({ type: 'START_BLOCK', messageId: currentAssistantId, block: tuiBlock });
+                    routeDispatch({ type: 'START_BLOCK', messageId: currentAssistantId, block: tuiBlock });
                     break;
                   }
 
@@ -207,19 +237,19 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   case 'content_block_stop':
                     if (currentAssistantId) {
                       flushDeltas();
-                      dispatch({ type: 'STOP_BLOCK', messageId: currentAssistantId });
+                      routeDispatch({ type: 'STOP_BLOCK', messageId: currentAssistantId });
                     }
                     break;
 
                   case 'message_stop':
                     if (currentAssistantId) {
                       flushDeltas();
-                      dispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId });
+                      routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId });
                       // Track final token usage
                       const stopMsg = ev.message as Record<string, unknown> | undefined;
                       const stopUsage = stopMsg?.usage as Record<string, number> | undefined;
                       if (stopUsage) {
-                        dispatch({
+                        routeDispatch({
                           type: 'UPDATE_TOKEN_USAGE',
                           usage: {
                             inputTokens: stopUsage.input_tokens ?? 0,
@@ -261,7 +291,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     ],
                     timestamp: Date.now(),
                   };
-                  dispatch({ type: 'ADD_USER_MESSAGE', message: toolResultMsg });
+                  routeDispatch({ type: 'ADD_USER_MESSAGE', message: toolResultMsg });
                   continue;
                 }
                 const blocks = rawContent.map((b: Record<string, unknown>) => {
@@ -286,7 +316,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                 // Inject results into tool_use blocks for inline display
                 for (const block of blocks) {
                   if (block.type === 'tool_result' && block.toolId) {
-                    dispatch({
+                    routeDispatch({
                       type: 'SET_TOOL_USE_RESULT',
                       toolId: block.toolId,
                       duration: block.duration,
@@ -309,7 +339,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   ),
                 );
                 if (tuiBlocks.length > 0) {
-                  dispatch({
+                  routeDispatch({
                     type: 'ADD_USER_MESSAGE',
                     message: { ...toolResultMsg, blocks: tuiBlocks },
                   });
@@ -324,7 +354,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                 } | undefined;
                 if (progress?.toolUseId) {
                   if (progress.status === 'running') {
-                    dispatch({
+                    routeDispatch({
                       type: 'UPDATE_BLOCK_STATE',
                       toolId: progress.toolUseId,
                       state: 'executing',
@@ -346,7 +376,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
             // ── Error event ──────────────────────────────────────
             case 'error': {
               const errData = event.data as { message?: string };
-              dispatch({ type: 'SET_ERROR', error: errData?.message ?? String(event.data) });
+              routeDispatch({ type: 'SET_ERROR', error: errData?.message ?? String(event.data) });
               break;
             }
 
@@ -371,14 +401,14 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   },
                 });
 
-                dispatch({ type: 'SHOW_APPROVAL', req: approvalReq });
+                routeDispatch({ type: 'SHOW_APPROVAL', req: approvalReq });
 
                 // Await user choice — the ApprovalPrompt component
                 // calls deferred.resolve(true/false) when the user
                 // picks an option.
                 await deferred.promise;
 
-                dispatch({ type: 'HIDE_APPROVAL' });
+                routeDispatch({ type: 'HIDE_APPROVAL' });
                 setAppState({ pendingApproval: null });
               }
               break;
@@ -397,14 +427,14 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   },
                 } as any);
 
-                dispatch({
+                routeDispatch({
                   type: 'SHOW_QUESTION',
                   questions: deferred.questions,
                 } as any);
 
                 await deferred.promise;
 
-                dispatch({ type: 'HIDE_QUESTION' } as any);
+                routeDispatch({ type: 'HIDE_QUESTION' } as any);
                 setAppState({ pendingQuestion: null } as any);
               }
               break;
@@ -418,13 +448,10 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         }
       } catch (err) {
         flushDeltas();
-        // AbortError is expected when engine.interrupt() is called (e.g. when
-        // the user switches to a sub-agent view). Silently ignore it.
-        if (err instanceof Error && err.name === 'AbortError') return;
-        dispatch({ type: 'SET_ERROR', error: (err as Error).message });
+        routeDispatch({ type: 'SET_ERROR', error: (err as Error).message });
       }
     },
-    [engine, dispatch, flushDeltas, scheduleFlush, setAppState, subAgentViewRef],
+    [engine, routeDispatch, flushDeltas, scheduleFlush, setAppState],
   );
 
   return { runAgentTurn };

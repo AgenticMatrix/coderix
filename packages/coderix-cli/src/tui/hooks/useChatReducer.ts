@@ -105,6 +105,18 @@ export function getMessageThinking(m: Message): string | undefined {
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
+    // Internal: route an action to savedMainMessages when in sub-agent view.
+    // The wrapped action is applied to savedMainMessages instead of messages,
+    // letting the main agent work in the background without contaminating the view.
+    case 'ROUTE_TO_SAVED_MAIN': {
+      const altState = { ...state, messages: state.savedMainMessages ?? [] };
+      const result = chatReducer(altState, action.action);
+      return {
+        ...state,
+        savedMainMessages: result.messages,
+      };
+    }
+
     case 'SET_INPUT':
       return {
         ...state,
