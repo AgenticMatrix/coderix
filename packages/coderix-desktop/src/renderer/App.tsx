@@ -21,8 +21,8 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
 import type { ChatViewMessage } from './components/chat/ChatView';
 import { Composer } from './components/composer/Composer';
+import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
-import { GlobalModal } from './components/modals/GlobalModal';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
 
@@ -80,6 +80,7 @@ export function App(): React.ReactElement {
 
   // ── Local state ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -100,25 +101,8 @@ export function App(): React.ReactElement {
         return;
       }
 
-      // In 'plan' and 'ask' modes, the GlobalModal handles user interaction.
-      // The store / modal will call approvePermission or denyPermission after
-      // the user makes a choice. For now, we auto-deny after timeout.
-      const timeout = setTimeout(() => {
-        denyPermission(req.id).catch(() => {
-          // Permission request may already be handled
-        });
-      }, 120_000); // 2 minute timeout
-
-      // Store a cleanup ref so the modal can clear the timeout on user action
-      const cleanup = () => clearTimeout(timeout);
-
-      // The GlobalModal reads from its own internal queue or from a shared
-      // store. For now, we broadcast via a custom event that the modal listens to.
-      window.dispatchEvent(
-        new CustomEvent('coderix:permission-request', {
-          detail: { request: req, cleanup },
-        }),
-      );
+      // Show inline prompt (replaces any existing pending permission)
+      setPendingPermission(req);
     });
 
     return unsubscribe;
@@ -311,10 +295,18 @@ export function App(): React.ReactElement {
             isStreaming={isStreaming}
           />
 
+          {/* Permission prompt — inline above composer (Claude Code style) */}
+          {pendingPermission && (
+            <PermissionPrompt
+              request={pendingPermission}
+              onResolved={() => setPendingPermission(null)}
+            />
+          )}
+
           {/* Composer — fixed at bottom of chat */}
           <Composer
             onSubmit={handleComposerSubmit}
-            disabled={isStreaming}
+            disabled={isStreaming || !!pendingPermission}
             model="DeepSeek V4 Pro"
           />
 
@@ -322,9 +314,6 @@ export function App(): React.ReactElement {
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>
       </AppLayout>
-
-      {/* Global modal layer — permission dialogs, question prompts */}
-      <GlobalModal />
     </>
   );
 }

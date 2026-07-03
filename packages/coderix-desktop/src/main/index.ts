@@ -14,7 +14,7 @@ import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
 
-import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient } from '@coderix/core';
+import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient, plugins } from '@coderix/core';
 import type { QueryEngineConfig } from '@coderix/core';
 
 // ---------------------------------------------------------------------------
@@ -130,12 +130,39 @@ async function initQueryEngine(): Promise<void> {
     }) as unknown as QueryEngineConfig['callModel'];
   }
 
+  // Register all built-in tool plugins
+  const toolRegistry = new ToolRegistry();
+  for (const plugin of plugins) {
+    if (!plugin.isEnabled || plugin.isEnabled()) {
+      toolRegistry.register(
+        {
+          name: plugin.name,
+          description: plugin.schema.description ?? '',
+          input_schema: plugin.schema.input_schema ?? { type: 'object', properties: {} },
+        },
+        async (input, ctx) => {
+          const result = await plugin.executor(input, {
+            cwd: ctx.cwd ?? process.cwd(),
+            allowMutation: true,
+            maxOutput: 50_000,
+            signal: ctx.signal,
+            agentSpawn: (ctx as any).agentSpawn,
+            setPermissionMode: (ctx as any).setPermissionMode,
+            sessionId: (ctx as any).sessionId,
+          } as any);
+          return result as any;
+        },
+      );
+    }
+  }
+  console.log(`[Coderix] Registered ${toolRegistry.names.length} tools: ${toolRegistry.names.join(', ')}`);
+
   const config: QueryEngineConfig = {
     cwd: process.cwd(),
     model,
     customSystemPrompt: undefined,
     sessionManager: new SessionManager(),
-    toolRegistry: new ToolRegistry(),
+    toolRegistry,
     callModel,
   };
 

@@ -104,12 +104,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         const updated = [...msg.blocks];
         const existing = { ...updated[existingIdx] };
 
-        // Accumulate content for text/thinking
-        if (block.content && (block.type === 'text' || block.type === 'thinking')) {
-          existing.content = (existing.content ?? '') + block.content;
-        }
-        // For tool blocks, replace content rather than append
-        if (block.content && (block.type === 'tool_use' || block.type === 'tool_result')) {
+        // Replace content — ipc-client already accumulates deltas
+        if (block.content !== undefined) {
           existing.content = block.content;
         }
         if (block.state) existing.state = block.state;

@@ -4,3 +4,5 @@ dist/
 .DS_Store
 *.log
 .claude
+packages/coderix-desktop/test-app/
+packages/coderix-desktop/test-e34.js
