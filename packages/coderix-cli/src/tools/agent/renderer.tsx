@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { getSubAgentRegistry } from '@coderix/core';
 import { useToolTimer } from '../shared/useToolTimer.js';
@@ -17,7 +17,7 @@ interface ToolCallSummary {
   state: string;
 }
 
-const POLL_MS = 300;
+const POLL_MS = 250;
 
 export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const agentType = props.input.agent_type as string | undefined;
@@ -29,6 +29,7 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const isExecuting = props.state === 'executing';
   const isPending = props.state === 'pending';
   const isError = props.state === 'error';
+  const isFork = !agentType;
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   const label = agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'Fork';
@@ -37,8 +38,11 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
 
   const doneToolCalls: ToolCallSummary[] = (props.result?.metadata?.toolCalls as ToolCallSummary[]) ?? [];
 
-  // Poll registry for live tool calls during execution
-  const [liveToolCalls, setLiveToolCalls] = useState<ToolCallSummary[]>([]);
+  // Poll registry for live tool calls during execution.
+  // Use a ref (always current, survives React batching) + a tick counter
+  // to force re-renders so the tool tree grows progressively.
+  const liveCallsRef = useRef<ToolCallSummary[]>([]);
+  const [liveTick, setLiveTick] = useState(0);
   const isActive = isExecuting || isPending;
 
   useEffect(() => {
@@ -52,7 +56,6 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
         const running = registry.list().filter(a => a.status === 'running');
         if (running.length === 0) return;
 
-        // Match the most recently started agent of the same type
         const matching = running
           .filter(a => {
             const expectedType = agentType || 'fork';
@@ -62,8 +65,9 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
           .sort((a, b) => b.createdAt - a.createdAt);
 
         const agent = matching[0];
-        if (agent?.liveToolCalls && agent.liveToolCalls.length > 0) {
-          setLiveToolCalls([...agent.liveToolCalls]);
+        if (agent?.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
+          liveCallsRef.current = [...agent.liveToolCalls];
+          setLiveTick(t => t + 1);
         }
       } catch {
         // Ignore poll errors
@@ -74,6 +78,13 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
     const interval = setInterval(poll, POLL_MS);
     return () => clearInterval(interval);
   }, [isActive, agentType]);
+
+  // Seed liveCallsRef from done result so we don't lose data on re-render
+  if (isDone && doneToolCalls.length > liveCallsRef.current.length) {
+    liveCallsRef.current = doneToolCalls;
+  }
+
+  const displayCalls = liveCallsRef.current.length > 0 ? liveCallsRef.current : doneToolCalls;
 
   if (isError) {
     return (
@@ -87,51 +98,27 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
     );
   }
 
-  // Done state — use final toolCalls from result metadata
-  if (isDone) {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Text>
-          <Text color="green">● </Text>
-          <Text bold>{headerText}</Text>
-          {background ? <Text color="green"> (background)</Text> : null}
-        </Text>
-        {doneToolCalls.length > 0 && (
-          <Box flexDirection="column" marginLeft={2}>
-            {doneToolCalls.map((tc, i) => {
-              const isLast = i === doneToolCalls.length - 1;
-              const prefix = isLast ? '└── ' : '├── ';
-              return (
-                <Text key={i} dimColor>
-                  {prefix}{tc.name} · {tc.input}
-                </Text>
-              );
-            })}
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
-  // Executing / pending state — show live tool calls from registry
-  const indicator = blinkOn ? '●' : '○';
-  const statusText = isExecuting ? '' : 'queued';
+  const indicator = isDone ? '●' : (blinkOn ? '●' : '○');
+  const indicatorColor = isDone ? 'green' : 'yellow';
+  const statusText = isPending ? 'queued' : '';
+  const showTimer = (isExecuting || isPending) && !isDone;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>{headerText}</Text>
-        {isExecuting || isPending ? (
+        {showTimer ? (
           <Text dimColor color="yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
-        {background ? <Text dimColor> (background)</Text> : null}
+        {background && !isFork ? <Text dimColor> (background)</Text> : null}
         {isolation ? <Text dimColor> isolated: {isolation}</Text> : null}
+        {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>
-      {liveToolCalls.length > 0 && (
+      {displayCalls.length > 0 && (
         <Box flexDirection="column" marginLeft={2}>
-          {liveToolCalls.map((tc, i) => {
-            const isLast = i === liveToolCalls.length - 1;
+          {displayCalls.map((tc, i) => {
+            const isLast = i === displayCalls.length - 1;
             const prefix = isLast ? '└── ' : '├── ';
             return (
               <Text key={i} dimColor>

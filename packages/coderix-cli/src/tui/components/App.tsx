@@ -120,35 +120,45 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
 
   // Load sub-agent transcript when entering immersive mode.
-  // Only loads from registry if no cached messages exist (cache preserves
-  // user messages from previous immersive sessions).
+  // Polls every 400ms while the agent is running, progressively loading
+  // new messages as the transcript grows in the registry.
   useEffect(() => {
     if (!state.subAgentView) return;
     const agentId = state.subAgentView.agentId;
-    // Skip if we already have cached messages (includes user messages)
-    if (state.subAgentMessageCache[agentId]?.length) return;
+    const initialCount = state.subAgentMessageCache[agentId]?.length ?? 0;
+    let lastCount = initialCount;
+    let missingCount = 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    const loadTranscript = () => {
+    const pollTranscript = () => {
       const registry = getSubAgentRegistry();
-      if (!registry) return false;
+      if (!registry) return;
       const agent = registry.get(agentId);
-      if (agent?.transcript && agent.transcript.length > 0) {
-        const messages = convertTranscriptToMessages(agent.transcript);
-        dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
-        return true;
+      if (!agent) {
+        // Agent not in registry yet — keep polling up to 30s
+        missingCount++;
+        if (missingCount > 75) {
+          clearInterval(interval!);
+        }
+        return;
       }
-      return false;
+
+      const transcriptLen = agent.transcript?.length ?? 0;
+      if (transcriptLen > lastCount) {
+        lastCount = transcriptLen;
+        const messages = convertTranscriptToMessages(agent.transcript!);
+        dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
+      }
+
+      // Stop polling once the agent is done and we've loaded all messages
+      if (agent.status !== 'running' && lastCount > 0) {
+        clearInterval(interval!);
+      }
     };
 
-    if (!loadTranscript()) {
-      // Agent still running — poll until transcript is available
-      const interval = setInterval(() => {
-        if (loadTranscript()) {
-          clearInterval(interval);
-        }
-      }, 500);
-      return () => clearInterval(interval);
-    }
+    pollTranscript();
+    interval = setInterval(pollTranscript, 400);
+    return () => { if (interval) clearInterval(interval); };
   }, [state.subAgentView?.agentId]);
 
   const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);

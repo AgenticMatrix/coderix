@@ -328,14 +328,24 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
                 accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: shortInput, state: 'executing' });
               }
             }
-            agentSpawn.subAgentRegistry.update(agentId, {
-              liveToolCalls: [...accumulatedLiveCalls],
-            });
           }
+
+          // Push transcript snapshot for real-time immersive sub-agent view
+          agentSpawn.subAgentRegistry.update(agentId, {
+            liveToolCalls: [...accumulatedLiveCalls],
+            transcript: [...transcript],
+            turnCount: assistantTurnCount,
+            messageCount: transcript.length,
+            toolCount,
+          });
           break;
         }
         case 'user':
           transcript.push(msg.message as unknown as Message);
+          agentSpawn.subAgentRegistry.update(agentId, {
+            transcript: [...transcript],
+            messageCount: transcript.length,
+          });
           break;
         case 'system':
           if (msg.subtype === 'progress') {
