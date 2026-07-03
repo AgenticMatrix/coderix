@@ -49,6 +49,8 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   const prevActiveCount = useRef(0);
   const hiddenTeams = useRef<Set<string>>(new Set());
   const prevFingerprint = useRef('');
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
 
   useEffect(() => {
     let active = true;
@@ -67,6 +69,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
             // Disk configs persist across sessions, but the registry does not.
             const liveMembers = cfg.members.filter((m) => {
               if (m.agentId.startsWith('pending-')) return true;
+              if (focusedRef.current) return true;
               if (m.status === 'done' || m.status === 'error' || m.status === 'stopped') return false;
               return registry ? registry.get(m.agentId) !== undefined : false;
             });
@@ -85,7 +88,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         if (registry) {
           const soloMembers: TeamMember[] = [];
           for (const agent of registry.list()) {
-            if (!teamAgentIds.has(agent.id) && agent.status === 'running') {
+            if (!teamAgentIds.has(agent.id) && (focusedRef.current || agent.status === 'running')) {
               soloMembers.push(agentToMember(agent));
             }
           }
@@ -135,9 +138,9 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       active = false;
       clearInterval(interval);
     };
-  }, [dismissed, onDismissReset]);
+  }, [dismissed, onDismissReset, focused]);
 
-  const visible = configs.filter(c => !hiddenTeams.current.has(c.name));
+  const visible = focused ? configs : configs.filter(c => !hiddenTeams.current.has(c.name));
   const allMembers = visible.flatMap(c => c.members);
   const sorted = [...allMembers].sort((a, b) => {
     const order: Record<string, number> = { running: 0, pending: 1, done: 2, error: 3, stopped: 4 };
@@ -153,7 +156,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     task: 'Return to main agent',
     joinedAt: 0,
   };
-  const displayList = sorted.length > 0 ? [...sorted, mainEntry] : [];
+  const displayList = sorted.length > 0 ? [mainEntry, ...sorted] : [];
 
   // Keyboard navigation when focused
   useInput((_input, key) => {
@@ -220,11 +223,6 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
           <Text dimColor>({visible.length} teams) </Text>
         )}
         <Text dimColor>({parts.join(', ')})</Text>
-        {focused ? (
-          <Text color="yellow"> — Up/Down navigate · Enter select · Esc defocus</Text>
-        ) : hasActive ? (
-          <Text dimColor> — Ctrl+K to pick member</Text>
-        ) : null}
       </Box>
 
       {displayList.slice(0, 9).map((m, i) => {
@@ -272,6 +270,17 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       {sorted.length > 8 && (
         <Box>
           <Text dimColor>  ... and {sorted.length - 8} more</Text>
+        </Box>
+      )}
+
+      {focused && (
+        <Box>
+          <Text color="yellow">Up/Down navigate · Enter select · Esc defocus</Text>
+        </Box>
+      )}
+      {!focused && hasActive && (
+        <Box>
+          <Text dimColor>    Ctrl+K to toggle filter</Text>
         </Box>
       )}
     </Box>
