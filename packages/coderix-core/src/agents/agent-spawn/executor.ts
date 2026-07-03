@@ -285,6 +285,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   let messageCount = 0;
   let toolCount = 0;
   const transcript: Message[] = [];
+  const accumulatedLiveCalls: Array<{ name: string; input: string; state: string }> = [];
 
   try {
     const generator = query({
@@ -314,7 +315,23 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
           const assistantMsg = msg.message as unknown as Message;
           transcript.push(assistantMsg);
           const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
-          toolCount += blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
+          const newToolCount = blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
+          toolCount += newToolCount;
+
+          // Push live tool calls to registry for real-time TUI display
+          if (newToolCount > 0) {
+            for (const block of blocks) {
+              if (block.type === 'tool_use') {
+                const b = block as { name?: string; input?: Record<string, unknown> };
+                const inputStr = b.input ? JSON.stringify(b.input) : '';
+                const shortInput = inputStr.length > 80 ? inputStr.slice(0, 77) + '...' : inputStr;
+                accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: shortInput, state: 'executing' });
+              }
+            }
+            agentSpawn.subAgentRegistry.update(agentId, {
+              liveToolCalls: [...accumulatedLiveCalls],
+            });
+          }
           break;
         }
         case 'user':
@@ -687,7 +704,6 @@ async function executeFork(
   prompt: string,
   description: string | undefined,
   modelOverride: string | undefined,
-  backgroundOverride: boolean | undefined,
   isolation: 'worktree' | undefined,
   agentSpawn: AgentSpawnContext,
   bgSessionId?: string,
@@ -695,7 +711,8 @@ async function executeFork(
   const agentType = 'fork';
   const agentId = `fork-${shortId()}`;
   const subAbortController = new AbortController();
-  const isBackground = backgroundOverride ?? false;
+  // Fork agents always run in foreground so the user can see real-time progress
+  const isBackground = false;
 
   // ── Recursion guard ──────────────────────────────────────────────────
   const parentSession = agentSpawn.sessionManager.getActive();
@@ -1181,7 +1198,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // ── Path 2: Fork mode — no agent_type → inherit parent context ────
   if (!agentTypeInput && isForkSubagentEnabled()) {
-    return executeFork(prompt, description, modelOverride, backgroundOverride, isolation, agentSpawn, options.sessionId);
+    return executeFork(prompt, description, modelOverride, isolation, agentSpawn, options.sessionId);
   }
 
   // ── Path 3: Standard subagent — explicit agent_type ───────────────

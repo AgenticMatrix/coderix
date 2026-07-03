@@ -32,6 +32,8 @@ export interface SubAgentRecord {
   notified: boolean;
   /** Path to the on-disk output file (written for background agents). */
   outputPath?: string;
+  /** Live tool calls emitted during agent execution (for real-time TUI). */
+  liveToolCalls?: Array<{ name: string; input: string; state: string }>;
 }
 
 export class SubAgentRegistry {
