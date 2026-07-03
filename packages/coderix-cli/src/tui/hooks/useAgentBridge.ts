@@ -101,6 +101,10 @@ export interface AgentBridgeDeps {
   engine: QueryEngine;
   dispatch: React.Dispatch<ChatAction>;
   setAppState: (partial: Partial<AppState>) => void;
+  /** Ref that tracks whether a sub-agent view is currently active.
+   *  When set, main-agent dispatches are skipped to avoid contaminating
+   *  the sub-agent's message list. */
+  subAgentViewRef: React.MutableRefObject<{ agentId: string } | null | undefined>;
 }
 
 /**
@@ -110,7 +114,7 @@ export interface AgentBridgeDeps {
  * The QueryEngine handles the full agent loop (API → tool execution →
  * permission → repeat), so this bridge is purely a translation layer.
  */
-export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDeps) {
+export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef }: AgentBridgeDeps) {
   // Map tool_use_id → toolName for identifying read results
   const toolNameMapRef = useRef<Map<string, string>>(new Map());
 
@@ -125,6 +129,9 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
     async (text: string) => {
       const trimmed = text.trim();
       if (trimmed.length === 0) return;
+
+      // If the user is viewing a sub-agent, don't start a main-agent turn.
+      if (subAgentViewRef.current) return;
 
       // ── Create and dispatch user message ────────────────────
       const userMsg: Message = {
@@ -142,6 +149,9 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
         let pendingBlocks: TuiContentBlock[] = [];
 
         for await (const event of engine.submitMessage(trimmed)) {
+          // User switched to a sub-agent view — stop dispatching
+          // main-agent events to avoid contaminating the sub-agent view.
+          if (subAgentViewRef.current) continue;
           switch (event.type) {
             // ── Message event (stream_event | assistant | user | progress) ──
             case 'message': {
@@ -408,10 +418,13 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
         }
       } catch (err) {
         flushDeltas();
+        // AbortError is expected when engine.interrupt() is called (e.g. when
+        // the user switches to a sub-agent view). Silently ignore it.
+        if (err instanceof Error && err.name === 'AbortError') return;
         dispatch({ type: 'SET_ERROR', error: (err as Error).message });
       }
     },
-    [engine, dispatch, flushDeltas, scheduleFlush, setAppState],
+    [engine, dispatch, flushDeltas, scheduleFlush, setAppState, subAgentViewRef],
   );
 
   return { runAgentTurn };
