@@ -275,12 +275,12 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
 
       {focused && (
         <Box>
-          <Text color="yellow">Up/Down navigate · Enter select · Esc defocus</Text>
+          <Text color="yellow">    Up/Down navigate · Enter select · Esc defocus</Text>
         </Box>
       )}
       {!focused && hasActive && (
         <Box>
-          <Text dimColor>    Ctrl+K to toggle filter</Text>
+          <Text dimColor>    Up/Down navigate · Ctrl+K to toggle filter</Text>
         </Box>
       )}
     </Box>
