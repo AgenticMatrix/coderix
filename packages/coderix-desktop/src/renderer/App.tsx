@@ -65,6 +65,7 @@ export function App(): React.ReactElement {
   const messages = useChatStore((s) => s.messages);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const error = useChatStore((s) => s.error);
   const setSessionId = useChatStore((s) => s.setSessionId);
   const sessionId = useChatStore((s) => s.sessionId);
 
@@ -190,7 +191,12 @@ export function App(): React.ReactElement {
 
   const handleNewSession = useCallback(async () => {
     await createSession();
-  }, [createSession]);
+    // Sync chat store sessionId with the newly created session
+    const newSid = useSessionStore.getState().currentSessionId;
+    if (newSid) {
+      setSessionId(newSid);
+    }
+  }, [createSession, setSessionId]);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen((prev) => !prev);
@@ -200,11 +206,20 @@ export function App(): React.ReactElement {
     async (value: string) => {
       if (!value.trim()) return;
 
+      // Auto-create a session if none exists yet
+      let currentSid = useChatStore.getState().sessionId;
+      if (!currentSid) {
+        await createSession();
+        currentSid = useSessionStore.getState().currentSessionId;
+        if (currentSid) {
+          setSessionId(currentSid);
+        }
+      }
+
       // Add the user message to the chat store (triggers streaming state)
       await sendMessage(value);
 
       // Submit the query via IPC to the main process
-      const currentSid = useChatStore.getState().sessionId;
       if (currentSid) {
         try {
           await submitQuery(value, currentSid);
@@ -216,7 +231,7 @@ export function App(): React.ReactElement {
         }
       }
     },
-    [sendMessage],
+    [sendMessage, createSession, setSessionId],
   );
 
   // ── Build chat messages for ChatView ────────────────────────────────────
@@ -274,6 +289,22 @@ export function App(): React.ReactElement {
       >
         {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Error banner */}
+          {error && (
+            <div
+              className="px-4 py-2 text-sm bg-red-900/60 border-b border-red-700/50 text-red-200 flex items-center gap-2"
+              role="alert"
+            >
+              <span className="flex-1">{error}</span>
+              <button
+                className="text-red-300 hover:text-white px-2 py-0.5 rounded"
+                onClick={() => useChatStore.getState().setError(null)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           <ChatView
             messages={chatViewMessages}
             isEmpty={isEmpty}

@@ -1,18 +1,5 @@
 /**
  * Coderix Desktop — Electron Main Process Entry Point
- *
- * Wires together all main-process modules:
- *   WindowManager → BrowserWindow lifecycle
- *   IpcBridge      → IPC channel handlers + QueryEngine bridge
- *   FileWatcher    → chokidar-based file system monitoring
- *   TerminalManager → PTY terminal sessions
- *   TrayManager    → macOS system tray
- *
- * Architecture (ADR-001 §2):
- *   Main Process  ←→  Preload (contextBridge)  ←→  Renderer (React)
- *        │                    │                         │
- *   QueryEngine        ipcRenderer              coderixAPI.*
- *   ToolRegistry       contextBridge
  */
 
 import { app, BrowserWindow } from 'electron';
@@ -27,17 +14,8 @@ import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
 
-import { QueryEngine, SessionManager, ToolRegistry } from '@coderix/core';
+import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient } from '@coderix/core';
 import type { QueryEngineConfig } from '@coderix/core';
-
-// ---------------------------------------------------------------------------
-// Prevent multiple instances (single-instance lock)
-// ---------------------------------------------------------------------------
-
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-}
 
 // ---------------------------------------------------------------------------
 // Global state
@@ -50,44 +28,35 @@ let terminalManager: TerminalManager | null = null;
 let trayManager: TrayManager | null = null;
 
 // ---------------------------------------------------------------------------
-// Bootstrap sequence
+// Bootstrap sequence — create window FIRST before any heavy init
 // ---------------------------------------------------------------------------
 
 async function bootstrap(): Promise<void> {
   try {
-    // ── Step 1: Create window manager ──────────────────────────────────
+    // Step 1: Create window manager
     windowManager = createWindowManager();
 
-    // ── Step 2: Create main window ─────────────────────────────────────
-    const mainWindow = windowManager.createMainWindow();
-    if (!mainWindow) {
-      throw new Error('Failed to create main window');
-    }
-
-    // ── Step 3: Create infrastructure managers ─────────────────────────
+    // Step 2: Create IPC bridge BEFORE window (renderer calls IPC on load)
     fileWatcher = createFileWatcherManager();
     terminalManager = createTerminalManager();
-
-    // Register main window with file watcher so it can push events
-    fileWatcher.setMainWindow(mainWindow);
-
-    // ── Step 4: Create IPC bridge ──────────────────────────────────────
     ipcBridge = createIpcBridge({
       windowManager,
       fileWatcher,
       terminalManager,
     });
 
-    // ── Step 5: Initialize QueryEngine (non-blocking) ──────────────────
-    initQueryEngine().catch((err) => {
-      console.error('[Coderix] Failed to initialize query engine:', err);
-    });
+    // Step 3: Create the window — this must happen before heavy init
+    const mainWindow = windowManager.createMainWindow();
+    if (!mainWindow) {
+      throw new Error('Failed to create main window');
+    }
+    fileWatcher.setMainWindow(mainWindow);
 
-    // ── Step 6: Set up system tray ─────────────────────────────────────
+    // Step 4: Set up system tray
     trayManager = createTrayManager();
     trayManager.create(() => windowManager?.getMainWindow() ?? null);
 
-    // ── Step 7: Handle second-instance (focus existing window) ─────────
+    // Step 5: Handle second-instance
     app.on('second-instance', () => {
       const win = windowManager?.getMainWindow();
       if (win) {
@@ -97,7 +66,7 @@ async function bootstrap(): Promise<void> {
       }
     });
 
-    // ── Step 8: Handle open-file / open-url (macOS) ────────────────────
+    // Step 6: Handle open-file (macOS)
     app.on('open-file', (_event, filePath) => {
       const win = windowManager?.getMainWindow();
       if (win) {
@@ -106,6 +75,13 @@ async function bootstrap(): Promise<void> {
     });
 
     console.log('[Coderix] Bootstrap complete');
+
+    // Step 7: Defer QueryEngine init to avoid blocking renderer startup
+    setTimeout(() => {
+      initQueryEngine().catch((err) => {
+        console.error('[Coderix] Failed to initialize query engine:', err);
+      });
+    }, 1000);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[Coderix] Bootstrap failed:', message);
@@ -122,20 +98,45 @@ async function initQueryEngine(): Promise<void> {
     throw new Error('IPC bridge not initialized');
   }
 
+  const model = process.env['CODERIX_MODEL'] ?? process.env['ANTHROPIC_MODEL'] ?? 'deepseek-v4-pro';
+  const apiKey = process.env['ANTHROPIC_AUTH_TOKEN'] ?? process.env['ANTHROPIC_API_KEY'] ?? '';
+  const baseURL = process.env['ANTHROPIC_BASE_URL'] ?? 'https://api.anthropic.com';
+
+  let callModel: QueryEngineConfig['callModel'];
+  try {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const client = new Anthropic({
+      apiKey,
+      baseURL,
+    });
+    callModel = createCallModelFromClient(client, model);
+    console.log(`[Coderix] callModel initialized: model=${model}, baseURL=${baseURL}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Coderix] Failed to initialize Anthropic client:', message);
+    callModel = (async function* (_params: unknown) {
+      yield {
+        type: 'message' as const,
+        data: {
+          type: 'assistant' as const,
+          message: {
+            content: `⚠️ **API 未配置**\n\n无法初始化模型客户端:\n\`\`\`\n${message}\n\`\`\`\n\n请在设置中配置 API Key。`,
+            stop_reason: 'end_turn' as const,
+            usage: { input_tokens: 0, output_tokens: 0 },
+            model: 'system',
+          },
+        },
+      } as unknown;
+    }) as unknown as QueryEngineConfig['callModel'];
+  }
+
   const config: QueryEngineConfig = {
-    // The actual provider config will be loaded from user settings;
-    // for now we use environment-based or default settings.
     cwd: process.cwd(),
-    model: process.env['CODERIX_MODEL'] ?? 'deepseek-v4-pro',
-    // System prompt can be customized via config
+    model,
     customSystemPrompt: undefined,
-    // Session manager and tool registry are created inside initEngine
     sessionManager: new SessionManager(),
     toolRegistry: new ToolRegistry(),
-    // callModel stub — throws a clear error until real provider is configured
-    callModel: (async (_params: unknown) => {
-      throw new Error('Model client not initialized. Please configure an API key in Settings.');
-    }) as unknown as QueryEngineConfig['callModel'],
+    callModel,
   };
 
   await ipcBridge.initEngine(config);
@@ -143,21 +144,18 @@ async function initQueryEngine(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// App lifecycle events
+// App lifecycle
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(bootstrap);
 
 app.on('window-all-closed', () => {
-  // On macOS, keep the app running in the menu bar (Dock)
-  // The user can click the Dock icon or use Cmd+Tab to bring it back.
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
 app.on('activate', () => {
-  // macOS: re-create window when Dock icon is clicked and no windows are open
   if (windowManager) {
     const existingWindow = windowManager.getMainWindow();
     if (existingWindow && !existingWindow.isDestroyed()) {
@@ -169,38 +167,18 @@ app.on('activate', () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Graceful shutdown
-// ---------------------------------------------------------------------------
-
 app.on('before-quit', () => {
   console.log('[Coderix] Shutting down...');
-
-  // Save window state
   windowManager?.saveWindowState();
-
-  // Destroy IPC bridge (removes handlers, aborts active queries)
   ipcBridge?.destroy();
-
-  // Destroy all file watchers
   fileWatcher?.destroy();
-
-  // Destroy all terminal sessions
   terminalManager?.destroyAll();
-
-  // Destroy tray
   trayManager?.destroy();
-
   console.log('[Coderix] Shutdown complete');
 });
 
-// ---------------------------------------------------------------------------
-// Unhandled error handling
-// ---------------------------------------------------------------------------
-
 process.on('uncaughtException', (error) => {
   console.error('[Coderix] Uncaught exception:', error);
-  // Don't crash — log and attempt recovery
 });
 
 process.on('unhandledRejection', (reason) => {

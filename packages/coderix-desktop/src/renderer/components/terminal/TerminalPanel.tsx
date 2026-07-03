@@ -120,20 +120,21 @@ export default function TerminalPanel({
         </div>
       )}
 
-      {/* Terminal Area */}
-      <div
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          padding: '4px',
-        }}
-      >
-        <Terminal
-          onReady={handleReady}
-          onData={handleData}
-          readOnly={!isOpen}
-        />
-      </div>
+      {/* Terminal Area — only render when open to avoid xterm.js crash on zero-size container */}
+      {isOpen && (
+        <div
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            padding: '4px',
+          }}
+        >
+          <Terminal
+            onReady={handleReady}
+            onData={handleData}
+          />
+        </div>
+      )}
     </div>
   );
 }
