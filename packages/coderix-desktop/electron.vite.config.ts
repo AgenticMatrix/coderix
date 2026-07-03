@@ -1,27 +1,40 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { builtinModules } from 'node:module'
+
+// Everything gets bundled EXCEPT electron and Node.js builtins.
+// This avoids CJS/ESM interop issues in Electron's Node.js runtime.
+const external = [
+  'electron',
+  'electron/main',
+  ...builtinModules,
+  ...builtinModules.map(m => `node:${m}`),
+]
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'dist/main',
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
         },
+        external,
+        output: {
+          format: 'cjs',
+        },
       },
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'dist/preload',
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),
         },
+        external,
       },
     },
   },

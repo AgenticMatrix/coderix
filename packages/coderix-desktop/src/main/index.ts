@@ -27,8 +27,9 @@ import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
 
-import { QueryEngine, SessionManager, ToolRegistry } from '@coderix/core';
-import type { QueryEngineConfig } from '@coderix/core';
+import { QueryEngine, type QueryEngineConfig } from '../../../../src/core/query-engine.js';
+import { SessionManager } from '../../../../src/core/session.js';
+import { ToolRegistry } from '../../../../src/core/tool-registry.js';
 
 // ---------------------------------------------------------------------------
 // Prevent multiple instances (single-instance lock)

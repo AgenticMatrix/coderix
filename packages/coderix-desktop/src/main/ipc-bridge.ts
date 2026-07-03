@@ -18,18 +18,19 @@ import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
 
 import type {
-  Session,
+  SessionMetadata as Session,
   SessionSummary,
   StreamEvent,
   DeferredPermission,
   DeferredQuestion,
   CompletionUsage,
-  CoderSettings,
-  ModelItem,
-} from '@coderix/core';
+} from '../../../../src/core/types.js';
+import type { CoderSettings, ModelItem } from '../../../../src/cli/config.js';
 
-import { QueryEngine, PermissionMode, SessionManager, ToolRegistry } from '@coderix/core';
-import type { QueryEngineConfig, QueryEngineEvent } from '@coderix/core';
+import { QueryEngine, type QueryEngineConfig, type QueryEngineEvent } from '../../../../src/core/query-engine.js';
+import { PermissionMode } from '../../../../src/core/types.js';
+import { SessionManager } from '../../../../src/core/session.js';
+import { ToolRegistry } from '../../../../src/core/tool-registry.js';
 
 import type { WindowManager } from './window-manager.js';
 import type { FileWatcherManager } from './file-watcher.js';
