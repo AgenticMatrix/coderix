@@ -5,6 +5,32 @@ import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamConfig, TeamMember } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 
+function formatDuration(ms: number): string {
+  const secs = ms / 1000;
+  if (secs < 60) return `${secs.toFixed(1)}s`;
+  const mins = Math.floor(secs / 60);
+  const remain = Math.floor(secs % 60);
+  return `${mins}m ${remain}s`;
+}
+
+function statusLabel(m: TeamMember, now: number): string {
+  const elapsed = m.finishedAt ? m.finishedAt - m.joinedAt : now - m.joinedAt;
+  switch (m.status) {
+    case 'running':
+      return `running ${formatDuration(elapsed)}`;
+    case 'pending':
+      return 'pending';
+    case 'done':
+      return `done ${formatDuration(elapsed)}`;
+    case 'error':
+      return `error ${formatDuration(elapsed)}`;
+    case 'stopped':
+      return `stopped ${formatDuration(elapsed)}`;
+    default:
+      return m.status;
+  }
+}
+
 interface TeamPanelProps {
   dismissed: boolean;
   onDismissReset?: () => void;
@@ -36,6 +62,7 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
     status: statusMap[agent.status] ?? 'done',
     task,
     joinedAt: agent.createdAt,
+    finishedAt: agent.finishedAt,
   };
 }
 
@@ -52,6 +79,15 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   const prevFingerprint = useRef('');
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
+
+  // Tick every second while any agent is running, to update elapsed timers
+  const [now, setNow] = useState(Date.now());
+  const hasRunning = configs.some(c => c.members.some(m => m.status === 'running' || m.status === 'pending'));
+  useEffect(() => {
+    if (!hasRunning) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [hasRunning]);
 
   useEffect(() => {
     let active = true;
@@ -255,6 +291,8 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const icon = isViewed ? '●' : '○';
         const iconColor = isViewed ? 'green' : 'grey';
         const label = memberLabel(m);
+        const statusText = statusLabel(m, now);
+        const statusColor = m.status === 'running' ? 'yellow' : m.status === 'error' ? 'red' : undefined;
 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
@@ -267,6 +305,8 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               <Text bold={isCursor}>{m.agentType}</Text>
               <Text dimColor> · </Text>
               <Text dimColor={m.status === 'done'}>{label}</Text>
+              <Text dimColor> · </Text>
+              <Text color={statusColor} dimColor={m.status === 'done'}>{statusText}</Text>
             </Text>
           </Box>
         );

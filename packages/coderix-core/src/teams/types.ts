@@ -28,6 +28,8 @@ export interface TeamMember {
   task?: string;
   /** Unix timestamp (ms) when the member joined the team. */
   joinedAt: number;
+  /** Unix timestamp (ms) when the member finished (done/error/stopped). */
+  finishedAt?: number;
 }
 
 // ---------------------------------------------------------------------------
