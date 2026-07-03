@@ -75,8 +75,7 @@ function extractToolCalls(messages: Message[]): ToolCallSummary[] {
       if (block.type === 'tool_use') {
         const b = block as { name?: string; input?: Record<string, unknown>; id?: string };
         const inputStr = b.input ? JSON.stringify(b.input) : '';
-        const shortInput = inputStr.length > 80 ? inputStr.slice(0, 77) + '...' : inputStr;
-        tools.push({ name: b.name ?? 'unknown', input: shortInput, state: 'done' });
+        tools.push({ name: b.name ?? 'unknown', input: inputStr, state: 'done' });
       }
     }
   }
@@ -324,8 +323,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
               if (block.type === 'tool_use') {
                 const b = block as { name?: string; input?: Record<string, unknown> };
                 const inputStr = b.input ? JSON.stringify(b.input) : '';
-                const shortInput = inputStr.length > 80 ? inputStr.slice(0, 77) + '...' : inputStr;
-                accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: shortInput, state: 'executing' });
+                accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: inputStr, state: 'executing' });
               }
             }
           }
