@@ -386,8 +386,8 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
       <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
         {/* Sub-agent indicator header */}
         {state.subAgentView && (
-          <Box flexShrink={0} marginBottom={1}>
-            <Text backgroundColor="blue" color="white"> Agent: {state.subAgentView.agentId} </Text>
+          <Box flexShrink={0} marginBottom={1} flexDirection="column">
+            <Text dimColor>--- {state.subAgentView.agentId} ---</Text>
             <Text dimColor> Esc or Ctrl+T to return to main</Text>
           </Box>
         )}
