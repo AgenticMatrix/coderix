@@ -340,7 +340,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   return (
     <Box flexDirection="column" height="100%" padding={1}>
       {/* ── Static zone: re-renders on Ctrl+D / Ctrl+E ────────────── */}
-      <Static key={`static-${state.contentExpanded}`} items={staticItems}>
+      <Static key={`static-${state.contentExpanded}-${state.subAgentView?.agentId ?? 'main'}`} items={staticItems}>
         {(item) => {
           if (item._type === 'header') return <HeaderLogo key="header" />;
           return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} />;
