@@ -60,6 +60,29 @@ function compressTranscript(messages: Message[]): string {
   return body.slice(0, 1997) + '...';
 }
 
+interface ToolCallSummary {
+  name: string;
+  input: string;
+  state: string;
+}
+
+function extractToolCalls(messages: Message[]): ToolCallSummary[] {
+  const tools: ToolCallSummary[] = [];
+  for (const msg of messages.slice(-50)) {
+    if (msg.role !== 'assistant') continue;
+    const blocks = Array.isArray(msg.content) ? msg.content : [];
+    for (const block of blocks) {
+      if (block.type === 'tool_use') {
+        const b = block as { name?: string; input?: Record<string, unknown>; id?: string };
+        const inputStr = b.input ? JSON.stringify(b.input) : '';
+        const shortInput = inputStr.length > 80 ? inputStr.slice(0, 77) + '...' : inputStr;
+        tools.push({ name: b.name ?? 'unknown', input: shortInput, state: 'done' });
+      }
+    }
+  }
+  return tools;
+}
+
 /**
  * Enrich an agent definition's system prompt with environment info from the
  * assembler's worker role output.
@@ -651,6 +674,7 @@ async function executeStandardSubagent(
       toolCount: result.toolCount,
       duration: Date.now() - result.startTime,
       worktreePath,
+      toolCalls: extractToolCalls(result.transcript),
     },
   };
 }
@@ -902,6 +926,7 @@ async function executeFork(
       toolCount: result.toolCount,
       duration: Date.now() - result.startTime,
       worktreePath,
+      toolCalls: extractToolCalls(result.transcript),
     },
   };
 }
@@ -1098,6 +1123,7 @@ async function executeResume(
       turnCount: result.assistantTurnCount, toolCount: result.toolCount,
       totalTurns: agent.turnCount + result.assistantTurnCount,
       duration: Date.now() - result.startTime,
+      toolCalls: extractToolCalls(result.transcript),
     },
   };
 }
