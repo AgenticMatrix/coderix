@@ -171,7 +171,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       const member = displayList[cursorIndex];
       if (member) {
         if (member.agentId === '__main__') {
-          onFocusRequest();
+          onSelect('__main__');
         } else {
           onSelect(member.agentId);
         }
@@ -216,11 +216,11 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   return (
     <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="grey">
       <Box>
-        <Text bold>Team </Text>
+        <Text bold>Agents </Text>
         {visible.length === 1 ? (
           <Text dimColor>{visible[0].name} </Text>
         ) : (
-          <Text dimColor>({visible.length} teams) </Text>
+          <Text dimColor>({visible.length} groups) </Text>
         )}
         <Text dimColor>({parts.join(', ')})</Text>
       </Box>
@@ -239,7 +239,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
                 {' '}
                 <Text color={isViewed ? 'green' : 'grey'}>{isViewed ? '●' : '○'} </Text>
                 <Text color={isCursor ? 'yellow' : undefined} bold={isCursor}>main</Text>
-                <Text dimColor> · Return to main agent</Text>
+                <Text dimColor> · Return to main agent (Enter toggle, Esc defocus)</Text>
               </Text>
             </Box>
           );

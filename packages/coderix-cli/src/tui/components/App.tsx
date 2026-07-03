@@ -501,7 +501,11 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         viewedAgentId={state.subAgentView?.agentId ?? null}
         onSelect={(agentId) => {
           dispatch({ type: 'HIDE_TEAM_PICKER' });
-          dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
+          if (agentId === '__main__') {
+            dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
+          } else {
+            dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
+          }
         }}
       />
     </Box>
