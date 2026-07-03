@@ -22,15 +22,7 @@ import type {
 } from '../../types.js';
 import type { AppState } from '../../state/AppState.js';
 import { nextMessageId } from './useChatReducer.js';
-
-/** Throttle interval for batched delta dispatches (ms). */
-const DELTA_FLUSH_INTERVAL = 60;
-
-interface PendingDelta {
-  messageId: number;
-  deltaType: BlockDeltaType;
-  text: string;
-}
+import { useDeltaThrottle } from './streamHelpers.js';
 
 // ---------------------------------------------------------------------------
 // Block mapping: core ContentBlock → TUI ContentBlock
@@ -124,25 +116,7 @@ export function useAgentBridge({ engine, dispatch, setAppState }: AgentBridgeDep
 
   // ── Delta throttling: batch APPEND_BLOCK_DELTA dispatches to reduce
   //    re-renders during streaming so terminal text selection isn't disrupted.
-  const pendingDeltasRef = useRef<PendingDelta[]>([]);
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flushDeltas = useCallback(() => {
-    const deltas = pendingDeltasRef.current;
-    pendingDeltasRef.current = [];
-    if (flushTimerRef.current !== null) {
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = null;
-    }
-    for (const d of deltas) {
-      dispatch({ type: 'APPEND_BLOCK_DELTA', messageId: d.messageId, deltaType: d.deltaType, text: d.text });
-    }
-  }, [dispatch]);
-
-  const scheduleFlush = useCallback(() => {
-    if (flushTimerRef.current !== null) return;
-    flushTimerRef.current = setTimeout(flushDeltas, DELTA_FLUSH_INTERVAL);
-  }, [flushDeltas]);
+  const { pendingDeltasRef, flushDeltas, scheduleFlush } = useDeltaThrottle(dispatch);
 
   /**
    * Run a single agent turn: user input → QueryEngine → dispatch → React render.

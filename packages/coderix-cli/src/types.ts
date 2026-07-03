@@ -205,6 +205,10 @@ export interface ChatState extends CoreState {
   contentExpanded: boolean;
   /** When set, renders a sub-agent transcript view instead of the main chat. */
   subAgentView: { agentId: string } | null;
+  /** Saved main chat messages when viewing a sub-agent. Restored on exit. */
+  savedMainMessages: Message[] | null;
+  /** Per-agent cached message state. Keyed by agentId. */
+  subAgentMessageCache: Record<string, Message[]>;
   /** Last viewed sub-agent ID — Ctrl+T defaults to this. */
   lastAgentViewId: string | null;
   /** When true, shows the sub-agent picker overlay. */
@@ -266,6 +270,7 @@ export type ChatAction =
   | { type: 'TOGGLE_ALL_CONTENT' }
   | { type: 'OPEN_SUBAGENT_VIEW'; agentId: string }
   | { type: 'CLOSE_SUBAGENT_VIEW' }
+  | { type: 'LOAD_SUBAGENT_TRANSCRIPT'; agentId: string; messages: Message[] }
   | { type: 'SHOW_AGENT_PICKER' }
   | { type: 'HIDE_AGENT_PICKER' }
   | { type: 'TOGGLE_TASK_PANEL' }

@@ -10,6 +10,77 @@ export function nextMessageId(): number {
   return messageIdCounter++;
 }
 
+/**
+ * Convert core ContentBlock to TUI ContentBlock.
+ * Mirrors mapCoreBlockToTui from useAgentBridge.
+ */
+function coreBlockToTui(block: Record<string, unknown>): ContentBlock {
+  switch (block.type) {
+    case 'text':
+      return { type: 'text', content: (block.text as string) ?? '' };
+    case 'thinking':
+      return { type: 'thinking', content: (block.thinking as string) ?? '' };
+    case 'tool_use':
+      return {
+        type: 'tool_use',
+        toolName: (block.name as string) ?? 'unknown',
+        toolId: (block.id as string) ?? '',
+        input: (block.input as Record<string, unknown>) ?? {},
+        state: 'done' as const,
+        result: undefined,
+        duration: undefined,
+      };
+    case 'tool_result':
+      return {
+        type: 'tool_result',
+        toolId: (block.tool_use_id as string) ?? '',
+        toolName: (block.name as string) ?? '',
+        content: typeof block.content === 'string'
+          ? block.content
+          : Array.isArray(block.content)
+            ? (block.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
+            : '',
+        isError: (block.is_error as boolean) ?? false,
+      };
+    default:
+      return { type: 'text', content: '' };
+  }
+}
+
+/**
+ * Convert core transcript messages to TUI Message objects.
+ * Core messages have `content: string | ContentBlock[]`.
+ */
+export function convertTranscriptToMessages(rawMessages: Array<{ role: string; content: unknown; timestamp?: number }>): Message[] {
+  const base = Date.now();
+  return rawMessages.map((raw, i) => {
+    let blocks: ContentBlock[];
+    let textContent: string;
+
+    if (typeof raw.content === 'string') {
+      textContent = raw.content;
+      blocks = [{ type: 'text', content: raw.content }];
+    } else if (Array.isArray(raw.content)) {
+      blocks = raw.content.map((b: unknown) => coreBlockToTui(b as Record<string, unknown>));
+      textContent = blocks
+        .filter((b): b is ContentBlock & { content: string } => b.type === 'text')
+        .map(b => (b as { content: string }).content)
+        .join('');
+    } else {
+      textContent = '';
+      blocks = [{ type: 'text', content: '' }];
+    }
+
+    return {
+      id: base + i,
+      role: raw.role as Message['role'],
+      content: textContent,
+      blocks,
+      timestamp: raw.timestamp ?? (base + i),
+    };
+  });
+}
+
 /** Get plain text from Message.blocks for backward compat. */
 export function getMessageText(m: Message): string {
   if (m.blocks.length > 0) {
@@ -285,11 +356,43 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'OPEN_SUBAGENT_VIEW':
-      return { ...state, subAgentView: { agentId: action.agentId }, lastAgentViewId: action.agentId };
+    case 'OPEN_SUBAGENT_VIEW': {
+      const cached = state.subAgentMessageCache[action.agentId];
+      return {
+        ...state,
+        subAgentView: { agentId: action.agentId },
+        lastAgentViewId: action.agentId,
+        savedMainMessages: state.savedMainMessages ?? state.messages,
+        messages: cached ?? [],
+        isStreaming: false,
+        isFrozen: false,
+      };
+    }
 
-    case 'CLOSE_SUBAGENT_VIEW':
-      return { ...state, subAgentView: null };
+    case 'CLOSE_SUBAGENT_VIEW': {
+      const currentAgentId = state.subAgentView?.agentId;
+      const updatedCache = currentAgentId
+        ? { ...state.subAgentMessageCache, [currentAgentId]: state.messages }
+        : state.subAgentMessageCache;
+      return {
+        ...state,
+        subAgentView: null,
+        messages: state.savedMainMessages ?? [],
+        savedMainMessages: null,
+        subAgentMessageCache: updatedCache,
+        isStreaming: false,
+      };
+    }
+
+    case 'LOAD_SUBAGENT_TRANSCRIPT':
+      return {
+        ...state,
+        messages: action.messages,
+        subAgentMessageCache: {
+          ...state.subAgentMessageCache,
+          [action.agentId]: action.messages,
+        },
+      };
 
     case 'SHOW_AGENT_PICKER':
       return { ...state, agentPicker: true };
@@ -511,6 +614,8 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     pasteBlocks: {},
     contentExpanded: false,
     subAgentView: null,
+    savedMainMessages: null,
+    subAgentMessageCache: {},
     lastAgentViewId: null,
     agentPicker: false,
     taskPanelDismissed: false,

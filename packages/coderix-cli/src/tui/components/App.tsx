@@ -10,7 +10,6 @@ import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
 import { QuestionPrompt } from './QuestionPrompt.js';
-import { SubAgentTranscriptView } from './SubAgentTranscriptView.js';
 import { SubAgentPicker } from './SubAgentPicker.js';
 import { TaskPanel } from './TaskPanel.js';
 import { TodoPanel } from './TodoPanel.js';
@@ -18,8 +17,9 @@ import { TeamPanel } from './TeamPanel.js';
 import { MemoryPicker } from './MemoryPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { CommandHint } from './CommandHint.js';
-import { useChatReducer } from '../hooks/useChatReducer.js';;
+import { useChatReducer, convertTranscriptToMessages } from '../hooks/useChatReducer.js';;
 import { useAgentBridge } from '../hooks/useAgentBridge.js';;
+import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
 import { useInputHandler } from '../hooks/useInputHandler.js';;
 import { useTokenStats } from '../hooks/useTokenStats.js';;
 import { createSlashHandler } from '../../commands/index.js';
@@ -111,6 +111,20 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   messagesRef.current = state.messages;
 
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState });
+  const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
+
+  // Load sub-agent transcript when entering immersive mode
+  useEffect(() => {
+    if (state.subAgentView) {
+      const registry = (engine as any).config?.subAgentRegistry;
+      if (!registry) return;
+      const agent = registry.get(state.subAgentView.agentId);
+      if (agent?.transcript && agent.transcript.length > 0) {
+        const messages = convertTranscriptToMessages(agent.transcript);
+        dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId: state.subAgentView.agentId, messages });
+      }
+    }
+  }, [state.subAgentView?.agentId]);
 
   const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);
   const handleTodoDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TODO_PANEL' }), [dispatch]);
@@ -139,6 +153,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     historyIndex: state.historyIndex,
     historyScratch: state.historyScratch,
     pasteBlocks: state.pasteBlocks,
+    onSubAgentSend: sendToSubAgent,
     onSlashCommand: createSlashHandler({
       dispatch,
       send: runAgentTurn,
@@ -344,83 +359,79 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
 
       {/* ── Live zone: only the current streaming message ──────── */}
       <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
-        {state.subAgentView ? (
-          <SubAgentTranscriptView
-            agentId={state.subAgentView.agentId}
-            onBack={() => dispatch({ type: 'CLOSE_SUBAGENT_VIEW' })}
-            onSendMessage={(agentId, message) => {
-              engine.sendSubAgentMessage(agentId, message).then(() => {
-                dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
-              });
-            }}
-          />
-        ) : (
-          <>
-            {displayMessages.length === 0 && !state.isStreaming && (
-              <Box marginY={1}>
-                <Text dimColor>
-                  Welcome to Coder Chat TUI! Type a message and press Enter to start.
-                </Text>
-              </Box>
-            )}
+        {/* Sub-agent indicator header */}
+        {state.subAgentView && (
+          <Box flexShrink={0} marginBottom={1}>
+            <Text backgroundColor="blue" color="white"> Agent: {state.subAgentView.agentId} </Text>
+            <Text dimColor> Esc or Ctrl+T to return to main</Text>
+          </Box>
+        )}
 
-            <OffscreenFreeze frozen={state.isFrozen}>
-              {live.map((message) => (
-                <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} />
-              ))}
-            </OffscreenFreeze>
+        {displayMessages.length === 0 && !state.isStreaming && (
+          <Box marginY={1}>
+            <Text dimColor>
+              {state.subAgentView
+                ? 'Send a message to continue the conversation with this agent.'
+                : 'Welcome to Coder Chat TUI! Type a message and press Enter to start.'}
+            </Text>
+          </Box>
+        )}
 
-            {state.approvalReq && (
-              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-                <ApprovalPrompt
-                  req={state.approvalReq}
-                  onChoice={handleApprovalChoice}
-                />
-              </Box>
-            )}
+        <OffscreenFreeze frozen={state.isFrozen}>
+          {live.map((message) => (
+            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} />
+          ))}
+        </OffscreenFreeze>
 
-            {state.questionReq && (
-              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-                <QuestionPrompt
-                  questions={state.questionReq.questions}
-                  onAnswer={handleQuestionAnswer}
-                />
-              </Box>
-            )}
+        {state.approvalReq && (
+          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+            <ApprovalPrompt
+              req={state.approvalReq}
+              onChoice={handleApprovalChoice}
+            />
+          </Box>
+        )}
 
-            {state.agentPicker && (
-              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-                <SubAgentPicker
-                  onSelect={(agentId) => {
-                    dispatch({ type: 'HIDE_AGENT_PICKER' });
-                    dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
-                  }}
-                  onCancel={() => dispatch({ type: 'HIDE_AGENT_PICKER' })}
-                />
-              </Box>
-            )}
+        {state.questionReq && (
+          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+            <QuestionPrompt
+              questions={state.questionReq.questions}
+              onAnswer={handleQuestionAnswer}
+            />
+          </Box>
+        )}
 
-            {state.memoryPicker && (
-              <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-                <MemoryPicker
-                  cwd={process.cwd()}
-                  onSelect={(target) => {
-                    dispatch({ type: 'HIDE_MEMORY_PICKER' });
-                    const prompts: Record<string, string> = {
-                      user: 'Read and display the contents of ~/.coderix/CODER.md (the user-level memory file).',
-                      project: 'Read and display the contents of ./CODERIX.md (the project-level memory file).',
-                      auto: 'List all files in the auto-memory directory and show the MEMORY.md index contents.',
-                    };
-                    const prompt = prompts[target];
-                    if (prompt) {
-                      runAgentTurn(prompt);
-                    }
-                  }}
-                  onCancel={() => dispatch({ type: 'HIDE_MEMORY_PICKER' })}
-                />
-              </Box>
-            )}
-          </>
+        {state.agentPicker && (
+          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+            <SubAgentPicker
+              onSelect={(agentId) => {
+                dispatch({ type: 'HIDE_AGENT_PICKER' });
+                dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
+              }}
+              onCancel={() => dispatch({ type: 'HIDE_AGENT_PICKER' })}
+            />
+          </Box>
+        )}
+
+        {state.memoryPicker && (
+          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+            <MemoryPicker
+              cwd={process.cwd()}
+              onSelect={(target) => {
+                dispatch({ type: 'HIDE_MEMORY_PICKER' });
+                const prompts: Record<string, string> = {
+                  user: 'Read and display the contents of ~/.coderix/CODER.md (the user-level memory file).',
+                  project: 'Read and display the contents of ./CODERIX.md (the project-level memory file).',
+                  auto: 'List all files in the auto-memory directory and show the MEMORY.md index contents.',
+                };
+                const prompt = prompts[target];
+                if (prompt) {
+                  runAgentTurn(prompt);
+                }
+              }}
+              onCancel={() => dispatch({ type: 'HIDE_MEMORY_PICKER' })}
+            />
+          </Box>
         )}
       </Box>
 

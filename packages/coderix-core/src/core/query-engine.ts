@@ -30,6 +30,13 @@ import type { AgentRegistry } from './agent-registry.js';
 import { getAgentRole, getCoordinatorSystemContext } from '../teams/coordinator-mode.js';
 import { drainUnreadMessages } from '../teams/team-mailbox.js';
 import { execute as executeSendMessage } from '../teams/tools/team-message/executor.js';
+import { filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../agents/tool-filtering.js';
+import {
+  readAgentMetadata,
+  getAgentTranscript,
+  saveAgentTranscript,
+  writeAgentMetadata,
+} from '../agents/agent-persistence.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { EventBus } from '../state/observable.js';
@@ -489,6 +496,242 @@ export class QueryEngine {
         },
       },
     );
+  }
+
+  /**
+   * Streaming version of sendSubAgentMessage.
+   * Yields QueryEngineEvents as the sub-agent runs, so the TUI can render
+   * messages in real-time. Updates the registry transcript on completion.
+   */
+  async *sendSubAgentMessageStreaming(
+    agentId: string,
+    message: string,
+  ): AsyncGenerator<QueryEngineEvent> {
+    const { subAgentRegistry, toolRegistry, callModel, hookManager, systemPromptAssembler, agentRegistry } = this.config;
+    if (!subAgentRegistry || !systemPromptAssembler || !agentRegistry) {
+      yield { type: 'error', data: { message: 'Sub-agent infrastructure not available.' } };
+      return;
+    }
+
+    // ── Resolve agent (with disk fallback) ──────────────────────────
+    let agent = subAgentRegistry.get(agentId);
+
+    if (!agent) {
+      const meta = await readAgentMetadata(agentId);
+      const diskTranscript = await getAgentTranscript(agentId);
+
+      if (!meta || !diskTranscript) {
+        yield {
+          type: 'error',
+          data: { message: `Agent '${agentId}' not found in registry or on disk.` },
+        };
+        return;
+      }
+
+      const diskAbortController = new AbortController();
+      subAgentRegistry.register({
+        id: agentId,
+        name: `${meta.agentType}-${agentId}`,
+        agentType: (meta.agentType as any) || 'general-purpose',
+        status: 'stopped',
+        prompt: meta.description ?? '',
+        createdAt: meta.createdAt,
+        turnCount: diskTranscript.filter((m: any) => m.role === 'assistant').length,
+        messageCount: diskTranscript.length,
+        toolCount: 0,
+        abortController: diskAbortController,
+        notified: true,
+        transcript: diskTranscript,
+      });
+
+      agent = subAgentRegistry.get(agentId);
+      if (!agent) {
+        yield { type: 'error', data: { message: `Failed to re-register agent '${agentId}' from disk.` } };
+        return;
+      }
+    }
+
+    if (agent.status === 'running') {
+      yield {
+        type: 'error',
+        data: { message: `Cannot message running agent '${agentId}'. Wait for it to complete.` },
+      };
+      return;
+    }
+
+    const transcript = agent.transcript ?? [];
+    const agentType = agent.agentType;
+    const agentDef = agentRegistry.get(agentType);
+
+    // ── Build resumed messages ──────────────────────────────────────
+    const resumedMessages: any[] = [
+      ...transcript,
+      { role: 'user', content: message },
+    ];
+
+    // ── Build sub-agent tooling ─────────────────────────────────────
+    const parentDefs = toolRegistry.getDefinitions();
+    const filteredDefs = agentDef
+      ? filterToolsForResumedAgent(parentDefs, agentDef)
+      : parentDefs.filter(t => !GLOBAL_DISALLOWED_FOR_SUBAGENTS.has(t.name));
+    const subToolRegistry = new ToolRegistry();
+    for (const def of filteredDefs) {
+      const registration = toolRegistry.get(def.name);
+      if (registration) {
+        subToolRegistry.register(def, registration.execute);
+      }
+    }
+
+    const subPermissionEngine = new PermissionEngine(process.cwd());
+    subPermissionEngine.setMode(PermissionMode.AUTO);
+
+    const subSessionManager = new SessionManager();
+    subSessionManager.create({
+      title: `Sub-agent: ${agentType} (resumed)`,
+      cwd: process.cwd(),
+    });
+
+    const subCheckpointManager = new CheckpointManager();
+
+    // ── Build system prompt ─────────────────────────────────────────
+    let systemPromptText: string;
+    if (agentDef) {
+      try {
+        const workerPrompt = await systemPromptAssembler.assemble({
+          cwd: process.cwd(),
+          permissionMode: 'auto',
+          agentRole: 'worker',
+        });
+        const envPart = workerPrompt.parts.find(p => p.name === 'env_info');
+        const permPart = workerPrompt.parts.find(p => p.name === 'permission_mode');
+        const extra = [envPart?.content, permPart?.content].filter(Boolean).join('\n\n');
+        systemPromptText = extra
+          ? agentDef.getSystemPrompt() + '\n\n' + extra
+          : agentDef.getSystemPrompt();
+      } catch {
+        systemPromptText = agentDef.getSystemPrompt();
+      }
+    } else {
+      systemPromptText = [
+        'You are a sub-agent worker spawned by Coderix to complete a specific task.',
+        'Complete the task efficiently using the tools available to you.',
+        'You CANNOT spawn additional sub-agents.',
+        'Do not ask the user questions — you operate autonomously.',
+      ].join('\n');
+    }
+
+    const workerPrompt: SystemPrompt = {
+      prompt: systemPromptText,
+      parts: [{ name: `agent-${agentType}`, content: systemPromptText, priority: 0 }],
+    };
+
+    const subAbortController = new AbortController();
+    subAgentRegistry.update(agentId, {
+      status: 'running',
+      abortController: subAbortController,
+    });
+
+    // ── Run the query loop ──────────────────────────────────────────
+    let assistantTurnCount = 0;
+    let toolCount = 0;
+    const newTranscript: any[] = [];
+
+    try {
+      const generator = query({
+        sessionId: subSessionManager.getActive().id,
+        cwd: process.cwd(),
+        messages: resumedMessages,
+        systemPrompt: workerPrompt,
+        toolRegistry: subToolRegistry,
+        permissionEngine: subPermissionEngine,
+        sessionManager: subSessionManager,
+        checkpointManager: subCheckpointManager,
+        abortController: subAbortController,
+        maxTurns: agentDef?.maxTurns ?? 15,
+        contextBudget: agentDef?.contextBudget ?? 120_000,
+        compactThreshold: 0.7,
+        maxToolConcurrency: 8,
+        callModel,
+        hookManager,
+      });
+
+      for await (const msg of generator) {
+        if (subAbortController.signal.aborted) break;
+
+        switch (msg.type) {
+          case 'stream_event': {
+            yield { type: 'message', data: msg };
+            break;
+          }
+          case 'assistant': {
+            assistantTurnCount++;
+            newTranscript.push(msg.message);
+            const blocks = Array.isArray(msg.message.content) ? msg.message.content : [];
+            toolCount += blocks.filter((b: any) => b.type === 'tool_use').length;
+            yield { type: 'message', data: msg };
+            break;
+          }
+          case 'user': {
+            newTranscript.push(msg.message);
+            yield { type: 'message', data: msg };
+            break;
+          }
+          case 'system': {
+            if (msg.subtype === 'progress') {
+              subAgentRegistry.update(agentId, {
+                turnCount: agent.turnCount + assistantTurnCount,
+                messageCount: transcript.length + newTranscript.length,
+                toolCount: agent.toolCount + toolCount,
+              });
+            }
+            if (msg.subtype === 'permission_required') {
+              yield { type: 'permission_required', deferred: msg.deferred };
+            } else if (msg.subtype === 'question_required') {
+              yield { type: 'question_required', deferred: msg.deferred };
+            } else if (msg.subtype === 'error') {
+              yield { type: 'error', data: { message: msg.error.message } };
+            } else {
+              yield { type: 'message', data: msg };
+            }
+            break;
+          }
+        }
+      }
+
+      // ── Finalize ──────────────────────────────────────────────────
+      const cumulativeTranscript = [...transcript, ...newTranscript];
+      subAgentRegistry.update(agentId, {
+        status: subAbortController.signal.aborted ? 'stopped' : 'done',
+        finishedAt: Date.now(),
+        turnCount: agent.turnCount + assistantTurnCount,
+        messageCount: cumulativeTranscript.length,
+        toolCount: agent.toolCount + toolCount,
+        transcript: cumulativeTranscript,
+      });
+
+      saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
+      writeAgentMetadata(agentId, {
+        agentType,
+        worktreePath: undefined,
+        description: agent.prompt,
+        createdAt: agent.createdAt,
+        finishedAt: Date.now(),
+      }).catch(() => {});
+
+      yield {
+        type: 'done',
+        data: { sessionId: subSessionManager.getActive().id, agentId },
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      subAgentRegistry.update(agentId, {
+        status: 'error',
+        finishedAt: Date.now(),
+        turnCount: agent.turnCount + assistantTurnCount,
+        error: errorMsg,
+      });
+      yield { type: 'error', data: { message: errorMsg } };
+    }
   }
 
   async resume(sessionId: string): Promise<Session> {

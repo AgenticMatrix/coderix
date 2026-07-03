@@ -45,6 +45,8 @@ export interface InputHandlerDeps {
   lastAgentViewId?: string | null;
   /** Current command picker selected index (-1 = hidden). */
   commandPickerIndex: number;
+  /** Callback to send a message to a sub-agent (immersive mode). */
+  onSubAgentSend?: (agentId: string, text: string) => void;
 }
 
 /**
@@ -82,6 +84,7 @@ export function useInputHandler({
   lastAgentViewId,
   teamPicker,
   commandPickerIndex,
+  onSubAgentSend,
 }: InputHandlerDeps) {
   const slashRef = useRef(onSlashCommand);
   slashRef.current = onSlashCommand;
@@ -192,11 +195,16 @@ export function useInputHandler({
         return;
       }
 
-      // Allow sending messages while viewing a sub-agent transcript.
-      // The view closes and the message goes to the main agent.
+      // In sub-agent immersive mode, send to sub-agent via onSubAgentSend
       if (subAgentView && key.return) {
-        dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
-        // Fall through to normal send logic below
+        const cur = inputRef.current;
+        if (cur.trim().length > 0 && onSubAgentSend) {
+          const expandedText = expandPasteMarkers(cur.trim(), pasteBlocks);
+          dispatch({ type: 'ADD_HISTORY', line: expandedText });
+          dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
+          onSubAgentSend(subAgentView.agentId, expandedText);
+        }
+        return;
       }
 
       // Ctrl+E toggles expand / collapse of tool blocks
