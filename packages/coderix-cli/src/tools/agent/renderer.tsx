@@ -11,6 +11,58 @@ const AGENT_TYPE_LABEL: Record<string, string> = {
   fork: 'Fork',
 };
 
+const TOOL_LABEL: Record<string, string> = {
+  bash: 'Bash',
+  read: 'Read',
+  grep: 'Grep',
+  glob: 'Glob',
+  write: 'Write',
+  edit: 'Edit',
+  'web-search': 'WebSearch',
+  'web-fetch': 'WebFetch',
+  task: 'Task',
+};
+
+const TOOL_KEY_PARAM: Record<string, string> = {
+  bash: 'command',
+  read: 'file_path',
+  grep: 'pattern',
+  glob: 'pattern',
+  write: 'file_path',
+  edit: 'file_path',
+  'web-search': 'query',
+  'web-fetch': 'url',
+};
+
+function formatToolCallDetail(tc: ToolCallSummary): string {
+  let inputObj: Record<string, unknown> | null = null;
+  try {
+    inputObj = JSON.parse(tc.input);
+  } catch {
+    return tc.input;
+  }
+
+  const desc = inputObj?.description as string | undefined;
+  const keyParam = TOOL_KEY_PARAM[tc.name];
+  const keyValue = keyParam ? (inputObj?.[keyParam] as string | undefined) : undefined;
+
+  const parts: string[] = [];
+  if (desc) parts.push(desc);
+  if (keyValue) {
+    parts.push(keyValue.length > 50 ? keyValue.slice(0, 47) + '...' : keyValue);
+  } else if (!desc) {
+    // Fallback: show a short summary of the input
+    const str = tc.input.length > 60 ? tc.input.slice(0, 57) + '...' : tc.input;
+    parts.push(str);
+  }
+
+  return parts.join(', ');
+}
+
+function toolLabel(name: string): string {
+  return TOOL_LABEL[name] || name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 interface ToolCallSummary {
   name: string;
   input: string;
@@ -121,11 +173,17 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
       </Text>
       {displayCalls.length > 0 && (
         <Box flexDirection="column" marginLeft={2}>
-          {visibleCalls.map((tc, i) => (
-            <Text key={i} dimColor>
-              {tooLong ? '├── ' : (i === visibleCalls.length - 1 ? '└── ' : '├── ')}{tc.name} · {tc.input}
-            </Text>
-          ))}
+          {visibleCalls.map((tc, i) => {
+            const prefix = tooLong ? '├── ' : (i === visibleCalls.length - 1 ? '└── ' : '├── ');
+            const detail = formatToolCallDetail(tc);
+            return (
+              <Text key={i}>
+                <Text dimColor>{prefix}</Text>
+                <Text bold>{toolLabel(tc.name)}</Text>
+                <Text dimColor>({detail})</Text>
+              </Text>
+            );
+          })}
           {tooLong && (
             <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
           )}
