@@ -17,8 +17,7 @@ interface TeamPanelProps {
 const POLL_INTERVAL_MS = 2000;
 
 function memberLabel(m: TeamMember): string {
-  const task = m.task ? ` — ${m.task}` : '';
-  return `${m.name} ${task}`.slice(0, 60);
+  return m.task ? m.task.slice(0, 50) : '';
 }
 
 function agentToMember(agent: SubAgentRecord): TeamMember {
