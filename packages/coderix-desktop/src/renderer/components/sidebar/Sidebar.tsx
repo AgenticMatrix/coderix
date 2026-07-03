@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { FileExplorer } from './FileExplorer';
 import { IconButton } from '../shared/IconButton';
-import styles from './Sidebar.module.css';
+import './Sidebar.css';
 
 export interface SidebarProps {
   /** Currently active session ID */

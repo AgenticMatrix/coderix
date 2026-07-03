@@ -21,8 +21,8 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
 import type { ChatViewMessage } from './components/chat/ChatView';
 import { Composer } from './components/composer/Composer';
+import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
-import { GlobalModal } from './components/modals/GlobalModal';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
 
@@ -65,6 +65,7 @@ export function App(): React.ReactElement {
   const messages = useChatStore((s) => s.messages);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const error = useChatStore((s) => s.error);
   const setSessionId = useChatStore((s) => s.setSessionId);
   const sessionId = useChatStore((s) => s.sessionId);
 
@@ -79,6 +80,7 @@ export function App(): React.ReactElement {
 
   // ── Local state ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -99,25 +101,8 @@ export function App(): React.ReactElement {
         return;
       }
 
-      // In 'plan' and 'ask' modes, the GlobalModal handles user interaction.
-      // The store / modal will call approvePermission or denyPermission after
-      // the user makes a choice. For now, we auto-deny after timeout.
-      const timeout = setTimeout(() => {
-        denyPermission(req.id).catch(() => {
-          // Permission request may already be handled
-        });
-      }, 120_000); // 2 minute timeout
-
-      // Store a cleanup ref so the modal can clear the timeout on user action
-      const cleanup = () => clearTimeout(timeout);
-
-      // The GlobalModal reads from its own internal queue or from a shared
-      // store. For now, we broadcast via a custom event that the modal listens to.
-      window.dispatchEvent(
-        new CustomEvent('coderix:permission-request', {
-          detail: { request: req, cleanup },
-        }),
-      );
+      // Show inline prompt (replaces any existing pending permission)
+      setPendingPermission(req);
     });
 
     return unsubscribe;
@@ -190,7 +175,12 @@ export function App(): React.ReactElement {
 
   const handleNewSession = useCallback(async () => {
     await createSession();
-  }, [createSession]);
+    // Sync chat store sessionId with the newly created session
+    const newSid = useSessionStore.getState().currentSessionId;
+    if (newSid) {
+      setSessionId(newSid);
+    }
+  }, [createSession, setSessionId]);
 
   const handleOpenSettings = useCallback(() => {
     setSettingsOpen((prev) => !prev);
@@ -200,11 +190,20 @@ export function App(): React.ReactElement {
     async (value: string) => {
       if (!value.trim()) return;
 
+      // Auto-create a session if none exists yet
+      let currentSid = useChatStore.getState().sessionId;
+      if (!currentSid) {
+        await createSession();
+        currentSid = useSessionStore.getState().currentSessionId;
+        if (currentSid) {
+          setSessionId(currentSid);
+        }
+      }
+
       // Add the user message to the chat store (triggers streaming state)
       await sendMessage(value);
 
       // Submit the query via IPC to the main process
-      const currentSid = useChatStore.getState().sessionId;
       if (currentSid) {
         try {
           await submitQuery(value, currentSid);
@@ -216,7 +215,7 @@ export function App(): React.ReactElement {
         }
       }
     },
-    [sendMessage],
+    [sendMessage, createSession, setSessionId],
   );
 
   // ── Build chat messages for ChatView ────────────────────────────────────
@@ -274,16 +273,40 @@ export function App(): React.ReactElement {
       >
         {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Error banner */}
+          {error && (
+            <div
+              className="px-4 py-2 text-sm bg-red-900/60 border-b border-red-700/50 text-red-200 flex items-center gap-2"
+              role="alert"
+            >
+              <span className="flex-1">{error}</span>
+              <button
+                className="text-red-300 hover:text-white px-2 py-0.5 rounded"
+                onClick={() => useChatStore.getState().setError(null)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           <ChatView
             messages={chatViewMessages}
             isEmpty={isEmpty}
             isStreaming={isStreaming}
           />
 
+          {/* Permission prompt — inline above composer (Claude Code style) */}
+          {pendingPermission && (
+            <PermissionPrompt
+              request={pendingPermission}
+              onResolved={() => setPendingPermission(null)}
+            />
+          )}
+
           {/* Composer — fixed at bottom of chat */}
           <Composer
             onSubmit={handleComposerSubmit}
-            disabled={isStreaming}
+            disabled={isStreaming || !!pendingPermission}
             model="DeepSeek V4 Pro"
           />
 
@@ -291,9 +314,6 @@ export function App(): React.ReactElement {
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>
       </AppLayout>
-
-      {/* Global modal layer — permission dialogs, question prompts */}
-      <GlobalModal />
     </>
   );
 }

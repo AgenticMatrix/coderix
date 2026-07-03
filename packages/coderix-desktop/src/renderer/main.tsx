@@ -35,6 +35,18 @@ declare global {
 }
 
 // ---------------------------------------------------------------------------
+// Global error capture for debugging
+// ---------------------------------------------------------------------------
+
+window.addEventListener('error', (event) => {
+  console.error('[Global Error]', event.error?.message, event.error?.stack);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[Unhandled Rejection]', event.reason?.message, event.reason?.stack);
+});
+
+// ---------------------------------------------------------------------------
 // Mount
 // ---------------------------------------------------------------------------
 

@@ -9,12 +9,8 @@ directories:
 files:
   - dist/**/*
   - package.json
-
-extraResources:
-  - from: ../coderix-core/dist
-    to: core
-    filter:
-      - '**/*'
+  - node_modules/**/*
+  - '!node_modules/.cache'
 
 mac:
   category: public.app-category.developer-tools
@@ -65,7 +61,4 @@ linux:
   category: Development
   artifactName: ${productName}-${version}-${arch}.${ext}
 
-asar: true
-asarUnpack:
-  - '**/*.node'
-  - '**/node-pty/**'
+asar: false

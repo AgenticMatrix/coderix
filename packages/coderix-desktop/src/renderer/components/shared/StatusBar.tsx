@@ -1,7 +1,7 @@
 import React from 'react';
 import { Cpu, ArrowUp, ArrowDown, DollarSign, GitBranch, Command } from 'lucide-react';
 import { Badge } from './Badge';
-import styles from './StatusBar.module.css';
+import './StatusBar.css';
 
 export interface StatusBarProps {
   /** Current model name */

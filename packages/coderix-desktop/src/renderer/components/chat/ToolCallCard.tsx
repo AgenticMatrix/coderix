@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wrench, CheckCircle2, XCircle, Loader2, ChevronRight, Clock } from 'lucide-react';
-import styles from './ToolCallCard.module.css';
+import './ToolCallCard.css';
 
 export interface ToolCallCardProps {
   /** Tool name */

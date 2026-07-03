@@ -1,0 +1,306 @@
+/* ==========================================================================
+   Sidebar.module.css — Frosted Glass Sidebar (WeChat × Apple Style)
+   NSVisualEffectView vibrancy simulation with backdrop-filter
+   ========================================================================== */
+
+/* Sidebar root container */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Header area — search + new session + tabs */
+.sidebar-header {
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Search bar row */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Search input */
+.search-input-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-6);
+  font-size: var(--text-footnote);
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default);
+}
+
+.search-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.search-input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-muted);
+  outline: none;
+}
+
+/* Tab selector — segmented control (Apple style) */
+.tab-selector {
+  display: flex;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1-5) var(--space-1);
+  font-size: var(--text-footnote);
+  font-weight: var(--font-medium);
+  font-family: var(--font-sans);
+  color: var(--color-text-tertiary);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-instant) var(--ease-default);
+}
+
+.tab-btn:hover {
+  color: var(--color-text-secondary);
+}
+
+.tab-btn.active {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.tab-btn-icon {
+  display: flex;
+  align-items: center;
+}
+
+/* Content area — scrollable session/file list */
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Session list items */
+.session-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: background var(--duration-instant) var(--ease-default);
+  border-left: 3px solid transparent;
+  position: relative;
+}
+
+.session-item:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.session-item.active {
+  background: var(--color-brand-muted);
+  border-left-color: var(--color-brand);
+}
+
+.session-item-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.session-item-icon.active {
+  color: var(--color-brand);
+}
+
+.session-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+}
+
+.session-item-title {
+  font-size: var(--text-subhead);
+  font-weight: var(--font-medium);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--leading-tight);
+}
+
+.session-item.active .session-item-title {
+  color: var(--color-text-primary);
+}
+
+.session-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font-size: var(--text-caption2);
+  color: var(--color-text-tertiary);
+}
+
+.session-item-meta-dot {
+  color: var(--color-text-quaternary);
+}
+
+/* Empty state */
+.sidebar-empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  font-size: var(--text-footnote);
+  color: var(--color-text-tertiary);
+  line-height: var(--leading-relaxed);
+}
+
+/* File tree styles */
+.file-tree-node {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-footnote);
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background var(--duration-instant) var(--ease-default);
+  text-align: left;
+}
+
+.file-tree-node:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.file-tree-node.directory {
+  font-weight: var(--font-medium);
+}
+
+.file-tree-arrow {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-default);
+}
+
+.file-tree-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.file-tree-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.file-tree-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Git status badge in file tree */
+.git-status {
+  margin-left: auto;
+  font-size: var(--text-caption2);
+  font-family: var(--font-mono);
+  font-weight: var(--font-bold);
+  flex-shrink: 0;
+}
+
+.git-status.modified { color: var(--color-warning); }
+.git-status.added { color: var(--color-success); }
+.git-status.deleted { color: var(--color-danger); }
+.git-status.untracked { color: var(--color-info); }
+
+/* Sidebar footer */
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-separator);
+  background: transparent;
+}
+
+/* Footer action button */
+.footer-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-footnote);
+  font-family: var(--font-sans);
+  color: var(--color-text-tertiary);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.footer-action:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+
+/* Scroll to top fade indicator */
+.sidebar-content::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 1px;
+  background: transparent;
+  pointer-events: none;
+  z-index: var(--z-base);
+}

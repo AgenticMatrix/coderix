@@ -87,31 +87,35 @@ export function createWindowManager(): WindowManager {
       }
 
       const state = this.loadWindowState();
+      const isMac = process.platform === 'darwin';
 
-      mainWindow = new BrowserWindow({
+      const windowOptions: Electron.BrowserWindowConstructorOptions = {
         width: state.width,
         height: state.height,
         minWidth: DEFAULT_WINDOW_OPTIONS.minWidth,
         minHeight: DEFAULT_WINDOW_OPTIONS.minHeight,
         title: 'Coderix',
-        // ── macOS Native Look ──────────────────────────────────────────
-        titleBarStyle: 'hidden',
-        trafficLightPosition: { x: 6, y: 11 },
-        vibrancy: 'under-window',
-        visualEffectState: 'active',
         backgroundColor: '#FFFFFF',
-        // ── Tab support (macOS) ────────────────────────────────────────
-        tabbingIdentifier: 'coderix-main',
-        // ── Show only when ready ───────────────────────────────────────
         show: false,
         webPreferences: {
           preload: join(__dirname, '../preload/index.mjs'),
           contextIsolation: true,
           nodeIntegration: false,
-          sandbox: false, // false so preload can use Node APIs
+          sandbox: false,
           webviewTag: false,
         },
-      });
+      };
+
+      // macOS-specific window options
+      if (isMac) {
+        windowOptions.titleBarStyle = 'hidden';
+        windowOptions.trafficLightPosition = { x: 6, y: 11 };
+        windowOptions.vibrancy = 'under-window';
+        windowOptions.visualEffectState = 'active';
+        windowOptions.tabbingIdentifier = 'coderix-main';
+      }
+
+      mainWindow = new BrowserWindow(windowOptions);
 
       // Log preload path for debugging
       console.log('[Coderix] Preload path:', join(__dirname, '../preload/index.mjs'));
@@ -129,6 +133,12 @@ export function createWindowManager(): WindowManager {
       if (state.isMaximized) {
         mainWindow.maximize();
       }
+
+      // Forward renderer console to main process for debugging
+      mainWindow.webContents.on('console-message', (_event, level, message) => {
+        const prefix = level === 3 ? 'RENDERER ERR' : 'RENDERER';
+        console.log(`[${prefix}] ${message}`);
+      });
 
       // Register events
       this.registerWindowEvents(mainWindow);
@@ -252,15 +262,27 @@ export function createWindowManager(): WindowManager {
 
     loadContent(win: BrowserWindow): void {
       const isDev = !app.isPackaged;
+      const filePath = join(__dirname, '../renderer/index.html');
+      console.log('[Coderix] loadContent: isDev=%s, hasDevUrl=%s, isPackaged=%s, filePath=%s',
+        isDev, !!process.env['ELECTRON_RENDERER_URL'], app.isPackaged, filePath);
       if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-        win.loadURL(process.env['ELECTRON_RENDERER_URL']).catch((err: Error) => {
+        const devUrl = process.env['ELECTRON_RENDERER_URL'];
+        console.log('[Coderix] Loading dev URL:', devUrl);
+        win.loadURL(devUrl).then(() => {
+          console.log('[Coderix] loadURL succeeded');
+        }).catch((err: Error) => {
           console.error('[Coderix] Failed to load dev server URL:', err.message);
-          win.loadFile(join(__dirname, '../renderer/index.html')).catch((err2: Error) => {
-            console.error('[Coderix] Failed to load fallback HTML:', err2.message);
-          });
+          if (!win.isDestroyed()) {
+            win.loadFile(filePath).catch((err2: Error) => {
+              console.error('[Coderix] Failed to load fallback HTML:', err2.message);
+            });
+          }
         });
       } else {
-        win.loadFile(join(__dirname, '../renderer/index.html')).catch((err: Error) => {
+        console.log('[Coderix] Loading file:', filePath);
+        win.loadFile(filePath).then(() => {
+          console.log('[Coderix] loadFile succeeded');
+        }).catch((err: Error) => {
           console.error('[Coderix] Failed to load renderer HTML:', err.message);
         });
       }

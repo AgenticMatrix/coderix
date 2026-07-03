@@ -144,9 +144,23 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     const { query: userInput, sessionId } = payload;
 
-    // Switch active session if requested
-    if (sessionId && sessionManager.getActive()?.id !== sessionId) {
-      sessionManager.resume(sessionId);
+    // Ensure we have an active session (create one if needed)
+    try {
+      sessionManager.getActive();
+    } catch {
+      sessionManager.create({ title: '新对话' });
+    }
+
+    // Switch to requested session if it exists
+    if (sessionId) {
+      try {
+        if (sessionManager.getActive()?.id !== sessionId) {
+          sessionManager.resume(sessionId);
+        }
+      } catch {
+        // Session doesn't exist — keep using the current (newly created) one
+        console.warn(`[IpcBridge] Session not found: ${sessionId}, using current session`);
+      }
     }
 
     // Abort any existing query

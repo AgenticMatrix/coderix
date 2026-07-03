@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:prod": "electron-vite build --config electron.vite.prod.config.ts",
     "preview": "electron-vite preview",
     "package": "electron-builder",
     "typecheck": "tsc --noEmit"
@@ -23,6 +24,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^9.0.0",
+    "undici": "^7.27.2",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",
     "zustand": "^5.0.0"
