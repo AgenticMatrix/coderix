@@ -24,7 +24,11 @@ Sub-agents cannot spawn further sub-agents (depth limit = 1).`,
       },
       prompt: {
         type: 'string',
-        description: 'The task for the agent to perform. Be specific and include all necessary context.',
+        description: 'The full task for the agent to perform. Be specific and include all necessary context.',
+      },
+      description: {
+        type: 'string',
+        description: 'A short (3-5 word) human-readable label for this agent, shown in the UI panel. Example: "Investigate auth bug". If omitted, Coderix will derive one from the prompt.',
       },
       model: {
         type: 'string',

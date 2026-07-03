@@ -29,12 +29,13 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
     stopped: 'stopped',
   };
   const isFork = agent.name.startsWith('fork-');
+  const task = agent.description || (isFork ? '' : agent.prompt.slice(0, 80));
   return {
     agentId: agent.id,
     name: agent.name || agent.agentType,
     agentType: agent.agentType,
     status: statusMap[agent.status] ?? 'done',
-    task: isFork ? '' : agent.prompt.slice(0, 80),
+    task,
     joinedAt: agent.createdAt,
   };
 }

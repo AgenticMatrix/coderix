@@ -17,6 +17,8 @@ export interface SubAgentRecord {
   agentType: SubagentType;
   status: SubAgentStatus;
   prompt: string;
+  /** Brief human-readable summary shown in the Agents panel. */
+  description?: string;
   createdAt: number;
   finishedAt?: number;
   turnCount: number;

@@ -17,6 +17,9 @@ import type { Message } from '../core/types.js';
 export interface AgentMetadata {
   agentType: string;
   worktreePath?: string;
+  /** Short human-readable label shown in the Agents panel. */
+  displayDescription?: string;
+  /** Full task prompt (stored for cross-session resume). */
   description?: string;
   model?: string;
   createdAt: number;

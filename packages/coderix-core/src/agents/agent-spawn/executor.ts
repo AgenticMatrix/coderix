@@ -363,6 +363,7 @@ async function executeStandardSubagent(
 ): Promise<ToolResult> {
   const agentTypeInput = input.agent_type as string;
   const prompt = input.prompt as string;
+  const description = input.description as string | undefined;
   const modelOverride = input.model as string | undefined;
   const backgroundOverride = input.background as boolean | undefined;
   const isolation = input.isolation as 'worktree' | undefined;
@@ -491,6 +492,7 @@ async function executeStandardSubagent(
     agentType: agentType as 'explore' | 'plan' | 'general-purpose',
     status: 'running',
     prompt,
+    description,
     createdAt: Date.now(),
     turnCount: 0,
     messageCount: 0,
@@ -556,7 +558,7 @@ async function executeStandardSubagent(
 
         // Persist to disk for cross-session resume
         writeAgentMetadata(agentId, {
-          agentType, worktreePath, description: prompt,
+          agentType, worktreePath, description: prompt, displayDescription: description,
           model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
         }).catch(() => {});
         saveAgentTranscript(agentId, result.transcript).catch(() => {});
@@ -624,7 +626,7 @@ async function executeStandardSubagent(
 
   // Persist to disk for cross-session resume
   writeAgentMetadata(agentId, {
-    agentType, worktreePath, description: prompt,
+    agentType, worktreePath, description: prompt, displayDescription: description,
     model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
   }).catch(() => {});
   saveAgentTranscript(agentId, result.transcript).catch(() => {});
@@ -659,6 +661,7 @@ async function executeStandardSubagent(
 
 async function executeFork(
   prompt: string,
+  description: string | undefined,
   modelOverride: string | undefined,
   backgroundOverride: boolean | undefined,
   isolation: 'worktree' | undefined,
@@ -755,6 +758,7 @@ async function executeFork(
     agentType: 'general-purpose',
     status: 'running',
     prompt,
+    description,
     createdAt: Date.now(),
     turnCount: 0,
     messageCount: 0,
@@ -811,7 +815,7 @@ async function executeFork(
 
         // Persist to disk for cross-session resume
         writeAgentMetadata(agentId, {
-          agentType: 'fork', worktreePath, description: prompt,
+          agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
           model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
         }).catch(() => {});
         saveAgentTranscript(agentId, result.transcript).catch(() => {});
@@ -873,7 +877,7 @@ async function executeFork(
 
   // Persist to disk for cross-session resume
   writeAgentMetadata(agentId, {
-    agentType: 'fork', worktreePath, description: prompt,
+    agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
     model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
   }).catch(() => {});
   saveAgentTranscript(agentId, result.transcript).catch(() => {});
@@ -951,6 +955,7 @@ async function executeResume(
       agentType: (meta.agentType as SubAgentRecord['agentType']) || 'general-purpose',
       status: 'stopped',
       prompt: meta.description ?? '',
+      description: meta.displayDescription,
       createdAt: meta.createdAt,
       turnCount: transcript.filter(m => m.role === 'assistant').length,
       messageCount: transcript.length,
@@ -1071,7 +1076,7 @@ async function executeResume(
   // Persist updated transcript to disk
   saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
   writeAgentMetadata(agentId, {
-    agentType, worktreePath: undefined, description: agent.prompt,
+    agentType, worktreePath: undefined, description: agent.prompt, displayDescription: agent.description,
     createdAt: agent.createdAt, finishedAt: Date.now(),
   }).catch(() => {});
 
@@ -1112,6 +1117,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   const agentTypeInput = input.agent_type as string | undefined;
   const prompt = input.prompt as string;
+  const description = input.description as string | undefined;
   const modelOverride = input.model as string | undefined;
   const backgroundOverride = input.background as boolean | undefined;
   const isolation = input.isolation as 'worktree' | undefined;
@@ -1149,7 +1155,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // ── Path 2: Fork mode — no agent_type → inherit parent context ────
   if (!agentTypeInput && isForkSubagentEnabled()) {
-    return executeFork(prompt, modelOverride, backgroundOverride, isolation, agentSpawn, options.sessionId);
+    return executeFork(prompt, description, modelOverride, backgroundOverride, isolation, agentSpawn, options.sessionId);
   }
 
   // ── Path 3: Standard subagent — explicit agent_type ───────────────
