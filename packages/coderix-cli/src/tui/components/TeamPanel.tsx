@@ -179,8 +179,12 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       return;
     }
 
-    if (key.upArrow && cursorIndex > 0) {
-      setCursorIndex(i => i - 1);
+    if (key.upArrow) {
+      if (cursorIndex > 0) {
+        setCursorIndex(i => i - 1);
+      } else {
+        onFocusRequest();
+      }
       return;
     }
 
