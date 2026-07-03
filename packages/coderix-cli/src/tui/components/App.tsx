@@ -3,7 +3,7 @@ import { Box, Text, Static } from 'ink';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock } from '../../types.js';
-import { PermissionMode } from '@coderix/core';
+import { PermissionMode, getSubAgentRegistry } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
 import { InputBox } from './InputBox.js';
@@ -116,7 +116,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   // Load sub-agent transcript when entering immersive mode
   useEffect(() => {
     if (state.subAgentView) {
-      const registry = (engine as any).config?.subAgentRegistry;
+      const registry = getSubAgentRegistry();
       if (!registry) return;
       const agent = registry.get(state.subAgentView.agentId);
       if (agent?.transcript && agent.transcript.length > 0) {
