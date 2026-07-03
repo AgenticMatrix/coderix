@@ -101,6 +101,24 @@ export function getMessageThinking(m: Message): string | undefined {
   return m.thinking;
 }
 
+// ── Message routing helper ───────────────────────────────────────────────
+// When viewing a sub-agent, main-agent message modifications are routed to
+// savedMainMessages so the sub-agent view is never contaminated. Main-agent
+// work is preserved and restored when the user returns to the main view.
+
+function updateMessages(state: ChatState, fn: (messages: Message[]) => Message[]): ChatState {
+  if (state.subAgentView) {
+    return {
+      ...state,
+      savedMainMessages: fn(state.savedMainMessages ?? []),
+    };
+  }
+  return {
+    ...state,
+    messages: fn(state.messages),
+  };
+}
+
 // ── Reducer ─────────────────────────────────────────────────────────────
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -113,7 +131,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pasteBlocks: action.text === '' ? {} : state.pasteBlocks,
       };
 
-    case 'ADD_USER_MESSAGE':
+    case 'ADD_USER_MESSAGE': {
+      if (state.subAgentView) {
+        return {
+          ...state,
+          savedMainMessages: [...(state.savedMainMessages ?? []), action.message],
+        };
+      }
       return {
         ...state,
         messages: [...state.messages, action.message],
@@ -122,6 +146,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         error: null,
         pasteBlocks: {},
       };
+    }
 
     case 'START_ASSISTANT_RESPONSE': {
       const assistantMsg: Message = {
@@ -131,6 +156,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         blocks: [],
         timestamp: Date.now(),
       };
+      if (state.subAgentView) {
+        return {
+          ...state,
+          savedMainMessages: [...(state.savedMainMessages ?? []), assistantMsg],
+        };
+      }
       return {
         ...state,
         messages: [...state.messages, assistantMsg],
@@ -139,31 +170,33 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'START_BLOCK':
-      return {
-        ...state,
-        messages: state.messages.map((m) =>
-          m.id === action.messageId
-            ? {
+    case 'START_BLOCK': {
+      const targetMsgs = state.subAgentView ? (state.savedMainMessages ?? []) : state.messages;
+      const updated = targetMsgs.map((m) =>
+        m.id === action.messageId
+          ? {
+              ...m,
+              blocks: [...m.blocks, action.block],
+              content: getMessageText({
                 ...m,
                 blocks: [...m.blocks, action.block],
-                content: getMessageText({
-                  ...m,
-                  blocks: [...m.blocks, action.block],
-                }),
-                thinking: getMessageThinking({
-                  ...m,
-                  blocks: [...m.blocks, action.block],
-                }),
-              }
-            : m,
-        ),
-      };
-
-    case 'APPEND_BLOCK_DELTA':
+              }),
+              thinking: getMessageThinking({
+                ...m,
+                blocks: [...m.blocks, action.block],
+              }),
+            }
+          : m,
+      );
       return {
         ...state,
-        messages: state.messages.map((m) => {
+        ...(state.subAgentView ? { savedMainMessages: updated } : { messages: updated }),
+      };
+    }
+
+    case 'APPEND_BLOCK_DELTA':
+      return updateMessages(state, (messages) =>
+        messages.map((m) => {
           if (m.id !== action.messageId) return m;
 
           if (m.blocks.length === 0) {
@@ -202,8 +235,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             }
           } else if (action.deltaType === 'json' && lastBlock.type === 'tool_use') {
             const partialStr = ((lastBlock.input as Record<string, unknown>)._partial as string || '') + action.text;
-            // Try to parse the accumulated JSON so keys like `command` and `description`
-            // are directly accessible to renderers during streaming.
             try {
               const parsed = JSON.parse(partialStr) as Record<string, unknown>;
               lastBlock.input = { ...parsed, _partial: partialStr };
@@ -223,12 +254,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             thinking: getMessageThinking({ ...m, blocks }),
           };
         }),
-      };
+      );
 
     case 'SET_TOOL_USE_RESULT':
-      return {
-        ...state,
-        messages: state.messages.map((m) => ({
+      return updateMessages(state, (messages) =>
+        messages.map((m) => ({
           ...m,
           blocks: m.blocks.map((b) =>
             b.type === 'tool_use' && b.toolId === action.toolId
@@ -241,12 +271,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               : b,
           ),
         })),
-      };
+      );
 
     case 'STOP_BLOCK':
-      return {
-        ...state,
-        messages: state.messages.map((m) => {
+      return updateMessages(state, (messages) =>
+        messages.map((m) => {
           if (m.id !== action.messageId || m.blocks.length === 0) return m;
           const blocks = [...m.blocks];
           const lastIdx = blocks.length - 1;
@@ -265,32 +294,29 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           blocks[lastIdx] = lastBlock;
           return { ...m, blocks };
         }),
-      };
+      );
 
     case 'APPEND_ASSISTANT_TEXT':
-      return {
-        ...state,
-        messages: state.messages.map((m) =>
+      return updateMessages(state, (messages) =>
+        messages.map((m) =>
           m.id === action.id
             ? { ...m, content: m.content + action.text }
             : m,
         ),
-      };
+      );
 
     case 'APPEND_ASSISTANT_THINKING':
-      return {
-        ...state,
-        messages: state.messages.map((m) =>
+      return updateMessages(state, (messages) =>
+        messages.map((m) =>
           m.id === action.id
             ? { ...m, thinking: (m.thinking ?? '') + action.text }
             : m,
         ),
-      };
+      );
 
     case 'UPDATE_BLOCK_STATE':
-      return {
-        ...state,
-        messages: state.messages.map((m) => ({
+      return updateMessages(state, (messages) =>
+        messages.map((m) => ({
           ...m,
           blocks: m.blocks.map((b) =>
             b.type === 'tool_use' && b.toolId === action.toolId
@@ -298,12 +324,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               : b,
           ),
         })),
-      };
+      );
 
     case 'FINISH_ASSISTANT_RESPONSE':
+      if (state.subAgentView) return state;
       return { ...state, isStreaming: false };
 
     case 'INTERRUPT':
+      if (state.subAgentView) return state;
       return { ...state, isStreaming: false };
 
     case 'TOGGLE_THINKING':
