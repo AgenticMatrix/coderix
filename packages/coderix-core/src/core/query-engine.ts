@@ -358,6 +358,12 @@ export class QueryEngine {
       },
     });
 
+    // Trim session.messages to prevent unbounded growth.
+    // The query loop compacts its local copy but session.messages is never
+    // trimmed otherwise.  Use 2x contextBudget as a generous ceiling.
+    const trimBudget = (this.config.contextBudget ?? 180_000) * 2;
+    this.config.sessionManager.trimMessages(trimBudget);
+
     const queryConfig: QueryConfig = {
       sessionId: session.id,
       cwd: this.config.cwd,

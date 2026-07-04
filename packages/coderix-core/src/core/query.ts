@@ -906,6 +906,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           abortController.signal,
           compactFailures,
         );
+        sessionManager.replaceMessages(messages);
         continue; // Retry the API call with compacted messages
       }
 
@@ -1025,7 +1026,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     );
 
     // Apply per-result and per-message size limits
-    toolResults = applyToolResultLimits(
+    toolResults = await applyToolResultLimits(
       toolResults,
       orderedBlocks.map((b) => b.name),
     );
@@ -1107,6 +1108,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         abortController.signal,
         compactFailures,
       );
+      // Sync compacted messages back to session so pre-compaction
+      // tool results are released for GC.
+      sessionManager.replaceMessages(messages);
     }
   }
 }

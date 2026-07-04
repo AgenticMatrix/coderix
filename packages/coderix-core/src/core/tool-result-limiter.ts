@@ -11,7 +11,7 @@
  * collectively blow out the context.
  */
 
-import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ToolResultBlock } from './types.js';
@@ -59,29 +59,31 @@ interface PersistedResult {
  * @param maxResultSizeByTool - Optional map from tool name to its max size
  * @returns Processed results with large outputs replaced by previews
  */
-export function applyToolResultLimits(
+export async function applyToolResultLimits(
   results: ToolResultBlock[],
   toolNames: string[],
   maxResultSizeByTool?: ReadonlyMap<string, number>,
-): ToolResultBlock[] {
+): Promise<ToolResultBlock[]> {
   // Step 1: Per-result limit + empty result marker
-  const withPerResultLimit = results.map((result, i) => {
-    const toolName = toolNames[i] ?? 'unknown';
+  const withPerResultLimit = await Promise.all(
+    results.map(async (result, i) => {
+      const toolName = toolNames[i] ?? 'unknown';
 
-    // Empty result marker — inject placeholder so the model always
-    // has something to react to at the prompt tail
-    if (isResultContentEmpty(result.content)) {
-      return { ...result, content: `(${toolName} completed with no output)` };
-    }
+      // Empty result marker — inject placeholder so the model always
+      // has something to react to at the prompt tail
+      if (isResultContentEmpty(result.content)) {
+        return { ...result, content: `(${toolName} completed with no output)` };
+      }
 
-    // Per-tool size limit
-    const maxSize =
-      maxResultSizeByTool?.get(toolName) ?? DEFAULT_MAX_RESULT_SIZE_CHARS;
-    // Infinity means the tool self-bounds — skip
-    if (!Number.isFinite(maxSize)) return result;
+      // Per-tool size limit
+      const maxSize =
+        maxResultSizeByTool?.get(toolName) ?? DEFAULT_MAX_RESULT_SIZE_CHARS;
+      // Infinity means the tool self-bounds — skip
+      if (!Number.isFinite(maxSize)) return result;
 
-    return limitSingleResult(result, toolName, maxSize);
-  });
+      return limitSingleResult(result, toolName, maxSize);
+    }),
+  );
 
   // Step 2: Per-message aggregate budget
   return enforceAggregateBudget(withPerResultLimit, toolNames);
@@ -91,15 +93,15 @@ export function applyToolResultLimits(
 // Per-result limit
 // ---------------------------------------------------------------------------
 
-function limitSingleResult(
+async function limitSingleResult(
   result: ToolResultBlock,
   _toolName: string,
   maxSize: number,
-): ToolResultBlock {
+): Promise<ToolResultBlock> {
   const contentStr = extractContentString(result.content);
   if (contentStr.length <= maxSize) return result;
 
-  const persisted = persistToolResult(contentStr, result.tool_use_id);
+  const persisted = await persistToolResult(contentStr, result.tool_use_id);
   if (!persisted) return result; // persist failed — send original
 
   const message = buildLargeResultMessage(persisted);
@@ -110,10 +112,10 @@ function limitSingleResult(
 // Aggregate budget
 // ---------------------------------------------------------------------------
 
-function enforceAggregateBudget(
+async function enforceAggregateBudget(
   results: ToolResultBlock[],
   toolNames: string[],
-): ToolResultBlock[] {
+): Promise<ToolResultBlock[]> {
   const totalSize = results.reduce(
     (sum, r) => sum + extractContentString(r.content).length,
     0,
@@ -157,36 +159,38 @@ function enforceAggregateBudget(
 
   if (toReplace.size === 0) return results;
 
-  return results.map((result, i) => {
-    if (!toReplace.has(i)) return result;
+  const mapped = await Promise.all(
+    results.map(async (result, i) => {
+      if (!toReplace.has(i)) return result;
 
-    const contentStr = extractContentString(result.content);
-    const persisted = persistToolResult(contentStr, result.tool_use_id);
-    if (!persisted) return result;
+      const contentStr = extractContentString(result.content);
+      const persisted = await persistToolResult(contentStr, result.tool_use_id);
+      if (!persisted) return result;
 
-    const message = buildLargeResultMessage(persisted);
-    return { ...result, content: message };
-  });
+      const message = buildLargeResultMessage(persisted);
+      return { ...result, content: message };
+    }),
+  );
+
+  return mapped;
 }
 
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
 
-function persistToolResult(
+async function persistToolResult(
   content: string,
   toolUseId: string,
-): PersistedResult | null {
+): Promise<PersistedResult | null> {
   try {
-    if (!existsSync(TOOL_RESULTS_DIR)) {
-      mkdirSync(TOOL_RESULTS_DIR, { recursive: true });
-    }
+    await mkdir(TOOL_RESULTS_DIR, { recursive: true });
 
     const filepath = join(TOOL_RESULTS_DIR, `${toolUseId}.txt`);
 
     // Use 'wx' flag to avoid overwriting — idempotent across turns
     try {
-      writeFileSync(filepath, content, { encoding: 'utf-8', flag: 'wx' });
+      await writeFile(filepath, content, { encoding: 'utf-8', flag: 'wx' });
     } catch (err: unknown) {
       // EEXIST is fine — already persisted on a prior turn
       if ((err as NodeJS.ErrnoException)?.code !== 'EEXIST') throw err;

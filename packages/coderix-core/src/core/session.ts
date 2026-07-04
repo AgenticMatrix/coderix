@@ -19,6 +19,7 @@ import type {
   TokenUsageSummary,
 } from './types.js';
 import type { Message } from './types.js';
+import { tokenCountWithEstimation } from './token-budget.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -182,6 +183,49 @@ export class SessionManager {
 
     this.saveSession(session);
     return session;
+  }
+
+  /**
+   * Trim session messages to stay within a token budget.
+   *
+   * Drops oldest messages until the total estimated token count is
+   * below `maxTokens`.  Keeps at least `minKeep` most recent messages.
+   * Returns the number of messages dropped.
+   */
+  trimMessages(maxTokens: number, minKeep = 10): number {
+    const session = this.getActive();
+    const totalTokens = tokenCountWithEstimation(session.messages);
+    if (totalTokens <= maxTokens) return 0;
+
+    // Scan from the front to find the keep-start index
+    const maxDrop = session.messages.length - minKeep;
+    let keepStart = 0;
+    for (let i = 0; i < maxDrop; i++) {
+      keepStart = i + 1;
+      const remaining = session.messages.slice(keepStart);
+      if (tokenCountWithEstimation(remaining) <= maxTokens) break;
+    }
+
+    const dropped = keepStart;
+    if (dropped === 0) return 0;
+
+    session.messages = session.messages.slice(keepStart);
+    session.updatedAt = new Date();
+    this.saveSession(session);
+    return dropped;
+  }
+
+  /**
+   * Replace the active session's messages with a compacted set.
+   *
+   * Called after context compaction to release pre-compaction messages
+   * for GC, preventing unbounded memory growth from old tool results.
+   */
+  replaceMessages(messages: Message[]): void {
+    const session = this.getActive();
+    session.messages = [...messages];
+    session.updatedAt = new Date();
+    this.saveSession(session);
   }
 
   /**
