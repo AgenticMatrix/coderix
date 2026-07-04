@@ -621,6 +621,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
+    case 'EVICT_AGENT_CACHE': {
+      const { [action.agentId]: _, ...rest } = state.subAgentMessageCache;
+      return { ...state, subAgentMessageCache: rest };
+    }
+
     default:
       return state;
   }

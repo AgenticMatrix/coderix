@@ -107,6 +107,35 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     store.setState(state);
   }, [state]);
 
+  // ── Agent cache cleanup ───────────────────────────────────────
+  // When an agent finishes (done / error / stopped), evict its
+  // transcript from subAgentMessageCache and free the raw transcript
+  // on the SubAgentRecord to reduce memory pressure.
+  const agents = useAppState(s => s.agents);
+  const subAgentViewIdRef = useRef(state.subAgentView?.agentId ?? null);
+  subAgentViewIdRef.current = state.subAgentView?.agentId ?? null;
+  const prevAgentStatusesRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    for (const [id, agent] of Object.entries(agents)) {
+      const prevStatus = prevAgentStatusesRef.current[id];
+      const curStatus = agent.status;
+
+      if (prevStatus === 'running' && curStatus !== 'running') {
+        // Agent just finished — null out raw transcript from registry
+        const registry = getSubAgentRegistry();
+        registry?.update(id, { transcript: undefined });
+
+        // Evict from TUI message cache (unless currently viewing it)
+        if (subAgentViewIdRef.current !== id) {
+          dispatch({ type: 'EVICT_AGENT_CACHE', agentId: id });
+        }
+      }
+
+      prevAgentStatusesRef.current[id] = curStatus;
+    }
+  }, [agents]);
+
   const messagesRef = useRef(state.messages);
   const currentSessionRef = useRef<string>('');
   messagesRef.current = state.messages;
@@ -344,7 +373,6 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   const { memory: processMemory, osProcessCount } = useProcessStats();
 
   // Count running sub-agents (in-process, not visible to ps)
-  const agents = useAppState(s => s.agents);
   const runningAgentCount = useMemo(() => {
     let count = 0;
     for (const agent of Object.values(agents)) {

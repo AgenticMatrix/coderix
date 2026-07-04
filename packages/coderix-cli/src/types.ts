@@ -301,6 +301,8 @@ export type ChatAction =
   | { type: 'ADD_PASTE_BLOCK'; text: string }
   // Token usage
   | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage> }
+  // Agent cache management
+  | { type: 'EVICT_AGENT_CACHE'; agentId: string }
   // Internal: route an action to savedMainMessages when in sub-agent view
   | { type: 'ROUTE_TO_SAVED_MAIN'; action: ChatAction };
 
