@@ -283,7 +283,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   let assistantTurnCount = 0;
   let messageCount = 0;
   let toolCount = 0;
-  const transcript: Message[] = [];
+  const transcript: Message[] = [...initialMessages];
   const accumulatedLiveCalls: Array<{ name: string; input: string; state: string }> = [];
 
   try {
