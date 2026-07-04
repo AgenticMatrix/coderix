@@ -34,6 +34,8 @@ export interface SubAgentRecord {
   outputPath?: string;
   /** Live tool calls emitted during agent execution (for real-time TUI). */
   liveToolCalls?: Array<{ name: string; input: string; state: string }>;
+  /** Accumulated token usage (context window consumption) for this agent. */
+  tokenUsage?: { inputTokens: number; outputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number; totalTokens?: number };
 }
 
 export class SubAgentRegistry {

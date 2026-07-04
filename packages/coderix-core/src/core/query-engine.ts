@@ -678,10 +678,18 @@ export class QueryEngine {
           }
           case 'system': {
             if (msg.subtype === 'progress') {
+              const usage = subSessionManager.getActive().tokenUsage;
               subAgentRegistry.update(agentId, {
                 turnCount: agent.turnCount + assistantTurnCount,
                 messageCount: transcript.length + newTranscript.length,
                 toolCount: agent.toolCount + toolCount,
+                tokenUsage: {
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  cacheCreationInputTokens: usage.cacheCreationInputTokens,
+                  cacheReadInputTokens: usage.cacheReadInputTokens,
+                  totalTokens: usage.totalTokens,
+                },
               });
             }
             if (msg.subtype === 'permission_required') {
@@ -700,6 +708,7 @@ export class QueryEngine {
 
       // ── Finalize ──────────────────────────────────────────────────
       const cumulativeTranscript = [...transcript, ...newTranscript];
+      const finalUsage = subSessionManager.getActive().tokenUsage;
       subAgentRegistry.update(agentId, {
         status: subAbortController.signal.aborted ? 'stopped' : 'done',
         finishedAt: Date.now(),
@@ -707,6 +716,13 @@ export class QueryEngine {
         messageCount: cumulativeTranscript.length,
         toolCount: agent.toolCount + toolCount,
         transcript: cumulativeTranscript,
+        tokenUsage: {
+          inputTokens: finalUsage.inputTokens,
+          outputTokens: finalUsage.outputTokens,
+          cacheCreationInputTokens: finalUsage.cacheCreationInputTokens,
+          cacheReadInputTokens: finalUsage.cacheReadInputTokens,
+          totalTokens: finalUsage.totalTokens,
+        },
       });
 
       saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
@@ -724,11 +740,19 @@ export class QueryEngine {
       };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorUsage = subSessionManager.getActive().tokenUsage;
       subAgentRegistry.update(agentId, {
         status: 'error',
         finishedAt: Date.now(),
         turnCount: agent.turnCount + assistantTurnCount,
         error: errorMsg,
+        tokenUsage: {
+          inputTokens: errorUsage.inputTokens,
+          outputTokens: errorUsage.outputTokens,
+          cacheCreationInputTokens: errorUsage.cacheCreationInputTokens,
+          cacheReadInputTokens: errorUsage.cacheReadInputTokens,
+          totalTokens: errorUsage.totalTokens,
+        },
       });
       yield { type: 'error', data: { message: errorMsg } };
     }

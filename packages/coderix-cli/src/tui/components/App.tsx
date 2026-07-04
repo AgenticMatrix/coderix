@@ -22,6 +22,7 @@ import { useAgentBridge } from '../hooks/useAgentBridge.js';;
 import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
 import { useInputHandler } from '../hooks/useInputHandler.js';;
 import { useTokenStats } from '../hooks/useTokenStats.js';;
+import { useProcessStats } from '../hooks/useProcessStats.js';
 import { createSlashHandler } from '../../commands/index.js';
 import { loadHistory } from '../../cli/history.js';
 import { useAppState, useSetAppState } from '../../state/AppStateContext.js';;
@@ -339,6 +340,22 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
 
   const stats = useTokenStats(state.messages, state.tokenUsage, state.accumulatedCost);
 
+  // OS-level process tree stats (main + sub-agents + tool subprocesses)
+  const { memory: processMemory, osProcessCount } = useProcessStats();
+
+  // Count running sub-agents (in-process, not visible to ps)
+  const agents = useAppState(s => s.agents);
+  const runningAgentCount = useMemo(() => {
+    let count = 0;
+    for (const agent of Object.values(agents)) {
+      if (agent.status === 'running') count++;
+    }
+    return count;
+  }, [agents]);
+
+  // Total: main process + OS child processes + in-process sub-agents
+  const totalProcs = 1 + osProcessCount + runningAgentCount;
+
   const messages = state.messages;
 
   // When display is frozen (user scrolled up), keep showing the snapshot.
@@ -500,6 +517,8 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
           accumulatedCost={stats.accumulatedCost}
           currency={config.currency}
           maxContext={config.maxContext}
+          processMemory={processMemory}
+          processCount={totalProcs}
         />
       </Box>
 

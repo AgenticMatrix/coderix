@@ -22,6 +22,10 @@ interface StatusBarProps {
   currency?: string;
   /** Maximum context window size in tokens (default: 131072). */
   maxContext?: number;
+  /** Total RSS memory of the process tree in bytes. */
+  processMemory: number;
+  /** Number of processes in the tree. */
+  processCount: number;
 }
 
 function formatTokens(n: number): string {
@@ -59,6 +63,13 @@ function formatDuration(seconds: number): string {
   return `${h}h ${rm}m ${s}s`;
 }
 
+/** Format RSS bytes into a readable size. */
+function formatMemory(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1024) return (mb / 1024).toFixed(1) + 'G';
+  return Math.round(mb) + 'M';
+}
+
 /**
  * Render a battery-like bar for context usage.
  * Uses real API token counts (including cache) for the ctx total.
@@ -83,12 +94,14 @@ function ContextBar({ used, max }: { used: number; max: number }) {
 
 /**
  * Bottom status bar showing:
- *   Ready | ctx [████░░░░] 40% 3.2K/128K | 0.0042 $ | 12m 34s | ⏲ 3s | Model: xxx ✓ | Ctrl+C to exit
+ *   Ready | ctx [████░░░░] 40% 3.2K/128K | 0.0042 $ | 12m 34s | ⏲ 3s | Model: xxx ✓ | Mem 30M | Procs 4 | Ctrl+C to exit
  *
  * ctx = cache_read + cache_creation + output + input (real API tokens).
+ * Mem = total RSS memory of Coderix process tree (main + sub-agents + tool subprocesses).
+ * Procs = number of processes in the tree.
  * Timers update every second in real-time.
  */
-export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext }: StatusBarProps) {
+export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
@@ -177,6 +190,20 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
         {!error && !isStreaming ? (
           <Text color="green" dimColor> ✓</Text>
         ) : null}
+      </Text>
+
+      <Sep />
+
+      <Text>
+        <Text dimColor>Mem </Text>
+        <Text color="cyan">{formatMemory(processMemory)}</Text>
+      </Text>
+
+      <Sep />
+
+      <Text>
+        <Text dimColor>Procs </Text>
+        <Text color="cyan">{processCount}</Text>
       </Text>
 
       <Sep />
