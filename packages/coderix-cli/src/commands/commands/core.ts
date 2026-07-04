@@ -88,6 +88,16 @@ export const coreCommands: SlashCommand[] = [
   },
 
   {
+    aliases: ['concise'],
+    help: 'toggle brief mode (concise responses to save context)',
+    name: 'brief',
+    run: (_arg, ctx) => {
+      ctx.dispatch({ type: 'TOGGLE_BRIEF_MODE' });
+      ctx.sys('Brief mode toggled. Use /brief again to disable.');
+    },
+  },
+
+  {
     help: 'undo the last exchange',
     name: 'undo',
     run: (_arg, ctx) => {

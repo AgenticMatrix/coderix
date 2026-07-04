@@ -73,6 +73,8 @@ export interface QueryConfig {
   maxBudgetUsd?: number;
   contextBudget: number;
   compactThreshold: number;
+  /** Enable automatic context compaction. When false, only manual /compact works. */
+  autoCompactEnabled?: boolean;
   /** Max concurrent tool executions (default: 32). */
   maxToolConcurrency?: number;
   callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
@@ -312,6 +314,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     maxBudgetUsd,
     contextBudget,
     compactThreshold,
+    autoCompactEnabled,
     maxToolConcurrency = 32,
     callModel,
     hookManager,
@@ -1092,7 +1095,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
     // === Context compaction check ===
     const currentTokens = tokenCountWithEstimation(messages);
-    if (currentTokens / contextBudget > compactThreshold) {
+    if (autoCompactEnabled !== false && currentTokens / contextBudget > compactThreshold) {
       messages = yield* runCompaction(
         messages,
         currentTokens,

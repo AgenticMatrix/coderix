@@ -626,6 +626,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, subAgentMessageCache: rest };
     }
 
+    case 'TOGGLE_BRIEF_MODE':
+      return { ...state, briefMode: !state.briefMode };
+
     default:
       return state;
   }
@@ -644,6 +647,9 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
       outputPrice,
       cacheReadPrice,
       maxContext: 0,
+      briefMode: false,
+      autoCompactEnabled: true,
+      compactThreshold: 0.85,
     },
     messages: [],
     isStreaming: false,
@@ -678,6 +684,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     inputPrice,
     outputPrice,
     cacheReadPrice,
+    briefMode: false,
   };
 }
 

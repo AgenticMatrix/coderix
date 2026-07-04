@@ -107,6 +107,11 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     store.setState(state);
   }, [state]);
 
+  // Sync briefMode → QueryEngine (rebuilds system prompt on toggle)
+  useEffect(() => {
+    engine.setBriefMode(state.briefMode);
+  }, [state.briefMode, engine]);
+
   // ── Agent cache cleanup ───────────────────────────────────────
   // When an agent finishes (done / error / stopped), evict its
   // transcript from subAgentMessageCache and free the raw transcript
@@ -545,6 +550,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
           accumulatedCost={stats.accumulatedCost}
           currency={config.currency}
           maxContext={config.maxContext}
+          compactThreshold={config.compactThreshold}
           processMemory={processMemory}
           processCount={totalProcs}
         />

@@ -299,7 +299,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
       abortController: subAbortController,
       maxTurns: effectiveMaxTurns,
       contextBudget: effectiveContextBudget,
-      compactThreshold: 0.7,
+      compactThreshold: 0.85,
       maxToolConcurrency: DEFAULT_MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
       hookManager: agentSpawn.hookManager,

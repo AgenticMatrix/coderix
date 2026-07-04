@@ -246,7 +246,7 @@ async function handleSubAgentResume(
       abortController: subAbortController,
       maxTurns: agentDef?.maxTurns ?? MAX_RESUME_TURNS,
       contextBudget: agentDef?.contextBudget ?? CONTEXT_BUDGET,
-      compactThreshold: 0.7,
+      compactThreshold: 0.85,
       maxToolConcurrency: MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
       hookManager: agentSpawn.hookManager,

@@ -85,6 +85,12 @@ export interface CoderSettings {
   default_team?: string;
   /** Persistent memory system configuration. */
   memory?: MemorySettings;
+  /** Enable brief/concise mode to reduce token consumption. */
+  brief_mode?: boolean;
+  /** Enable automatic context compaction. When false, only manual /compact works. */
+  auto_compact_enabled?: boolean;
+  /** Ratio (0–1) at which auto-compaction triggers. Default 0.85 (85%). */
+  compact_threshold?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -305,5 +311,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0 };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85 };
 }

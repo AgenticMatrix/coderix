@@ -237,6 +237,8 @@ export interface ChatState extends CoreState {
   outputPrice: number;
   /** Price per 1M cache read/creation input tokens. */
   cacheReadPrice: number;
+  /** Brief mode toggle — reduces response verbosity to save context. */
+  briefMode: boolean;
 }
 
 // ── Chat actions ────────────────────────────────────────────────────
@@ -303,6 +305,7 @@ export type ChatAction =
   | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage> }
   // Agent cache management
   | { type: 'EVICT_AGENT_CACHE'; agentId: string }
+  | { type: 'TOGGLE_BRIEF_MODE' }
   // Internal: route an action to savedMainMessages when in sub-agent view
   | { type: 'ROUTE_TO_SAVED_MAIN'; action: ChatAction };
 

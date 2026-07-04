@@ -90,6 +90,10 @@ export interface QueryEngineConfig {
    *  Engine events are emitted to both AsyncGenerator AND
    *  eventBus.engineEvents Observable. */
   eventBus?: EventBus;
+  /** Enable brief/concise mode to reduce response verbosity. */
+  briefMode?: boolean;
+  /** Enable automatic context compaction. When false, only manual /compact works. */
+  autoCompactEnabled?: boolean;
 }
 
 export interface QueryEngineEvent {
@@ -115,7 +119,7 @@ export class QueryEngine {
     this.config = {
       maxTurns: 100,
       contextBudget: 180_000,
-      compactThreshold: 0.7,
+      compactThreshold: 0.85,
       model: 'deepseek-v4-pro',
       ...config,
     };
@@ -164,6 +168,7 @@ export class QueryEngine {
       agentRole,
       model: this.config.model,
       memorySettings: this.config.settings?.memory,
+      briefMode: this.config.briefMode ?? false,
     });
 
     // Setup hook (non-blockable, fires on first init)
@@ -179,6 +184,16 @@ export class QueryEngine {
         ).catch(() => {});
       }
     }
+  }
+
+  /**
+   * Toggle brief mode on/off at runtime. Forces system prompt rebuild
+   * so the directive is injected (or removed) on the next turn.
+   */
+  setBriefMode(enabled: boolean): void {
+    if (this.config.briefMode === enabled) return;
+    this.config.briefMode = enabled;
+    this.systemPrompt = null; // force reassembly on next submitMessage
   }
 
   async *submitMessage(userInput: string): AsyncGenerator<QueryEngineEvent> {
@@ -355,6 +370,9 @@ export class QueryEngine {
         outputPrice: 0,
         cacheReadPrice: 0,
         maxContext: this.config.contextBudget ?? 180_000,
+        briefMode: this.config.briefMode ?? false,
+        autoCompactEnabled: this.config.autoCompactEnabled ?? true,
+        compactThreshold: this.config.compactThreshold ?? 0.85,
       },
     });
 
@@ -363,6 +381,26 @@ export class QueryEngine {
     // trimmed otherwise.  Use 2x contextBudget as a generous ceiling.
     const trimBudget = (this.config.contextBudget ?? 180_000) * 2;
     this.config.sessionManager.trimMessages(trimBudget);
+
+    // Resolve autoCompactEnabled: config key + env var override
+    const autoCompactEnabled = (() => {
+      if (process.env.DISABLE_COMPACT || process.env.DISABLE_AUTO_COMPACT) {
+        return false;
+      }
+      return this.config.autoCompactEnabled ?? true;
+    })();
+
+    // Resolve compactThreshold: env var > settings > default (0.85)
+    const resolvedCompactThreshold = (() => {
+      const envOverride = process.env.CODERRX_AUTOCOMPACT_PCT_OVERRIDE;
+      if (envOverride) {
+        const pct = parseFloat(envOverride);
+        if (!isNaN(pct) && pct > 0 && pct <= 100) {
+          return pct / 100;
+        }
+      }
+      return this.config.compactThreshold!;
+    })();
 
     const queryConfig: QueryConfig = {
       sessionId: session.id,
@@ -377,7 +415,8 @@ export class QueryEngine {
       maxTurns: this.config.maxTurns!,
       maxBudgetUsd: this.config.maxBudgetUsd,
       contextBudget: this.config.contextBudget!,
-      compactThreshold: this.config.compactThreshold!,
+      compactThreshold: resolvedCompactThreshold,
+      autoCompactEnabled,
       maxToolConcurrency: this.config.maxToolConcurrency,
       callModel: this.config.callModel,
       hookManager: this.config.hookManager,
@@ -655,9 +694,9 @@ export class QueryEngine {
         abortController: subAbortController,
         maxTurns: agentDef?.maxTurns ?? 15,
         contextBudget: agentDef?.contextBudget ?? 120_000,
-        compactThreshold: 0.7,
-        maxToolConcurrency: 8,
-        callModel,
+        compactThreshold: 0.85,
+        autoCompactEnabled: this.config.autoCompactEnabled ?? true,
+        callModel: this.config.callModel,
         hookManager,
       });
 

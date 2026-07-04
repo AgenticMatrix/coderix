@@ -1,6 +1,9 @@
 {
   "theme": "light",
   "max_tokens": 32768,
+  "brief_mode": false,
+  "auto_compact_enabled": true,
+  "compact_threshold": 0.85,
   "web_bridge": {
     "_comment": "── Web Bridge (Browser Automation via CDP) ───────────────────",
     "_help": "Control a real Chrome/Edge browser from the AI agent.",

@@ -140,7 +140,7 @@ async function runPrintMode(queryText: string): Promise<void> {
   const { registry: agentRegistry } = await buildAgentRegistry(process.cwd());
   const settings = loadSettings();
   const mcpPlugins = await initMcpAndGetPlugins(process.cwd());
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPlugins), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings });
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPlugins), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init(); engine.setPermissionMode(PermissionMode.AUTO);
   let fullText = '';
   for await (const event of engine.submitMessage(queryText)) {
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
   const { createEventBus } = await import('@coderix/core');
   const eventBus = createEventBus();
 
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPluginsTui), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings, eventBus });
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPluginsTui), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings, eventBus, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init();
 
   // ── Create unified AppState store ──────────────────────────────────

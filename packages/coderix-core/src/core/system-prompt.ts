@@ -42,6 +42,8 @@ export interface AssemblyContext {
   model?: string;
   /** Memory settings from CoderSettings (optional — skips memory section if not provided). */
   memorySettings?: MemorySettings;
+  /** Enable brief/concise mode to reduce response verbosity. */
+  briefMode?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +63,7 @@ export class SystemPromptAssembler {
       () => this.buildSystemRules(role),
       () => this.buildToolUsage(role),
       () => this.buildCommunication(role),
+      () => this.buildBriefMode(ctx.briefMode ?? false),
       () => this.buildEnvInfo(envInfo, ctx.model),
       () => this.buildCodeAgentMd(codeAgentContext, role),
       () => this.buildMemoryContext(role, ctx),
@@ -226,6 +229,22 @@ export class SystemPromptAssembler {
     ].join('\n');
 
     return { name: 'communication', content, priority: 15 };
+  }
+
+  /**
+   * Priority 18 — Brief mode directive (toggleable via /brief).
+   */
+  private buildBriefMode(enabled: boolean): PromptPart | null {
+    if (!enabled) return null;
+    const content = [
+      '# Brief Mode',
+      '',
+      'You are in brief mode. Keep responses concise and direct.',
+      'Skip preambles, summaries of completed work, and commentary.',
+      'State what you are doing, do it, and report the result in minimal words.',
+      'No multi-sentence explanations unless the user explicitly asks for details.',
+    ].join('\n');
+    return { name: 'brief_mode', content, priority: 18 };
   }
 
   /**

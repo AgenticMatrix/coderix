@@ -15,6 +15,9 @@ export interface CoreConfig {
   outputPrice: number;
   cacheReadPrice: number;
   maxContext: number;
+  briefMode: boolean;
+  autoCompactEnabled: boolean;
+  compactThreshold: number;
 }
 
 export interface CoreState {

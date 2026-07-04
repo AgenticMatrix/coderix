@@ -22,6 +22,8 @@ interface StatusBarProps {
   currency?: string;
   /** Maximum context window size in tokens (default: 131072). */
   maxContext?: number;
+  /** Auto-compact threshold ratio (0–1). Shows "X% until compact" warning. */
+  compactThreshold?: number;
   /** Total RSS memory of the process tree in bytes. */
   processMemory: number;
   /** Number of processes in the tree. */
@@ -101,7 +103,7 @@ function ContextBar({ used, max }: { used: number; max: number }) {
  * Procs = number of processes in the tree.
  * Timers update every second in real-time.
  */
-export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, processMemory, processCount }: StatusBarProps) {
+export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
@@ -144,6 +146,11 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
 
   const contextMax = maxContext ?? 131072;
 
+  // Distance to auto-compact threshold (%) — shown when approaching
+  const compactDistance = ctxTokens > 0 && compactThreshold
+    ? Math.max(0, Math.round(compactThreshold * 100) - Math.round((ctxTokens / contextMax) * 100))
+    : null;
+
   const Sep = () => <Text dimColor color="grey"> │ </Text>;
 
   return (
@@ -163,6 +170,11 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
       <Text dimColor>ctx </Text>
       <ContextBar used={ctxTokens} max={contextMax} />
       <Text dimColor> {formatTokens(ctxTokens)}/{formatTokens(contextMax)}</Text>
+      {compactDistance !== null && (
+        <Text dimColor color={compactDistance <= 10 ? 'yellow' : undefined}>
+          {' '}({compactDistance}% until compact)
+        </Text>
+      )}
 
       <Sep />
 
