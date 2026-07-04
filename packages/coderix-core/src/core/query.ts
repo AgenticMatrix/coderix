@@ -55,6 +55,7 @@ import { classifyError } from './error-recovery.js';
 import { loadCodeAgentContext } from './context-loader.js';
 import { loadMemoryPrompt } from '../memory/prompt-builder.js';
 import { loadMemoryConfig } from '../memory/config.js';
+import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
 import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
 import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
 // Types
@@ -365,7 +366,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         messages,
         tokenCountWithEstimation(messages),
         contextBudget,
-        { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode(), planModeState: pm.current },
+        { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode(), planModeState: pm.current, readFileTracker, clearCaches },
         abortController.signal,
         { count: 0 },
       );
@@ -402,6 +403,34 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
     if (abortController.signal.aborted) {
       return;
+    }
+
+    // === Snip Compact: inject pending marker, then trim ===
+    if (consumeSnipRequest()) {
+      messages.push(createSnipMarker());
+      sessionManager.replaceMessages(messages);
+    }
+    {
+      const { messages: snipped, snippedCount } = snipCompact(messages);
+      if (snippedCount > 0) {
+        const beforeTokens = tokenCountWithEstimation(messages);
+        messages = snipped;
+        sessionManager.replaceMessages(messages);
+        yield {
+          type: 'system',
+          subtype: 'compact_boundary',
+          compactMetadata: {
+            beforeTokens,
+            afterTokens: tokenCountWithEstimation(messages),
+            strategy: 'snip',
+          },
+        };
+        hookManager?.onNotification(
+          sessionId, cwd, 'info',
+          `Snip-compacted: dropped ${snippedCount} messages`,
+          { snippedCount },
+        ).catch(() => {});
+      }
     }
 
     // === Get tool definitions for LLM ===
@@ -978,7 +1007,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           messages,
           tokenCountWithEstimation(messages),
           contextBudget,
-          { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode(), planModeState: pm.current },
+          { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode(), planModeState: pm.current, readFileTracker, clearCaches },
           abortController.signal,
           compactFailures,
         );
@@ -1370,11 +1399,11 @@ async function* runCompaction(
         messages.push(...restoreMessages);
 
         // ── File restoration ────────────────────────────────────
-        // TODO: buildFileRestoreContext not yet implemented
-        // if (readFileTracker) {
-        //   const fileMessages = buildFileRestoreContext(readFileTracker);
-        //   messages.push(...fileMessages);
-        // }
+        // Re-inject recently read files so the model retains codebase awareness.
+        if (readFileTracker) {
+          const fileMessages = buildFileRestoreContext(readFileTracker);
+          messages.push(...fileMessages);
+        }
 
         // ── Cache cleanup ────────────────────────────────────────
         clearCaches?.();
@@ -1434,6 +1463,8 @@ async function* runCompaction(
     `Context compacted: ${currentTokens} → ${afterTokens} tokens (${strategy}${droppedCount > 0 ? `, dropped ${droppedCount} messages` : ''})`,
     { beforeTokens: currentTokens, afterTokens, strategy, droppedMessages: droppedCount },
   ).catch(() => {});
+
+  clearCaches?.();
 
   return messages;
 }
@@ -1511,4 +1542,41 @@ async function buildRestoreContext(
   }
 
   return messages;
+}
+
+/**
+ * Build file restoration messages after LLM compaction.
+ * Re-injects recently read files (up to 5, capped per-file) so the model
+ * retains awareness of codebase files it was working with.
+ */
+function buildFileRestoreContext(
+  tracker: import('./read-file-tracker.js').ReadFileTracker,
+): Message[] {
+  const MAX_RESTORE_FILES = 5;
+  const MAX_CHARS_PER_FILE = 20_000;
+  const MAX_TOTAL_CHARS = 200_000;
+
+  const recent = tracker.getRecent(MAX_RESTORE_FILES);
+  if (recent.length === 0) return [];
+
+  let totalChars = 0;
+  const parts: string[] = [];
+
+  for (const entry of recent) {
+    const capped = entry.content.length > MAX_CHARS_PER_FILE
+      ? entry.content.slice(0, MAX_CHARS_PER_FILE) + '\n... (truncated)'
+      : entry.content;
+    const available = MAX_TOTAL_CHARS - totalChars;
+    if (available <= 0) break;
+    const toInclude = capped.length > available ? capped.slice(0, available) : capped;
+    parts.push(`## ${entry.path}\n\`\`\`\n${toInclude}\n\`\`\``);
+    totalChars += toInclude.length;
+  }
+
+  if (parts.length === 0) return [];
+
+  return [{
+    role: 'system',
+    content: `[Post-compact file restoration — recently read files]\n\n${parts.join('\n\n')}`,
+  }];
 }

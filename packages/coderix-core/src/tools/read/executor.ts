@@ -20,6 +20,11 @@ export const execute: ToolExecutor = async (input, opts) => {
     const result = lines.slice(startLine, endLine).join('\n');
     const duration = Date.now() - startTime;
 
+    // Track for post-compact file restoration
+    if (opts.readFileTracker && !input.offset && !input.limit) {
+      opts.readFileTracker.record(fullPath, result);
+    }
+
     if (result.length > opts.maxOutput) {
       return {
         content: result.slice(0, opts.maxOutput) + '\n... (output truncated)',

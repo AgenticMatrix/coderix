@@ -21,6 +21,7 @@ export type { SubAgentRecord } from './core/subagent-registry.js';
 export { AgentRegistry } from './core/agent-registry.js';
 export { createCallModelFromClient } from './core/provider-adapter.js';
 export { Compactor, requestManualCompact } from './core/compactor.js';
+export { snipCompact, createSnipMarker, SNIP_MARKER, requestSnip, consumeSnipRequest } from './core/snip-compact.js';
 export { TokenBudget } from './core/token-budget.js';
 export { ToolExecutionQueue } from './core/tool-queue.js';
 

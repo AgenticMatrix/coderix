@@ -55,6 +55,7 @@ import {
   formatRecalledMemories,
   RelevanceCache,
 } from '../memory/recall.js';
+import { ReadFileTracker } from './read-file-tracker.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -114,6 +115,7 @@ export class QueryEngine {
   private systemPrompt: SystemPrompt | null = null;
   private memoryConfig: MemoryConfig;
   private relevanceCache = new RelevanceCache();
+  private readFileTracker = new ReadFileTracker();
 
   constructor(config: QueryEngineConfig) {
     this.config = {
@@ -194,6 +196,15 @@ export class QueryEngine {
     if (this.config.briefMode === enabled) return;
     this.config.briefMode = enabled;
     this.systemPrompt = null; // force reassembly on next submitMessage
+  }
+
+  /**
+   * Clear transient caches after compaction. Prevents stale state
+   * from polluting new conversation turns.
+   */
+  clearCaches(): void {
+    this.relevanceCache.clear();
+    this.readFileTracker.clear();
   }
 
   async *submitMessage(userInput: string): AsyncGenerator<QueryEngineEvent> {

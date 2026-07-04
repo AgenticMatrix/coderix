@@ -1,6 +1,6 @@
 import type { SlashCommand } from '../types.js';
 import { findSlashCommand, listCommandNames } from '../registry.js';
-import { requestManualCompact } from '@coderix/core';
+import { requestManualCompact, requestSnip } from '@coderix/core';
 
 export const coreCommands: SlashCommand[] = [
   {
@@ -84,6 +84,15 @@ export const coreCommands: SlashCommand[] = [
     run: (_arg, ctx) => {
       requestManualCompact();
       ctx.sys('Compacting conversation context — LLM summarization will run on the next turn.');
+    },
+  },
+
+  {
+    help: 'snip conversation history (drop all messages before this point)',
+    name: 'snip',
+    run: (_arg, ctx) => {
+      requestSnip();
+      ctx.sys('Snip marker will be inserted. Messages before this point will be dropped before the next API call.');
     },
   },
 

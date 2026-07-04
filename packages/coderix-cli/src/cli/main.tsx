@@ -90,6 +90,7 @@ async function buildToolRegistry(mcpPlugins?: any[]): Promise<any> {
             setPermissionMode: ctx.setPermissionMode,
             getPermissionMode: ctx.getPermissionMode,
             planModeState: ctx.planModeState,
+            readFileTracker: ctx.readFileTracker,
           });
           return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
         }
