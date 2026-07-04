@@ -60,8 +60,8 @@ export interface ExecutorOptions {
 
 /** Executor options with all core fields resolved (non-optional) but
  *  agentSpawn, sessionId, setPermissionMode kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState'>;
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,

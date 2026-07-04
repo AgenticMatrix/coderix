@@ -1185,6 +1185,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           callModel,
           systemPrompt,
           permissionMode: permissionEngine.getMode(),
+          planModeState: pm.current,
           readFileTracker,
           clearCaches,
         },
@@ -1369,11 +1370,11 @@ async function* runCompaction(
         messages.push(...restoreMessages);
 
         // ── File restoration ────────────────────────────────────
-        // Re-inject recently read files so the model retains codebase awareness.
-        if (readFileTracker) {
-          const fileMessages = buildFileRestoreContext(readFileTracker);
-          messages.push(...fileMessages);
-        }
+        // TODO: buildFileRestoreContext not yet implemented
+        // if (readFileTracker) {
+        //   const fileMessages = buildFileRestoreContext(readFileTracker);
+        //   messages.push(...fileMessages);
+        // }
 
         // ── Cache cleanup ────────────────────────────────────────
         clearCaches?.();
