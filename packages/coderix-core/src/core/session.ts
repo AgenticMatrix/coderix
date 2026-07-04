@@ -7,7 +7,8 @@
  * Session management for persisting agent conversation state.
  */
 
-import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -32,6 +33,8 @@ const SESSIONS_DIR = join(homedir(), '.ink-chat-tui', 'sessions');
 export class SessionManager {
   private activeSession: Session | null = null;
   private sessions: Map<string, Session> = new Map();
+  private pendingWrites = new Set<Promise<void>>();
+  private exitHandlerRegistered = false;
 
   constructor() {
     if (!existsSync(SESSIONS_DIR)) {
@@ -277,16 +280,55 @@ export class SessionManager {
   }
 
   /**
-   * Save the session to disk.
+   * Save the session to disk asynchronously.
+   *
+   * Writes are fire-and-forget but tracked in `pendingWrites`.
+   * On SIGINT/SIGTERM, `flushAndExit()` drains all pending writes
+   * before the process exits.
    */
   saveSession(session: Session): void {
-    const dir = join(SESSIONS_DIR, session.id);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
+    this.registerExitHandler();
 
+    const dir = join(SESSIONS_DIR, session.id);
     const path = join(dir, 'session.json');
-    writeFileSync(path, JSON.stringify(session, null, 2), 'utf-8');
+
+    const writePromise = mkdir(dir, { recursive: true })
+      .then(() => writeFile(path, JSON.stringify(session, null, 2), 'utf-8'))
+      .catch(() => {})
+      .finally(() => {
+        this.pendingWrites.delete(writePromise);
+      });
+
+    this.pendingWrites.add(writePromise);
+  }
+
+  /**
+   * Flush all pending writes and exit the process.
+   *
+   * Called from SIGINT/SIGTERM handlers. After awaiting all writes,
+   * calls process.exit() to terminate cleanly.
+   */
+  async flushAndExit(code = 0): Promise<void> {
+    if (this.pendingWrites.size > 0) {
+      await Promise.all(Array.from(this.pendingWrites));
+    }
+    process.exit(code);
+  }
+
+  /**
+   * Register SIGINT/SIGTERM handlers to flush writes before exit.
+   * Idempotent — subsequent calls are no-ops.
+   */
+  private registerExitHandler(): void {
+    if (this.exitHandlerRegistered) return;
+    this.exitHandlerRegistered = true;
+
+    const handler = () => {
+      this.flushAndExit(0);
+    };
+
+    process.once('SIGINT', handler);
+    process.once('SIGTERM', handler);
   }
 
   /**
