@@ -170,8 +170,8 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
       <Text dimColor>ctx </Text>
       <ContextBar used={ctxTokens} max={contextMax} />
       <Text dimColor> {formatTokens(ctxTokens)}/{formatTokens(contextMax)}</Text>
-      {compactDistance !== null && (
-        <Text dimColor color={compactDistance <= 10 ? 'yellow' : undefined}>
+      {compactDistance !== null && compactDistance <= 10 && (
+        <Text dimColor color="yellow">
           {' '}({compactDistance}% until compact)
         </Text>
       )}
