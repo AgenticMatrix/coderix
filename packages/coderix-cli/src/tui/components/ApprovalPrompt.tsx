@@ -58,6 +58,7 @@ export function ApprovalPrompt({ req, onChoice }: ApprovalPromptProps) {
   const rawLines = req.command.split('\n');
   const shown = rawLines.slice(0, CMD_PREVIEW_LINES);
   const overflow = rawLines.length - shown.length;
+  const hasCommandDetail = req.command.trim() !== req.toolName;
 
   return (
     <Box
@@ -70,18 +71,20 @@ export function ApprovalPrompt({ req, onChoice }: ApprovalPromptProps) {
         Approval required — {req.description}
       </Text>
 
-      <Box flexDirection="column" paddingLeft={1}>
-        {shown.map((line, i) => (
-          <Text key={i} wrap="truncate-end">
-            {line || ' '}
-          </Text>
-        ))}
-        {overflow > 0 ? (
-          <Text dimColor>
-            ... +{overflow} more line{overflow === 1 ? '' : 's'}
-          </Text>
-        ) : null}
-      </Box>
+      {hasCommandDetail ? (
+        <Box flexDirection="column" paddingLeft={1}>
+          {shown.map((line, i) => (
+            <Text key={i} wrap="truncate-end">
+              {line || ' '}
+            </Text>
+          ))}
+          {overflow > 0 ? (
+            <Text dimColor>
+              ... +{overflow} more line{overflow === 1 ? '' : 's'}
+            </Text>
+          ) : null}
+        </Box>
+      ) : null}
 
       <Text>{' '}</Text>
 
