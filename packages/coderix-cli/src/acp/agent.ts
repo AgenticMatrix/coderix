@@ -65,6 +65,8 @@ function buildAcpToolRegistry(): ToolRegistry {
             signal: ctx.signal,
             agentSpawn: (ctx as any).agentSpawn,
             setPermissionMode: (ctx as any).setPermissionMode,
+            getPermissionMode: (ctx as any).getPermissionMode,
+            planModeState: (ctx as any).planModeState,
             sessionId: (ctx as any).sessionId,
           } as any);
           return result as any;

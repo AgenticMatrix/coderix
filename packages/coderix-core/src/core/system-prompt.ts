@@ -337,10 +337,9 @@ export class SystemPromptAssembler {
           content: [
             '# Permission Mode: Plan',
             '',
-            'You are in plan mode. You can explore the codebase and design solutions,',
-            'but you CANNOT modify files or run commands that change system state.',
-            'Use the plan agent for architectural design.',
-            'When ready to implement, ask the user to switch to a different permission mode.',
+            'Plan mode is active — you are in a read-only exploration and design phase.',
+            'See the plan mode workflow instructions for the full planning protocol.',
+            'Only the plan file may be edited; all other mutations are blocked.',
           ].join('\n'),
           priority: 40,
         };

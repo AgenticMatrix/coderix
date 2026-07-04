@@ -23,6 +23,7 @@ import type {
   DeferredPermission,
 } from './types.js';
 import { AgentError, RiskLevel, PermissionMode } from './types.js';
+import type { PlanModeState } from './types.js';
 import type { ToolContext } from './types.js';
 import { ToolRegistry } from './tool-registry.js';
 import { PermissionEngine } from './permission.js';
@@ -54,8 +55,8 @@ import { classifyError } from './error-recovery.js';
 import { loadCodeAgentContext } from './context-loader.js';
 import { loadMemoryPrompt } from '../memory/prompt-builder.js';
 import { loadMemoryConfig } from '../memory/config.js';
-
-// ---------------------------------------------------------------------------
+import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
+import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
 // Types
 // ---------------------------------------------------------------------------
 
@@ -92,6 +93,10 @@ export interface QueryConfig {
   getCoreState?: () => CoreState;
   /** Emit a tool request to the frontend (background tasks, agents). */
   emitToolRequest?: (req: ToolRequestEvent) => void;
+  /** Track recently read files for post-compact restoration. */
+  readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
+  /** Clear transient caches after compaction. */
+  clearCaches?: () => void;
 }
 
 export interface CallModelParams {
@@ -189,15 +194,18 @@ interface ExecuteSingleToolOpts {
   systemPromptAssembler?: SystemPromptAssembler;
   agentRegistry?: AgentRegistry;
   setPermissionMode?: (mode: string) => void;
+  getPermissionMode?: () => PermissionMode;
+  planModeState?: PlanModeState | null;
   getCoreState?: () => CoreState;
   emitToolRequest?: (req: ToolRequestEvent) => void;
+  readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
 }
 
 async function executeSingleTool(
   toolBlock: ToolUseBlock,
   opts: ExecuteSingleToolOpts,
 ): Promise<ToolResultBlock> {
-  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, setPermissionMode, getCoreState, emitToolRequest } = opts;
+  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, setPermissionMode, getPermissionMode, planModeState, getCoreState, emitToolRequest, readFileTracker } = opts;
   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
 
   // PreToolUse hook
@@ -224,8 +232,11 @@ async function executeSingleTool(
     cwd,
     signal: abortController.signal,
     setPermissionMode,
+    getPermissionMode,
+    planModeState: planModeState ?? undefined,
     getCoreState,
     emitToolRequest,
+    readFileTracker,
     agentSpawn: subAgentRegistry && systemPromptAssembler && agentRegistry ? {
       callModel,
       toolRegistry,
@@ -322,12 +333,19 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     agentRole,
     getCoreState,
     emitToolRequest,
+    readFileTracker,
+    clearCaches,
   } = config;
 
   let messages = [...config.messages];
   let systemPrompt = config.systemPrompt;
   let turnCount = 0;
   let totalCost = 0;
+
+  // ── Plan mode state (lives across turns while in plan mode) ──
+  // Wrapped in an object so TypeScript doesn't narrow the let binding
+  // to `never` when only reassigned inside callbacks.
+  const pm = { current: null as PlanModeState | null };
 
   // Circuit breaker: stop auto-compact after N consecutive failures.
   // Resets on success. Manual /compact always bypasses.
@@ -347,7 +365,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         messages,
         tokenCountWithEstimation(messages),
         contextBudget,
-        { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode() },
+        { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode(), planModeState: pm.current },
         abortController.signal,
         { count: 0 },
       );
@@ -424,14 +442,60 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       systemPromptAssembler: config.systemPromptAssembler,
       agentRegistry: config.agentRegistry,
       setPermissionMode: (mode: string) => {
-        permissionEngine.setMode(mode as PermissionMode);
+        const previousMode = permissionEngine.getMode();
+        const newMode = mode as PermissionMode;
+
+        if (newMode === PermissionMode.PLAN && previousMode !== PermissionMode.PLAN) {
+          // Entering plan mode — save pre-plan state
+          const slug = generatePlanSlug();
+          const planFilePath = getPlanFilePath(slug);
+          pm.current = {
+            prePlanMode: previousMode,
+            planFilePath,
+            planFileSlug: slug,
+            turnCount: 0,
+            hasExitedPlanMode: false,
+            needsExitAttachment: false,
+          };
+        } else if (newMode !== PermissionMode.PLAN && previousMode === PermissionMode.PLAN) {
+          // Exiting plan mode — mark for exit attachment
+          if (pm.current) {
+            pm.current.hasExitedPlanMode = true;
+            pm.current.needsExitAttachment = true;
+          }
+        }
+
+        permissionEngine.setMode(newMode);
       },
+      getPermissionMode: () => permissionEngine.getMode(),
+      planModeState: pm.current,
       getCoreState: config.getCoreState,
       emitToolRequest: config.emitToolRequest,
+      readFileTracker: config.readFileTracker,
     };
 
     try {
       let systemText = systemPrompt.prompt;
+
+      // ── Plan mode attachment injection ──────────────────────────
+      const planAttachment = getPlanModeAttachmentContent(pm.current);
+      if (planAttachment) {
+        systemText = planAttachment + '\n\n' + systemText;
+      }
+
+      // ── Plan mode exit notification (one-shot) ──────────────────
+      if (
+        pm.current?.needsExitAttachment &&
+        permissionEngine.getMode() !== PermissionMode.PLAN
+      ) {
+        const planRef = pm.current.planFilePath
+          ? ` The plan file is located at ${pm.current.planFilePath} if you need to reference it.`
+          : '';
+        systemText =
+          `<system-reminder>\n## Exited Plan Mode\n\nYou have exited plan mode. You can now make edits, run tools, and take actions.${planRef}\n</system-reminder>\n\n` +
+          systemText;
+        pm.current.needsExitAttachment = false;
+      }
 
       // === PreMessage hook (blockable) ===
       if (hookManager) {
@@ -525,7 +589,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
             // ── exit-plan-mode: block for user approval ──
             if (toolBlock.name === 'ExitPlanMode') {
-              const planText = (toolBlock.input as any)?.plan as string ?? '';
+              const { getPlan } = await import('./plan-files.js');
+              let planText = (toolBlock.input as any)?.plan as string ?? '';
+              // Fall back to reading plan from disk
+              if (!planText && pm.current?.planFilePath) {
+                planText = getPlan(pm.current.planFilePath) ?? '';
+              }
               const description = planText
                 ? `Approve plan to exit plan mode and begin implementation?\n\n${planText.slice(0, 500)}${planText.length > 500 ? '...' : ''}`
                 : 'Exit plan mode and begin implementation?';
@@ -738,7 +807,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
                 // ── exit-plan-mode: block for user approval ──
                 if (toolBlock.name === 'ExitPlanMode') {
-                  const planText2 = (toolBlock.input as any)?.plan as string ?? '';
+                  const { getPlan: getPlan2 } = await import('./plan-files.js');
+                  let planText2 = (toolBlock.input as any)?.plan as string ?? '';
+                  if (!planText2 && pm.current?.planFilePath) {
+                    planText2 = getPlan2(pm.current.planFilePath) ?? '';
+                  }
                   const desc2 = planText2
                     ? `Approve plan? ${planText2.slice(0, 300)}${planText2.length > 300 ? '...' : ''}`
                     : 'Exit plan mode and begin implementation?';
@@ -905,7 +978,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           messages,
           tokenCountWithEstimation(messages),
           contextBudget,
-          { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode() },
+          { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode: permissionEngine.getMode(), planModeState: pm.current },
           abortController.signal,
           compactFailures,
         );
@@ -1082,6 +1155,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
     turnCount++;
 
+    // ── Increment plan mode turn counter ───────────────────────
+    if (pm.current && permissionEngine.getMode() === PermissionMode.PLAN) {
+      incrementPlanModeTurn(pm.current);
+    }
+
     // If this is the coordinator and background sub-agents are still
     // running, end turn to prevent polling with TaskGet.
     // Exception: if a notification was just drained (e.g. after Sleep woke
@@ -1107,6 +1185,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           callModel,
           systemPrompt,
           permissionMode: permissionEngine.getMode(),
+          readFileTracker,
+          clearCaches,
         },
         abortController.signal,
         compactFailures,
@@ -1133,11 +1213,14 @@ async function* runCompaction(
     callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
     systemPrompt: SystemPrompt;
     permissionMode: PermissionMode;
+    planModeState: PlanModeState | null;
+    readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
+    clearCaches?: () => void;
   },
   signal: AbortSignal,
   compactFailures: { count: number },
 ): AsyncGenerator<QueryMessage, Message[]> {
-  const { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode } = ctx;
+  const { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode, planModeState: pmState, readFileTracker, clearCaches } = ctx;
   const MAX_AUTOCOMPACT_FAILURES = 3;
 
   // ── PreCompact hook ──────────────────────────────────────────────
@@ -1211,6 +1294,7 @@ async function* runCompaction(
         },
       ).catch(() => {});
 
+      clearCaches?.();
       // Early return — messages already updated
       return messages;
     }
@@ -1251,6 +1335,7 @@ async function* runCompaction(
         { beforeTokens: currentTokens, afterTokens },
       ).catch(() => {});
       compactFailures.count = 0;
+      clearCaches?.();
       return messages;
     }
   }
@@ -1279,8 +1364,19 @@ async function* runCompaction(
           cwd,
           systemPrompt,
           permissionMode,
+          pmState,
         );
         messages.push(...restoreMessages);
+
+        // ── File restoration ────────────────────────────────────
+        // Re-inject recently read files so the model retains codebase awareness.
+        if (readFileTracker) {
+          const fileMessages = buildFileRestoreContext(readFileTracker);
+          messages.push(...fileMessages);
+        }
+
+        // ── Cache cleanup ────────────────────────────────────────
+        clearCaches?.();
 
         const afterTokens = tokenCountWithEstimation(messages);
         yield {
@@ -1360,6 +1456,7 @@ async function buildRestoreContext(
   cwd: string,
   _systemPrompt: SystemPrompt,
   permissionMode: PermissionMode,
+  planModeState: PlanModeState | null,
 ): Promise<Message[]> {
   const messages: Message[] = [];
 
@@ -1400,10 +1497,15 @@ async function buildRestoreContext(
 
   // ── 3. Plan mode reminder ────────────────────────────────────────
   if (permissionMode === 'plan') {
+    const planFileInfo = planModeState?.planFilePath
+      ? ` Plan file: ${planModeState.planFilePath}.`
+      : '';
     messages.push({
       role: 'system',
       content:
-        '[Reminder] You are still in plan mode. Explore and design — do not modify files or run commands that change state. Use ExitPlanMode when ready to implement.',
+        `<system-reminder>\n[Context restored after compaction] You are still in plan mode. ` +
+        `Read-only except the plan file. Follow the 5-phase workflow (Explore → Design → Review → Final Plan → ExitPlanMode).` +
+        `${planFileInfo} End turns with AskUserQuestion or ExitPlanMode.\n</system-reminder>`,
     });
   }
 

@@ -220,6 +220,22 @@ export enum PermissionMode {
   LOW = 'low',
 }
 
+/** State tracking for plan mode across turns. */
+export interface PlanModeState {
+  /** The mode before entering plan mode — restored on exit. */
+  prePlanMode: PermissionMode;
+  /** Absolute path to the current plan file. */
+  planFilePath: string;
+  /** Word-slug filename stem (e.g. "brave-tiger"). */
+  planFileSlug: string;
+  /** Turns executed while in plan mode (for attachment throttling). */
+  turnCount: number;
+  /** Whether plan mode has been exited at least once in this session. */
+  hasExitedPlanMode: boolean;
+  /** One-shot flag: inject exit attachment on the next turn. */
+  needsExitAttachment: boolean;
+}
+
 export enum RiskLevel {
   SAFE = 'safe',
   MUTATION = 'mutation',
@@ -353,10 +369,16 @@ export interface ToolContext {
   agentSpawn?: AgentSpawnContext;
   /** Switch permission mode (for enter/exit-plan-mode tools). */
   setPermissionMode?: (mode: string) => void;
+  /** Plan mode state — populated when plan mode is active. */
+  planModeState?: PlanModeState;
+  /** Get the current permission mode. */
+  getPermissionMode?: () => PermissionMode;
   /** Read CoreState snapshot (engine-level fields). */
   getCoreState?: () => import('../state/core-state.js').CoreState;
   /** Emit a tool request to the frontend (background tasks, agents). */
   emitToolRequest?: (req: import('../state/observable.js').ToolRequestEvent) => void;
+  /** Track recently read files for post-compact restoration. */
+  readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
 }
 
 export interface ToolDefinition {

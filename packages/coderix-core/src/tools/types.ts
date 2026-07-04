@@ -44,18 +44,24 @@ export interface ExecutorOptions {
   sessionId?: string;
   /** Switch permission mode (for enter/exit-plan-mode tools). */
   setPermissionMode?: (mode: string) => void;
+  /** Get the current permission mode. */
+  getPermissionMode?: () => import('../core/types.js').PermissionMode;
+  /** Plan mode state (available during plan mode). */
+  planModeState?: import('../core/types.js').PlanModeState;
   /** Override the generated agentId (used by swarm teammate spawn). */
   agentId?: string;
   /** Read CoreState snapshot (engine-level fields). */
   getCoreState?: () => import('../state/core-state.js').CoreState;
   /** Emit a tool request to the frontend (background tasks, agent registration). */
   emitToolRequest?: (req: import('../state/observable.js').ToolRequestEvent) => void;
+  /** Track recently read files for post-compact restoration. */
+  readFileTracker?: import('../core/read-file-tracker.js').ReadFileTracker;
 }
 
 /** Executor options with all core fields resolved (non-optional) but
  *  agentSpawn, sessionId, setPermissionMode kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest'>;
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,
