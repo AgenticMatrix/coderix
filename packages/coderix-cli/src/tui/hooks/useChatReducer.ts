@@ -145,6 +145,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         savedMainMessages: result.messages,
+        // Propagate isStreaming so that FINISH_ASSISTANT_RESPONSE / INTERRUPT
+        // dispatched while viewing a sub-agent still unlock the main input
+        isStreaming: result.isStreaming,
       };
     }
 

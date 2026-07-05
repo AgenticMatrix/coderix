@@ -242,9 +242,12 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     break;
 
                   case 'message_stop':
+                    // Always finish the assistant response to guarantee
+                    // isStreaming is reset even when message_start was
+                    // not received (malformed stream, provider edge case).
+                    routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId ?? 0 });
                     if (currentAssistantId) {
                       flushDeltas();
-                      routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId });
                       // Track final token usage
                       const stopMsg = ev.message as Record<string, unknown> | undefined;
                       const stopUsage = stopMsg?.usage as Record<string, number> | undefined;
@@ -468,6 +471,8 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
             // ── Done event ───────────────────────────────────────
             case 'done':
               flushDeltas();
+              // Safety net: ensure isStreaming is false after turn completes
+              routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: 0 });
               break;
           }
         }
