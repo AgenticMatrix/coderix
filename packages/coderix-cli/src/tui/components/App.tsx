@@ -127,11 +127,9 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
       const curStatus = agent.status;
 
       if (prevStatus === 'running' && curStatus !== 'running') {
-        // Agent just finished — null out raw transcript from registry
-        const registry = getSubAgentRegistry();
-        registry?.update(id, { transcript: undefined });
-
-        // Evict from TUI message cache (unless currently viewing it)
+        // Agent just finished — evict from TUI message cache
+        // (unless currently viewing it). Keep the raw transcript in
+        // the registry so the user can re-enter the panel later.
         if (subAgentViewIdRef.current !== id) {
           dispatch({ type: 'EVICT_AGENT_CACHE', agentId: id });
         }
@@ -216,6 +214,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     onExit: () => process.exit(0),
     blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker,
     teamPicker: state.teamPicker,
+    agentCount: Object.keys(agents).length,
     subAgentView: state.subAgentView,
     lastAgentViewId: state.lastAgentViewId,
     commandPickerIndex: state.commandPickerIndex,

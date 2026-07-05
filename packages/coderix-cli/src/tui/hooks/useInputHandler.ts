@@ -29,6 +29,8 @@ export interface InputHandlerDeps {
   blocked?: boolean;
   /** When true, the team picker overlay is shown. */
   teamPicker?: boolean;
+  /** Number of agents in the registry (Down arrow only shows picker when > 0). */
+  agentCount?: number;
   /** Optional slash command handler. Returns true if the command was handled. */
   onSlashCommand?: (input: string) => boolean;
   /** Input history lines (newest last). */
@@ -83,6 +85,7 @@ export function useInputHandler({
   subAgentView,
   lastAgentViewId,
   teamPicker,
+  agentCount = 0,
   commandPickerIndex,
   onSubAgentSend,
 }: InputHandlerDeps) {
@@ -325,6 +328,10 @@ export function useInputHandler({
 
       if (key.downArrow) {
         if (historyIndex === -1) {
+          // Show Team Picker only when there are agents to pick from
+          if (agentCount > 0) {
+            dispatch({ type: 'SHOW_TEAM_PICKER' });
+          }
           return;
         }
         if (historyIndex < history.length - 1) {
