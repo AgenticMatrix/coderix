@@ -155,10 +155,11 @@ export class PermissionEngine {
       return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'auto' } };
     }
 
-    // PLAN mode: approve safe tools and Write (Write is gated at executor level
-    // to only allow the plan file path).
+    // PLAN mode: approve safe tools, Write (gated at executor level to only
+    // allow the plans directory), and ExitPlanMode (user approval is handled
+    // by the dedicated dialog in query.ts).
     if (this.mode === PermissionMode.PLAN) {
-      if (permission.riskLevel === RiskLevel.SAFE || permission.toolName === 'write') {
+      if (permission.riskLevel === RiskLevel.SAFE || permission.toolName === 'write' || permission.toolName === 'ExitPlanMode') {
         return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'plan' } };
       }
       return {
