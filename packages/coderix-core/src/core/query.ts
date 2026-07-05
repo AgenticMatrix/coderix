@@ -743,9 +743,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
               // deny
               if (!permissionResult.allowed && permissionResult.behavior === 'deny') {
-                const reason = typeof permissionResult.reason === 'string'
-                  ? permissionResult.reason
-                  : permissionResult.reason?.mode ?? 'Denied';
+                const reason = permissionResult.prompt
+                  ?? (typeof permissionResult.reason === 'string'
+                    ? permissionResult.reason
+                    : permissionResult.reason?.mode)
+                  ?? 'Denied';
                 queue.storeError(toolBlock, reason);
                 hookManager?.onPermissionDenied(
                   sessionId, cwd, toolBlock.name, toolBlock.input, reason,
