@@ -616,45 +616,6 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               continue;
             }
 
-            // ── exit-plan-mode: block for user approval ──
-            // Skip the approval gate when in AUTO mode (user already
-            // selected "Allow this session" for a previous approval).
-            if (toolBlock.name === 'ExitPlanMode' && permissionEngine.getMode() !== PermissionMode.AUTO) {
-              const { getPlan } = await import('./plan-files.js');
-              let planText = (toolBlock.input as any)?.plan as string ?? '';
-              // Fall back to reading plan from disk
-              if (!planText && pm.current?.planFilePath) {
-                planText = getPlan(pm.current.planFilePath) ?? '';
-              }
-              const description = planText
-                ? `Approve plan to exit plan mode and begin implementation?\n\n${planText.slice(0, 500)}${planText.length > 500 ? '...' : ''}`
-                : 'Exit plan mode and begin implementation?';
-
-              let resolve!: (allowed: boolean) => void;
-              const promise = new Promise<boolean>((res) => { resolve = res; });
-              const deferred = {
-                toolName: toolBlock.name, command: 'ExitPlanMode',
-                description, toolUseId: toolBlock.id, resolve, promise,
-              };
-
-              yield {
-                type: 'system', subtype: 'permission_required',
-                deferred,
-              } as any;
-
-              const allowed = await new Promise<boolean>((res) => {
-                promise.then((v) => res(v));
-                abortController.signal.addEventListener('abort', () => res(false), { once: true });
-              });
-
-              if (!allowed) {
-                queue.storeError(toolBlock, 'User rejected the plan');
-                buildingBlock = null;
-                continue;
-              }
-              // Approved — fall through to normal execution
-            }
-
             // ── ask-user-question: block and wait for user input ──
             if (toolBlock.name === 'AskUserQuestion') {
               const qInput = toolBlock.input as Record<string, unknown>;
@@ -836,37 +797,6 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                   queue.storeError(toolBlock,
                     `Tool '${toolBlock.name}' is not available in coordinator mode. Use agent/team orchestration tools instead.`);
                   continue;
-                }
-
-                // ── exit-plan-mode: block for user approval ──
-                // Skip the approval gate when in AUTO mode (user already
-                // selected "Allow this session" for a previous approval).
-                if (toolBlock.name === 'ExitPlanMode' && permissionEngine.getMode() !== PermissionMode.AUTO) {
-                  const { getPlan: getPlan2 } = await import('./plan-files.js');
-                  let planText2 = (toolBlock.input as any)?.plan as string ?? '';
-                  if (!planText2 && pm.current?.planFilePath) {
-                    planText2 = getPlan2(pm.current.planFilePath) ?? '';
-                  }
-                  const desc2 = planText2
-                    ? `Approve plan? ${planText2.slice(0, 300)}${planText2.length > 300 ? '...' : ''}`
-                    : 'Exit plan mode and begin implementation?';
-
-                  let res2!: (allowed: boolean) => void;
-                  const prom2 = new Promise<boolean>((r) => { res2 = r; });
-                  const def2 = {
-                    toolName: toolBlock.name, command: 'ExitPlanMode',
-                    description: desc2, toolUseId: toolBlock.id,
-                    resolve: res2, promise: prom2,
-                  };
-
-                  yield { type: 'system', subtype: 'permission_required', deferred: def2 } as any;
-
-                  const ok2 = await new Promise<boolean>((r) => {
-                    prom2.then((v) => r(v));
-                    abortController.signal.addEventListener('abort', () => r(false), { once: true });
-                  });
-
-                  if (!ok2) { queue.storeError(toolBlock, 'User rejected the plan'); continue; }
                 }
 
                 // ── ask-user-question: block and wait for user input ──
