@@ -3,6 +3,7 @@ dist/
 .env
 .DS_Store
 *.log
+*.tsbuildinfo
 .claude
 packages/coderix-desktop/test-app/
 packages/coderix-desktop/test-e34.js
