@@ -13,9 +13,12 @@ export interface QuestionPromptProps {
 }
 
 export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
+  const firstQ = questions[0]!;
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(
+    firstQ.multiSelect ? [] : (firstQ.options?.length ? [firstQ.options[0].label] : []),
+  );
   const [cursorIndex, setCursorIndex] = useState(0);
   const [customText, setCustomText] = useState('');
 
@@ -29,7 +32,8 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       onAnswer(next);
     } else {
       setAnswers(next);
-      setSelected([]);
+      const nextQ = questions[qIndex + 1]!;
+      setSelected(nextQ.multiSelect ? [] : (nextQ.options?.length ? [nextQ.options[0]!.label] : []));
       setCustomText('');
       setCursorIndex(0);
       setQIndex(qIndex + 1);
