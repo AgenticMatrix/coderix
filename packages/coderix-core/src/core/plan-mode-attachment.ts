@@ -20,15 +20,11 @@ const FULL_INSTRUCTION_INTERVAL = 5;
 // ---------------------------------------------------------------------------
 
 function getFullInstructions(state: PlanModeState): string {
-  const planFileInfo = state.planFilePath
-    ? `Plan file: ${state.planFilePath}\nRead and update this file as you build your plan. This is the ONLY file you can edit.`
-    : 'No plan file yet — create one at the path specified in the plan file info.';
-
   return `<system-reminder>
-Plan mode is active. The user indicated that they do not want you to execute yet — you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
+Plan mode is active. The user indicated that they do not want you to execute yet — you MUST NOT make any edits, run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. The ONLY exception: you may write .md and .txt files (e.g. the plan file, research notes).
 
 ## Plan File
-${planFileInfo}
+${state.planFilePath ? `Plan file: ${state.planFilePath}\nWrite your final plan here when ready.` : 'No plan file yet — create one at the path specified in the plan file info.'}
 
 ## Plan Workflow
 
@@ -89,7 +85,7 @@ NOTE: At any point through this workflow you should feel free to ask the user qu
 
 function getSparseInstructions(state: PlanModeState): string {
   return `<system-reminder>
-Plan mode still active (see full instructions earlier in conversation). Read-only except plan file (${state.planFilePath}). Follow the 5-phase workflow. End turns with AskUserQuestion (for clarifications) or ExitPlanMode (for plan approval). Never ask about plan approval via text or AskUserQuestion.
+Plan mode still active (see full instructions earlier in conversation). Read-only except .md/.txt files. Follow the 5-phase workflow. End turns with AskUserQuestion (for clarifications) or ExitPlanMode (for plan approval). Never ask about plan approval via text or AskUserQuestion.
 </system-reminder>`;
 }
 
@@ -105,7 +101,7 @@ Plan mode still active (see full instructions earlier in conversation). Read-onl
  * @returns Attachment string to prepend to system prompt, or null
  */
 export function getPlanModeAttachmentContent(state: PlanModeState | null): string | null {
-  if (!state) return null;
+  if (!state || state.hasExitedPlanMode) return null;
 
   const isFirstTurn = state.turnCount === 0;
   const isIntervalTurn = state.turnCount > 0 && state.turnCount % FULL_INSTRUCTION_INTERVAL === 0;
