@@ -14,10 +14,8 @@
  */
 
 import type { WebviewOutboundMessage } from '../types/webviewProtocol';
-import { bridgeQueryToGateway, createBridgeState, resolveApproval } from '../bridge/index.js';
-import type { BridgeState } from '../bridge/index.js';
-import { gatewayToWebview } from '../gateway/gatewayToWebview';
-import type { GatewayEvent } from '../bridge/events.js';
+import { bridgeQueryToGateway, createBridgeState, resolveApproval, gatewayToWebview } from '../bridge/index.js';
+import type { BridgeState, GatewayEvent } from '../bridge/index.js';
 
 type MessageSender = (msg: WebviewOutboundMessage) => void;
 
@@ -28,6 +26,8 @@ export class EngineHost {
   private sessionId = '';
   private bridgeState: BridgeState;
   private model = '';
+  private sessionTitleSet = false;
+  private activeDeferred: any = null;
 
   constructor(send: MessageSender) {
     this.send = send;
@@ -200,9 +200,20 @@ export class EngineHost {
     this.bridgeState = createBridgeState(this.sessionId);
     this.bridgeState.model = this.model;
 
-    // Update session title from first message
-    const title = text.length > 50 ? text.slice(0, 50) + '...' : text;
-    this.send({ type: 'sessionSwitched', sessionId: this.sessionId, title });
+    // Set session title from first message only
+    if (!this.sessionTitleSet) {
+      const title = text.length > 50 ? text.slice(0, 50) + '...' : text;
+      this.send({ type: 'sessionSwitched', sessionId: this.sessionId, title });
+      this.sessionTitleSet = true;
+      // Persist title to session
+      if (this.sessionManager) {
+        const s = this.sessionManager.get(this.sessionId);
+        if (s) {
+          s.title = title;
+          this.sessionManager.saveSession(s);
+        }
+      }
+    }
 
     try {
       for await (const event of this.engine.submitMessage(text)) {
@@ -220,6 +231,74 @@ export class EngineHost {
             const data = event.data as any;
             if (data?.sessionId) {
               this.sessionId = data.sessionId;
+            }
+            // Forward usage collected during the turn
+            const usage = this.bridgeState.usage;
+            if (usage.inputTokens > 0 || usage.outputTokens > 0) {
+              this.send({
+                type: 'usageUpdate',
+                usage: {
+                  calls: 1,
+                  input: usage.inputTokens,
+                  output: usage.outputTokens,
+                  cache: usage.cacheCreationInputTokens + usage.cacheReadInputTokens,
+                  total: usage.inputTokens + usage.outputTokens + usage.cacheCreationInputTokens + usage.cacheReadInputTokens,
+                  cost_usd: usage.totalCost,
+                },
+                contextWindow: data?.contextWindow,
+                sessionId: this.sessionId,
+              });
+            }
+            break;
+          }
+          case 'cost': {
+            const data = event.data as any;
+            this.send({
+              type: 'usageUpdate',
+              usage: {
+                calls: this.bridgeState.usage.inputTokens > 0 ? 1 : 0,
+                input: this.bridgeState.usage.inputTokens,
+                output: this.bridgeState.usage.outputTokens,
+                cache: this.bridgeState.usage.cacheCreationInputTokens + this.bridgeState.usage.cacheReadInputTokens,
+                total: this.bridgeState.usage.totalCost > 0
+                  ? (this.bridgeState.usage.inputTokens + this.bridgeState.usage.outputTokens)
+                  : (data?.inputTokens ?? 0) + (data?.outputTokens ?? 0),
+                cost_usd: data?.totalCost ?? this.bridgeState.usage.totalCost,
+              },
+              contextWindow: data?.contextWindow,
+              sessionId: this.sessionId,
+            });
+            break;
+          }
+          case 'compact': {
+            const data = event.data as any;
+            this.send({
+              type: 'usageUpdate',
+              usage: {
+                calls: 0,
+                input: data?.metadata?.beforeTokens ?? this.bridgeState.usage.inputTokens,
+                output: this.bridgeState.usage.outputTokens,
+                cache: 0,
+                total: data?.metadata?.afterTokens ?? (this.bridgeState.usage.inputTokens + this.bridgeState.usage.outputTokens),
+              },
+              contextWindow: data?.metadata?.contextWindow,
+              sessionId: this.sessionId,
+            });
+            break;
+          }
+          case 'question_required': {
+            const deferred = (event as any).deferred as any;
+            if (deferred) {
+              this.send({
+                type: 'questionRequest',
+                requestId: deferred.toolUseId,
+                toolName: deferred.toolName,
+                questions: deferred.questions,
+              } as any);
+              // Wait for user response via resolveQuestion
+              this.activeDeferred = deferred;
+              await deferred.promise;
+              this.activeDeferred = null;
             }
             break;
           }
@@ -249,6 +328,7 @@ export class EngineHost {
 
   async createSession(_silent?: boolean): Promise<void> {
     await this.ensureEngine();
+    this.sessionTitleSet = false;
     const session = this.sessionManager?.create({
       cwd: this.engine?.config?.cwd ?? process.cwd(),
       model: this.model,
@@ -263,13 +343,18 @@ export class EngineHost {
 
   async resumeSession(id: string): Promise<void> {
     await this.ensureEngine();
+    this.sessionTitleSet = true; // resumed session already has a title
     try {
       const session = this.sessionManager?.resume(id);
       if (session) {
         this.sessionId = id;
         const messages = (session.messages ?? []).map((m: any) => ({
           role: m.role,
-          text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          text: typeof m.content === 'string'
+            ? m.content
+            : Array.isArray(m.content)
+              ? m.content.filter((b: any) => b.type === 'text').map((b: any) => b.text ?? '').join('')
+              : String(m.content ?? ''),
         }));
         this.send({ type: 'sessionHistory', messages, sessionId: id });
         this.send({ type: 'sessionSwitched', sessionId: id, title: session.title || 'Untitled' });
@@ -306,6 +391,21 @@ export class EngineHost {
         session_id: this.sessionId,
       } as GatewayEvent);
     }
+  }
+
+  resolveQuestion(_requestId: string, answers: Record<string, string>): void {
+    if (this.activeDeferred) {
+      this.activeDeferred.resolve(answers);
+      this.activeDeferred = null;
+    }
+  }
+
+  setPermissionMode(mode: 'plan' | 'ask' | 'auto'): void {
+    if (!this.engine) return;
+    const { PermissionMode } = require('@coderix/core');
+    const permMode = mode === 'auto' ? PermissionMode.AUTO : mode === 'plan' ? PermissionMode.PLAN : PermissionMode.ASK;
+    this.engine.setPermissionMode(permMode);
+    this.send({ type: 'configUpdate', config: { model: this.model, provider: '', permissionMode: mode } });
   }
 
   dispose(): void {

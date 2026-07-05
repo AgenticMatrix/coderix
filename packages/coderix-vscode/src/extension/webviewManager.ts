@@ -2,14 +2,12 @@
  * webviewManager.ts — Manages the VS Code WebviewPanel lifecycle
  *
  * Creates and manages the chat webview panel. Handles message routing
- * between the webview and the gateway client.
+ * between the webview and the engine/acp client.
  */
 
 import type { ExtensionContext, WebviewPanel } from 'vscode';
 import { window, ViewColumn, Uri, workspace } from 'vscode';
 import type { WebviewOutboundMessage, WebviewInboundMessage } from '../types/webviewProtocol';
-import type { VSCodeGatewayClient } from '../gateway/vsCodeGateway';
-import type { AcpClient } from '../acp/acpClient';
 import type { EngineHost } from '../engine/engineHost';
 
 type GatewayLike = {
@@ -19,16 +17,26 @@ type GatewayLike = {
   resumeSession(id: string): Promise<void>;
   listSessions(): void;
   handleApproval(requestId: string, allowed: boolean): void;
+  setPermissionMode(mode: 'plan' | 'ask' | 'auto'): void;
+  resolveQuestion(requestId: string, answers: Record<string, string>): void;
   dispose(): void;
 };
+
+export interface WebviewCallbacks {
+  onStatusChange?: (status: string, model?: string, isBusy?: boolean) => void;
+  onAgentNotification?: (message: string) => void;
+  onAgentProgress?: (agentId: string, goal: string, status: string) => void;
+}
 
 export class WebviewManager {
   private panel: WebviewPanel | null = null;
   private gateway: GatewayLike | null = null;
   private context: ExtensionContext;
+  private callbacks: WebviewCallbacks;
 
-  constructor(context: ExtensionContext) {
+  constructor(context: ExtensionContext, callbacks: WebviewCallbacks = {}) {
     this.context = context;
+    this.callbacks = callbacks;
   }
 
   show(): void {
@@ -89,19 +97,8 @@ export class WebviewManager {
 
   async getGateway(): Promise<GatewayLike> {
     if (!this.gateway) {
-      const config = workspace.getConfiguration('coder');
-      const acpMode = config.get<string>('acpMode') ?? 'engine';
-
-      if (acpMode === 'engine') {
-        const { EngineHost } = await import('../engine/engineHost');
-        this.gateway = new EngineHost((msg: WebviewOutboundMessage) => this.postMessage(msg));
-      } else if (acpMode === 'stdio') {
-        const { AcpClient } = await import('../acp/acpClient');
-        this.gateway = new AcpClient((msg: WebviewOutboundMessage) => this.postMessage(msg));
-      } else {
-        const { VSCodeGatewayClient } = await import('../gateway/vsCodeGateway');
-        this.gateway = new VSCodeGatewayClient((msg: WebviewOutboundMessage) => this.postMessage(msg));
-      }
+      const { EngineHost } = await import('../engine/engineHost');
+      this.gateway = new EngineHost((msg: WebviewOutboundMessage) => this.postMessage(msg));
     }
     return this.gateway;
   }
@@ -111,6 +108,21 @@ export class WebviewManager {
   }
 
   postMessage(msg: WebviewOutboundMessage): void {
+    // Trigger callbacks for native VS Code integration
+    if (msg.type === 'statusUpdate') {
+      this.callbacks.onStatusChange?.(
+        msg.message ?? msg.status,
+        undefined,
+        msg.status !== 'ready' && msg.status !== 'error'
+      );
+    } else if (msg.type === 'configUpdate') {
+      this.callbacks.onStatusChange?.('Ready', msg.config.model, false);
+    } else if (msg.type === 'subagentProgress') {
+      this.callbacks.onAgentProgress?.(msg.agentId, msg.goal, msg.status);
+      if (msg.status === 'completed') {
+        this.callbacks.onAgentNotification?.(`Agent "${msg.goal}" completed`);
+      }
+    }
     this.panel?.webview.postMessage(msg);
   }
 
@@ -158,6 +170,12 @@ export class WebviewManager {
           gw.listSessions();
           break;
         }
+        case 'setPermissionMode':
+          gw.setPermissionMode(msg.mode);
+          break;
+        case 'questionAnswer':
+          gw.resolveQuestion(msg.requestId, msg.answers);
+          break;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

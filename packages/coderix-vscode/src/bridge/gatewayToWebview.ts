@@ -5,7 +5,7 @@
  * message format. Each GatewayEvent maps to zero or more webview messages.
  */
 
-import type { GatewayEvent } from '../bridge/index';
+import type { GatewayEvent } from './events.js';
 import type { WebviewOutboundMessage, UsageInfo } from '../types/webviewProtocol';
 
 export function gatewayToWebview(
@@ -37,7 +37,7 @@ export function gatewayToWebview(
     }
 
     case 'thinking.delta':
-      return []; // VS Code webview doesn't show thinking details for now
+      return [{ type: 'thinkingDelta', text: ev.payload?.text ?? '', sessionId: sid }];
 
     case 'tool.start': {
       const sp = ev.payload;
@@ -60,6 +60,7 @@ export function gatewayToWebview(
           name: cp.name ?? 'unknown',
           durationMs: Math.round((cp.duration_s ?? 0) * 1000),
           error: cp.error,
+          resultText: cp.result_text,
         },
       ];
     }
@@ -128,28 +129,80 @@ export function gatewayToWebview(
         title: ev.title,
       }];
 
-    // Events we don't translate to webview yet
+    case 'reasoning.delta': {
+      return [{ type: 'thinkingDelta', text: ev.payload?.text ?? '', sessionId: sid }];
+    }
+    case 'reasoning.available': {
+      return [{ type: 'thinkingDelta', text: ev.payload?.text ?? 'Reasoning available', sessionId: sid }];
+    }
+
+    case 'question.request': {
+      const qp = ev.payload;
+      return [{
+        type: 'questionRequest' as const,
+        requestId: qp.request_id ?? '',
+        toolName: qp.tool_name ?? 'Question',
+        questions: qp.questions ?? [],
+      }];
+    }
+
+    case 'background.complete': {
+      const bgc = ev.payload;
+      return [{ type: 'subagentProgress', agentId: bgc.task_id ?? 'background', goal: 'Background task', status: 'completed', summary: bgc.text }];
+    }
+
+    case 'subagent.spawn_requested':
+    case 'subagent.start':
+    case 'subagent.progress': {
+      const sg = ev.payload;
+      return [{
+        type: 'subagentProgress',
+        agentId: sg.subagent_id ?? 'unknown',
+        goal: sg.goal ?? '',
+        status: ev.type === 'subagent.spawn_requested' ? 'running' : 'running',
+        taskIndex: sg.task_index ?? 0,
+        taskCount: sg.task_count ?? 0,
+        currentTool: sg.tool_name,
+        filesRead: sg.files_read,
+        filesWritten: sg.files_written,
+        durationSeconds: sg.duration_seconds,
+        tokensUsed: (sg.input_tokens ?? 0) + (sg.output_tokens ?? 0),
+        summary: sg.text ?? sg.summary,
+      }];
+    }
+
+    case 'subagent.complete': {
+      const sc = ev.payload;
+      return [{
+        type: 'subagentProgress',
+        agentId: sc.subagent_id ?? 'unknown',
+        goal: sc.goal ?? '',
+        status: sc.status === 'completed' ? 'completed' : sc.status === 'interrupted' ? 'interrupted' : 'error',
+        taskIndex: sc.task_index ?? 0,
+        taskCount: sc.task_count ?? 0,
+        filesRead: sc.files_read,
+        filesWritten: sc.files_written,
+        durationSeconds: sc.duration_seconds,
+        tokensUsed: (sc.input_tokens ?? 0) + (sc.output_tokens ?? 0),
+        summary: sc.summary ?? sc.text ?? '',
+      }];
+    }
+
+    // Events not yet translated to webview
     case 'gateway.ready':
     case 'gateway.stderr':
     case 'gateway.start_timeout':
     case 'gateway.protocol_error':
     case 'skin.changed':
-    case 'reasoning.delta':
-    case 'reasoning.available':
     case 'voice.status':
     case 'voice.transcript':
     case 'browser.progress':
     case 'clarify.request':
     case 'sudo.request':
     case 'secret.request':
-    case 'background.complete':
     case 'review.summary':
-    case 'subagent.spawn_requested':
-    case 'subagent.start':
     case 'subagent.thinking':
     case 'subagent.tool':
-    case 'subagent.progress':
-    case 'subagent.complete':
       return [];
   }
 }

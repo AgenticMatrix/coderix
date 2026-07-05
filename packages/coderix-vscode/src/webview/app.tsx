@@ -20,6 +20,7 @@ export interface ToolState {
   name: string;
   status: 'running' | 'completed' | 'error';
   error?: string;
+  resultText?: string;
 }
 
 export interface ApprovalState {
@@ -27,6 +28,20 @@ export interface ApprovalState {
   command: string;
   description: string;
   pending: boolean;
+}
+
+export interface SubagentState {
+  agentId: string;
+  goal: string;
+  status: 'running' | 'completed' | 'error' | 'interrupted';
+  taskIndex?: number;
+  taskCount?: number;
+  currentTool?: string;
+  filesRead?: string[];
+  filesWritten?: string[];
+  durationSeconds?: number;
+  tokensUsed?: number;
+  summary?: string;
 }
 
 let nextId = 1;
@@ -70,6 +85,14 @@ export function App(): h.JSX.Element {
   const [sessionTitle, setSessionTitle] = useState('');
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [thinkingText, setThinkingText] = useState('');
+  const thinkingRef = useRef('');
+  const [subagents, setSubagents] = useState<Map<string, SubagentState>>(new Map());
+  const [contextWindow, setContextWindow] = useState<number | undefined>();
+  const [question, setQuestion] = useState<{ requestId: string; toolName: string; questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string }> }> } | null>(null);
+  const [permissionMode, setPermissionMode] = useState<'plan' | 'ask' | 'auto'>('ask');
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected'>('connected');
+  const [reconnectMsg, setReconnectMsg] = useState('');
 
   // Notify extension that webview is ready
   useEffect(() => {
@@ -113,6 +136,8 @@ export function App(): h.JSX.Element {
           }
           streamingRef.current = '';
           setStreamingText('');
+          thinkingRef.current = '';
+          setThinkingText('');
           if (msg.usage) setUsage(msg.usage);
           break;
         }
@@ -128,7 +153,7 @@ export function App(): h.JSX.Element {
           setTools((prev) =>
             prev.map((t) =>
               t.toolId === msg.toolId
-                ? { ...t, status: msg.error ? 'error' : 'completed', error: msg.error }
+                ? { ...t, status: msg.error ? 'error' : 'completed', error: msg.error, resultText: msg.resultText }
                 : t,
             ),
           );
@@ -161,10 +186,15 @@ export function App(): h.JSX.Element {
             ...prev,
             { id: `err-${nextId++}`, role: 'system', text: `Error: ${msg.message}` },
           ]);
+          if (msg.message.includes('Engine init failed') || msg.message.includes('Gateway error')) {
+            setConnectionStatus('disconnected');
+            setReconnectMsg(msg.message);
+          }
           break;
 
         case 'configUpdate':
           if (msg.config.model) setModel(msg.config.model);
+          if (msg.config.permissionMode) setPermissionMode(msg.config.permissionMode);
           break;
 
         case 'themeChange':
@@ -189,6 +219,46 @@ export function App(): h.JSX.Element {
         case 'sessionList':
           setSessions(msg.sessions);
           break;
+
+        case 'thinkingDelta': {
+          const tUpdated = thinkingRef.current + msg.text;
+          thinkingRef.current = tUpdated;
+          setThinkingText(tUpdated);
+          break;
+        }
+
+        case 'subagentProgress':
+          setSubagents((prev) => {
+            const next = new Map(prev);
+            next.set(msg.agentId, {
+              agentId: msg.agentId,
+              goal: msg.goal,
+              status: msg.status,
+              taskIndex: msg.taskIndex,
+              taskCount: msg.taskCount,
+              currentTool: msg.currentTool,
+              filesRead: msg.filesRead,
+              filesWritten: msg.filesWritten,
+              durationSeconds: msg.durationSeconds,
+              tokensUsed: msg.tokensUsed,
+              summary: msg.summary,
+            });
+            return next;
+          });
+          break;
+
+        case 'usageUpdate':
+          if (msg.usage) setUsage(msg.usage);
+          if (msg.contextWindow) setContextWindow(msg.contextWindow);
+          break;
+
+        case 'questionRequest':
+          setQuestion({
+            requestId: msg.requestId,
+            toolName: msg.toolName,
+            questions: msg.questions,
+          });
+          break;
       }
     };
 
@@ -205,8 +275,12 @@ export function App(): h.JSX.Element {
       ]);
       streamingRef.current = '';
       setStreamingText('');
+      thinkingRef.current = '';
+      setThinkingText('');
       setTools([]);
+      setSubagents(new Map());
       setApproval(null);
+      setQuestion(null);
       vscode.postMessage({ type: 'submitPrompt', text } as WebviewInboundMessage);
     },
     [vscode],
@@ -230,6 +304,28 @@ export function App(): h.JSX.Element {
     [vscode],
   );
 
+  // Permission mode cycle
+  const handleModeToggle = useCallback(() => {
+    const modes: Array<'plan' | 'ask' | 'auto'> = ['plan', 'ask', 'auto'];
+    const next = modes[(modes.indexOf(permissionMode) + 1) % modes.length];
+    setPermissionMode(next);
+    vscode.postMessage({ type: 'setPermissionMode', mode: next } as WebviewInboundMessage);
+  }, [vscode, permissionMode]);
+
+  // Question answer
+  const handleQuestionAnswer = useCallback(
+    (answers: Record<string, string>) => {
+      if (!question) return;
+      vscode.postMessage({
+        type: 'questionAnswer',
+        requestId: question.requestId,
+        answers,
+      } as WebviewInboundMessage);
+      setQuestion(null);
+    },
+    [vscode, question],
+  );
+
   // Approval response
   const handleApproval = useCallback(
     (allowed: boolean) => {
@@ -246,10 +342,23 @@ export function App(): h.JSX.Element {
 
   return (
     <div class="coder-app">
+      {connectionStatus === 'disconnected' && (
+        <div class="connection-banner connection-banner--disconnected">
+          <span>{reconnectMsg || 'Connection lost'}</span>
+          <button
+            class="connection-retry-btn"
+            onClick={() => { setConnectionStatus('connected'); vscode.postMessage({ type: 'newSession' } as WebviewInboundMessage); }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <ChatList
         messages={messages}
         streamingText={streamingText}
+        thinkingText={thinkingText}
         tools={tools}
+        subagents={subagents}
         onFileClick={(path) => vscode.postMessage({ type: 'openFile', path } as WebviewInboundMessage)}
       />
       {approval?.pending && (
@@ -260,15 +369,43 @@ export function App(): h.JSX.Element {
           onDeny={() => handleApproval(false)}
         />
       )}
+      {question && (
+        <div class="approval-card">
+          <div class="approval-header">
+            <span class="approval-title">{question.toolName}</span>
+          </div>
+          <div class="approval-body">
+            {question.questions.map((q, qi) => (
+              <div key={qi} class="question-group">
+                <div class="question-text">{q.question}</div>
+                <div class="question-options">
+                  {q.options.map((opt, oi) => (
+                    <button
+                      key={oi}
+                      class="approval-approve"
+                      onClick={() => handleQuestionAnswer({ [q.header]: opt.label })}
+                    >
+                      {opt.label}: {opt.description}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <StatusBar
         status={statusText}
         model={model}
         usage={usage}
+        contextWindow={contextWindow}
         isBusy={isBusy}
         sessionId={sessionId}
         sessionTitle={sessionTitle}
+        permissionMode={permissionMode}
         onNewSession={() => vscode.postMessage({ type: 'newSession' } as WebviewInboundMessage)}
         onSessionClick={handleOpenPicker}
+        onPermissionModeToggle={handleModeToggle}
       />
       <SessionPicker
         sessions={sessions}

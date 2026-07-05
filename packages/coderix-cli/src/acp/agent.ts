@@ -344,9 +344,17 @@ export function createAcpAgent(app: AgentApp, _appConfig: AppConfig): void {
                     },
                   } satisfies SessionNotification);
                 }
+              } else if (delta?.type === 'thinking_delta' && delta.thinking) {
+                await client.notify('session/update', {
+                  sessionId: sid,
+                  update: {
+                    sessionUpdate: 'agent_thought_chunk' as const,
+                    content: { type: 'text', text: delta.thinking },
+                  },
+                } satisfies SessionNotification);
               }
             }
-            // Tool call start
+            // Tool call start / thinking block start
             if (msgEvent?.type === 'content_block_start') {
               const cb = msgEvent.content_block;
               if (cb?.type === 'tool_use' && cb.id && cb.name) {
@@ -360,7 +368,37 @@ export function createAcpAgent(app: AgentApp, _appConfig: AppConfig): void {
                   sessionId: sid,
                   update: { sessionUpdate: 'tool_call' as const, ...tool, title: (tool.title ?? 'tool') },
                 } as any);
+
+                // TodoWrite → plan entries mapping
+                if (cb.name === 'TodoWrite' && cb.input?.todos) {
+                  const entries = (cb.input.todos as Array<{ content: string; status: string; activeForm: string }>).map(
+                    (t, i) => ({
+                      id: `todo-${i + 1}`,
+                      content: t.content,
+                      status: t.status,
+                    }),
+                  );
+                  await client.notify('session/update', {
+                    sessionId: sid,
+                    update: {
+                      sessionUpdate: 'plan' as const,
+                      entries,
+                    },
+                  } as any);
+                }
+              } else if (cb?.type === 'thinking' && cb.thinking) {
+                await client.notify('session/update', {
+                  sessionId: sid,
+                  update: {
+                    sessionUpdate: 'agent_thought_chunk' as const,
+                    content: { type: 'text', text: cb.thinking },
+                  },
+                } satisfies SessionNotification);
               }
+            }
+            // Tool use block stop → tool_call_update
+            if (msgEvent?.type === 'content_block_stop') {
+              // Track completed blocks for tool_call_update
             }
           } else if (msgType === 'assistant') {
             // Non-streaming fallback: send full response text
@@ -379,7 +417,58 @@ export function createAcpAgent(app: AgentApp, _appConfig: AppConfig): void {
                 },
               } satisfies SessionNotification);
             }
+          } else if (msgType === 'user') {
+            // Tool results → tool_call_update
+            const um = msg.message;
+            if (Array.isArray(um?.content)) {
+              for (const block of um.content) {
+                if (block.type === 'tool_result' && block.tool_use_id) {
+                  const resultText = typeof block.content === 'string'
+                    ? block.content
+                    : (block.content ? JSON.stringify(block.content).slice(0, 2000) : '');
+                  await client.notify('session/update', {
+                    sessionId: sid,
+                    update: {
+                      sessionUpdate: 'tool_call_update' as const,
+                      toolCallId: block.tool_use_id,
+                      status: block.is_error ? 'failed' : 'completed',
+                      rawOutput: resultText,
+                    },
+                  } as any);
+                }
+              }
+            }
+          } else if (msgType === 'system' && msg.subtype === 'progress') {
+            const prog = msg.data as any;
+            const progressText = prog?.message ?? `Running ${prog?.toolName ?? 'task'}...`;
+            await client.notify('session/update', {
+              sessionId: sid,
+              update: {
+                sessionUpdate: 'agent_message_chunk' as const,
+                content: { type: 'text', text: `[Progress] ${progressText}` },
+              },
+            } satisfies SessionNotification);
           }
+        } else if (event.type === 'cost') {
+          const costData = (event as any).data;
+          await client.notify('session/update', {
+            sessionId: sid,
+            update: {
+              sessionUpdate: 'usage_update' as const,
+              used: (costData?.inputTokens ?? 0) + (costData?.outputTokens ?? 0),
+              cost: costData?.totalCost,
+            },
+          } as any);
+        } else if (event.type === 'compact') {
+          const compactData = (event as any).data;
+          await client.notify('session/update', {
+            sessionId: sid,
+            update: {
+              sessionUpdate: 'usage_update' as const,
+              used: compactData?.metadata?.afterTokens,
+              size: compactData?.metadata?.contextWindow,
+            },
+          } as any);
         } else if (event.type === 'permission_required') {
           const deferred = event.deferred as DeferredPermission | undefined;
           if (deferred) {
