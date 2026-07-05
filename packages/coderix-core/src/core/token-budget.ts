@@ -232,11 +232,17 @@ export function needsCompaction(
 // ---------------------------------------------------------------------------
 
 /**
- * Extract the input_tokens from the last API response in a message array.
+ * Extract the total context token count from the last API response.
  *
- * The API's usage.input_tokens is the authoritative token count for the
- * request that produced the last assistant message. This is far more
- * accurate than character-based estimation.
+ * Returns the sum of input_tokens + cache_read + cache_creation + output_tokens.
+ * This represents the full context size after the last API call completed:
+ *   - input_tokens: tokens sent to the model (uncached portion)
+ *   - cache_read_input_tokens: tokens served from the prompt cache
+ *   - cache_creation_input_tokens: tokens written to the cache
+ *   - output_tokens: tokens the model generated (now part of the conversation)
+ *
+ * With prompt caching (DeepSeek, Anthropic), input_tokens may be small
+ * while cache_read is large — the sum is the true context size.
  *
  * Returns undefined when no assistant message with usage data exists
  * (e.g., on the very first turn before any API call).
@@ -244,13 +250,17 @@ export function needsCompaction(
 export function tokenCountFromLastAPIResponse(
   messages: Message[],
 ): number | undefined {
-  // Walk backwards to find the last assistant message with usage data
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg?.role === 'assistant' && 'usage' in msg) {
       const usage = (msg as AssistantMessage).usage;
       if (usage?.input_tokens && usage.input_tokens > 0) {
-        return usage.input_tokens;
+        return (
+          usage.input_tokens +
+          (usage.cache_read_input_tokens ?? 0) +
+          (usage.cache_creation_input_tokens ?? 0) +
+          (usage.output_tokens ?? 0)
+        );
       }
     }
   }
@@ -258,14 +268,14 @@ export function tokenCountFromLastAPIResponse(
 }
 
 /**
- * Hybrid token counter: uses API-reported input_tokens when available,
+ * Hybrid token counter: uses API-reported token counts when available,
  * falls back to character-based estimation.
  *
- * The API value reflects the token count of the request that produced the
- * last assistant message — it does NOT include messages added since
- * (new assistant messages, tool results, injected context). For compaction
- * decisions this is safely conservative: we'll trigger compaction slightly
- * earlier than strictly necessary, which is better than missing the window.
+ * Uses the full context size from the last API response (input + cache + output).
+ * This is a snapshot from the start of the last API call plus the model's
+ * output — it does not include tool results or other messages added since.
+ * For compaction decisions this is safely conservative: we'll trigger
+ * compaction slightly earlier than strictly necessary.
  */
 export function tokenCountWithEstimation(messages: Message[]): number {
   const apiCount = tokenCountFromLastAPIResponse(messages);
