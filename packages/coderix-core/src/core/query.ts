@@ -617,7 +617,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             }
 
             // ── exit-plan-mode: block for user approval ──
-            if (toolBlock.name === 'ExitPlanMode') {
+            // Skip the approval gate when in AUTO mode (user already
+            // selected "Allow this session" for a previous approval).
+            if (toolBlock.name === 'ExitPlanMode' && permissionEngine.getMode() !== PermissionMode.AUTO) {
               const { getPlan } = await import('./plan-files.js');
               let planText = (toolBlock.input as any)?.plan as string ?? '';
               // Fall back to reading plan from disk
@@ -835,7 +837,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 }
 
                 // ── exit-plan-mode: block for user approval ──
-                if (toolBlock.name === 'ExitPlanMode') {
+                // Skip the approval gate when in AUTO mode (user already
+                // selected "Allow this session" for a previous approval).
+                if (toolBlock.name === 'ExitPlanMode' && permissionEngine.getMode() !== PermissionMode.AUTO) {
                   const { getPlan: getPlan2 } = await import('./plan-files.js');
                   let planText2 = (toolBlock.input as any)?.plan as string ?? '';
                   if (!planText2 && pm.current?.planFilePath) {
