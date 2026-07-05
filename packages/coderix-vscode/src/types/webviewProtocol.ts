@@ -21,23 +21,34 @@ export type WebviewOutboundMessage =
   // Streaming
   | { type: 'messageDelta'; text: string; sessionId: string }
   | { type: 'messageComplete'; text: string; usage?: UsageInfo; sessionId: string }
+  // Thinking / reasoning
+  | { type: 'thinkingDelta'; text: string; sessionId: string }
   // Session
   | { type: 'sessionHistory'; messages: TranscriptMessage[]; sessionId: string }
   | { type: 'sessionList'; sessions: SessionSummary[] }
   | { type: 'sessionSwitched'; sessionId: string; title: string }
   // Tools
   | { type: 'toolStart'; toolId: string; name: string; args?: string }
-  | { type: 'toolComplete'; toolId: string; name: string; durationMs: number; error?: string }
+  | { type: 'toolComplete'; toolId: string; name: string; durationMs: number; error?: string; resultText?: string }
   // Permissions
   | { type: 'approvalRequest'; requestId: string; command: string; description: string }
   // Status
   | { type: 'statusUpdate'; status: 'thinking' | 'generating' | 'running_tool' | 'ready' | 'error'; message?: string; sessionId: string }
   // Config
   | { type: 'configUpdate'; config: WebviewConfig }
+  // Token usage
+  | { type: 'usageUpdate'; usage: UsageInfo; contextWindow?: number; sessionId: string }
   // Error
   | { type: 'errorMessage'; message: string }
   // Theme
-  | { type: 'themeChange'; kind: 'dark' | 'light' };
+  | { type: 'themeChange'; kind: 'dark' | 'light' }
+  // Connection
+  | { type: 'connectionStatus'; status: 'connected' | 'connecting' | 'disconnected'; message?: string }
+  // Sub-agent
+  | { type: 'subagentProgress'; agentId: string; goal: string; status: 'running' | 'completed' | 'error' | 'interrupted'; taskIndex?: number; taskCount?: number; currentTool?: string; filesRead?: string[]; filesWritten?: string[]; durationSeconds?: number; tokensUsed?: number; summary?: string }
+  // Question
+  | { type: 'questionRequest'; requestId: string; toolName: string; questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string }> }> };
+
 
 export interface TranscriptMessage {
   role: 'assistant' | 'system' | 'tool' | 'user';
@@ -68,4 +79,5 @@ export type WebviewInboundMessage =
   | { type: 'setPermissionMode'; mode: 'plan' | 'ask' | 'auto' }
   | { type: 'listSessions' }
   | { type: 'openFile'; path: string }
-  | { type: 'webviewReady' };
+  | { type: 'webviewReady' }
+  | { type: 'questionAnswer'; requestId: string; answers: Record<string, string> };

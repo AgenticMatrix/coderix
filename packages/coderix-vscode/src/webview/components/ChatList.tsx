@@ -1,61 +1,85 @@
 /**
- * ChatList.tsx — Scrollable message list with tool execution cards
+ * ChatList.tsx — Scrollable message list with tool execution cards,
+ * thinking block, and subagent tree.
  */
 
 import { h } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import type { ChatMessage, ToolState } from '../app';
+import { ThinkingBlock } from './ThinkingBlock';
+import { SubagentTree } from './SubagentTree';
+import type { ChatMessage, ToolState, SubagentState } from '../app';
 
 interface ChatListProps {
   messages: ChatMessage[];
   streamingText: string;
+  thinkingText: string;
   tools: ToolState[];
+  subagents: Map<string, SubagentState>;
   onFileClick: (path: string) => void;
 }
 
-export function ChatList({ messages, streamingText, tools, onFileClick }: ChatListProps): h.JSX.Element {
+function ToolCard({ tool }: { tool: ToolState }): h.JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const hasOutput = (tool.resultText && tool.resultText.length > 0);
+
+  return (
+    <div
+      class={`tool-card ${tool.status === 'running' ? 'tool-running' : tool.status === 'error' ? 'tool-error' : 'tool-completed'} ${hasOutput ? 'tool-has-output' : ''}`}
+    >
+      <button class="tool-card-header" onClick={() => hasOutput && setExpanded(!expanded)}>
+        <span class="tool-icon">
+          {tool.status === 'running' ? <span class="tool-spinner" /> : tool.status === 'error' ? '✗' : '✓'}
+        </span>
+        <span class="tool-name">{tool.name}</span>
+        {tool.status === 'error' && <span class="tool-error-text">— {tool.error}</span>}
+      </button>
+      {expanded && hasOutput && (
+        <div class="tool-card-output">
+          <pre>{tool.resultText}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatList({
+  messages, streamingText, thinkingText, tools, subagents, onFileClick,
+}: ChatListProps): h.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingText, tools]);
-
-  const activeTools = tools.filter((t) => t.status === 'running');
-  const completedTools = tools.filter((t) => t.status !== 'running');
+  }, [messages, streamingText, tools, thinkingText]);
 
   return (
     <div class="chat-list">
       {messages.map((msg) => (
-        <div key={msg.id} class={`message message-${msg.role}`}>
-          <span class="message-role">
-            {msg.role === 'user' ? 'You' : msg.role === 'system' ? 'System' : 'Coder'}
-          </span>
-          <div class="message-text"><MarkdownRenderer text={msg.text} onFileClick={onFileClick} /></div>
-        </div>
+        msg.role === 'user' ? (
+          <div key={msg.id} class="message message-user-box">
+            <div class="message-text"><MarkdownRenderer text={msg.text} onFileClick={onFileClick} /></div>
+          </div>
+        ) : (
+          <div key={msg.id} class={`message message-${msg.role}`}>
+            <span class="message-role">
+              {msg.role === 'system' ? 'System' : 'Coder'}
+            </span>
+            <div class="message-text"><MarkdownRenderer text={msg.text} onFileClick={onFileClick} /></div>
+          </div>
+        )
       ))}
 
-      {/* Active tool indicators */}
-      {activeTools.map((tool) => (
-        <div key={tool.toolId} class="tool-card tool-running">
-          <span class="tool-spinner" />
-          <span class="tool-name">Running {tool.name}...</span>
-        </div>
+      {/* Tool execution cards */}
+      {tools.map((tool) => (
+        <ToolCard key={tool.toolId} tool={tool} />
       ))}
 
-      {/* Completed tool indicators */}
-      {completedTools.map((tool) => (
-        <div
-          key={tool.toolId}
-          class={`tool-card ${tool.status === 'error' ? 'tool-error' : 'tool-completed'}`}
-        >
-          <span class="tool-icon">{tool.status === 'error' ? '✗' : '✓'}</span>
-          <span class="tool-name">
-            {tool.name} {tool.status === 'error' ? `— ${tool.error}` : ''}
-          </span>
-        </div>
-      ))}
+      {/* Thinking / reasoning block */}
+      {thinkingText && (
+        <ThinkingBlock content={thinkingText} isStreaming={!streamingText} />
+      )}
 
+      {/* Streaming response */}
       {streamingText && (
         <div class="message message-assistant streaming">
           <span class="message-role">Coder</span>
@@ -63,6 +87,9 @@ export function ChatList({ messages, streamingText, tools, onFileClick }: ChatLi
           <span class="cursor">|</span>
         </div>
       )}
+
+      {/* Sub-agent progress cards */}
+      <SubagentTree subagents={subagents} />
 
       <div ref={bottomRef} />
     </div>

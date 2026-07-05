@@ -9,3 +9,4 @@ export {
 } from './bridge-state.js';
 export { bridgeQueryToGateway } from './bridge-query.js';
 export { resolveApproval } from './bridge-permissions.js';
+export { gatewayToWebview } from './gatewayToWebview.js';

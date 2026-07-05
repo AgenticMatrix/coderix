@@ -23,6 +23,13 @@ export interface PendingApproval {
   deferred: DeferredPermission;
 }
 
+export interface PendingQuestion {
+  toolUseId: string;
+  toolName: string;
+  questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string }> }>;
+  deferred: any;
+}
+
 export interface BridgeState {
   sessionId: string;
   accumulatedText: string;
@@ -31,6 +38,7 @@ export interface BridgeState {
   usage: BridgeUsage;
   toolResults: Map<string, string>;
   pendingApprovals: PendingApproval[];
+  pendingQuestion: PendingQuestion | null;
   model: string;
   turnCount: number;
   currentTurnToolCount: number;
@@ -54,6 +62,7 @@ export function createBridgeState(sessionId: string): BridgeState {
     },
     toolResults: new Map(),
     pendingApprovals: [],
+    pendingQuestion: null,
     model: '',
     turnCount: 0,
     currentTurnToolCount: 0,
