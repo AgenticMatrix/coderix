@@ -59,7 +59,7 @@ export const coderixGuideAgent: BuiltInAgentDefinition = {
   baseDir: 'built-in',
   whenToUse:
     'Use this agent when the user asks questions ("Can Coderix...", "Does Coderix...", "How do I...") about: (1) Coderix (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) Sub-agents and teams - building custom agents, team orchestration; (3) LLM APIs - API usage, tool use, provider integrations. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed coderix-guide agent that you can continue via SendMessage.',
-  tools: ['bash', 'read', 'glob', 'grep', 'web-fetch', 'web-search'],
+  tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch'],
   model: 'haiku',
   permissionMode: 'dontAsk',
   maxTurns: 10,

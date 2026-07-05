@@ -18,8 +18,8 @@ const TOOL_LABEL: Record<string, string> = {
   glob: 'Glob',
   write: 'Write',
   edit: 'Edit',
-  'web-search': 'WebSearch',
-  'web-fetch': 'WebFetch',
+  'WebSearch': 'WebSearch',
+  'WebFetch': 'WebFetch',
   task: 'Task',
 };
 
@@ -30,8 +30,8 @@ const TOOL_KEY_PARAM: Record<string, string> = {
   glob: 'pattern',
   write: 'file_path',
   edit: 'file_path',
-  'web-search': 'query',
-  'web-fetch': 'url',
+  'WebSearch': 'query',
+  'WebFetch': 'url',
 };
 
 function formatToolCallDetail(tc: ToolCallSummary): string {

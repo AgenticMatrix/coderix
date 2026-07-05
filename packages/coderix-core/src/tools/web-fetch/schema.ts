@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'web-fetch',
+  name: 'WebFetch',
   description: 'Fetches content from a specified URL and processes it.',
   input_schema: {
     type: 'object',

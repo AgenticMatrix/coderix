@@ -223,7 +223,7 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                   (b) => b.type !== 'tool_result' || (
                     b.toolName !== 'read' && b.toolName !== 'bash' &&
                     b.toolName !== 'glob' && b.toolName !== 'grep' &&
-                    b.toolName !== 'web-search' && b.toolName !== 'web-fetch' &&
+                    b.toolName !== 'WebSearch' && b.toolName !== 'WebFetch' &&
                     b.toolName !== 'write' && b.toolName !== 'edit'
                   ),
                 );

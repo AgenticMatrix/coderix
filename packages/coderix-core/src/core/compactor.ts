@@ -102,8 +102,8 @@ const COMPACTABLE_TOOLS = new Set<string>([
   'bash',
   'grep',
   'glob',
-  'web-search',
-  'web-fetch',
+  'WebSearch',
+  'WebFetch',
   'edit',
   'write',
 ]);

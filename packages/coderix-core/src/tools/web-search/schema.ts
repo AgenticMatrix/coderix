@@ -1,7 +1,7 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'web-search',
+  name: 'WebSearch',
   description:
     'Search the web. Returns result blocks with titles, URLs, and snippets.',
   input_schema: {

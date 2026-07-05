@@ -73,8 +73,8 @@ useRendererByName.set('write', WriteRenderer);
 useRendererByName.set('edit', EditRenderer);
 useRendererByName.set('glob', GlobRenderer);
 useRendererByName.set('grep', GrepRenderer);
-useRendererByName.set('web-fetch', WebFetchRenderer);
-useRendererByName.set('web-search', WebSearchRenderer);
+useRendererByName.set('WebFetch', WebFetchRenderer);
+useRendererByName.set('WebSearch', WebSearchRenderer);
 useRendererByName.set('TodoWrite', TodoWriteRenderer);
 useRendererByName.set('TaskCreate', TaskCreateRenderer);
 useRendererByName.set('TaskUpdate', TaskUpdateRenderer);
@@ -100,8 +100,8 @@ resultRendererByName.set('TaskList', TaskListResultRenderer);
 resultRendererByName.set('TaskOutput', TaskOutputResultRenderer);
 resultRendererByName.set('TaskStop', TaskStopResultRenderer);
 resultRendererByName.set('TaskUpdate', TaskUpdateResultRenderer);
-resultRendererByName.set('web-fetch', WebFetchResultRenderer);
-resultRendererByName.set('web-search', WebSearchResultRenderer);
+resultRendererByName.set('WebFetch', WebFetchResultRenderer);
+resultRendererByName.set('WebSearch', WebSearchResultRenderer);
 resultRendererByName.set('write', WriteResultRenderer);
 
 // Generic fallback for known (executor-less) tool names

@@ -3,7 +3,7 @@ import { schema } from './schema.js';
 import { execute } from './executor.js';
 
 const webSearchPlugin: ToolPlugin = {
-  name: 'web-search',
+  name: 'WebSearch',
   schema,
   executor: execute,
   paramSummary: (input) => {

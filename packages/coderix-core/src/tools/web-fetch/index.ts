@@ -3,7 +3,7 @@ import { schema } from './schema.js';
 import { execute } from './executor.js';
 
 const webFetchPlugin: ToolPlugin = {
-  name: 'web-fetch',
+  name: 'WebFetch',
   schema,
   executor: execute,
   paramSummary: (input) => {
