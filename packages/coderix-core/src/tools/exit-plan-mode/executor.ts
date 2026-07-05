@@ -31,11 +31,15 @@ export const execute: ToolExecutor = async (input, options) => {
     };
   }
 
-  // Restore the pre-plan permission mode
+  // Restore the pre-plan permission mode and mark plan mode as exited
   const restoreMode = options.planModeState?.prePlanMode ?? 'auto';
 
   if (options.setPermissionMode) {
     options.setPermissionMode(restoreMode);
+  }
+
+  if (options.planModeState) {
+    options.planModeState.hasExitedPlanMode = true;
   }
 
   return {
