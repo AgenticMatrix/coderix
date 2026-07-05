@@ -325,7 +325,6 @@ export function useInputHandler({
 
       if (key.downArrow) {
         if (historyIndex === -1) {
-          dispatch({ type: 'SHOW_TEAM_PICKER' });
           return;
         }
         if (historyIndex < history.length - 1) {

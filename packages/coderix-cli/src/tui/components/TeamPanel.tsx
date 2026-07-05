@@ -197,12 +197,14 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
 
   // Keyboard navigation when focused
   useInput((_input, key) => {
-    if (!focused || dismissed || displayList.length === 0) return;
+    if (!focused || dismissed) return;
 
     if (key.escape) {
       onFocusRequest();
       return;
     }
+
+    if (displayList.length === 0) return;
 
     if (key.return) {
       const member = displayList[cursorIndex];
