@@ -78,6 +78,20 @@ body {
   border-left: 3px solid var(--coder-user-msg);
 }
 
+.message-user-box {
+  margin: 4px 0;
+  padding: 6px 10px;
+  background: var(--vscode-input-background, var(--coder-bg));
+  border: 1px solid var(--vscode-input-border, var(--coder-border));
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.message-user-box .message-text {
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+}
+
 .message-assistant {
   background: var(--coder-assistant-msg);
 }
@@ -247,6 +261,15 @@ body {
   white-space: nowrap;
 }
 
+.tool-error-text {
+  font-size: 11px;
+  color: var(--vscode-testing-iconFailed);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Approval card ─────────────────────────────────────────── */
 
 .approval-card {
@@ -281,6 +304,28 @@ body {
   background: var(--coder-input-bg);
   border-radius: 3px;
   word-break: break-all;
+}
+
+.question-group {
+  margin-bottom: 8px;
+}
+
+.question-text {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--vscode-editor-foreground);
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.question-options .approval-approve {
+  flex: 1;
+  min-width: 120px;
 }
 
 .approval-desc {
@@ -678,4 +723,337 @@ body {
   font-size: 10px;
   opacity: 0.35;
   border-top: 1px solid var(--coder-border);
+}
+
+/* ── ThinkingBlock ─────────────────────────────────────────────── */
+
+.thinking-block {
+  margin: 4px 0;
+}
+
+.thinking-block-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  background: var(--coder-bg);
+  border: 1px solid var(--coder-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  transition: background 0.15s;
+}
+
+.thinking-block-toggle:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.thinking-arrow {
+  font-size: 8px;
+  transition: transform 0.15s;
+}
+
+.thinking-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.thinking-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.thinking-label {
+  flex: 1;
+  text-align: left;
+  font-weight: 500;
+}
+
+.thinking-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--vscode-descriptionForeground);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.thinking-block-content {
+  margin-top: 2px;
+  padding: 6px 10px;
+  background: var(--coder-bg);
+  border-left: 2px solid var(--vscode-textLink-foreground);
+  border-radius: 0 4px 4px 0;
+}
+
+.thinking-block-content pre {
+  margin: 0;
+  font-size: 12px;
+  font-family: var(--vscode-editor-font-family);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.thinking-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: var(--vscode-descriptionForeground);
+  vertical-align: middle;
+  animation: blink 0.8s step-end infinite;
+}
+
+/* ── ToolCard expandable ────────────────────────────────────────── */
+
+.tool-card-has-output .tool-card-header {
+  cursor: pointer;
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+}
+
+.tool-card-output {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--coder-bg);
+  border: 1px solid var(--coder-border);
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tool-card-output pre {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--vscode-editor-foreground);
+  line-height: 1.4;
+}
+
+/* ── SubagentTree ────────────────────────────────────────────────── */
+
+.subagent-tree {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subagent-card {
+  border: 1px solid var(--coder-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.subagent-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--coder-bg);
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--vscode-editor-foreground);
+  transition: background 0.15s;
+}
+
+.subagent-card-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.subagent-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.subagent-status--running {
+  background: var(--vscode-textLink-foreground);
+  color: #fff;
+}
+
+.subagent-status--completed {
+  background: var(--vscode-testing-iconPassed);
+  color: #fff;
+}
+
+.subagent-status--error {
+  background: var(--vscode-testing-iconFailed);
+  color: #fff;
+}
+
+.subagent-status--interrupted {
+  background: var(--vscode-editorWarning-foreground);
+  color: #fff;
+}
+
+.subagent-goal {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.subagent-tool {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+.subagent-expand-arrow {
+  font-size: 8px;
+  color: var(--vscode-descriptionForeground);
+  transition: transform 0.15s;
+}
+
+.subagent-expand-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.subagent-progress-bar {
+  height: 3px;
+  background: var(--coder-border);
+}
+
+.subagent-progress-fill {
+  height: 100%;
+  background: var(--vscode-textLink-foreground);
+  transition: width 0.3s ease;
+}
+
+.subagent-card-details {
+  padding: 6px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.subagent-detail {
+  white-space: nowrap;
+}
+
+.subagent-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+
+.subagent-detail-label {
+  font-weight: 500;
+  margin-right: 2px;
+}
+
+.subagent-file {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--coder-bg);
+  border: 1px solid var(--coder-border);
+  border-radius: 2px;
+}
+
+.subagent-summary {
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--vscode-editor-foreground);
+  padding-top: 4px;
+  border-top: 1px solid var(--coder-border);
+}
+
+/* ── StatusBar usage bar ─────────────────────────────────────────── */
+
+.status-usage-bar {
+  display: inline-block;
+  width: 80px;
+  height: 4px;
+  background: var(--coder-border);
+  border-radius: 2px;
+  margin: 0 4px;
+  vertical-align: middle;
+}
+
+.status-usage-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+/* ── Connection banner ───────────────────────────────────────────── */
+
+.connection-banner {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.connection-banner--disconnected {
+  background: var(--vscode-inputValidation-warningBackground);
+  color: var(--vscode-inputValidation-warningForeground);
+  border-bottom: 1px solid var(--vscode-inputValidation-warningBorder);
+}
+
+.connection-banner--reconnecting {
+  background: var(--vscode-inputValidation-infoBackground);
+  color: var(--vscode-inputValidation-infoForeground);
+  border-bottom: 1px solid var(--vscode-inputValidation-infoBorder);
+}
+
+.connection-retry-btn {
+  margin-left: 12px;
+  padding: 2px 12px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.connection-retry-btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.status-mode-btn {
+  padding: 1px 6px;
+  background: none;
+  border: 1px solid var(--coder-border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.status-mode-btn:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

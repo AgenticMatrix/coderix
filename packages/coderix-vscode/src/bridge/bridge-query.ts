@@ -385,6 +385,22 @@ export function bridgeQueryToGateway(
         case 'permission_required':
           events.push(...handlePermissionRequired(msg.deferred, state, sid));
           break;
+
+        case 'question_required': {
+          const deferred = msg.deferred as any;
+          state.pendingQuestion = {
+            toolUseId: deferred.toolUseId,
+            toolName: deferred.toolName,
+            questions: deferred.questions,
+            deferred,
+          };
+          events.push(ev('question.request', {
+            request_id: deferred.toolUseId,
+            tool_name: deferred.toolName,
+            questions: deferred.questions,
+          }, sid));
+          break;
+        }
       }
       break;
   }

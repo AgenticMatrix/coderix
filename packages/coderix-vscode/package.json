@@ -29,6 +29,14 @@
         "title": "Coder: New Session"
       }
     ],
+    "views": {
+      "coder": [
+        {
+          "id": "coderAgentTree",
+          "name": "Coder Agents"
+        }
+      ]
+    },
     "configuration": {
       "title": "Coder Agent",
       "properties": {
@@ -62,11 +70,10 @@
           "type": "string",
           "enum": [
             "engine",
-            "gateway",
             "stdio"
           ],
           "default": "engine",
-          "description": "Engine mode: 'engine' (direct import), 'stdio' (subprocess), 'gateway' (legacy)"
+          "description": "Engine mode: 'engine' (direct import for best performance), 'stdio' (ACP subprocess for isolation)"
         },
         "coder.acpPort": {
           "type": "number",

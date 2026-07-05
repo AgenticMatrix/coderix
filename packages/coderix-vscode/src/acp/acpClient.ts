@@ -143,8 +143,18 @@ export class AcpClient {
   // -----------------------------------------------------------------------
 
   private handleMessage(msg: AcpMessage): void {
-    // JSON-RPC response (has id)
-    if ('id' in msg && msg.id !== undefined) {
+    const hasId = 'id' in msg && msg.id !== undefined;
+    const hasMethod = 'method' in msg && msg.method !== undefined;
+
+    if (hasId && hasMethod) {
+      // JSON-RPC request from server (e.g., session/request_permission)
+      const req = msg as unknown as { id: number; method: string; params: any };
+      this.handleRequest(req.id, req.method, req.params);
+      return;
+    }
+
+    if (hasId) {
+      // JSON-RPC response to our request
       const pending = this.pending.get(msg.id);
       if (pending) {
         this.pending.delete(msg.id);
@@ -155,10 +165,33 @@ export class AcpClient {
     }
 
     // JSON-RPC notification (has method, no id)
-    if ('method' in msg) {
+    if (hasMethod) {
       this.handleNotification(msg.method, msg.params);
     }
   }
+
+  private handleRequest(id: number, method: string, params: any): void {
+    switch (method) {
+      case 'session/request_permission': {
+        const perm = params as any;
+        this.send({
+          type: 'approvalRequest',
+          requestId: String(id),
+          command: perm?.toolCall?.name ?? 'tool',
+          description: perm?.toolCall?.input
+            ? JSON.stringify(perm.toolCall.input).slice(0, 200)
+            : 'Requesting permission',
+        });
+        // Store the id so handleApproval can send the response
+        this.pendingApprovalId = id;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  private pendingApprovalId: number | null = null;
 
   private handleNotification(method: string, params: any): void {
     const sid = params?.sessionId ?? this.activeSessionId;
@@ -189,7 +222,52 @@ export class AcpClient {
             args: update.rawInput ? JSON.stringify(update.rawInput) : undefined,
           });
           this.send({ type: 'statusUpdate', status: 'running_tool', message: `Running ${update.title ?? 'tool'}...`, sessionId: sid });
+        } else if (kind === 'tool_call_update') {
+          const status: 'completed' | 'error' = update.status === 'failed' ? 'error' : 'completed';
+          const resultText = update.rawOutput
+            ? (typeof update.rawOutput === 'string' ? update.rawOutput : JSON.stringify(update.rawOutput))
+            : undefined;
+          this.send({
+            type: 'toolComplete',
+            toolId: update.toolCallId,
+            name: update.title ?? 'tool',
+            durationMs: 0,
+            error: status === 'error' ? (resultText ?? 'Tool failed') : undefined,
+            resultText,
+          });
+        } else if (kind === 'agent_thought_chunk') {
+          const thoughtText = update.content?.text ?? '';
+          if (thoughtText) {
+            this.send({ type: 'thinkingDelta', text: thoughtText, sessionId: sid });
+          }
+        } else if (kind === 'plan' || kind === 'plan_update') {
+          // Forward plan entries as status update with structured text
+          if (update.entries) {
+            const entries = update.entries as Array<{ id: string; content: string; status: string }>;
+            const planText = entries
+              .map((e) => {
+                const icon = e.status === 'completed' ? '[x]' : e.status === 'in_progress' ? '[*]' : '[ ]';
+                return `${icon} ${e.content}`;
+              })
+              .join('\n');
+            this.send({ type: 'statusUpdate', status: 'ready', message: `Tasks:\n${planText}`, sessionId: sid });
+          }
         } else if (kind === 'usage_update') {
+          if (update.used || update.size) {
+            this.send({
+              type: 'usageUpdate',
+              usage: {
+                calls: 1,
+                input: 0,
+                output: 0,
+                cache: 0,
+                total: update.used ?? 0,
+                cost_usd: update.cost,
+              },
+              contextWindow: update.size,
+              sessionId: sid,
+            });
+          }
           this.send({
             type: 'configUpdate',
             config: {
@@ -199,17 +277,6 @@ export class AcpClient {
             },
           });
         }
-        break;
-      }
-
-      case 'session/request_permission': {
-        const toolCall = params?.toolCall;
-        this.send({
-          type: 'approvalRequest',
-          requestId: toolCall?.toolCallId ?? 'unknown',
-          command: toolCall?.title ?? 'tool',
-          description: toolCall?.rawInput ? JSON.stringify(toolCall.rawInput) : '',
-        });
         break;
       }
 
@@ -341,16 +408,21 @@ export class AcpClient {
     }).catch(() => {});
   }
 
-  handleApproval(requestId: string, allowed: boolean): void {
-    // ACP uses request_permission response; we need to respond to the agent
-    // For now, notify the permission outcome
-    this.rpc('session/request_permission', {
-      sessionId: this.activeSessionId,
-      outcome: {
-        outcome: allowed ? 'selected' : 'cancelled',
-        ...(allowed ? { optionId: 'allow_once' } : {}),
-      },
-    }).catch(() => {});
+  handleApproval(_requestId: string, allowed: boolean): void {
+    // Respond to the server's session/request_permission request
+    if (this.pendingApprovalId !== null && this.proc) {
+      const response = {
+        jsonrpc: '2.0',
+        id: this.pendingApprovalId,
+        result: { allowed },
+      };
+      this.proc.stdin?.write(JSON.stringify(response) + '\n');
+      this.pendingApprovalId = null;
+    }
+  }
+
+  setPermissionMode(mode: 'plan' | 'ask' | 'auto'): void {
+    this.rpc('session/set_mode', { mode }).catch(() => {});
   }
 
   dispose(): void {
