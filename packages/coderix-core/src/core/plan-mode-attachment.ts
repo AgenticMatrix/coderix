@@ -24,7 +24,7 @@ function getFullInstructions(state: PlanModeState): string {
 Plan mode is active. The user indicated that they do not want you to execute yet — you MUST NOT make any edits, run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. The ONLY exception: you may write .md and .txt files (e.g. the plan file, research notes).
 
 ## Plan File
-${state.planFilePath ? `Plan file: ${state.planFilePath}\nWrite your final plan here when ready.` : 'No plan file yet — create one at the path specified in the plan file info.'}
+${state.planFilePath ? `You MUST write your plan to this exact file path:\n  ${state.planFilePath}\nDo NOT use a different filename — ExitPlanMode will only read from this file.` : 'No plan file yet — create one at the path specified in the plan file info.'}
 
 ## Plan Workflow
 

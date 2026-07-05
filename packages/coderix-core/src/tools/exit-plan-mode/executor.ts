@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolExecutor } from '../types.js';
@@ -21,7 +21,31 @@ export const execute: ToolExecutor = async (input, options) => {
     filePath = join(plansDir, `plan-${timestamp}.md`);
   }
 
-  const plan = getPlan(filePath);
+  let plan = getPlan(filePath);
+
+  // Fallback: if the exact file doesn't exist or is empty, scan the plans
+  // directory for the most recently modified .md file (the AI may have
+  // written to a different filename).
+  if (!plan) {
+    const plansDir = join(homedir(), '.coderix', 'plans');
+    try {
+      const files = readdirSync(plansDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => ({ name: f, path: join(plansDir, f), mtime: statSync(join(plansDir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+
+      for (const f of files) {
+        const content = getPlan(f.path);
+        if (content) {
+          plan = content;
+          filePath = f.path;
+          break;
+        }
+      }
+    } catch {
+      // Fallback failed — will return error below
+    }
+  }
 
   if (!plan) {
     return {
