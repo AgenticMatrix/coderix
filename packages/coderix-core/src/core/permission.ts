@@ -155,9 +155,10 @@ export class PermissionEngine {
       return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'auto' } };
     }
 
-    // PLAN mode: approve safe, deny mutation/destructive
+    // PLAN mode: approve safe tools and Write (Write is gated at executor level
+    // to only allow the plan file path).
     if (this.mode === PermissionMode.PLAN) {
-      if (permission.riskLevel === RiskLevel.SAFE) {
+      if (permission.riskLevel === RiskLevel.SAFE || permission.toolName === 'write') {
         return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'plan' } };
       }
       return {

@@ -1,18 +1,26 @@
 import { writeFileSync, existsSync, readFileSync } from 'node:fs';
-import { resolve, relative } from 'node:path';
+import { resolve, relative, dirname } from 'node:path';
 import type { ToolExecutor } from '../types.js';
 import { computeDiff, formatDiff } from '../shared/diff.js';
 
 export const execute: ToolExecutor = async (input, opts) => {
-  if (!opts.allowMutation) {
-    return { content: 'Error: write tool is not available (mutation tools disabled)', isError: true };
-  }
-
   const filePath = input.file_path as string;
   const content = input.content as string;
 
   if (!filePath) return { content: 'Error: file_path is required', isError: true };
   if (content === undefined) return { content: 'Error: content is required', isError: true };
+
+  // In plan mode, only allow writing inside the plans directory
+  if (opts.planModeState) {
+    const resolvedTarget = resolve(opts.cwd, filePath);
+    const planDir = dirname(resolve(opts.cwd, opts.planModeState.planFilePath));
+    if (!resolvedTarget.startsWith(planDir + '/') && resolvedTarget !== planDir) {
+      return {
+        content: 'Plan mode: can only write to files in ~/.coderix/plans/. Use the plan file path shown in the system instructions.',
+        isError: true,
+      };
+    }
+  }
 
   try {
     const fullPath = resolve(opts.cwd, filePath);
