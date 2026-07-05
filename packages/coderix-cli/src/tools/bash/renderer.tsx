@@ -6,6 +6,8 @@ import type { ToolUseRendererProps } from '../types.js';
 
 const MAX_DISPLAY_CHARS = 60;
 const COLLAPSE_THRESHOLD = 3;
+const COLLAPSE_CHAR_THRESHOLD = 500;
+const PER_LINE_CHAR_LIMIT = 200;
 
 function extractCommentLabel(command: string): string | null {
   const lines = command.split('\n');
@@ -82,9 +84,18 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
   const stderrLines = stderr ? stderr.split('\n').filter(l => l !== '') : [];
   const emptiness = stdoutLines.length === 0 && stderrLines.length === 0;
 
-  const tooLong = !props.contentExpanded && stdoutLines.length > COLLAPSE_THRESHOLD;
-  const displayOutLines = tooLong ? stdoutLines.slice(0, COLLAPSE_THRESHOLD) : stdoutLines;
+  const totalChars = stdoutLines.reduce((sum, l) => sum + l.length, 0);
+  const tooLongByLines = !props.contentExpanded && stdoutLines.length > COLLAPSE_THRESHOLD;
+  const tooLongByChars = !props.contentExpanded && !tooLongByLines && totalChars > COLLAPSE_CHAR_THRESHOLD;
+
+  const displayOutLines = tooLongByLines
+    ? stdoutLines.slice(0, COLLAPSE_THRESHOLD)
+    : tooLongByChars
+      ? stdoutLines.map(l => l.length > PER_LINE_CHAR_LIMIT ? l.slice(0, PER_LINE_CHAR_LIMIT) + '…' : l)
+      : stdoutLines;
+
   const hiddenCount = stdoutLines.length - COLLAPSE_THRESHOLD;
+  const hiddenChars = tooLongByChars ? totalChars - COLLAPSE_CHAR_THRESHOLD : 0;
 
   const hasResult = isDone && result;
 
@@ -119,8 +130,10 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
               {displayOutLines.map((line, i) => (
                 <OutputLine key={`out-${i}`} line={line} />
               ))}
-              {tooLong ? (
+              {tooLongByLines ? (
                 <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+              ) : tooLongByChars ? (
+                <Text dimColor>... {hiddenChars} more chars (Ctrl+D to detail)</Text>
               ) : null}
               {stderrLines.length > 0 ? (
                 <Box flexDirection="column" marginTop={stdoutLines.length > 0 ? 1 : 0}>
