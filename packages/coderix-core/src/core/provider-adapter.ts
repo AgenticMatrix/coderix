@@ -175,6 +175,7 @@ export function createCallModelFromClient(
         messages: apiMessages,
         ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
         stream: true,
+        thinking: { type: 'enabled', budget_tokens: 16000 },
       });
 
       for await (const event of stream) {

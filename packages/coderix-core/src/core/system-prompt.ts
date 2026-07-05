@@ -212,9 +212,12 @@ export class SystemPromptAssembler {
     const content = [
       '# Communication style',
       '',
-      'Assume users cannot see your tool calls — only your text output.',
+      'Assume users cannot see your tool calls or thinking — only your text output.',
       'Before your first tool call, briefly state what you are about to do.',
       'While working, give short updates at key moments: when you find something important, change direction, or hit a blocker.',
+      '',
+      'Keep thinking concise and focused. Do not narrate your internal reasoning or',
+      'produce lengthy thought processes. Think in terms of actions, not exposition.',
       '',
       'After editing or creating a file, state what you did in one sentence.',
       'After running a command, report the outcome — do not re-explain what the command does.',
@@ -469,7 +472,6 @@ export class SystemPromptAssembler {
       '- Break complex tasks into smaller steps using the task tracking system.',
       '- Explore the codebase to understand existing patterns before making changes.',
       '- Verify your work: run tests, check types, execute the code.',
-      '- Think step by step. If an assumption proves wrong, adjust.',
     ].join('\n');
   }
 
