@@ -1,6 +1,6 @@
 /* ==========================================================================
    Composer.css — Bottom Input Area (Claude Desk Style)
-   Warm surface background, terracotta focus ring, clean send button
+   Warm surface background, terracotta focus ring, send button inside input
    ========================================================================== */
 
 /* Composer root — bottom bar pinned to viewport */
@@ -8,13 +8,23 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  padding: 8px 16px 12px;
-  border-top: 1px solid var(--color-separator);
-  background: var(--color-bg-secondary);
-  transition: border-color var(--duration-fast) var(--ease-default);
+  padding: 0 24px 16px;
+  background: transparent;
 }
 
-/* Attachments / context pills row (above input) */
+/* Model selector row — above the input */
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 8px;
+}
+
+.model-selector:empty {
+  display: none;
+}
+
+/* Attachments / context pills row */
 .attachments-row {
   display: flex;
   align-items: center;
@@ -67,25 +77,17 @@
   color: #FFFFFF;
 }
 
-/* Main input row */
-.composer-input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
-
-/* Input wrapper — rounded with focus ring */
+/* Input wrapper — Claude Desk style: single row with buttons inside */
 .composer-input-wrapper {
-  flex: 1;
   display: flex;
   align-items: flex-end;
+  gap: 8px;
   background: var(--color-bg-tertiary);
   border: 1px solid var(--color-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--space-2) var(--space-3);
+  border-radius: 12px;
+  padding: 8px 12px;
   transition: border-color var(--duration-fast) var(--ease-default),
               box-shadow var(--duration-fast) var(--ease-default);
-  min-height: 40px;
 }
 
 .composer-input-wrapper:focus-within {
@@ -100,121 +102,89 @@
   border: none;
   outline: none;
   color: var(--color-text-primary);
-  font-size: var(--text-body);
+  font-size: 15px;
   font-family: var(--font-sans);
-  line-height: var(--leading-normal);
+  line-height: 1.5;
   resize: none;
-  max-height: 120px;
+  max-height: 200px;
   overflow-y: auto;
-  padding: 0;
-  align-self: stretch;
+  padding: 4px 0;
 }
 
 .composer-input::placeholder {
   color: var(--color-text-tertiary);
 }
 
-/* Shortcut hint (⌘⏎) */
-.shortcut-hint {
+/* Input action buttons (inside wrapper) */
+.composer-input-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-0) var(--space-2);
-  margin-left: var(--space-2);
-  font-size: var(--text-caption1);
-  color: var(--color-text-tertiary);
-  border: 1px solid var(--color-separator);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-sans);
-  background: var(--color-bg-secondary);
-  white-space: nowrap;
+  gap: 4px;
   flex-shrink: 0;
 }
 
-/* Action buttons row (model picker, context, send) */
-.composer-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-shrink: 0;
-}
-
-/* Send button — circular, brand-colored */
-.send-btn {
+/* Generic input button */
+.composer-input-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-full);
-  background: var(--color-brand);
-  color: var(--color-text-inverse);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--color-text-tertiary);
+  background: transparent;
   border: none;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
-  flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 
-.send-btn:hover {
+.composer-input-btn:hover {
+  background: var(--color-bg-quaternary);
+  color: var(--color-text-secondary);
+}
+
+/* Send button — rounded square, brand-colored */
+.composer-input-btn.send {
+  background: var(--color-brand);
+  color: var(--color-text-inverse);
+}
+
+.composer-input-btn.send:hover {
   background: var(--color-brand-hover);
-  transform: scale(1.06);
-  box-shadow: 0 2px 8px var(--color-brand-muted);
 }
 
-.send-btn:active {
+.composer-input-btn.send:active {
   background: var(--color-brand-active);
   transform: scale(0.96);
 }
 
-.send-btn:disabled {
-  background: var(--color-bg-tertiary);
+.composer-input-btn.send:disabled {
+  background: var(--color-bg-quaternary);
   color: var(--color-text-tertiary);
   cursor: not-allowed;
   transform: none;
-  box-shadow: none;
 }
 
 /* Model picker button */
 .model-picker-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  gap: 4px;
+  padding: 4px 10px;
   height: 28px;
-  font-size: var(--text-caption1);
-  font-weight: var(--font-medium);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-separator);
-  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
+  transition: all 0.15s ease;
   white-space: nowrap;
 }
 
 .model-picker-btn:hover {
-  color: var(--color-text-primary);
-  border-color: var(--color-separator-strong);
-  background: var(--color-bg-quaternary);
-}
-
-/* Context / attachment button */
-.context-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--color-text-tertiary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
-}
-
-.context-btn:hover {
   color: var(--color-text-primary);
   background: var(--color-bg-tertiary);
 }

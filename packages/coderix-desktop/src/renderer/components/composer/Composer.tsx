@@ -80,23 +80,9 @@ export function Composer({
 
   return (
     <div className="composer">
-      <div className="composer-input-row">
-        <div className="composer-input-wrapper">
-          <textarea
-            ref={textareaRef}
-            className="composer-input"
-            placeholder={placeholder}
-            value={currentValue}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            disabled={disabled}
-            rows={1}
-            aria-label="Message input"
-          />
-          <span className="shortcut-hint">⌘⏎</span>
-        </div>
-
-        <div className="composer-actions">
+      {/* Model selector row — above the input, Claude Desk style */}
+      {onModelPick && (
+        <div className="model-selector">
           <button
             className="model-picker-btn"
             onClick={onModelPick}
@@ -106,9 +92,26 @@ export function Composer({
             <Cpu size={12} />
             <span>{model}</span>
           </button>
+        </div>
+      )}
 
+      {/* Input wrapper — textarea + send button inside, Claude Desk style */}
+      <div className="composer-input-wrapper">
+        <textarea
+          ref={textareaRef}
+          className="composer-input"
+          placeholder={placeholder}
+          value={currentValue}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          rows={1}
+          aria-label="Message input"
+        />
+
+        <div className="composer-input-actions">
           <button
-            className="send-btn"
+            className="composer-input-btn send"
             onClick={handleSend}
             disabled={!canSend}
             title="Send message (⌘⏎)"
