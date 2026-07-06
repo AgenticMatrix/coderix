@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ThinkingBlock } from './ThinkingBlock';
-import { ToolCallCard } from './ToolCallCard';
+import { ToolRenderer } from './ToolRenderer';
 import { CodeBlock } from './CodeBlock';
 import type { StreamBlock } from '../../types';
 
@@ -171,10 +171,10 @@ export function ContentBlockRenderer({
 
     case 'tool_use':
       return (
-        <ToolCallCard
+        <ToolRenderer
           toolName={block.toolName ?? 'Unknown'}
           toolInput={block.toolInput}
-          state={block.state ?? 'executing'}
+          state={block.state}
           toolId={block.toolId}
         />
       );
