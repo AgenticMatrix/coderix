@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import type { ToolExecutor, ToolResult } from '../../tools/types.js';
 import type { Message, ContentBlock, AgentSpawnContext, ToolContext } from '../../core/types.js';
 import type { SystemPrompt, SystemPromptAssembler } from '../../core/system-prompt.js';
@@ -28,6 +29,7 @@ import {
 import { writeAgentOutput } from './output-writer.js';
 import { spawnTeammate } from './spawn-teammate.js';
 import {
+  agentDir,
   writeAgentMetadata,
   readAgentMetadata,
   getAgentTranscript,
@@ -709,8 +711,10 @@ async function executeStandardSubagent(
     };
   }
 
+  const transcriptPath = join(agentDir(agentId), 'transcript.json');
+
   return {
-    content: `Sub-agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`,
+    content: `Sub-agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}\n\nFull transcript: ${transcriptPath}`,
     isError: false,
     duration: Date.now() - result.startTime,
     metadata: {
@@ -720,6 +724,7 @@ async function executeStandardSubagent(
       toolCount: result.toolCount,
       duration: Date.now() - result.startTime,
       worktreePath,
+      transcriptPath,
       toolCalls: extractToolCalls(result.transcript),
       tokenUsage: result.tokenUsage,
     },
@@ -963,8 +968,10 @@ async function executeFork(
     };
   }
 
+  const forkTranscriptPath = join(agentDir(agentId), 'transcript.json');
+
   return {
-    content: `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`,
+    content: `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}\n\nFull transcript: ${forkTranscriptPath}`,
     isError: false,
     duration: Date.now() - result.startTime,
     metadata: {
@@ -974,6 +981,7 @@ async function executeFork(
       toolCount: result.toolCount,
       duration: Date.now() - result.startTime,
       worktreePath,
+      transcriptPath: forkTranscriptPath,
       toolCalls: extractToolCalls(result.transcript),
       tokenUsage: result.tokenUsage,
     },
@@ -1163,8 +1171,10 @@ async function executeResume(
     };
   }
 
+  const resumeTranscriptPath = join(agentDir(agentId), 'transcript.json');
+
   return {
-    content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${result.assistantTurnCount} LLM turns, +${result.toolCount} tools.\n\n${compressed}`,
+    content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${result.assistantTurnCount} LLM turns, +${result.toolCount} tools.\n\n${compressed}\n\nFull transcript: ${resumeTranscriptPath}`,
     isError: false,
     duration: Date.now() - result.startTime,
     metadata: {
@@ -1172,6 +1182,7 @@ async function executeResume(
       turnCount: result.assistantTurnCount, toolCount: result.toolCount,
       totalTurns: agent.turnCount + result.assistantTurnCount,
       duration: Date.now() - result.startTime,
+      transcriptPath: resumeTranscriptPath,
       toolCalls: extractToolCalls(result.transcript),
       tokenUsage: result.tokenUsage,
     },

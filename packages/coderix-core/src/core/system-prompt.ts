@@ -431,6 +431,10 @@ export class SystemPromptAssembler {
         '- Launch independent agents in parallel for maximum efficiency.',
         '- Use TaskGet to check sub-agent progress, TaskStop to cancel them.',
         '- Explore agents are cheaper and faster — prefer them for pure search tasks.',
+        '- When a sub-agent completes, you receive a compressed summary. The full transcript',
+        '  is saved to ~/.coderix/agents/<agent-id>/transcript.json — use the Read tool to',
+        '  retrieve detailed results (tool outputs, file contents, full reasoning) if the',
+        '  summary lacks sufficient detail.',
       ].join('\n'),
       priority: 50,
     };
