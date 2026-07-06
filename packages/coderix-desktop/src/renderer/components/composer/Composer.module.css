@@ -119,6 +119,12 @@
   color: var(--color-text-tertiary);
 }
 
+/* Suppress global focus-visible outline — wrapper handles focus via border+shadow */
+.composer-input:focus,
+.composer-input:focus-visible {
+  outline: none;
+}
+
 /* Input action buttons (inside wrapper) */
 .composer-input-actions {
   display: flex;
