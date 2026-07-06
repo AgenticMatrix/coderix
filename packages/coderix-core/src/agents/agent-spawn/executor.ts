@@ -255,6 +255,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   transcript: Message[];
   startTime: number;
   error?: string;
+  tokenUsage?: { inputTokens: number; outputTokens: number; cacheCreationInputTokens: number; cacheReadInputTokens: number; totalCost: number };
 }> {
   const {
     agentId, agentType, prompt, agentSpawn,
@@ -358,15 +359,34 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
       messageCount++;
     }
 
+    const subSession = subSessionManager.getActive();
+    const subTokenUsage = subSession ? {
+      inputTokens: subSession.tokenUsage.inputTokens,
+      outputTokens: subSession.tokenUsage.outputTokens,
+      cacheCreationInputTokens: subSession.tokenUsage.cacheCreationInputTokens ?? 0,
+      cacheReadInputTokens: subSession.tokenUsage.cacheReadInputTokens ?? 0,
+      totalCost: subSession.totalCost,
+    } : undefined;
+
     return {
       agentId, agentType, assistantTurnCount, toolCount,
-      transcript, startTime,
+      transcript, startTime, tokenUsage: subTokenUsage,
     };
   } catch (err) {
+    const subSession = subSessionManager.getActive();
+    const subTokenUsage = subSession ? {
+      inputTokens: subSession.tokenUsage.inputTokens,
+      outputTokens: subSession.tokenUsage.outputTokens,
+      cacheCreationInputTokens: subSession.tokenUsage.cacheCreationInputTokens ?? 0,
+      cacheReadInputTokens: subSession.tokenUsage.cacheReadInputTokens ?? 0,
+      totalCost: subSession.totalCost,
+    } : undefined;
+
     return {
       agentId, agentType, assistantTurnCount, toolCount,
       transcript, startTime,
       error: err instanceof Error ? err.message : String(err),
+      tokenUsage: subTokenUsage,
     };
   }
 }
@@ -602,6 +622,7 @@ async function executeStandardSubagent(
           transcript: result.transcript,
           error: result.error,
           outputPath,
+          tokenUsage: result.tokenUsage,
         });
 
         // Persist to disk for cross-session resume
@@ -700,6 +721,7 @@ async function executeStandardSubagent(
       duration: Date.now() - result.startTime,
       worktreePath,
       toolCalls: extractToolCalls(result.transcript),
+      tokenUsage: result.tokenUsage,
     },
   };
 }
@@ -860,6 +882,7 @@ async function executeFork(
           transcript: result.transcript,
           error: result.error,
           outputPath,
+          tokenUsage: result.tokenUsage,
         });
 
         // Persist to disk for cross-session resume
@@ -952,6 +975,7 @@ async function executeFork(
       duration: Date.now() - result.startTime,
       worktreePath,
       toolCalls: extractToolCalls(result.transcript),
+      tokenUsage: result.tokenUsage,
     },
   };
 }
@@ -1149,6 +1173,7 @@ async function executeResume(
       totalTurns: agent.turnCount + result.assistantTurnCount,
       duration: Date.now() - result.startTime,
       toolCalls: extractToolCalls(result.transcript),
+      tokenUsage: result.tokenUsage,
     },
   };
 }

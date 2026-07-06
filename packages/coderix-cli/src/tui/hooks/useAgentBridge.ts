@@ -329,6 +329,19 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                         metadata: block.metadata,
                       },
                     });
+                    // Accumulate sub-agent token cost into main agent total
+                    const subTokenUsage = block.metadata?.tokenUsage as Record<string, number> | undefined;
+                    if (subTokenUsage) {
+                      routeDispatch({
+                        type: 'UPDATE_TOKEN_USAGE',
+                        usage: {
+                          inputTokens: subTokenUsage.inputTokens ?? 0,
+                          outputTokens: subTokenUsage.outputTokens ?? 0,
+                          cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
+                          cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                        },
+                      });
+                    }
                   }
                 }
 
@@ -396,6 +409,19 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                       metadata: completed.metadata,
                     },
                   });
+                  // Accumulate sub-agent token cost into main agent total
+                  const subTokenUsage = completed.metadata?.tokenUsage as Record<string, number> | undefined;
+                  if (subTokenUsage) {
+                    routeDispatch({
+                      type: 'UPDATE_TOKEN_USAGE',
+                      usage: {
+                        inputTokens: subTokenUsage.inputTokens ?? 0,
+                        outputTokens: subTokenUsage.outputTokens ?? 0,
+                        cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
+                        cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                      },
+                    });
+                  }
                 }
               }
               break;

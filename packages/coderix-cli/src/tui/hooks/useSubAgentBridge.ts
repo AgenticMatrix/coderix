@@ -215,6 +215,19 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                         metadata: block.metadata,
                       },
                     });
+                    // Accumulate sub-agent token cost into total
+                    const subTokenUsage = block.metadata?.tokenUsage as Record<string, number> | undefined;
+                    if (subTokenUsage) {
+                      dispatch({
+                        type: 'UPDATE_TOKEN_USAGE',
+                        usage: {
+                          inputTokens: subTokenUsage.inputTokens ?? 0,
+                          outputTokens: subTokenUsage.outputTokens ?? 0,
+                          cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
+                          cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                        },
+                      });
+                    }
                   }
                 }
 

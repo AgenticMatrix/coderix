@@ -146,6 +146,16 @@ export class SubAgentRegistry {
       lines.push(`  <result>${agent.result.slice(0, 2000)}</result>`);
     }
 
+    if (agent.tokenUsage) {
+      const tu = agent.tokenUsage;
+      lines.push('  <token_usage>');
+      lines.push(`    <input_tokens>${tu.inputTokens}</input_tokens>`);
+      lines.push(`    <output_tokens>${tu.outputTokens}</output_tokens>`);
+      if (tu.cacheCreationInputTokens) lines.push(`    <cache_creation_input_tokens>${tu.cacheCreationInputTokens}</cache_creation_input_tokens>`);
+      if (tu.cacheReadInputTokens) lines.push(`    <cache_read_input_tokens>${tu.cacheReadInputTokens}</cache_read_input_tokens>`);
+      lines.push('  </token_usage>');
+    }
+
     lines.push('</task-notification>');
 
     const notification = lines.join('\n');
