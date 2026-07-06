@@ -25,6 +25,7 @@ import { DetailPanel } from './components/panels/DetailPanel';
 import { GlobalModal } from './components/modals/GlobalModal';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
+import type { SidebarTab } from './components/sidebar/IconSidebar';
 
 import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';
 import { useStreamEvents } from './hooks/useStreamEvents';
@@ -79,6 +80,7 @@ export function App(): React.ReactElement {
 
   // ── Local state ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sessions');
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -250,18 +252,19 @@ export function App(): React.ReactElement {
     <>
       <AppLayout
         sidebar={
-          settingsOpen ? (
-            <SettingsView />
-          ) : (
-            <Sidebar
-              activeSessionId={currentSessionId ?? undefined}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onOpenSettings={handleOpenSettings}
-            />
-          )
+          <Sidebar
+            activeSessionId={currentSessionId ?? undefined}
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+            onOpenSettings={() => setSettingsOpen(true)}
+            activeTab={sidebarTab}
+            onTabChange={setSidebarTab}
+          />
         }
-        sidebarVisible={sidebarOpen || settingsOpen}
+        sidebarVisible={sidebarOpen}
+        iconActiveTab={sidebarTab}
+        onIconTabChange={setSidebarTab}
+        onIconSettings={() => setSettingsOpen(true)}
         detailPanel={<DetailPanel />}
         detailVisible={detailPanelOpen}
         statusBarProps={{
@@ -294,6 +297,15 @@ export function App(): React.ReactElement {
 
       {/* Global modal layer — permission dialogs, question prompts */}
       <GlobalModal />
+
+      {/* Settings modal */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-[var(--z-modal)] bg-black/40 flex items-center justify-center" onClick={() => setSettingsOpen(false)}>
+          <div className="w-[700px] max-h-[85vh] overflow-y-auto rounded-xl shadow-2xl bg-[var(--color-bg-primary)]" onClick={(e) => e.stopPropagation()}>
+            <SettingsView />
+          </div>
+        </div>
+      )}
     </>
   );
 }

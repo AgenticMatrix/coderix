@@ -1,21 +1,16 @@
 import React from 'react';
-import { MessageSquare, FolderOpen, Settings } from 'lucide-react';
+import { MessageSquare, FolderGit2, GitBranch, Settings } from 'lucide-react';
 import styles from './IconSidebar.module.css';
 
-interface NavItem {
-  id: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
-  label: string;
+export type SidebarTab = 'sessions' | 'files' | 'git';
+
+interface Props {
+  activeTab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
+  onSettings: () => void;
 }
 
-const navItems: NavItem[] = [
-  { id: 'chat', icon: MessageSquare, label: 'Chat' },
-  { id: 'files', icon: FolderOpen, label: 'Files' },
-];
-
-export function IconSidebar(): React.ReactElement {
-  const [activeNav, setActiveNav] = React.useState('chat');
-
+export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): React.ReactElement {
   return (
     <div className={styles.iconSidebar}>
       {/* macOS titlebar drag area */}
@@ -23,29 +18,26 @@ export function IconSidebar(): React.ReactElement {
 
       {/* Navigation icons */}
       <nav className={styles.nav}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeNav === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveNav(item.id)}
-              className={`${styles.iconButton} ${isActive ? styles.active : ''}`}
-              aria-label={item.label}
-            >
-              <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
-              <span className={styles.tooltip}>{item.label}</span>
-            </button>
-          );
-        })}
+        <button className={`${styles.iconButton} ${activeTab === 'sessions' ? styles.active : ''}`}
+          onClick={() => onTabChange('sessions')} title="Sessions">
+          <MessageSquare size={22} strokeWidth={activeTab === 'sessions' ? 2.5 : 2} />
+          <span className={styles.tooltip}>Sessions</span>
+        </button>
+        <button className={`${styles.iconButton} ${activeTab === 'files' ? styles.active : ''}`}
+          onClick={() => onTabChange('files')} title="Explorer">
+          <FolderGit2 size={22} strokeWidth={activeTab === 'files' ? 2.5 : 2} />
+          <span className={styles.tooltip}>Explorer</span>
+        </button>
+        <button className={`${styles.iconButton} ${activeTab === 'git' ? styles.active : ''}`}
+          onClick={() => onTabChange('git')} title="Source Control">
+          <GitBranch size={22} strokeWidth={activeTab === 'git' ? 2.5 : 2} />
+          <span className={styles.tooltip}>Source Control</span>
+        </button>
       </nav>
 
       {/* Bottom actions */}
       <div className={styles.bottomActions}>
-        <button
-          className={styles.iconButton}
-          aria-label="Settings"
-        >
+        <button className={styles.iconButton} onClick={onSettings} title="Settings">
           <Settings size={20} strokeWidth={2} />
           <span className={styles.tooltip}>Settings</span>
         </button>

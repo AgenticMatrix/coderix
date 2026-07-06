@@ -3,28 +3,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ResizablePanel } from '../shared/ResizablePanel';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { IconSidebar } from '../sidebar/IconSidebar';
+import type { SidebarTab } from '../sidebar/IconSidebar';
 
 export interface AppLayoutProps {
-  /** Sidebar content */
   sidebar: ReactNode;
-  /** Is sidebar visible */
   sidebarVisible?: boolean;
-  /** Sidebar width */
   sidebarWidth?: number;
-  /** Sidebar width callback */
   onSidebarResize?: (width: number) => void;
-  /** Main content */
   children: ReactNode;
-  /** Detail panel content */
   detailPanel?: ReactNode;
-  /** Is detail panel visible */
   detailVisible?: boolean;
-  /** Detail panel width */
   detailWidth?: number;
-  /** Detail panel width callback */
   onDetailResize?: (width: number) => void;
-  /** Status bar props */
   statusBarProps?: StatusBarProps;
+  headerActions?: ReactNode;
+  iconActiveTab: SidebarTab;
+  onIconTabChange: (tab: SidebarTab) => void;
+  onIconSettings: () => void;
 }
 
 /**
@@ -62,10 +57,14 @@ export function AppLayout({
   detailWidth = 380,
   onDetailResize,
   statusBarProps,
+  headerActions,
+  iconActiveTab,
+  onIconTabChange,
+  onIconSettings,
 }: AppLayoutProps): React.ReactElement {
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
-      <IconSidebar />
+      <IconSidebar activeTab={iconActiveTab} onTabChange={onIconTabChange} onSettings={onIconSettings} />
 
       <div className="flex-1 flex flex-col min-w-0">
       {/* Header bar — draggable titlebar for frameless window */}
