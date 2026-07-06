@@ -122,14 +122,6 @@ export function ContentBlockRenderer({
           >
             {block.content ?? ''}
           </ReactMarkdown>
-          {/* Blinking cursor during streaming */}
-          {isStreaming && (
-            <motion.span
-              animate={{ opacity: [1, 0] }}
-              transition={{ repeat: Infinity, duration: 0.8 }}
-              className="inline-block w-2 h-4 bg-[var(--color-text-primary)] ml-0.5 align-text-bottom"
-            />
-          )}
         </div>
       );
 

@@ -69,10 +69,6 @@ const MessageBubbleContent = React.memo(
             </span>
           )}
 
-          {/* Blinking cursor during streaming */}
-          {isStreamingMsg && (
-            <span className="streaming-cursor" />
-          )}
         </div>
 
         {/* Assistant message model badge */}
