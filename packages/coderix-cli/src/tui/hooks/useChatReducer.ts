@@ -109,7 +109,24 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
     }
   }
 
-  return messages;
+  // Pass 3: remove tool_result blocks that are already rendered inline
+  // (same filter as useAgentBridge). Without this, transcript loading
+  // would show results twice — once inline and once as separate messages.
+  const inlineTools = new Set([
+    'read', 'bash', 'glob', 'grep',
+    'WebSearch', 'WebFetch', 'write', 'edit',
+    'Agent',
+  ]);
+
+  return messages.filter((msg) => {
+    if (msg.role !== 'user') return true;
+    // Remove inline-rendered tool_result blocks
+    const filtered = msg.blocks.filter(
+      (b) => b.type !== 'tool_result' || !inlineTools.has((b as { toolName?: string }).toolName ?? ''),
+    );
+    // Drop the message entirely if nothing remains
+    return filtered.length > 0;
+  });
 }
 
 /** Get plain text from Message.blocks for backward compat. */
