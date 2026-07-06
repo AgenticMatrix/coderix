@@ -23,20 +23,20 @@ const MAX_CONCURRENCY = 8;
 
 function compressTranscript(messages: Message[]): string {
   const parts: string[] = [];
-  for (const msg of messages.slice(-20)) {
+  for (const msg of messages.slice(-60)) {
     if (msg.role !== 'assistant') continue;
     const blocks = Array.isArray(msg.content) ? msg.content : [];
     for (const block of blocks) {
       if (block.type === 'text') {
         const text = (block as { text?: string }).text ?? '';
-        if (text) parts.push(text.slice(0, 800));
+        if (text) parts.push(text.slice(0, 8000));
       }
     }
   }
   const body = parts.join('\n\n');
   if (!body) return '(sub-agent produced no text output)';
-  if (body.length <= 2000) return body;
-  return body.slice(0, 1997) + '...';
+  if (body.length <= 65536) return body;
+  return body.slice(0, 65533) + '...';
 }
 
 // ── Team messaging mode ──────────────────────────────────────────────
@@ -233,6 +233,8 @@ async function handleSubAgentResume(
   let toolCount = 0;
   const newTranscript: Message[] = [];
 
+  const RESUMED_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
   try {
     const generator = query({
       sessionId: subSession.id,
@@ -252,35 +254,51 @@ async function handleSubAgentResume(
       hookManager: agentSpawn.hookManager,
     });
 
-    for await (const msg of generator) {
-      if (subAbortController.signal.aborted) break;
+    const timeoutPromise = new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), RESUMED_TIMEOUT_MS),
+    );
 
-      switch (msg.type) {
-        case 'assistant': {
-          assistantTurnCount++;
-          const assistantMsg = msg.message as unknown as Message;
-          newTranscript.push(assistantMsg);
-          const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
-          toolCount += blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
-          break;
-        }
-        case 'user':
-          newTranscript.push(msg.message as unknown as Message);
-          break;
-        case 'system':
-          if (msg.subtype === 'progress') {
-            registry.update(agentId, {
-              turnCount: agent.turnCount + assistantTurnCount,
-              messageCount: transcript.length + newTranscript.length,
-              toolCount: agent.toolCount + toolCount,
-            });
+    let timedOut = false;
+    const result = await Promise.race([
+      (async () => {
+        for await (const msg of generator) {
+          if (subAbortController.signal.aborted) break;
+          switch (msg.type) {
+            case 'assistant': {
+              assistantTurnCount++;
+              const assistantMsg = msg.message as unknown as Message;
+              newTranscript.push(assistantMsg);
+              const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
+              toolCount += blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
+              break;
+            }
+            case 'user':
+              newTranscript.push(msg.message as unknown as Message);
+              break;
+            case 'system':
+              if (msg.subtype === 'progress') {
+                registry.update(agentId, {
+                  turnCount: agent.turnCount + assistantTurnCount,
+                  messageCount: transcript.length + newTranscript.length,
+                  toolCount: agent.toolCount + toolCount,
+                });
+              }
+              break;
           }
-          break;
-      }
+        }
+      })(),
+      timeoutPromise,
+    ]);
+
+    if (result === 'timeout') {
+      subAbortController.abort();
+      timedOut = true;
     }
 
     const cumulativeTranscript = [...transcript, ...newTranscript];
-    const resultText = compressTranscript(newTranscript);
+    const resultText = timedOut
+      ? `(timed out after ${RESUMED_TIMEOUT_MS / 1000}s)`
+      : compressTranscript(newTranscript);
 
     registry.update(agentId, {
       status: subAbortController.signal.aborted ? 'stopped' : 'done',

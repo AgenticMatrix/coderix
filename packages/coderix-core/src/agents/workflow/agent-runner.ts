@@ -181,20 +181,20 @@ function shortId(): string {
 
 function compressTranscript(messages: Message[]): string {
   const parts: string[] = [];
-  for (const msg of messages.slice(-20)) {
+  for (const msg of messages.slice(-60)) {
     if (msg.role !== 'assistant') continue;
     const blocks = Array.isArray(msg.content) ? msg.content : [];
     for (const block of blocks) {
       if (block.type === 'text') {
         const text = (block as { text?: string }).text ?? '';
-        if (text) parts.push(text.slice(0, 800));
+        if (text) parts.push(text.slice(0, 8000));
       }
     }
   }
   const body = parts.join('\n\n');
   if (!body) return '(sub-agent produced no text output)';
-  if (body.length <= 2000) return body;
-  return body.slice(0, 1997) + '...';
+  if (body.length <= 65536) return body;
+  return body.slice(0, 65533) + '...';
 }
 
 // ---------------------------------------------------------------------------
