@@ -111,10 +111,22 @@ export function App(): React.ReactElement {
     return unsubscribe;
   }, []);
 
-  // ── Load sessions on mount ──────────────────────────────────────────────
+  // ── Load sessions on mount & auto-create default session ──────────────
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    async function init(): Promise<void> {
+      await loadSessions();
+      const sessions = useSessionStore.getState().sessions;
+      if (sessions.length === 0) {
+        await createSession();
+      } else {
+        // Use the most recent session
+        const latest = sessions[0];
+        setSessionId(latest.id);
+        useSessionStore.getState().setCurrentSessionId(latest.id);
+      }
+    }
+    init().catch((err) => console.error('[App] Session init failed:', err));
+  }, [loadSessions, createSession, setSessionId]);
 
   // ── Theme sync to DOM ───────────────────────────────────────────────────
   useEffect(() => {
@@ -209,6 +221,7 @@ export function App(): React.ReactElement {
       // Submit the query via IPC to the main process
       if (currentSid) {
         try {
+          console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
           await submitQuery(value, currentSid);
         } catch (err) {
           console.error('[App] Failed to submit query:', err);
@@ -216,6 +229,9 @@ export function App(): React.ReactElement {
             err instanceof Error ? err.message : 'Query submission failed',
           );
         }
+      } else {
+        console.error('[App] Cannot submit query — no session ID');
+        useChatStore.getState().setError('No active session');
       }
     },
     [sendMessage, createSession, setSessionId],
@@ -346,6 +362,10 @@ export function App(): React.ReactElement {
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>
       </AppLayout>
+
+
+      {/* Global modal layer — permission dialogs, question prompts */}
+      <GlobalModal />
 
       {/* Settings modal — rendered via Portal to escape framer-motion's transform context */}
       {settingsOpen && createPortal(

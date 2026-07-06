@@ -60,21 +60,22 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   createSession: async () => {
     set({ isLoading: true, error: null });
     try {
-      // The preload API does not have a direct createSession call.
-      // In practice, creating a session is done by starting a new conversation.
-      // We generate a client-side ID and set it as current.
-      const newId = `session-${Date.now()}`;
+      // Use real IPC session creation via preload
+      if (!window.coderixAPI) {
+        throw new Error('coderixAPI not available');
+      }
+      const result = await window.coderixAPI.session.create({ title: '新对话' });
       const newSession: SessionSummary = {
-        id: newId,
-        title: '新对话',
-        turnCount: 0,
+        id: result.id,
+        title: result.title,
+        turnCount: result.turnCount,
         model: '',
         updatedAt: Date.now(),
         createdAt: Date.now(),
       };
       set((state) => ({
         sessions: [newSession, ...state.sessions],
-        currentSessionId: newId,
+        currentSessionId: result.id,
         isLoading: false,
       }));
     } catch (err) {

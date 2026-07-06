@@ -271,6 +271,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Session ────────────────────────────────────────────────────────────
 
+  ipcMain.handle('session:create', async (_event, opts?: { title?: string }) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const session = sessionManager.create({ title: opts?.title ?? '新对话' });
+    return { id: session.id, title: session.title, turnCount: session.turnCount };
+  });
+
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
     if (!sessionManager) return [];
     return sessionManager.listSessions();
