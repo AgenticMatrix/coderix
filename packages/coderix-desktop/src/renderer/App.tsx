@@ -300,16 +300,54 @@ export function App(): React.ReactElement {
 
       {/* Settings modal */}
       {settingsOpen && (
-        <div className="fixed inset-0 z-[var(--z-modal)] bg-black/40 flex items-center justify-center p-8" onClick={() => setSettingsOpen(false)}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 500,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px',
+          }}
+          onClick={() => setSettingsOpen(false)}
+        >
           <div
-            className="relative flex flex-col w-[720px] max-w-[95vw] h-[85vh] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden"
-            style={{ background: 'var(--color-bg-primary)' }}
+            style={{
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              width: '720px',
+              maxWidth: '95vw',
+              height: '85vh',
+              maxHeight: '85vh',
+              borderRadius: '12px',
+              boxShadow: '0px 8px 24px rgba(0,0,0,0.12), 0px 2px 8px rgba(0,0,0,0.06)',
+              background: 'var(--color-bg-primary)',
+              overflow: 'hidden',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
             <button
               onClick={() => setSettingsOpen(false)}
-              className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                zIndex: 10,
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--color-text-tertiary)',
+                cursor: 'pointer',
+              }}
               aria-label="Close settings"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -317,7 +355,7 @@ export function App(): React.ReactElement {
               </svg>
             </button>
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto">
+            <div style={{ flex: 1, overflowY: 'auto' }}>
               <SettingsView />
             </div>
           </div>
