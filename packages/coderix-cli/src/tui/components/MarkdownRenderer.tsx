@@ -439,7 +439,7 @@ function BlockElement({ block, termWidth }: { block: Block; termWidth: number })
 
     case 'paragraph':
       return (
-        <Box>
+        <Box width={termWidth}>
           <InlineLine tokens={block.tokens} />
         </Box>
       );
@@ -695,7 +695,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const maxOutputWidth = Math.max(20, termWidth - 8);
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width={maxOutputWidth}>
       {blocks.map((block, i) => (
         <BlockElement key={i} block={block} termWidth={maxOutputWidth} />
       ))}
