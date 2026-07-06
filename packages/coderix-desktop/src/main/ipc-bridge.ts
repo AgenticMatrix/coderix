@@ -18,19 +18,16 @@ import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
 
 import type {
-  SessionMetadata as Session,
+  Session as SessionType,
   SessionSummary,
   StreamEvent,
   DeferredPermission,
   DeferredQuestion,
   CompletionUsage,
-} from '../../../../src/core/types.js';
-import type { CoderSettings, ModelItem } from '../../../../src/cli/config.js';
-
-import { QueryEngine, type QueryEngineConfig, type QueryEngineEvent } from '../../../../src/core/query-engine.js';
-import { PermissionMode } from '../../../../src/core/types.js';
-import { SessionManager } from '../../../../src/core/session.js';
-import { ToolRegistry } from '../../../../src/core/tool-registry.js';
+} from '@coderix/core';
+import type { CoderSettings, ModelItem } from '@coderix/core';
+import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
+import type { QueryEngineConfig, QueryEngineEvent } from '@coderix/core';
 
 import type { WindowManager } from './window-manager.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -270,6 +267,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   });
 
   // ── Session ────────────────────────────────────────────────────────────
+
+  ipcMain.handle('session:create', async (_event, opts?: { title?: string }) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const session = sessionManager.create({ title: opts?.title ?? '新对话' });
+    return { id: session.id, title: session.title, turnCount: session.turnCount };
+  });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
     if (!sessionManager) return [];

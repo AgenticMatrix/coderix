@@ -18,6 +18,15 @@ import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient, p
 import type { QueryEngineConfig } from '@coderix/core';
 
 // ---------------------------------------------------------------------------
+// Prevent multiple instances (single-instance lock)
+// ---------------------------------------------------------------------------
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
+
+// ---------------------------------------------------------------------------
 // Global state
 // ---------------------------------------------------------------------------
 
@@ -171,7 +180,7 @@ async function initQueryEngine(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// App lifecycle
+// App lifecycle events
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(bootstrap);
@@ -194,6 +203,10 @@ app.on('activate', () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Graceful shutdown
+// ---------------------------------------------------------------------------
+
 app.on('before-quit', () => {
   console.log('[Coderix] Shutting down...');
   windowManager?.saveWindowState();
@@ -203,6 +216,10 @@ app.on('before-quit', () => {
   trayManager?.destroy();
   console.log('[Coderix] Shutdown complete');
 });
+
+// ---------------------------------------------------------------------------
+// Unhandled error handling
+// ---------------------------------------------------------------------------
 
 process.on('uncaughtException', (error) => {
   console.error('[Coderix] Uncaught exception:', error);
