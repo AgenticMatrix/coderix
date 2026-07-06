@@ -39,7 +39,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       id: createId(),
       role: 'user',
       content: content.trim(),
-      blocks: [],
+      blocks: [{ type: 'text', content: content.trim(), state: 'done' }],
       timestamp: Date.now(),
     };
 

@@ -94,7 +94,7 @@
   max-width: 820px;
   margin: 0 auto;
   width: 100%;
-  padding: 16px 24px;
+  padding: 4px 24px;
   font-size: var(--text-body);
   line-height: 1.65;
   word-wrap: break-word;
@@ -105,13 +105,25 @@
   border-radius: 0;
 }
 
-/* User message block */
+/* User message block — right-aligned */
 .message-bubble.user {
   background-color: transparent;
   color: var(--color-text-primary);
   border-radius: 0;
   margin-left: auto;
-  margin-right: auto;
+  margin-right: 24px;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* User message inline timestamp */
+.message-time-inline {
+  font-size: var(--text-caption1);
+  color: var(--color-text-tertiary);
+  margin-top: 4px;
+  user-select: none;
 }
 
 /* Assistant message block — bottom border separator */
@@ -138,11 +150,7 @@
   width: auto;
 }
 
-/* Different-role messages get extra top spacing */
-.message-row.user + .message-row.assistant,
-.message-row.assistant + .message-row.user {
-  margin-top: 8px;
-}
+/* No extra spacing between different-role messages */
 
 /* Streaming message animation */
 .message-bubble.streaming {

@@ -62,22 +62,26 @@ const MessageBubbleContent = React.memo(
             />
           ))}
 
+          {/* User message timestamp — inline at bottom-right */}
+          {!isAssistant && message.timestamp && !isStreamingMsg && (
+            <span className="message-time-inline">
+              {formatMessageTime(message.timestamp)}
+            </span>
+          )}
+
           {/* Blinking cursor during streaming */}
           {isStreamingMsg && (
             <span className="streaming-cursor" />
           )}
         </div>
 
-        {/* Message timestamp / metadata */}
-        {message.timestamp && !isStreamingMsg && (
+        {/* Assistant message model badge */}
+        {isAssistant && message.model && !isStreamingMsg && (
           <div className="message-meta">
-            {message.model && isAssistant && (
-              <span className="model-badge">
-                <Sparkles size={10} />
-                {message.model}
-              </span>
-            )}
-            <span>{formatMessageTime(message.timestamp)}</span>
+            <span className="model-badge">
+              <Sparkles size={10} />
+              {message.model}
+            </span>
           </div>
         )}
       </>
