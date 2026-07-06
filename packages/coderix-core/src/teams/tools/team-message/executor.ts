@@ -39,6 +39,38 @@ function compressTranscript(messages: Message[]): string {
   return body.slice(0, 65533) + '...';
 }
 
+/** Trim large tool outputs in historical messages to prevent context bloat
+ *  across repeated resumes. Keeps the full message structure but caps
+ *  tool_result content at a limit so the model still sees all the context
+ *  without O(N) duplication of giant outputs. */
+function trimTranscriptForResume(messages: Message[]): Message[] {
+  const MAX_TOOL_OUTPUT = 4000;
+  return messages.map((msg) => {
+    if (msg.role !== 'user') return msg;
+    const blocks = Array.isArray(msg.content) ? msg.content as ContentBlock[] : [];
+    const hasLargeOutput = blocks.some(
+      (b) => b.type === 'tool_result' && typeof (b as { content?: string }).content === 'string'
+        && ((b as { content?: string }).content?.length ?? 0) > MAX_TOOL_OUTPUT,
+    );
+    if (!hasLargeOutput) return msg;
+    return {
+      ...msg,
+      content: blocks.map((b) => {
+        if (b.type !== 'tool_result') return b;
+        const content = (b as { content?: unknown }).content;
+        if (typeof content === 'string' && content.length > MAX_TOOL_OUTPUT) {
+          return {
+            ...b,
+            content: content.slice(0, MAX_TOOL_OUTPUT)
+              + `\n... [trimmed ${content.length - MAX_TOOL_OUTPUT} chars]`,
+          };
+        }
+        return b;
+      }),
+    };
+  });
+}
+
 // ── Team messaging mode ──────────────────────────────────────────────
 
 async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolResult> {
@@ -161,8 +193,12 @@ async function handleSubAgentResume(
   const agentType = agent.agentType;
   const agentDef = agentSpawn.agentRegistry?.get(agentType);
 
+  // Trim large tool outputs in the transcript to prevent context bloat.
+  // Each resume appends the full transcript, so after N resumes the model
+  // receives O(N) copies of every tool output, causing multi-minute delays.
+  const trimmedTranscript = trimTranscriptForResume(transcript);
   const resumedMessages: Message[] = [
-    ...transcript,
+    ...trimmedTranscript,
     { role: 'user', content: message },
   ];
 

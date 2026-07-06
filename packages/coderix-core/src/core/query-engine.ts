@@ -621,7 +621,7 @@ export class QueryEngine {
 
     // ── Build resumed messages ──────────────────────────────────────
     const resumedMessages: any[] = [
-      ...transcript,
+      ...trimTranscriptForResume(transcript),
       { role: 'user', content: message },
     ];
 
@@ -889,6 +889,35 @@ const modelMaxContext = (m: string | ModelItem): number | undefined =>
  *   2. If not found, use the first model in the first entry
  *   3. If nothing works, return undefined
  */
+/** Trim large tool outputs in historical messages to prevent context bloat
+ *  across repeated sub-agent resumes. Caps tool_result content at a limit so
+ *  the model still sees all the context without O(N) duplication of giant
+ *  outputs from prior turns. */
+function trimTranscriptForResume(messages: any[]): any[] {
+  const MAX_TOOL_OUTPUT = 4000;
+  return messages.map((msg) => {
+    if (msg.role !== 'user') return msg;
+    const content = Array.isArray(msg.content) ? msg.content : [];
+    const hasLargeOutput = content.some(
+      (b: any) => b.type === 'tool_result' && typeof b.content === 'string'
+        && b.content.length > MAX_TOOL_OUTPUT,
+    );
+    if (!hasLargeOutput) return msg;
+    return {
+      ...msg,
+      content: content.map((b: any) => {
+        if (b.type !== 'tool_result' || typeof b.content !== 'string'
+            || b.content.length <= MAX_TOOL_OUTPUT) return b;
+        return {
+          ...b,
+          content: b.content.slice(0, MAX_TOOL_OUTPUT)
+            + `\n... [trimmed ${b.content.length - MAX_TOOL_OUTPUT} chars]`,
+        };
+      }),
+    };
+  });
+}
+
 function resolveModelMaxContext(
   model: string,
   modelList: ModelEntry[],
