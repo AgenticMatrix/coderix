@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { ChevronDown, Zap } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { ContentBlockRenderer } from './ContentBlockRenderer';
 import './ChatView.css';
@@ -75,7 +75,7 @@ const MessageBubbleContent = React.memo(
         {isAssistant && message.model && !isStreamingMsg && (
           <div className="message-meta">
             <span className="model-badge">
-              <Sparkles size={10} />
+              <Zap size={10} />
               {message.model}
             </span>
           </div>
@@ -162,7 +162,7 @@ export function ChatView({
       <div className="chat-container">
         <div className="chat-empty">
           <div className="chat-empty-icon">
-            <Sparkles size={24} className="text-[var(--color-brand)]" />
+            <Zap size={24} className="text-[var(--color-brand)]" />
           </div>
           <h3 className="chat-empty-title">Ask Coderix anything</h3>
           <p className="chat-empty-subtitle">
