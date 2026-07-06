@@ -73,9 +73,6 @@ export function AppLayout({
                    bg-[var(--color-bg-primary)] border-b border-[var(--color-separator)]
                    select-none z-[var(--z-sticky)]"
       >
-        {/* Spacer for macOS traffic light buttons (~70px) */}
-        <div className="w-[70px] flex-shrink-0" />
-
         {/* App name */}
         <span className="text-[13px] font-semibold text-[var(--color-text-secondary)] tracking-tight">
           Coderix

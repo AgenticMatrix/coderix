@@ -1,5 +1,6 @@
 import React from 'react';
 import { MessageSquare, FolderGit2, GitBranch, Settings } from 'lucide-react';
+import './IconSidebar.css';
 import styles from './IconSidebar.module.css';
 
 export type SidebarTab = 'sessions' | 'files' | 'git';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, MessageSquare, FolderGit2, Settings, GitBranch } from 'lucide-react';
+import { Search, Plus, MessageSquare, FolderGit2, GitBranch } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { FileExplorer } from './FileExplorer';
@@ -120,19 +120,6 @@ export function Sidebar({
             <GitPanel />
           </motion.div>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="p-2 border-t border-[var(--color-separator)]">
-        <IconButton
-          label="Settings"
-          icon={<Settings size={14} />}
-          size="sm"
-          variant="ghost"
-          onClick={onOpenSettings}
-          tooltip="Settings"
-          shortcut="⌘,"
-        />
       </div>
     </div>
   );
