@@ -30,6 +30,73 @@ export interface ChatViewProps {
   onScrollToBottom?: () => void;
 }
 
+// ---------------------------------------------------------------------------
+// Memoized message bubble — prevents re-renders when AnimatePresence
+// re-processes children whose underlying data hasn't changed.
+// During streaming, only the last (streaming) message gets new blocks each
+// delta; all historical messages keep the same `blocks` reference, so
+// React.memo skips them entirely.
+// ---------------------------------------------------------------------------
+
+interface MessageBubbleContentProps {
+  message: ChatViewMessage;
+  isStreamingMsg: boolean;
+  isAssistant: boolean;
+}
+
+const MessageBubbleContent = React.memo(
+  function MessageBubbleContent({ message, isStreamingMsg, isAssistant }: MessageBubbleContentProps) {
+    return (
+      <>
+        <div
+          className={`message-bubble ${message.role} ${isStreamingMsg ? 'streaming' : ''}`}
+        >
+          {message.blocks.map((block, blockIdx) => (
+            <ContentBlockRenderer
+              key={`${message.id}-block-${blockIdx}`}
+              block={block}
+              isStreaming={
+                isStreamingMsg &&
+                blockIdx === message.blocks.length - 1
+              }
+            />
+          ))}
+
+          {/* Blinking cursor during streaming */}
+          {isStreamingMsg && (
+            <span className="streaming-cursor" />
+          )}
+        </div>
+
+        {/* Message timestamp / metadata */}
+        {message.timestamp && !isStreamingMsg && (
+          <div className="message-meta">
+            {message.model && isAssistant && (
+              <span className="model-badge">
+                <Sparkles size={10} />
+                {message.model}
+              </span>
+            )}
+            <span>{formatMessageTime(message.timestamp)}</span>
+          </div>
+        )}
+      </>
+    );
+  },
+  (prev, next) => {
+    // Skip re-render when message data hasn't actually changed.
+    // `blocks` reference is stable for historical messages (same objects from
+    // Zustand store); the streaming message gets a new `blocks` each delta
+    // so it will still re-render on every stream update.
+    return (
+      prev.message.id === next.message.id &&
+      prev.message.blocks === next.message.blocks &&
+      prev.message.role === next.message.role &&
+      prev.isStreamingMsg === next.isStreamingMsg
+    );
+  },
+);
+
 /**
  * ChatView — WeChat / Apple Messages style chat interface.
  * iMessage-like bubbles with rounded corners, code blocks with syntax highlighting,
@@ -44,14 +111,20 @@ export function ChatView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const prevMessageCountRef = useRef(messages.length);
 
-  // Auto-scroll when new content arrives (if user is near the bottom)
-  const scrollToBottom = useCallback((smooth = true) => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: smooth ? 'smooth' : 'auto',
-      block: 'end',
-    });
-  }, []);
+  // Auto-scroll when new content arrives (if user is near the bottom).
+  // Use 'auto' during streaming to avoid overlapping smooth-scroll animations
+  // that cause jitter when blocks arrive faster than the animation duration.
+  const scrollToBottom = useCallback(
+    (smooth = true) => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'end',
+      });
+    },
+    [],
+  );
 
   // Track whether user has scrolled up
   const handleScroll = useCallback(() => {
@@ -65,11 +138,17 @@ export function ChatView({
     setShowScrollBtn(distanceFromBottom > 200);
   }, []);
 
-  // Auto-scroll on new messages or streaming
+  // Auto-scroll on new messages or streaming.
+  // Only use smooth scroll when a NEW message is added (not on every
+  // streaming delta), so the scroll animation doesn't overlap itself.
   useEffect(() => {
-    if (isNearBottom) {
-      scrollToBottom(true);
-    }
+    if (!isNearBottom) return;
+
+    const hasNewMessage = messages.length !== prevMessageCountRef.current;
+    prevMessageCountRef.current = messages.length;
+
+    // Smooth only for new-message events; auto for streaming deltas
+    scrollToBottom(hasNewMessage && !isStreaming);
   }, [messages, isStreaming, isNearBottom, scrollToBottom]);
 
   // Initial scroll to bottom
@@ -121,38 +200,11 @@ export function ChatView({
                 }}
                 className={`message-row ${message.role} ${message.isGroupStart ? 'group-start' : ''}`}
               >
-                <div
-                  className={`message-bubble ${message.role} ${isStreamingMsg ? 'streaming' : ''}`}
-                >
-                  {message.blocks.map((block, blockIdx) => (
-                    <ContentBlockRenderer
-                      key={`${message.id}-block-${blockIdx}`}
-                      block={block}
-                      isStreaming={
-                        isStreamingMsg &&
-                        blockIdx === message.blocks.length - 1
-                      }
-                    />
-                  ))}
-
-                  {/* Blinking cursor during streaming */}
-                  {isStreamingMsg && (
-                    <span className="streaming-cursor" />
-                  )}
-                </div>
-
-                {/* Message timestamp / metadata */}
-                {message.timestamp && !isStreamingMsg && (
-                  <div className="message-meta">
-                    {message.model && isAssistant && (
-                      <span className="model-badge">
-                        <Sparkles size={10} />
-                        {message.model}
-                      </span>
-                    )}
-                    <span>{formatMessageTime(message.timestamp)}</span>
-                  </div>
-                )}
+                <MessageBubbleContent
+                  message={message}
+                  isStreamingMsg={isStreamingMsg ?? false}
+                  isAssistant={isAssistant}
+                />
               </motion.div>
             );
           })}

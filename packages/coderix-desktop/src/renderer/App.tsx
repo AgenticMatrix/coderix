@@ -15,7 +15,7 @@
  *         subtle animations, dark mode default.
  */
 
-import React, { useEffect, useCallback, useState, useRef } from 'react';
+import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
@@ -219,23 +219,51 @@ export function App(): React.ReactElement {
   );
 
   // ── Build chat messages for ChatView ────────────────────────────────────
-  const chatViewMessages: ChatViewMessage[] = messages.map((msg) => ({
-    id: msg.id,
-    role: msg.role,
-    blocks: msg.blocks,
-    timestamp: msg.timestamp,
-  }));
+  // Stabilize references: during streaming, only the streaming message changes.
+  // Reusing previous ChatViewMessage objects for unchanged messages prevents
+  // Framer Motion's AnimatePresence from re-processing every child each render.
+  const prevChatMessagesRef = useRef<ChatViewMessage[]>([]);
 
-  // If there's a currently streaming message, append it
-  if (streamCurrentMessage) {
-    chatViewMessages.push({
-      id: streamCurrentMessage.id,
-      role: 'assistant',
-      blocks: streamCurrentMessage.blocks,
-      timestamp: Date.now(),
-      isStreaming: true,
-    });
-  }
+  const chatViewMessages = useMemo<ChatViewMessage[]>(() => {
+    const result: ChatViewMessage[] = [];
+    const prevList = prevChatMessagesRef.current;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]!;
+      const prev = prevList[i];
+
+      // Reuse previous wrapper object if message data hasn't changed
+      if (
+        prev &&
+        prev.id === msg.id &&
+        prev.blocks === msg.blocks &&
+        prev.role === msg.role
+      ) {
+        result.push(prev);
+      } else {
+        result.push({
+          id: msg.id,
+          role: msg.role,
+          blocks: msg.blocks,
+          timestamp: msg.timestamp,
+        });
+      }
+    }
+
+    // Append streaming message (always fresh — blocks change every delta)
+    if (streamCurrentMessage) {
+      result.push({
+        id: streamCurrentMessage.id,
+        role: 'assistant',
+        blocks: streamCurrentMessage.blocks,
+        timestamp: Date.now(),
+        isStreaming: true,
+      });
+    }
+
+    prevChatMessagesRef.current = result;
+    return result;
+  }, [messages, streamCurrentMessage]);
 
   const isEmpty = chatViewMessages.length === 0;
 

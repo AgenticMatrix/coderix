@@ -22,7 +22,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-4) var(--space-4);
-  scroll-behavior: smooth;
   overscroll-behavior: contain;
 }
 
