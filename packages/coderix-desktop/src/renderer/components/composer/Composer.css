@@ -95,10 +95,10 @@
   box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.2);
 }
 
-/* Textarea input — match wrapper background exactly to avoid inner box */
+/* Textarea input */
 .composer-input {
   flex: 1;
-  background-color: var(--color-bg-tertiary);
+  background: transparent;
   border: none;
   outline: none;
   box-shadow: none;
