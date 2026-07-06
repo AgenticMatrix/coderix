@@ -300,9 +300,26 @@ export function App(): React.ReactElement {
 
       {/* Settings modal */}
       {settingsOpen && (
-        <div className="fixed inset-0 z-[var(--z-modal)] bg-black/40 flex items-center justify-center" onClick={() => setSettingsOpen(false)}>
-          <div className="w-[700px] max-h-[85vh] overflow-y-auto rounded-xl shadow-2xl bg-[var(--color-bg-primary)]" onClick={(e) => e.stopPropagation()}>
-            <SettingsView />
+        <div className="fixed inset-0 z-[var(--z-modal)] bg-black/40 flex items-center justify-center p-8" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="relative flex flex-col w-[720px] max-w-[95vw] h-[85vh] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden"
+            style={{ background: 'var(--color-bg-primary)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setSettingsOpen(false)}
+              className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+              aria-label="Close settings"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M1 1l12 12M13 1L1 13" />
+              </svg>
+            </button>
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto">
+              <SettingsView />
+            </div>
           </div>
         </div>
       )}
