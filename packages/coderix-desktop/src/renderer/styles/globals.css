@@ -1,82 +1,81 @@
 /* ==========================================================================
-   Coderix Global Styles — WeChat × Apple Desktop Design System
-   "微信苹果桌面风": Clean, minimalist, frosted glass, SF-style typography
+   Coderix Global Styles — Claude Desk inspired warm aesthetic
+   Warm off-white tones, terracotta accents, clean flat design
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    1. Theme Variables — Light Mode (default, Apple HIG)
    -------------------------------------------------------------------------- */
 :root {
-  /* === Brand / Accent === */
-  /* Apple Blue accent (primary) */
-  --color-brand:                 #007AFF;
-  --color-brand-hover:           #0066D6;
-  --color-brand-active:          #0056B8;
-  --color-brand-muted:           rgba(0, 122, 255, 0.1);
+  /* === Brand / Accent — Claude Desk terracotta === */
+  --color-brand:                 #D97757;
+  --color-brand-hover:           #C56A4B;
+  --color-brand-active:          #B05D3F;
+  --color-brand-muted:           rgba(217, 119, 87, 0.1);
 
   /* WeChat Green accent (secondary / success emphasis) */
   --color-wechat-green:          #07C160;
   --color-wechat-green-hover:    #06AD56;
   --color-wechat-green-muted:    rgba(7, 193, 96, 0.1);
 
-  /* === Backgrounds (Apple system grays) === */
-  --color-bg-primary:            #FFFFFF;
-  --color-bg-secondary:          #F2F2F7;  /* systemGroupedBackground */
-  --color-bg-tertiary:           #E5E5EA;  /* systemGray5 */
-  --color-bg-quaternary:         #D1D1D6;  /* systemGray4 */
+  /* === Backgrounds (Claude Desk warm tones) === */
+  --color-bg-primary:            #FAF9F5;
+  --color-bg-secondary:          #F4F2EB;
+  --color-bg-tertiary:           #E9E6DC;
+  --color-bg-quaternary:         #DBD7CD;
 
-  /* Glass / Vibrancy backgrounds */
-  --glass-bg-sidebar:            rgba(242, 242, 247, 0.85);
-  --glass-bg-toolbar:            rgba(242, 242, 247, 0.72);
-  --glass-bg-overlay:            rgba(242, 242, 247, 0.55);
+  /* Glass / Vibrancy backgrounds (solid warm tones) */
+  --glass-bg-sidebar:            #F4F2EB;
+  --glass-bg-toolbar:            #F4F2EB;
+  --glass-bg-overlay:            rgba(250, 249, 245, 0.88);
 
-  /* === Text Colors === */
-  --color-text-primary:          #1C1C1E;   /* almost black */
-  --color-text-secondary:        #6C6C70;   /* systemGray */
-  --color-text-tertiary:         #AEAEB2;   /* systemGray2 */
-  --color-text-quaternary:       #D1D1D6;   /* systemGray4 */
+  /* === Text Colors (Claude Desk warm browns) === */
+  --color-text-primary:          #29261B;
+  --color-text-secondary:        #656358;
+  --color-text-tertiary:         #9E9B8F;
+  --color-text-quaternary:       #C5C0B5;
   --color-text-inverse:          #FFFFFF;
 
-  /* === Semantic Colors (adjusted for light bg) === */
+  /* === Semantic Colors === */
   --color-success:               #34C759;
   --color-success-muted:         rgba(52, 199, 89, 0.1);
-  --color-warning:               #FF9F0A;
-  --color-warning-muted:         rgba(255, 159, 10, 0.1);
+  --color-warning:               #E8A440;
+  --color-warning-muted:         rgba(232, 164, 64, 0.1);
   --color-danger:                #FF3B30;
   --color-danger-muted:          rgba(255, 59, 48, 0.1);
-  --color-info:                  #007AFF;
-  --color-info-muted:            rgba(0, 122, 255, 0.1);
+  --color-info:                  #D97757;
+  --color-info-muted:            rgba(217, 119, 87, 0.1);
 
   /* === Borders / Separators === */
-  --color-separator:             rgba(0, 0, 0, 0.06);
-  --color-separator-strong:      rgba(0, 0, 0, 0.1);
-  --color-border:                rgba(0, 0, 0, 0.08);
-  --color-border-focus:          rgba(0, 122, 255, 0.4);
+  --color-separator:             rgba(0, 0, 0, 0.05);
+  --color-separator-strong:      rgba(0, 0, 0, 0.08);
+  --color-border:                rgba(0, 0, 0, 0.06);
+  --color-border-focus:          rgba(217, 119, 87, 0.35);
 
   /* === Code / Terminal === */
-  --color-code-bg:               #F2F2F7;
-  --color-code-text:             #1C1C1E;
-  --color-terminal-bg:           #1C1C1E;
-  --color-terminal-text:         #F5F5F7;
+  --color-code-bg:               #F0EDE5;
+  --color-code-text:             #29261B;
+  --color-terminal-bg:           #29261B;
+  --color-terminal-text:         #FAF9F5;
 
   /* === Links === */
-  --color-link:                  #007AFF;
-  --color-link-hover:            #0066D6;
+  --color-link:                  #D97757;
+  --color-link-hover:            #C56A4B;
 
-  /* === Message Bubbles === */
-  --bubble-user-bg:              #007AFF;
-  --bubble-user-text:            #FFFFFF;
-  --bubble-assistant-bg:         #E5E5EA;  /* systemGray5 */
-  --bubble-assistant-text:       #1C1C1E;
+  /* === Message Bubbles (flat style, no bubble backgrounds) === */
+  --bubble-user-bg:              transparent;
+  --bubble-user-text:            #29261B;
+  --bubble-assistant-bg:         transparent;
+  --bubble-assistant-text:       #29261B;
 
   /* === Scrollbar === */
   --scrollbar-track:             transparent;
-  --scrollbar-thumb:             rgba(0, 0, 0, 0.2);
-  --scrollbar-thumb-hover:       rgba(0, 0, 0, 0.35);
+  --scrollbar-thumb:             rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover:       rgba(0, 0, 0, 0.3);
 
   /* === Selection === */
-  --selection-bg:                rgba(0, 122, 255, 0.25);
-  --selection-text:              #FFFFFF;
+  --selection-bg:                rgba(217, 119, 87, 0.25);
+  --selection-text:              #29261B;
 }
 
 /* --------------------------------------------------------------------------
@@ -84,73 +83,73 @@
    -------------------------------------------------------------------------- */
 [data-theme="dark"] {
   /* === Brand / Accent Colors === */
-  --color-brand:                 #007AFF;
-  --color-brand-hover:           #0066D6;
-  --color-brand-active:          #0056B8;
-  --color-brand-muted:           rgba(0, 122, 255, 0.12);
+  --color-brand:                 #D97757;
+  --color-brand-hover:           #C56A4B;
+  --color-brand-active:          #B05D3F;
+  --color-brand-muted:           rgba(217, 119, 87, 0.15);
 
   --color-wechat-green:          #07C160;
   --color-wechat-green-hover:    #06AD56;
   --color-wechat-green-muted:    rgba(7, 193, 96, 0.12);
 
   /* === Backgrounds === */
-  --color-bg-primary:            #1C1C1E;
-  --color-bg-secondary:          #2C2C2E;
-  --color-bg-tertiary:           #3A3A3C;
-  --color-bg-quaternary:         #48484A;
+  --color-bg-primary:            #262624;
+  --color-bg-secondary:          #2D2D2A;
+  --color-bg-tertiary:           #383733;
+  --color-bg-quaternary:         #454440;
 
   /* Glass / Vibrancy */
-  --glass-bg-sidebar:            rgba(28, 28, 30, 0.85);
-  --glass-bg-toolbar:            rgba(28, 28, 30, 0.72);
-  --glass-bg-overlay:            rgba(28, 28, 30, 0.55);
+  --glass-bg-sidebar:            #2D2D2A;
+  --glass-bg-toolbar:            #2D2D2A;
+  --glass-bg-overlay:            rgba(38, 38, 36, 0.88);
 
   /* === Text Colors === */
-  --color-text-primary:          #F5F5F7;
-  --color-text-secondary:        #98989D;
-  --color-text-tertiary:         #636366;
-  --color-text-quaternary:       #48484A;
-  --color-text-inverse:          #1C1C1E;
+  --color-text-primary:          #EDEBE0;
+  --color-text-secondary:        #9E9B8F;
+  --color-text-tertiary:         #6B6860;
+  --color-text-quaternary:       #4A4842;
+  --color-text-inverse:          #262624;
 
   /* === Semantic Colors === */
   --color-success:               #30D158;
   --color-success-muted:         rgba(48, 209, 88, 0.12);
-  --color-warning:               #FFD60A;
-  --color-warning-muted:         rgba(255, 214, 10, 0.12);
+  --color-warning:               #E8A440;
+  --color-warning-muted:         rgba(232, 164, 64, 0.15);
   --color-danger:                #FF453A;
   --color-danger-muted:          rgba(255, 69, 58, 0.12);
-  --color-info:                  #64D2FF;
-  --color-info-muted:            rgba(100, 210, 255, 0.12);
+  --color-info:                  #E8A47A;
+  --color-info-muted:            rgba(232, 164, 122, 0.15);
 
   /* === Borders / Separators === */
-  --color-separator:             rgba(255, 255, 255, 0.08);
-  --color-separator-strong:      rgba(255, 255, 255, 0.12);
-  --color-border:                rgba(255, 255, 255, 0.1);
-  --color-border-focus:          rgba(0, 122, 255, 0.5);
+  --color-separator:             rgba(255, 255, 255, 0.06);
+  --color-separator-strong:      rgba(255, 255, 255, 0.1);
+  --color-border:                rgba(255, 255, 255, 0.08);
+  --color-border-focus:          rgba(217, 119, 87, 0.4);
 
   /* === Code / Terminal === */
-  --color-code-bg:               #262629;
-  --color-code-text:             #F5F5F7;
-  --color-terminal-bg:           #161618;
-  --color-terminal-text:         #F5F5F7;
+  --color-code-bg:               #2D2D2A;
+  --color-code-text:             #EDEBE0;
+  --color-terminal-bg:           #1E1E1C;
+  --color-terminal-text:         #EDEBE0;
 
   /* === Links === */
-  --color-link:                  #64D2FF;
-  --color-link-hover:            #8FE3FF;
+  --color-link:                  #E8A47A;
+  --color-link-hover:            #F0C0A0;
 
-  /* === Message Bubbles === */
-  --bubble-user-bg:              #007AFF;
-  --bubble-user-text:            #FFFFFF;
-  --bubble-assistant-bg:         #2C2C2E;
-  --bubble-assistant-text:       #F5F5F7;
+  /* === Message Bubbles (flat style) === */
+  --bubble-user-bg:              transparent;
+  --bubble-user-text:            #EDEBE0;
+  --bubble-assistant-bg:         transparent;
+  --bubble-assistant-text:       #EDEBE0;
 
   /* === Scrollbar === */
   --scrollbar-track:             transparent;
-  --scrollbar-thumb:             rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover:       rgba(255, 255, 255, 0.25);
+  --scrollbar-thumb:             rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover:       rgba(255, 255, 255, 0.2);
 
   /* === Selection === */
-  --selection-bg:                rgba(0, 122, 255, 0.3);
-  --selection-text:              #FFFFFF;
+  --selection-bg:                rgba(217, 119, 87, 0.3);
+  --selection-text:              #EDEBE0;
 }
 
 /* --------------------------------------------------------------------------
@@ -311,32 +310,26 @@ table {
    5. Glass / Vibrancy Utility Classes
    -------------------------------------------------------------------------- */
 
-/* Frosted glass sidebar (NSVisualEffectView vibrancy simulation) */
+/* Solid sidebar (no glass effect — Claude Desk style) */
 .glass-sidebar {
   background: var(--glass-bg-sidebar);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
-/* Toolbar-level glass */
+/* Toolbar-level surface */
 .glass-toolbar {
   background: var(--glass-bg-toolbar);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
 }
 
-/* Overlay glass for modals/popovers */
+/* Overlay glass for modals/popovers (keeps subtle blur) */
 .glass-overlay {
   background: var(--glass-bg-overlay);
   backdrop-filter: blur(12px) saturate(140%);
   -webkit-backdrop-filter: blur(12px) saturate(140%);
 }
 
-/* Generic glass */
+/* Generic glass — solid by default */
 .glass {
   background: var(--glass-bg-sidebar);
-  backdrop-filter: blur(18px) saturate(170%);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
 }
 
 /* --------------------------------------------------------------------------

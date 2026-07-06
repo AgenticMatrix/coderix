@@ -201,7 +201,7 @@ export default function SettingsView(): React.ReactElement {
             padding: '6px 16px',
             borderRadius: 'var(--radius-md)',
             background: 'var(--color-brand)',
-            color: '#ffffff',
+            color: 'var(--color-text-inverse)',
             border: 'none',
             cursor: 'pointer',
             fontSize: 'var(--text-sm)',
@@ -251,7 +251,7 @@ export default function SettingsView(): React.ReactElement {
                     : 'transparent',
                 color:
                   activeTab === tab
-                    ? '#ffffff'
+                    ? 'var(--color-text-inverse)'
                     : 'var(--color-text-secondary)',
                 fontSize: 'var(--text-sm)',
                 cursor: 'pointer',
@@ -306,7 +306,7 @@ export default function SettingsView(): React.ReactElement {
                         background: provider.connected
                           ? 'var(--color-success)'
                           : 'var(--color-text-tertiary)',
-                        color: '#ffffff',
+                        color: 'var(--color-text-inverse)',
                       }}
                     >
                       {provider.connected ? '已连接' : '未连接'}
@@ -434,12 +434,12 @@ export default function SettingsView(): React.ReactElement {
                           : '1px solid var(--color-separator)',
                       background:
                         t === 'light'
-                          ? '#ffffff'
-                          : '#1c1c1e',
+                          ? '#FAF9F5'
+                          : '#262624',
                       color:
                         t === 'light'
-                          ? '#1d1d1f'
-                          : '#f5f5f7',
+                          ? '#29261B'
+                          : '#EDEBE0',
                       cursor: 'pointer',
                       fontSize: 'var(--text-sm)',
                       fontWeight: settings.theme === t ? 600 : 400,

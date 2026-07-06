@@ -85,7 +85,7 @@ export default function TerminalPanel({
             padding: '4px 12px',
             height: '28px',
             flexShrink: 0,
-            background: 'var(--color-bg-secondary, #F2F2F7)',
+            background: 'var(--color-bg-secondary, #F4F2EB)',
             borderBottom: '1px solid var(--color-separator, rgba(0,0,0,0.08))',
           }}
         >
@@ -93,7 +93,7 @@ export default function TerminalPanel({
             style={{
               fontSize: '11px',
               fontWeight: 600,
-              color: 'var(--color-text-secondary, #6C6C70)',
+              color: 'var(--color-text-secondary, #656358)',
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
             }}
@@ -105,7 +105,7 @@ export default function TerminalPanel({
             style={{
               background: 'none',
               border: 'none',
-              color: 'var(--color-text-tertiary, #AEAEB2)',
+              color: 'var(--color-text-tertiary, #9E9B8F)',
               cursor: 'pointer',
               fontSize: '14px',
               padding: '2px 6px',

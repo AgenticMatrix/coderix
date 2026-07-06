@@ -60,7 +60,7 @@
 
 .iconButton.active {
   color: var(--color-brand);
-  background: var(--color-brand-muted, rgba(0, 122, 255, 0.1));
+  background: var(--color-brand-muted, rgba(217, 119, 87, 0.1));
 }
 
 /* Tooltip — slides out from right side of icon */

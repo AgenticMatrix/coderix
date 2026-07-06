@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
           justifyContent: 'center',
           height: '100vh',
           padding: '16px',
-          background: 'var(--color-bg-primary, #FFFFFF)',
+          background: 'var(--color-bg-primary, #FAF9F5)',
           color: 'var(--color-text-primary, #1D1D1F)',
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}>
@@ -55,8 +55,8 @@ export class ErrorBoundary extends Component<Props, State> {
             onClick={this.handleRetry}
             style={{
               padding: '8px 16px',
-              background: 'var(--color-brand, #007AFF)',
-              color: '#ffffff',
+              background: 'var(--color-brand, #D97757)',
+              color: 'var(--color-text-inverse, #FFFFFF)',
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',

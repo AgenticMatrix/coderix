@@ -109,7 +109,7 @@ export function createWindowManager(): WindowManager {
               // Keep native OS titlebar for Linux/Windows
               autoHideMenuBar: true,
             }),
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#FAF9F5',
         // ── Show only when ready ───────────────────────────────────────
         show: false,
         webPreferences: {

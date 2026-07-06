@@ -1,6 +1,5 @@
 /* ==========================================================================
-   Coderix Design Tokens — WeChat × Apple Design System
-   "微信苹果桌面风": WeChat's clean minimalism + Apple's refined aesthetics
+   Coderix Design Tokens — Claude Desk inspired warm aesthetic
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -52,12 +51,6 @@
   --radius-xl: 16px;
   --radius-2xl: 20px;
   --radius-full: 9999px;
-
-  /* Message bubble radius — WeChat/Apple style */
-  --bubble-radius-user: 16px 16px 4px 16px;
-  --bubble-radius-assistant: 16px 16px 16px 4px;
-  --bubble-radius-first: 16px 16px 4px 16px;
-  --bubble-radius-last: 16px 16px 16px 4px;
 }
 
 /* --------------------------------------------------------------------------

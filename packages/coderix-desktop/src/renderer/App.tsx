@@ -399,7 +399,7 @@ export function App(): React.ReactElement {
               maxHeight: '85vh',
               borderRadius: '12px',
               boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-              background: '#ffffff',
+              background: 'var(--color-bg-primary)',
               overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}

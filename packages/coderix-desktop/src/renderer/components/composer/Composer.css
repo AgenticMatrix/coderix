@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Composer.module.css — Bottom Input Area (WeChat × Apple Style)
-   Clean input box with model picker, context settings, and send button
+   Composer.css — Bottom Input Area (Claude Desk Style)
+   Warm surface background, terracotta focus ring, clean send button
    ========================================================================== */
 
 /* Composer root — bottom bar pinned to viewport */
@@ -8,9 +8,9 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  padding: var(--space-2) var(--space-4) var(--space-3);
+  padding: 8px 16px 12px;
   border-top: 1px solid var(--color-separator);
-  background: var(--color-bg-primary);
+  background: var(--color-bg-secondary);
   transition: border-color var(--duration-fast) var(--ease-default);
 }
 
@@ -90,7 +90,7 @@
 
 .composer-input-wrapper:focus-within {
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px var(--color-brand-muted);
+  box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.2);
 }
 
 /* Textarea input */

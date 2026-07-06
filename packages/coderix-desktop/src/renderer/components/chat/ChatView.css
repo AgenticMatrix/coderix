@@ -1,6 +1,6 @@
 /* ==========================================================================
-   ChatView — WeChat / Apple Messages Style
-   iMessage-style bubbles, code blocks, thinking blocks, smooth scroll
+   ChatView — Claude Desk Flat Message Style
+   Full-width blocks, subtle separators, clean typography
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -21,7 +21,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--space-4) var(--space-4);
+  padding: 24px 0;
   overscroll-behavior: contain;
 }
 
@@ -63,60 +63,68 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. Message Wrapper & Bubbles (iMessage style)
+   2. Message Layout — Flat Claude Desk Style (full-width blocks)
    -------------------------------------------------------------------------- */
 
-/* Each message row */
+/* Each message row — full width block, centered content */
 .message-row {
-  display: flex;
-  margin-bottom: var(--space-1);
-  padding: var(--space-0) var(--space-2);
+  display: block;
+  margin-bottom: 0;
+  padding: 0;
 }
 
-/* User message — right aligned, blue/green bubble */
+/* User message — no special alignment */
 .message-row.user {
-  justify-content: flex-end;
+  /* full width, no alignment needed */
 }
 
-/* Assistant message — left aligned, gray bubble */
+/* Assistant message — subtle bottom separator */
 .message-row.assistant {
-  justify-content: flex-start;
+  /* separator is on the bubble */
 }
 
 /* System message — centered, muted */
 .message-row.system {
+  display: flex;
   justify-content: center;
 }
 
-/* === Message Bubble === */
+/* === Message Block (replaces bubble) === */
 .message-bubble {
-  max-width: 72%;
-  padding: var(--space-2-5) var(--space-3-5);
+  max-width: 820px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 16px 24px;
   font-size: var(--text-body);
-  line-height: var(--leading-relaxed);
+  line-height: 1.65;
   word-wrap: break-word;
   overflow-wrap: break-word;
   position: relative;
-  transition: opacity var(--duration-fast) var(--ease-default);
+  color: var(--color-text-primary);
+  background: transparent;
+  border-radius: 0;
 }
 
-/* User bubble — blue (Apple) or green (WeChat) accent */
+/* User message block */
 .message-bubble.user {
-  background-color: var(--bubble-user-bg);
-  color: var(--bubble-user-text);
-  border-radius: var(--bubble-radius-user);
-  margin-left: var(--space-12);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  border-radius: 0;
+  margin-left: auto;
+  margin-right: auto;
 }
 
-/* Assistant bubble — light/dark gray */
+/* Assistant message block — bottom border separator */
 .message-bubble.assistant {
-  background-color: var(--bubble-assistant-bg);
-  color: var(--bubble-assistant-text);
-  border-radius: var(--bubble-radius-assistant);
-  margin-right: var(--space-12);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  border-radius: 0;
+  border-bottom: 1px solid var(--color-separator);
+  margin-left: auto;
+  margin-right: auto;
 }
 
-/* System bubble — subtle chip */
+/* System bubble — subtle chip (kept for system messages) */
 .message-bubble.system {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
@@ -127,18 +135,13 @@
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
   max-width: 320px;
+  width: auto;
 }
 
-/* First message in a group — bigger top radius */
-.message-row.user + .message-row.user .message-bubble.user,
-.message-row.assistant + .message-row.assistant .message-bubble.assistant {
-  /* consecutive same-author messages get tighter spacing */
-  margin-top: 0;
-}
-
+/* Different-role messages get extra top spacing */
 .message-row.user + .message-row.assistant,
 .message-row.assistant + .message-row.user {
-  margin-top: var(--space-3);
+  margin-top: 8px;
 }
 
 /* Streaming message animation */
@@ -147,15 +150,16 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. Message Bubble — Inline Markdown Content
+   3. Message Content — Inline Markdown
    -------------------------------------------------------------------------- */
 
-/* Code blocks inside bubbles */
+/* Code blocks inside messages */
 .message-bubble pre {
   margin: var(--space-2) 0;
-  padding: var(--space-3);
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-separator);
+  border-radius: 8px;
   overflow-x: auto;
   font-size: var(--text-footnote);
   line-height: var(--leading-code);
@@ -163,57 +167,44 @@
 
 .message-bubble pre code {
   background: none;
+  border: none;
   padding: 0;
-  font-size: inherit;
+  font-size: 13px;
+  line-height: 1.55;
   color: inherit;
 }
 
 /* Inline code */
 .message-bubble code {
-  padding: var(--space-0) var(--space-1);
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: var(--radius-xs);
-  font-size: var(--text-footnote);
+  padding: 1px 5px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-separator);
+  border-radius: 4px;
+  font-size: 13px;
   font-family: var(--font-mono);
 }
 
-/* User bubble inline code — darker overlay */
-.message-bubble.user code {
-  background: rgba(255, 255, 255, 0.18);
-}
-
-/* Links inside bubbles */
+/* Links inside messages */
 .message-bubble a {
+  color: var(--color-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.message-bubble.user a {
-  color: rgba(255, 255, 255, 0.9);
+.message-bubble a:hover {
+  color: var(--color-link-hover);
 }
 
-.message-bubble.assistant a {
-  color: var(--color-link);
-}
-
-/* Blockquote inside bubbles */
+/* Blockquote inside messages */
 .message-bubble blockquote {
-  border-left: 3px solid;
+  border-left: 3px solid var(--color-brand);
   padding-left: var(--space-3);
   margin: var(--space-2) 0;
-  opacity: 0.8;
+  opacity: 0.85;
   font-style: italic;
 }
 
-.message-bubble.user blockquote {
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.message-bubble.assistant blockquote {
-  border-color: var(--color-brand);
-}
-
-/* Lists inside bubbles */
+/* Lists inside messages */
 .message-bubble ul,
 .message-bubble ol {
   margin: var(--space-1) 0;
@@ -232,42 +223,34 @@
   margin-bottom: var(--space-0);
 }
 
-/* Headings inside bubbles */
+/* Headings inside messages */
 .message-bubble h1 { font-size: var(--text-title2); font-weight: var(--font-bold); margin: var(--space-3) 0 var(--space-2); }
 .message-bubble h2 { font-size: var(--text-title3); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1-5); }
 .message-bubble h3 { font-size: var(--text-headline); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1); }
 
-/* Table container in bubbles */
+/* Table container in messages */
 .message-bubble .table-wrapper {
   overflow-x: auto;
   margin: var(--space-2) 0;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-separator);
 }
 
 /* Horizontal rule */
 .message-bubble hr {
   margin: var(--space-3) 0;
   border: none;
-  border-top: 1px solid;
-  opacity: 0.2;
+  border-top: 1px solid var(--color-separator);
+  opacity: 0.5;
 }
 
-.message-bubble.user hr {
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.message-bubble.assistant hr {
-  border-color: var(--color-separator);
-}
-
-/* Paragraph spacing in bubbles */
+/* Paragraph spacing in messages */
 .message-bubble p {
   margin: 0;
 }
 
 .message-bubble p + p {
-  margin-top: var(--space-2);
+  margin-top: 8px;
 }
 
 /* --------------------------------------------------------------------------
@@ -414,13 +397,6 @@
   padding: 0 var(--space-1);
   font-size: var(--text-caption1);
   color: var(--color-text-tertiary);
-}
-
-.message-row.user .message-meta {
-  justify-content: flex-end;
-}
-
-.message-row.assistant .message-meta {
   justify-content: flex-start;
 }
 
@@ -440,107 +416,10 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Composer area (bottom input bar)
+   8. Responsive / Small adjustments
    -------------------------------------------------------------------------- */
-.chat-composer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  border-top: 1px solid var(--color-separator);
-  background: var(--color-bg-primary);
-}
-
-.chat-composer .composer-input-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--space-2) var(--space-3);
-  transition: border-color var(--duration-fast) var(--ease-default),
-              box-shadow var(--duration-fast) var(--ease-default);
-}
-
-.chat-composer .composer-input-wrapper:focus-within {
-  border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px var(--color-brand-muted);
-}
-
-.chat-composer .composer-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--color-text-primary);
-  font-size: var(--text-body);
-  font-family: var(--font-sans);
-  line-height: var(--leading-normal);
-  resize: none;
-  max-height: 120px;
-}
-
-.chat-composer .composer-input::placeholder {
-  color: var(--color-text-tertiary);
-}
-
-.chat-composer .composer-shortcut-hint {
-  font-size: var(--text-caption1);
-  color: var(--color-text-tertiary);
-  padding: var(--space-0) var(--space-1-5);
-  border: 1px solid var(--color-separator);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-sans);
-  background: var(--color-bg-secondary);
-  white-space: nowrap;
-}
-
-.chat-composer .composer-send-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  background: var(--color-brand);
-  color: var(--color-text-inverse);
-  border: none;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-default),
-              transform var(--duration-fast) var(--ease-default);
-  flex-shrink: 0;
-}
-
-.chat-composer .composer-send-btn:hover {
-  background: var(--color-brand-hover);
-  transform: scale(1.05);
-}
-
-.chat-composer .composer-send-btn:active {
-  background: var(--color-brand-active);
-  transform: scale(0.97);
-}
-
-.chat-composer .composer-send-btn:disabled {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text-tertiary);
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* --------------------------------------------------------------------------
-   9. Responsive / Small adjustments
-   -------------------------------------------------------------------------- */
-
-/* On narrow panels, reduce bubble max-width */
-@media (max-width: 480px) {
-  .message-bubble {
-    max-width: 88%;
-  }
-}
 
 /* Reduce spacing when sidebar/detail are visible */
 .chat-messages.compact {
-  padding: var(--space-3) var(--space-3);
+  padding: 12px 0;
 }
