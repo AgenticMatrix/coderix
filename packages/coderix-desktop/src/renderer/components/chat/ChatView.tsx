@@ -210,7 +210,8 @@ export function ChatView({
           })}
         </AnimatePresence>
 
-        {/* Invisible scroll anchor */}
+        {/* Invisible scroll anchor — outside AnimatePresence so it never
+            gets removed from the DOM during child reconciliation. */}
         <div ref={messagesEndRef} />
       </div>
 
