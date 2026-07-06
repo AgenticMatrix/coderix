@@ -9,7 +9,6 @@
     "start": "tsx --tsconfig packages/coderix-cli/tsconfig.json packages/coderix-cli/src/cli/main.tsx",
     "dev": "tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
     "dev:cli": "tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
-    "dev:desk": "pnpm --filter @coderix/desktop dev",
     "dev:vscode": "pnpm --filter @coderix/vscode dev",
     "build": "pnpm --filter @coderix/core build && pnpm --filter @coderix/cli build",
     "build:all": "pnpm --filter @coderix/core build && pnpm --filter @coderix/cli build && pnpm --filter @coderix/vscode build",
@@ -17,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "dev:desk": "cd desktop && npm run electron:start"
+    "dev:desk": "pnpm --filter @coderix/desktop dev"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.28.1",

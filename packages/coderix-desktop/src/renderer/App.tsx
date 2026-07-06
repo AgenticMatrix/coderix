@@ -26,6 +26,7 @@ import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
+import { GlobalModal } from './components/modals';
 import type { SidebarTab } from './components/sidebar/IconSidebar';
 
 import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';

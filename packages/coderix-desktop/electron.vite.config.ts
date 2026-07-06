@@ -5,11 +5,12 @@ import { builtinModules } from 'node:module'
 
 // Everything gets bundled EXCEPT electron and Node.js builtins.
 // This avoids CJS/ESM interop issues in Electron's Node.js runtime.
+// node:sqlite is NOT a builtin in Electron 33 (Node 20), so we stub it.
 const external = [
   'electron',
   'electron/main',
-  ...builtinModules,
-  ...builtinModules.map(m => `node:${m}`),
+  ...builtinModules.filter(m => m !== 'sqlite'),
+  ...builtinModules.filter(m => m !== 'sqlite').map(m => `node:${m}`),
 ]
 
 export default defineConfig({
@@ -24,6 +25,12 @@ export default defineConfig({
         output: {
           format: 'cjs',
         },
+      },
+    },
+    resolve: {
+      alias: {
+        // Electron 33 (Node 20) doesn't have node:sqlite — stub it
+        'node:sqlite': resolve(__dirname, 'src/main/node-sqlite-stub.cjs'),
       },
     },
   },

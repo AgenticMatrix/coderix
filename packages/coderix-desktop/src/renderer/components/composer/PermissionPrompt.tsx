@@ -47,7 +47,7 @@ export function PermissionPrompt({
 
   // Build a short description from request fields
   const description = request.message
-    || (request.command ? `Run: ${request.command}` : `${request.toolName} needs permission`);
+    || `${request.toolName} needs permission`;
 
   return (
     <div

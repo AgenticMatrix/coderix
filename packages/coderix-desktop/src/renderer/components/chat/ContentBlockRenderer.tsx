@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallCard } from './ToolCallCard';
+import { CodeBlock } from './CodeBlock';
 import type { StreamBlock } from '../../types';
 
 export interface ContentBlockRendererProps {
@@ -29,19 +30,14 @@ export function ContentBlockRenderer({
         <div className="prose prose-sm max-w-none text-[var(--color-text-primary)]">
           <ReactMarkdown
             components={{
-              // Code blocks
-              pre({ children, ...props }) {
-                return (
-                  <pre
-                    {...props}
-                    className="p-3 rounded-[var(--radius-lg)] bg-[var(--color-code-bg)] overflow-x-auto my-2 text-[var(--color-text-primary)] border border-[var(--color-separator)]"
-                  >
-                    {children}
-                  </pre>
-                );
+              // Code blocks — use dedicated CodeBlock component
+              pre({ children }) {
+                return <>{children}</>;
               },
               code({ children, className, ...props }) {
-                const isInline = !className;
+                const match = /language-(\w+)/.exec(className || '');
+                const codeStr = String(children).replace(/\n$/, '');
+                const isInline = !match && !codeStr.includes('\n');
                 if (isInline) {
                   return (
                     <code
@@ -53,9 +49,11 @@ export function ContentBlockRenderer({
                   );
                 }
                 return (
-                  <code {...props} className={`font-mono text-[13px] leading-[20px] ${className ?? ''}`}>
-                    {children}
-                  </code>
+                  <CodeBlock
+                    code={codeStr}
+                    language={match ? match[1] : ''}
+                    maxLines={50}
+                  />
                 );
               },
               // Links

@@ -15,21 +15,26 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { loadConfig, loadSettings, getMaxToolConcurrency } from '../cli/config.js';
 import { createClient } from '../api/client.js';
-import { createCallModelFromClient } from '../core/provider-adapter.js';
-import { ToolRegistry } from '../core/tool-registry.js';
-import { SessionManager } from '../core/session.js';
-import { QueryEngine } from '../core/query-engine.js';
-import { SubAgentRegistry } from '../core/subagent-registry.js';
-import { SystemPromptAssembler } from '../core/system-prompt.js';
-import { plugins } from '../tools/registry.js';
-import { PermissionMode, RiskLevel } from '../core/types.js';
-import { isSlashCommand, parseSlashCommand } from '../commands/handler.js';
-import { findSlashCommand } from '../commands/registry.js';
+import {
+  createCallModelFromClient,
+  ToolRegistry,
+  SessionManager,
+  QueryEngine,
+  SubAgentRegistry,
+  SystemPromptAssembler,
+  plugins,
+  PermissionMode,
+  RiskLevel,
+  buildAgentRegistry,
+  setSubAgentRegistry,
+} from '@coderix/core';
 import type {
   DeferredPermission,
   AssistantMessage,
   QueryMessage,
-} from '../core/types.js';
+} from '@coderix/core';
+import { isSlashCommand, parseSlashCommand } from '../commands/handler.js';
+import { findSlashCommand } from '../commands/registry.js';
 
 // ── JSON-RPC ────────────────────────────────────────────────────────
 
@@ -312,12 +317,8 @@ export async function startDesktopGateway(
 
   const settings = loadSettings();
   const subAgentRegistry = new SubAgentRegistry();
-  const { setSubAgentRegistry } = await import(
-    '../agents/agent-spawn/registry-ref.js'
-  );
   setSubAgentRegistry(subAgentRegistry);
   const systemPromptAssembler = new SystemPromptAssembler();
-  const { buildAgentRegistry } = await import('../agents/registry.js');
   const { registry: agentRegistry } = await buildAgentRegistry(cwd);
 
   const engine = new QueryEngine({
