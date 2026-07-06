@@ -178,7 +178,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
       {/* Header */}
       <div
         style={{
-          padding: '16px 24px',
+          padding: '7px 12px 7px 24px',
           borderBottom: '1px solid var(--color-separator)',
           display: 'flex',
           justifyContent: 'space-between',
@@ -188,7 +188,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
       >
         <h2
           style={{
-            fontSize: 'var(--text-xl)',
+            fontSize: 'var(--text-base)',
             fontWeight: 600,
             margin: 0,
           }}
