@@ -119,9 +119,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         msg = { ...msg, blocks: [...msg.blocks, { ...block }] };
       }
 
-      // Accumulate text content for the message's string representation
-      if (block.content && (block.type === 'text' || block.type === 'thinking')) {
-        msg = { ...msg, content: msg.content + block.content };
+      // Set message content from latest text block (ipc-client already accumulates)
+      if (block.content !== undefined && (block.type === 'text' || block.type === 'thinking')) {
+        msg = { ...msg, content: block.content };
       }
 
       set({ currentMessage: msg });

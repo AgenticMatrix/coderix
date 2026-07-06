@@ -20,7 +20,7 @@ declare global {
   interface Window {
     coderixAPI: {
       query: { submit(query: string, sessionId?: string): Promise<{ status: string }>; interrupt(): Promise<{ status: string }> };
-      session: { list(): Promise<unknown[]>; load(sessionId: string): Promise<unknown>; fork(sessionId: string): Promise<unknown>; delete(sessionId: string): Promise<{ status: string }> };
+      session: { create(opts?: { title?: string }): Promise<{ id: string; title: string; turnCount: number }>; list(): Promise<unknown[]>; load(sessionId: string): Promise<unknown>; fork(sessionId: string): Promise<unknown>; delete(sessionId: string): Promise<{ status: string }> };
       permission: { approve(toolUseId: string): Promise<{ status: string }>; deny(toolUseId: string): Promise<{ status: string }>; setMode(mode: string): Promise<{ mode: string }> };
       fs: { readFile(filePath: string): Promise<{ content: string; path: string }>; writeFile(path: string, content: string): Promise<{ status: string; path: string }>; listDir(dirPath: string): Promise<{ path: string; entries: unknown[] }>; watch(watchPath: string): Promise<{ watcherId: string; path: string }> };
       terminal: { create(opts?: { cwd?: string; rows?: number; cols?: number }): Promise<{ terminalId: string }>; write(sessionId: string, data: string): void; resize(sessionId: string, rows: number, cols: number): void; destroy(sessionId: string): void; onData(sessionId: string, callback: (data: string) => void): () => void; onExit(sessionId: string, callback: (exitCode: number) => void): () => void };

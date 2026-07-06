@@ -242,6 +242,11 @@ const coderixAPI = {
   // ── Session ──────────────────────────────────────────────────────────
 
   session: {
+    /** Create a new session. */
+    create(opts?: { title?: string }): Promise<{ id: string; title: string; turnCount: number }> {
+      return ipcRenderer.invoke('session:create', opts ?? {});
+    },
+
     /** List all sessions. */
     list(): Promise<unknown[]> {
       return ipcRenderer.invoke(CH.SESSION_LIST);

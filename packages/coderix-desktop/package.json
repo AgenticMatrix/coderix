@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@coderix/core": "workspace:*",
     "@radix-ui/react-tooltip": "^1.1.0",
     "chokidar": "^5.0.0",
     "electron-store": "^10.0.0",
