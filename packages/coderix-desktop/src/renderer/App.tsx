@@ -296,6 +296,33 @@ export function App(): React.ReactElement {
         </div>
       </AppLayout>
 
+      {/* DEBUG: Direct settings toggle button — bypasses all component props */}
+      <button
+        onClick={() => { console.log('DEBUG settings button clicked'); setSettingsOpen(true); }}
+        style={{
+          position: 'fixed',
+          bottom: '50px',
+          right: '20px',
+          zIndex: 2147483646,
+          background: '#ff0000',
+          color: '#ffffff',
+          border: 'none',
+          borderRadius: '50%',
+          width: '50px',
+          height: '50px',
+          fontSize: '20px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          boxShadow: '0 4px 12px rgba(255,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        title="OPEN SETTINGS (DEBUG)"
+      >
+        ⚙
+      </button>
+
       {/* Global modal layer — permission dialogs, question prompts */}
       <GlobalModal />
 
@@ -304,9 +331,14 @@ export function App(): React.ReactElement {
         <div
           style={{
             position: 'fixed',
-            inset: 0,
-            zIndex: 99999,
-            background: 'rgba(0,0,0,0.4)',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 2147483647,
+            background: 'rgba(255,0,0,0.5)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -324,8 +356,8 @@ export function App(): React.ReactElement {
               height: '85vh',
               maxHeight: '85vh',
               borderRadius: '12px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.08)',
-              background: 'var(--color-bg-primary)',
+              boxShadow: '0 0 0 4px red, 0 8px 32px rgba(0,0,0,0.25)',
+              background: '#ffffff',
               overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -336,11 +368,13 @@ export function App(): React.ReactElement {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '16px 20px',
-              borderBottom: '1px solid var(--color-separator)',
+              borderBottom: '1px solid #eee',
               flexShrink: 0,
+              background: '#ff0000',
+              color: '#ffffff',
             }}>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                Settings
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+                SETTINGS DEBUG
               </h2>
               <button
                 onClick={() => setSettingsOpen(false)}
@@ -352,15 +386,15 @@ export function App(): React.ReactElement {
                   justifyContent: 'center',
                   borderRadius: '6px',
                   border: 'none',
-                  background: 'transparent',
-                  color: 'var(--color-text-tertiary)',
+                  background: '#ffffff',
+                  color: '#ff0000',
                   cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
                 }}
                 aria-label="Close settings"
               >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M1 1l12 12M13 1L1 13" />
-                </svg>
+                ✕
               </button>
             </div>
             {/* Scrollable content */}

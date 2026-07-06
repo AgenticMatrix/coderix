@@ -88,20 +88,29 @@ export function createWindowManager(): WindowManager {
 
       const state = this.loadWindowState();
 
+      const isMac = process.platform === 'darwin';
+
       mainWindow = new BrowserWindow({
         width: state.width,
         height: state.height,
         minWidth: DEFAULT_WINDOW_OPTIONS.minWidth,
         minHeight: DEFAULT_WINDOW_OPTIONS.minHeight,
         title: 'Coderix',
-        // ── macOS Native Look ──────────────────────────────────────────
-        titleBarStyle: 'hidden',
-        trafficLightPosition: { x: 6, y: 11 },
-        vibrancy: 'under-window',
-        visualEffectState: 'active',
+        // ── Platform-specific window chrome ────────────────────────────
+        // macOS: hidden titlebar with traffic lights; Linux/Windows: OS titlebar
+        ...(isMac
+          ? {
+              titleBarStyle: 'hidden' as const,
+              trafficLightPosition: { x: 6, y: 11 },
+              vibrancy: 'under-window' as const,
+              visualEffectState: 'active' as const,
+              tabbingIdentifier: 'coderix-main',
+            }
+          : {
+              // Keep native OS titlebar for Linux/Windows
+              autoHideMenuBar: true,
+            }),
         backgroundColor: '#FFFFFF',
-        // ── Tab support (macOS) ────────────────────────────────────────
-        tabbingIdentifier: 'coderix-main',
         // ── Show only when ready ───────────────────────────────────────
         show: false,
         webPreferences: {
