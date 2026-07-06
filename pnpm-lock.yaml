@@ -149,9 +149,6 @@ importers:
 
   packages/coderix-desktop:
     dependencies:
-      '@coderix/core':
-        specifier: workspace:*
-        version: link:../coderix-core
       '@radix-ui/react-tooltip':
         specifier: ^1.1.0
         version: 1.2.10(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
