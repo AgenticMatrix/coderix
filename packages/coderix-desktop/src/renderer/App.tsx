@@ -16,6 +16,7 @@
  */
 
 import React, { useEffect, useCallback, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
@@ -298,13 +299,13 @@ export function App(): React.ReactElement {
       {/* Global modal layer — permission dialogs, question prompts */}
       <GlobalModal />
 
-      {/* Settings modal */}
-      {settingsOpen && (
+      {/* Settings modal — rendered via Portal to escape framer-motion's transform context */}
+      {settingsOpen && createPortal(
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 500,
+            zIndex: 99999,
             background: 'rgba(0,0,0,0.4)',
             display: 'flex',
             alignItems: 'center',
@@ -323,43 +324,52 @@ export function App(): React.ReactElement {
               height: '85vh',
               maxHeight: '85vh',
               borderRadius: '12px',
-              boxShadow: '0px 8px 24px rgba(0,0,0,0.12), 0px 2px 8px rgba(0,0,0,0.06)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.08)',
               background: 'var(--color-bg-primary)',
               overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button */}
-            <button
-              onClick={() => setSettingsOpen(false)}
-              style={{
-                position: 'absolute',
-                top: '12px',
-                right: '12px',
-                zIndex: 10,
-                width: '28px',
-                height: '28px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '50%',
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--color-text-tertiary)',
-                cursor: 'pointer',
-              }}
-              aria-label="Close settings"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M1 1l12 12M13 1L1 13" />
-              </svg>
-            </button>
+            {/* Header bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--color-separator)',
+              flexShrink: 0,
+            }}>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                Settings
+              </h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--color-text-tertiary)',
+                  cursor: 'pointer',
+                }}
+                aria-label="Close settings"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 1l12 12M13 1L1 13" />
+                </svg>
+              </button>
+            </div>
             {/* Scrollable content */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <SettingsView />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
