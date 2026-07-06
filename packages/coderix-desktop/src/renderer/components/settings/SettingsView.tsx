@@ -84,7 +84,7 @@ const defaultProviders: ProviderConfig[] = [
  * Settings are persisted via the `config:set` IPC channel and
  * applied immediately to the UI store for theme and permission mode.
  */
-export default function SettingsView(): React.ReactElement {
+export default function SettingsView({ onClose }: { onClose?: () => void }): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabKey>('Provider');
   const [settings, setSettings] = useState<SettingsData>({
     providers: defaultProviders,
@@ -183,6 +183,7 @@ export default function SettingsView(): React.ReactElement {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexShrink: 0,
         }}
       >
         <h2
@@ -194,34 +195,56 @@ export default function SettingsView(): React.ReactElement {
         >
           设置
         </h2>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            padding: '6px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--color-brand)',
-            color: 'var(--color-text-inverse)',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 500,
-            opacity: saving ? 0.6 : 1,
-          }}
-        >
-          {saving ? '保存中...' : '保存'}
-        </button>
-        {saveMsg && (
-          <span
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={handleSave}
+            disabled={saving}
             style={{
-              fontSize: 'var(--text-xs)',
-              color: saveMsg.includes('失败') ? 'var(--color-danger)' : 'var(--color-success)',
-              marginLeft: '12px',
+              padding: '6px 16px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-brand)',
+              color: 'var(--color-text-inverse)',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 500,
+              opacity: saving ? 0.6 : 1,
             }}
           >
-            {saveMsg}
-          </span>
-        )}
+            {saving ? '保存中...' : '保存'}
+          </button>
+          {saveMsg && (
+            <span
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: saveMsg.includes('失败') ? 'var(--color-danger)' : 'var(--color-success)',
+              }}
+            >
+              {saveMsg}
+            </span>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              style={{
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: '16px',
+                color: 'var(--color-text-secondary)',
+              }}
+              aria-label="Close settings"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Body: Sidebar Tabs + Content */}
@@ -247,12 +270,9 @@ export default function SettingsView(): React.ReactElement {
                 border: 'none',
                 background:
                   activeTab === tab
-                    ? 'var(--color-selection)'
+                    ? 'var(--color-brand-muted)'
                     : 'transparent',
-                color:
-                  activeTab === tab
-                    ? 'var(--color-text-inverse)'
-                    : 'var(--color-text-secondary)',
+                color: 'var(--color-text-primary)',
                 fontSize: 'var(--text-sm)',
                 cursor: 'pointer',
                 borderRadius: '0 6px 6px 0',
@@ -470,9 +490,9 @@ export default function SettingsView(): React.ReactElement {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {([
-                  { mode: 'plan' as PermissionMode, label: 'Plan — 先出计划再执行', desc: 'Agent 会先制定计划，您审批后再执行。最安全。' },
-                  { mode: 'ask' as PermissionMode, label: 'Ask — 每次操作前询问', desc: '每个工具调用都需要您确认。适合谨慎使用。' },
-                  { mode: 'auto' as PermissionMode, label: 'Auto — 自动执行', desc: 'Agent 自动执行所有操作，不询问。请谨慎使用。' },
+                  { mode: 'plan' as PermissionMode, label: '先出计划再执行', desc: 'Agent 会先制定计划，您审批后再执行。最安全。' },
+                  { mode: 'ask' as PermissionMode, label: '每次操作前询问', desc: '每个工具调用都需要您确认。适合谨慎使用。' },
+                  { mode: 'auto' as PermissionMode, label: '自动执行', desc: 'Agent 自动执行所有操作，不询问。请谨慎使用。' },
                 ]).map(({ mode, label, desc }) => (
                   <button
                     key={mode}

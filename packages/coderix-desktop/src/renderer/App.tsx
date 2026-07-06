@@ -404,40 +404,9 @@ export function App(): React.ReactElement {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header bar */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 20px',
-              borderBottom: '1px solid #eee',
-              flexShrink: 0,
-            }}>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-                Settings
-              </h2>
-              <button
-                onClick={() => setSettingsOpen(false)}
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                }}
-                aria-label="Close settings"
-              >
-                ✕
-              </button>
-            </div>
             {/* Scrollable content */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              <SettingsView />
+              <SettingsView onClose={() => setSettingsOpen(false)} />
             </div>
           </div>
         </div>,

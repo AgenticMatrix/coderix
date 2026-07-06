@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, MessageSquare, FolderGit2, GitBranch } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { FileExplorer } from './FileExplorer';
@@ -21,17 +21,10 @@ export interface SidebarProps {
   onTabChange: (tab: SidebarTab) => void;
 }
 
-const tabs: { key: SidebarTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'sessions', label: 'Sessions', icon: <MessageSquare size={14} /> },
-  { key: 'files', label: 'Files', icon: <FolderGit2 size={14} /> },
-  { key: 'git', label: 'Git', icon: <GitBranch size={14} /> },
-];
-
 export function Sidebar({
   activeSessionId,
   onSessionSelect,
   onNewSession,
-  onOpenSettings,
   activeTab,
   onTabChange,
 }: SidebarProps): React.ReactElement {
@@ -43,7 +36,7 @@ export function Sidebar({
       <div className="px-3 pt-3 pb-2 space-y-2">
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
-            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]" />
+            <Search size={12} className="absolute left-2 top-0 bottom-0 my-auto pointer-events-none text-[var(--color-text-tertiary)]" />
             <input
               type="text"
               placeholder="Search sessions..."
@@ -66,28 +59,6 @@ export function Sidebar({
             onClick={onNewSession}
             shortcut="⌘N"
           />
-        </div>
-
-        {/* Tab selector */}
-        <div className="flex rounded-[var(--radius-md)] bg-[var(--color-bg-tertiary)] p-0.5">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => onTabChange(tab.key)}
-              className={`
-                flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium
-                rounded-[var(--radius-sm)] transition-all duration-100
-                ${
-                  activeTab === tab.key
-                    ? 'bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] shadow-[var(--shadow-sm)]'
-                    : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
-                }
-              `}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          ))}
         </div>
       </div>
 
