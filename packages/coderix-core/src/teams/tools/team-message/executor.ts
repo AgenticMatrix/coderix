@@ -35,8 +35,8 @@ function compressTranscript(messages: Message[]): string {
   }
   const body = parts.join('\n\n');
   if (!body) return '(sub-agent produced no text output)';
-  if (body.length <= 65536) return body;
-  return body.slice(0, 65533) + '...';
+  if (body.length <= 16384) return body;
+  return body.slice(0, 16381) + '...';
 }
 
 interface ToolCallSummary {
