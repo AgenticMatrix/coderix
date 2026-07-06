@@ -238,6 +238,41 @@
 .message-bubble h3 { font-size: var(--text-headline); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1); }
 
 /* Table container in messages */
+.message-bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-footnote);
+  margin: var(--space-2) 0;
+}
+
+.message-bubble thead {
+  background: var(--color-bg-tertiary);
+}
+
+.message-bubble th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: var(--font-semibold);
+  font-size: var(--text-caption1);
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid var(--color-separator-strong);
+  white-space: nowrap;
+}
+
+.message-bubble td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-separator);
+  color: var(--color-text-primary);
+}
+
+.message-bubble tbody tr:nth-child(even) {
+  background: var(--color-bg-secondary);
+}
+
+.message-bubble tbody tr:hover {
+  background: var(--color-bg-tertiary);
+}
+
 .message-bubble .table-wrapper {
   overflow-x: auto;
   margin: var(--space-2) 0;
@@ -425,7 +460,47 @@
 }
 
 /* --------------------------------------------------------------------------
-   8. Responsive / Small adjustments
+   8. KaTeX Math Rendering
+   -------------------------------------------------------------------------- */
+
+/* Inline math */
+.message-bubble .katex {
+  font-size: 1.05em;
+}
+
+/* Block math — center and add spacing */
+.message-bubble .katex-display {
+  margin: var(--space-3) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Make KaTeX inherit text color in light and dark modes */
+.message-bubble .katex,
+.message-bubble .katex .mord,
+.message-bubble .katex .mbin,
+.message-bubble .katex .mrel,
+.message-bubble .katex .mopen,
+.message-bubble .katex .mclose,
+.message-bubble .katex .mpunct,
+.message-bubble .katex .minner {
+  color: var(--color-text-primary);
+}
+
+/* Dark mode KaTeX — use explicit color for readability */
+[data-theme="dark"] .message-bubble .katex,
+[data-theme="dark"] .message-bubble .katex .mord,
+[data-theme="dark"] .message-bubble .katex .mbin,
+[data-theme="dark"] .message-bubble .katex .mrel,
+[data-theme="dark"] .message-bubble .katex .mopen,
+[data-theme="dark"] .message-bubble .katex .mclose,
+[data-theme="dark"] .message-bubble .katex .mpunct,
+[data-theme="dark"] .message-bubble .katex .minner {
+  color: #EDEBE0;
+}
+
+/* --------------------------------------------------------------------------
+   9. Responsive / Small adjustments
    -------------------------------------------------------------------------- */
 
 /* Reduce spacing when sidebar/detail are visible */

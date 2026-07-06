@@ -11,6 +11,7 @@ import { App } from './App';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './styles/variables.css';
 import './styles/globals.css';
+import 'katex/dist/katex.min.css';
 
 // ---------------------------------------------------------------------------
 // Type augmentation for the coderixAPI exposed via preload contextBridge

@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { motion } from 'framer-motion';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { CodeBlock } from './CodeBlock';
@@ -29,6 +30,8 @@ export function ContentBlockRenderer({
       return (
         <div className="prose prose-sm max-w-none text-[var(--color-text-primary)]">
           <ReactMarkdown
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
             components={{
               // Code blocks — use dedicated CodeBlock component
               pre({ children }) {
@@ -98,6 +101,15 @@ export function ContentBlockRenderer({
               h3({ children, ...props }) {
                 return <h3 {...props} className="text-base font-semibold mt-2 mb-1">{children}</h3>;
               },
+              h4({ children, ...props }) {
+                return <h4 {...props} className="text-sm font-semibold mt-2 mb-1">{children}</h4>;
+              },
+              h5({ children, ...props }) {
+                return <h5 {...props} className="text-sm font-medium mt-1.5 mb-0.5">{children}</h5>;
+              },
+              h6({ children, ...props }) {
+                return <h6 {...props} className="text-xs font-medium mt-1.5 mb-0.5 text-[var(--color-text-secondary)]">{children}</h6>;
+              },
               // Table
               table({ children, ...props }) {
                 return (
@@ -117,6 +129,38 @@ export function ContentBlockRenderer({
               // Horizontal rule
               hr() {
                 return <hr className="my-4 border-[var(--color-separator)]" />;
+              },
+              // Images
+              img({ src, alt, ...props }) {
+                return (
+                  <img
+                    {...props}
+                    src={src}
+                    alt={alt}
+                    className="max-w-full h-auto rounded-[var(--radius-lg)] my-2"
+                    loading="lazy"
+                  />
+                );
+              },
+              // Task list checkboxes
+              input({ type, checked, disabled, ...props }) {
+                if (type === 'checkbox') {
+                  return (
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      readOnly
+                      className="mr-2 accent-[var(--color-brand)]"
+                      {...props}
+                    />
+                  );
+                }
+                return <input type={type} {...props} />;
+              },
+              // Strikethrough
+              del({ children, ...props }) {
+                return <del {...props} className="line-through text-[var(--color-text-tertiary)]">{children}</del>;
               },
             }}
           >
