@@ -16,6 +16,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
@@ -25,6 +26,7 @@ import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
+import type { SidebarTab } from './components/sidebar/IconSidebar';
 
 import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';
 import { useStreamEvents } from './hooks/useStreamEvents';
@@ -81,6 +83,7 @@ export function App(): React.ReactElement {
   // ── Local state ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sessions');
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -277,18 +280,19 @@ export function App(): React.ReactElement {
     <>
       <AppLayout
         sidebar={
-          settingsOpen ? (
-            <SettingsView />
-          ) : (
-            <Sidebar
-              activeSessionId={currentSessionId ?? undefined}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onOpenSettings={handleOpenSettings}
-            />
-          )
+          <Sidebar
+            activeSessionId={currentSessionId ?? undefined}
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+            onOpenSettings={() => setSettingsOpen(true)}
+            activeTab={sidebarTab}
+            onTabChange={setSidebarTab}
+          />
         }
-        sidebarVisible={sidebarOpen || settingsOpen}
+        sidebarVisible={sidebarOpen}
+        iconActiveTab={sidebarTab}
+        onIconTabChange={setSidebarTab}
+        onIconSettings={() => setSettingsOpen(true)}
         detailPanel={<DetailPanel />}
         detailVisible={detailPanelOpen}
         statusBarProps={{
@@ -342,6 +346,82 @@ export function App(): React.ReactElement {
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>
       </AppLayout>
+
+      {/* Settings modal — rendered via Portal to escape framer-motion's transform context */}
+      {settingsOpen && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 2147483647,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px',
+          }}
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              width: '720px',
+              maxWidth: '95vw',
+              height: '85vh',
+              maxHeight: '85vh',
+              borderRadius: '12px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+              background: '#ffffff',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: '1px solid #eee',
+              flexShrink: 0,
+            }}>
+              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+                Settings
+              </h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+                aria-label="Close settings"
+              >
+                ✕
+              </button>
+            </div>
+            {/* Scrollable content */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <SettingsView />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 }

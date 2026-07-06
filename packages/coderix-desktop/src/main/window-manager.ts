@@ -89,13 +89,28 @@ export function createWindowManager(): WindowManager {
       const state = this.loadWindowState();
       const isMac = process.platform === 'darwin';
 
-      const windowOptions: Electron.BrowserWindowConstructorOptions = {
+      mainWindow = new BrowserWindow({
         width: state.width,
         height: state.height,
         minWidth: DEFAULT_WINDOW_OPTIONS.minWidth,
         minHeight: DEFAULT_WINDOW_OPTIONS.minHeight,
         title: 'Coderix',
+        // ── Platform-specific window chrome ────────────────────────────
+        // macOS: hidden titlebar with traffic lights; Linux/Windows: OS titlebar
+        ...(isMac
+          ? {
+              titleBarStyle: 'hidden' as const,
+              trafficLightPosition: { x: 6, y: 11 },
+              vibrancy: 'under-window' as const,
+              visualEffectState: 'active' as const,
+              tabbingIdentifier: 'coderix-main',
+            }
+          : {
+              // Keep native OS titlebar for Linux/Windows
+              autoHideMenuBar: true,
+            }),
         backgroundColor: '#FFFFFF',
+        // ── Show only when ready ───────────────────────────────────────
         show: false,
         webPreferences: {
           preload: join(__dirname, '../preload/index.mjs'),
@@ -104,18 +119,7 @@ export function createWindowManager(): WindowManager {
           sandbox: false,
           webviewTag: false,
         },
-      };
-
-      // macOS-specific window options
-      if (isMac) {
-        windowOptions.titleBarStyle = 'hidden';
-        windowOptions.trafficLightPosition = { x: 6, y: 11 };
-        windowOptions.vibrancy = 'under-window';
-        windowOptions.visualEffectState = 'active';
-        windowOptions.tabbingIdentifier = 'coderix-main';
-      }
-
-      mainWindow = new BrowserWindow(windowOptions);
+      });
 
       // Log preload path for debugging
       console.log('[Coderix] Preload path:', join(__dirname, '../preload/index.mjs'));

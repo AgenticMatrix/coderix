@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Search, Plus, MessageSquare, FolderGit2, Users, Settings } from 'lucide-react';
+import { Search, Plus, MessageSquare, FolderGit2, Settings, GitBranch } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { FileExplorer } from './FileExplorer';
+import { GitPanel } from './GitPanel';
+import type { SidebarTab } from './IconSidebar';
 import { IconButton } from '../shared/IconButton';
 import './Sidebar.css';
 
@@ -15,14 +17,14 @@ export interface SidebarProps {
   onNewSession?: () => void;
   /** Callback to open settings */
   onOpenSettings?: () => void;
+  activeTab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
 }
-
-type SidebarTab = 'sessions' | 'files' | 'team';
 
 const tabs: { key: SidebarTab; label: string; icon: React.ReactNode }[] = [
   { key: 'sessions', label: 'Sessions', icon: <MessageSquare size={14} /> },
   { key: 'files', label: 'Files', icon: <FolderGit2 size={14} /> },
-  { key: 'team', label: 'Team', icon: <Users size={14} /> },
+  { key: 'git', label: 'Git', icon: <GitBranch size={14} /> },
 ];
 
 export function Sidebar({
@@ -30,8 +32,9 @@ export function Sidebar({
   onSessionSelect,
   onNewSession,
   onOpenSettings,
+  activeTab,
+  onTabChange,
 }: SidebarProps): React.ReactElement {
-  const [activeTab, setActiveTab] = useState<SidebarTab>('sessions');
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
@@ -70,7 +73,7 @@ export function Sidebar({
           {tabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => onTabChange(tab.key)}
               className={`
                 flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium
                 rounded-[var(--radius-sm)] transition-all duration-100
@@ -112,14 +115,9 @@ export function Sidebar({
             <FileExplorer />
           </motion.div>
         )}
-        {activeTab === 'team' && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.15 }}
-            className="p-4 text-xs text-[var(--color-text-tertiary)] text-center"
-          >
-            Team view — coming soon
+        {activeTab === 'git' && (
+          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}>
+            <GitPanel />
           </motion.div>
         )}
       </div>

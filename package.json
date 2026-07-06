@@ -2,7 +2,6 @@
   "name": "coderix",
   "version": "0.1.0",
   "description": "Coderix — A fully open-source AI programming assistant for the terminal",
-  "type": "module",
   "bin": {
     "coderix": "./bin/coderix.js"
   },
@@ -17,13 +16,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "dev:desk": "cd desktop && npm run electron:start"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.28.1",
     "@anthropic-ai/sdk": "^0.102.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tauri-apps/cli": "^2.11.4",
     "chrome-remote-interface": "^0.34.0",
+    "electron": "^33.4.11",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
     "ink": "^7.0.5",
@@ -31,12 +33,15 @@
     "react": "^19.2.4",
     "shell-quote": "^1.8.4",
     "undici": "^7.27.2",
+    "ws": "^8.21.0",
+    "yoga-layout": "^2.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.14",
     "@types/shell-quote": "^1.7.5",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.8",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Coderix Desktop — Electron desktop app for the Coderix AI coding assistant",
   "type": "module",
-  "main": "dist/main/index.js",
+  "main": "dist/main/index.cjs",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -13,7 +13,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@coderix/core": "workspace:*",
     "@radix-ui/react-tooltip": "^1.1.0",
     "chokidar": "^5.0.0",
     "electron-store": "^10.0.0",
