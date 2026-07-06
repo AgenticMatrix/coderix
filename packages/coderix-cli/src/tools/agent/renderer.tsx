@@ -9,6 +9,7 @@ const AGENT_TYPE_LABEL: Record<string, string> = {
   plan: 'Plan',
   'general-purpose': 'General Purpose',
   fork: 'Fork',
+  resume: 'Resume',
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -84,7 +85,8 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const isError = props.state === 'error';
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
-  const label = agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'Fork';
+  const isResume = !!(props.input.resume) && !!(props.input.agent_id);
+  const label = isResume ? 'Resume' : (agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'Fork');
   const shortDesc = description || (prompt ? (prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt) : '');
   const headerText = shortDesc ? `${label} (${shortDesc})` : label;
 
@@ -110,6 +112,9 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
 
         const matching = running
           .filter(a => {
+            if (isResume && props.input.agent_id) {
+              return a.id === props.input.agent_id;
+            }
             const expectedType = agentType || 'fork';
             if (expectedType === 'fork') return a.agentType === 'general-purpose';
             return a.agentType === expectedType;

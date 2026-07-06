@@ -118,7 +118,7 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
   const inlineTools = new Set([
     'read', 'bash', 'glob', 'grep',
     'WebSearch', 'WebFetch', 'write', 'edit',
-    'Agent',
+    'Agent', 'SendMessage',
   ]);
 
   return messages.filter((msg) => {

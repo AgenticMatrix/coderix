@@ -16,7 +16,9 @@ export const forkAgent: BuiltInAgentDefinition = {
   source: 'built-in',
   baseDir: 'built-in',
   whenToUse:
-    'Fork agent — inherits the parent agent\'s full context including conversation history, system prompt, and tool set. Used when no specific agent_type is specified.',
+    'Fork agent — creates a NEW sub-agent that inherits the parent\'s full context (conversation history, system prompt, tools). '
+    + 'Use fork when you need a fresh sub-agent to handle a new task with full awareness of what the parent has done. '
+    + 'Do NOT use fork to continue an existing sub-agent — for that, call Agent with agent_id + resume: true instead.',
   tools: '*', // All parent tools pass through (minus globally-disallowed)
   model: 'inherit',
   maxTurns: 200,

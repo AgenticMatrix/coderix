@@ -339,7 +339,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     b.toolName !== 'glob' && b.toolName !== 'grep' &&
                     b.toolName !== 'WebSearch' && b.toolName !== 'WebFetch' &&
                     b.toolName !== 'write' && b.toolName !== 'edit' &&
-                    b.toolName !== 'Agent'
+                    b.toolName !== 'Agent' && b.toolName !== 'SendMessage'
                   ),
                 );
                 if (tuiBlocks.length > 0) {

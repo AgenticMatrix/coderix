@@ -33,6 +33,7 @@ import { EnterPlanModeRenderer } from './enter-plan-mode/renderer.js';
 import { ExitPlanModeRenderer } from './exit-plan-mode/renderer.js';
 import { NotebookEditRenderer } from './notebook-edit/renderer.js';
 import { AgentRenderer } from './agent/renderer.js';
+import { SendMessageRenderer } from './send-message/renderer.js';
 
 // ── Tool-result renderers ───────────────────────────────────────────────
 import { BashResultRenderer } from './bash/result-renderer.js';
@@ -88,6 +89,7 @@ useRendererByName.set('EnterPlanMode', EnterPlanModeRenderer);
 useRendererByName.set('ExitPlanMode', ExitPlanModeRenderer);
 useRendererByName.set('NotebookEdit', NotebookEditRenderer);
 useRendererByName.set('Agent', AgentRenderer);
+useRendererByName.set('SendMessage', SendMessageRenderer);
 
 resultRendererByName.set('bash', BashResultRenderer);
 resultRendererByName.set('glob', GlobResultRenderer);

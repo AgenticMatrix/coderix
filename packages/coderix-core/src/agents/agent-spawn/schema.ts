@@ -57,11 +57,11 @@ Sub-agents cannot spawn further sub-agents (depth limit = 1).`,
       },
       agent_id: {
         type: 'string',
-        description: 'ID of a previously stopped or completed agent to resume. Requires resume: true. The agent continues with its full conversation transcript and original toolset. Use TaskGet to find available agent IDs.',
+        description: 'ID of a previously stopped or completed agent to resume. Requires resume: true. The agent continues with its full conversation transcript and original toolset. Use TaskGet to find available agent IDs. This is the preferred way to send a follow-up task to an existing sub-agent.',
       },
       resume: {
         type: 'boolean',
-        description: 'When true, resume the agent identified by agent_id instead of creating a new one. The agent picks up where it left off with all prior context.',
+        description: 'When true, resume the agent identified by agent_id instead of creating a new one. Use this to continue an existing sub-agent\'s work with a new task. Do NOT use fork mode for this — fork creates a new agent from the parent context, not from the sub-agent\'s own context.',
       },
     },
     required: ['prompt'],
