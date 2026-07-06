@@ -95,11 +95,10 @@
   box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.2);
 }
 
-/* Textarea input — seamless, no inner box */
+/* Textarea input — match wrapper background exactly to avoid inner box */
 .composer-input {
   flex: 1;
-  background: transparent;
-  background-color: transparent;
+  background-color: var(--color-bg-tertiary);
   border: none;
   outline: none;
   box-shadow: none;
@@ -113,6 +112,7 @@
   max-height: 200px;
   overflow-y: auto;
   padding: 4px 0;
+  border-radius: 0;
 }
 
 .composer-input::placeholder {
