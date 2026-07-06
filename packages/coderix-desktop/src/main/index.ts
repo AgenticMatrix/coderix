@@ -14,7 +14,7 @@ import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
 
-import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient, plugins } from '@coderix/core';
+import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient, plugins, loadConfig } from '@coderix/core';
 import type { QueryEngineConfig } from '@coderix/core';
 
 // ---------------------------------------------------------------------------
@@ -107,9 +107,13 @@ async function initQueryEngine(): Promise<void> {
     throw new Error('IPC bridge not initialized');
   }
 
-  const model = process.env['CODERIX_MODEL'] ?? process.env['ANTHROPIC_MODEL'] ?? 'deepseek-v4-pro';
-  const apiKey = process.env['ANTHROPIC_AUTH_TOKEN'] ?? process.env['ANTHROPIC_API_KEY'] ?? '';
-  const baseURL = process.env['ANTHROPIC_BASE_URL'] ?? 'https://api.anthropic.com';
+  // Load config from ~/.coderix/settings.json
+  const appConfig = loadConfig();
+  const model = appConfig.model;
+  const apiKey = appConfig.apiKey;
+  const baseURL = appConfig.baseUrl;
+
+  console.log(`[Coderix] Config loaded: model=${model}, baseURL=${baseURL}`);
 
   let callModel: QueryEngineConfig['callModel'];
   try {

@@ -13,7 +13,9 @@ import { ipcMain, BrowserWindow, app, dialog } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, resolve, normalize } from 'node:path';
+import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
 
@@ -28,6 +30,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
 import type { QueryEngineConfig, QueryEngineEvent } from '@coderix/core';
+import { loadSettings } from '@coderix/core';
 
 import type { WindowManager } from './window-manager.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -404,27 +407,24 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // ── Config ─────────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async () => {
-    // For now return placeholder
-    // In production, load from settings.json / electron-store
-    return {
-      theme: 'dark',
-      model: 'deepseek-v4-pro',
-      permissionMode: 'ask',
-    };
+    return loadSettings();
   });
 
   ipcMain.handle(IPC_CHANNELS.CONFIG_SET, async (_event, payload: { key: string; value: unknown }) => {
-    // Persist config change
+    const settingsDir = join(homedir(), '.coderix');
+    const settingsPath = join(settingsDir, 'settings.json');
+    const settings = loadSettings();
+    (settings as Record<string, unknown>)[payload.key] = payload.value;
+    if (!existsSync(settingsDir)) {
+      mkdirSync(settingsDir, { recursive: true });
+    }
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
     return { key: payload.key, value: payload.value, status: 'saved' };
   });
 
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET_MODEL_LIST, async () => {
-    return [
-      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', provider: 'deepseek' },
-      { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic' },
-      { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', provider: 'anthropic' },
-      { id: 'gpt-4.1', name: 'GPT-4.1', provider: 'openai' },
-    ];
+    const settings = loadSettings();
+    return settings.model_list ?? [];
   });
 
   // ── App ────────────────────────────────────────────────────────────────
