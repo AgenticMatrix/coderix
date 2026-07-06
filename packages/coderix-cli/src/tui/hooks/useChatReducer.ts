@@ -88,11 +88,12 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
 
   // Pass 2: find all tool_result blocks and inject results into the
   // corresponding tool_use blocks so they render inline (diffs, code, etc.)
+  // Also populate toolName on tool_result blocks (core's ToolResultBlock
+  // has no `name` field, only `tool_use_id`) so Pass 3 can filter correctly.
   for (const msg of messages) {
     if (msg.role !== 'user') continue;
     for (const block of msg.blocks) {
       if (block.type !== 'tool_result' || !block.toolId) continue;
-      // Find and enrich the matching tool_use block
       for (const other of messages) {
         if (other.role !== 'assistant') continue;
         for (const b of other.blocks) {
@@ -102,6 +103,8 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
               content: block.content,
               isError: block.isError,
             };
+            // Populate toolName for Pass 3 filtering
+            (block as { toolName?: string }).toolName = b.toolName;
             break;
           }
         }
