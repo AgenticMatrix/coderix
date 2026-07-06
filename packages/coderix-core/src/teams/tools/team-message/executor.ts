@@ -39,6 +39,28 @@ function compressTranscript(messages: Message[]): string {
   return body.slice(0, 65533) + '...';
 }
 
+interface ToolCallSummary {
+  name: string;
+  input: string;
+  state: string;
+}
+
+function extractToolCalls(messages: Message[]): ToolCallSummary[] {
+  const tools: ToolCallSummary[] = [];
+  for (const msg of messages.slice(-50)) {
+    if (msg.role !== 'assistant') continue;
+    const blocks = Array.isArray(msg.content) ? msg.content : [];
+    for (const block of blocks) {
+      if (block.type === 'tool_use') {
+        const b = block as { name?: string; input?: Record<string, unknown>; id?: string };
+        const inputStr = b.input ? JSON.stringify(b.input) : '';
+        tools.push({ name: b.name ?? 'unknown', input: inputStr, state: 'done' });
+      }
+    }
+  }
+  return tools;
+}
+
 /** Trim large tool outputs in historical messages to prevent context bloat
  *  across repeated resumes. Keeps the full message structure but caps
  *  tool_result content at a limit so the model still sees all the context
@@ -268,6 +290,7 @@ async function handleSubAgentResume(
   let assistantTurnCount = 0;
   let toolCount = 0;
   const newTranscript: Message[] = [];
+  const accumulatedLiveCalls: ToolCallSummary[] = [];
 
   const RESUMED_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -305,7 +328,14 @@ async function handleSubAgentResume(
               const assistantMsg = msg.message as unknown as Message;
               newTranscript.push(assistantMsg);
               const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
-              toolCount += blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
+              for (const block of blocks) {
+                if (block.type === 'tool_use') {
+                  const b = block as { name?: string; input?: Record<string, unknown>; id?: string };
+                  const inputStr = b.input ? JSON.stringify(b.input) : '';
+                  accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: inputStr, state: 'executing' });
+                  toolCount++;
+                }
+              }
               break;
             }
             case 'user':
@@ -317,6 +347,7 @@ async function handleSubAgentResume(
                   turnCount: agent.turnCount + assistantTurnCount,
                   messageCount: transcript.length + newTranscript.length,
                   toolCount: agent.toolCount + toolCount,
+                  liveToolCalls: [...accumulatedLiveCalls],
                 });
               }
               break;
@@ -331,7 +362,7 @@ async function handleSubAgentResume(
       timedOut = true;
     }
 
-    const cumulativeTranscript = [...transcript, ...newTranscript];
+    const cumulativeTranscript = [...transcript, { role: 'user' as const, content: message }, ...newTranscript];
     const resultText = timedOut
       ? `(timed out after ${RESUMED_TIMEOUT_MS / 1000}s)`
       : compressTranscript(newTranscript);
@@ -362,6 +393,7 @@ async function handleSubAgentResume(
         turnCount: assistantTurnCount, toolCount,
         totalTurns: agent.turnCount + assistantTurnCount,
         duration: Date.now() - startTime,
+        toolCalls: extractToolCalls(newTranscript),
       },
     };
   } catch (err) {
