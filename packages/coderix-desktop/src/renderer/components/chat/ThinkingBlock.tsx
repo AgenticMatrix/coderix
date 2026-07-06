@@ -22,13 +22,11 @@ export function ThinkingBlock({
     <div className="my-2">
       <motion.button
         onClick={() => setIsExpanded(!isExpanded)}
-        whileHover={{ backgroundColor: 'var(--color-bg-tertiary)' }}
-        whileTap={{ scale: 0.99 }}
         className={`
-          w-full flex items-center gap-2 px-3 py-2 text-xs font-medium
-          rounded-[var(--radius-lg)] cursor-pointer transition-colors duration-100
-          text-[var(--color-text-secondary)] bg-[var(--color-bg-secondary)]/50
-          hover:bg-[var(--color-bg-tertiary)]
+          flex items-center gap-2 py-1 text-xs font-medium
+          cursor-pointer transition-colors duration-100
+          text-[var(--color-text-secondary)]
+          hover:text-[var(--color-text-primary)]
         `}
       >
         <motion.span
@@ -69,7 +67,7 @@ export function ThinkingBlock({
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="px-3 py-2 mx-1 mt-1 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]/30 border-l-2 border-[var(--color-info)]/30">
+            <div className="py-2 mt-1 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]/30 border-l-2 border-[var(--color-info)]/30">
               <pre className="text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0">
                 {content}
                 {isStreaming && (

@@ -78,18 +78,12 @@ export function ToolCallCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className={`
-        my-2 rounded-[var(--radius-lg)] border overflow-hidden
-        ${cfg.bgClass}
-        bg-[var(--color-bg-secondary)]/30
-      `}
+      className="my-2"
     >
       {/* Header */}
       <motion.button
         onClick={() => setIsExpanded(!isExpanded)}
-        whileHover={{ backgroundColor: 'var(--color-bg-tertiary)' }}
-        whileTap={{ scale: 0.99 }}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs cursor-pointer transition-colors duration-100"
+        className="flex items-center gap-2 py-1 text-xs cursor-pointer transition-colors duration-100 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
       >
         <motion.span
           animate={{ rotate: isExpanded ? 90 : 0 }}
@@ -125,7 +119,7 @@ export function ToolCallCard({
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 space-y-2">
+            <div className="pb-3 space-y-2">
               {/* Tool input */}
               {toolInput && Object.keys(toolInput).length > 0 && (
                 <div>

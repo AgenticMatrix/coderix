@@ -126,14 +126,15 @@
   user-select: none;
 }
 
-/* Assistant message block — bottom border separator */
+/* Assistant message block — left-aligned with bottom border */
 .message-bubble.assistant {
   background-color: transparent;
   color: var(--color-text-primary);
   border-radius: 0;
   border-bottom: 1px solid var(--color-separator);
-  margin-left: auto;
+  margin-left: 24px;
   margin-right: auto;
+  max-width: 600px;
 }
 
 /* System bubble — subtle chip (kept for system messages) */
