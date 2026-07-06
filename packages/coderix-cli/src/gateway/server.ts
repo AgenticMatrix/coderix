@@ -41,6 +41,7 @@ function notify(ev: unknown): void {
 function buildToolRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
   for (const plugin of plugins) {
+    if (plugin.isEnabled && !plugin.isEnabled()) continue;
     const schema = plugin.schema as unknown as Record<string, unknown>;
     const inputSchema = schema.input_schema as Record<string, unknown>;
     const meta = schema._meta as { riskLevel?: string; isConcurrencySafe?: boolean } | undefined;

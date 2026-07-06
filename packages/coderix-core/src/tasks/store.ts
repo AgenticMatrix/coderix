@@ -59,13 +59,13 @@ export function getTaskListId(): string {
 
 /**
  * Whether the V2 task system (TaskCreate/TaskUpdate/TaskList/TaskGet) is active.
- * Defaults to true for interactive TUI sessions.
- * Set CLAUDE_CODE_ENABLE_TASKS=0 to force V1 (todo-write).
+ * Defaults to true (V2).
+ * Set CODERIX_ENABLE_TASKS=0 to force V1 (todo-write).
  */
 export function isTodoV2Enabled(): boolean {
-  if (process.env.CLAUDE_CODE_ENABLE_TASKS === '0') return false;
-  if (process.env.CLAUDE_CODE_ENABLE_TASKS === '1') return true;
-  return process.stdout.isTTY !== undefined;
+  if (process.env.CODERIX_ENABLE_TASKS === '0') return false;
+  if (process.env.CODERIX_ENABLE_TASKS === '1') return true;
+  return true;
 }
 
 // ---------------------------------------------------------------------------

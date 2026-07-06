@@ -72,6 +72,7 @@ async function buildToolRegistry(mcpPlugins?: any[]): Promise<any> {
   const allPlugins = [...plugins, ...(mcpPlugins ?? [])];
 
   for (const plugin of allPlugins) {
+    if (plugin.isEnabled && !plugin.isEnabled()) continue;
     const schema = plugin.schema as unknown as Record<string, unknown>;
     const inputSchema = schema.input_schema as Record<string, unknown>;
     const meta = schema._meta as { riskLevel?: string; isConcurrencySafe?: boolean } | undefined;

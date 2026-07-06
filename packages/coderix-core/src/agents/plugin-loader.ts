@@ -158,7 +158,7 @@ export async function loadPluginAgents(
                   plugin: pluginName,
                   getSystemPrompt: () => {
                     const base = parsed.getSystemPrompt();
-                    return base.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginPath);
+                    return base.replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath);
                   },
                 };
               }
@@ -188,7 +188,7 @@ export async function loadPluginAgents(
                   plugin: pluginName,
                   getSystemPrompt: () => {
                     const base = parsed.getSystemPrompt();
-                    return base.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginPath);
+                    return base.replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath);
                   },
                 };
               }
