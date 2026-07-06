@@ -95,12 +95,16 @@
   box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.2);
 }
 
-/* Textarea input */
+/* Textarea input — seamless, no inner box */
 .composer-input {
   flex: 1;
   background: transparent;
+  background-color: transparent;
   border: none;
   outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
   color: var(--color-text-primary);
   font-size: 15px;
   font-family: var(--font-sans);
