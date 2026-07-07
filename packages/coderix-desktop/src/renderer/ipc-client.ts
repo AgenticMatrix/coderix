@@ -303,6 +303,20 @@ export async function denyPermission(toolUseId: string): Promise<unknown> {
   );
 }
 
+// ===========================================================================
+//  Question (AskUserQuestion)
+// ===========================================================================
+
+/** Answer a pending question from the engine. */
+export async function answerQuestion(
+  toolUseId: string,
+  answers: Record<string, string | string[]>,
+): Promise<unknown> {
+  return invokeWithTimeout('question:answer', () =>
+    getAPI().question.answer(toolUseId, answers),
+  );
+}
+
 /**
  * Subscribe to permission requests.
  *

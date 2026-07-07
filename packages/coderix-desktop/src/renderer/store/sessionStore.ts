@@ -32,6 +32,13 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 
   loadSessions: async () => {
     set({ isLoading: true, error: null });
+    // Wait for preload API to be ready (race condition at startup)
+    if (!window.coderixAPI) {
+      console.log('[SessionStore] API not ready, retrying in 500ms');
+      setTimeout(() => get().loadSessions(), 500);
+      set({ isLoading: false });
+      return;
+    }
     try {
       const sessions = await listSessions();
       // Normalize: the preload returns unknown, but we expect SessionInfo[]

@@ -14,8 +14,52 @@ import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
 
-import { QueryEngine, SessionManager, ToolRegistry, createCallModelFromClient, plugins, loadConfig } from '@coderix/core';
-import type { QueryEngineConfig } from '@coderix/core';
+// Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
+import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
+import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/core/query-engine.js';
+import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
+import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
+import { createCallModelFromClient } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
+import { PermissionMode } from '../../../../packages/coderix-core/src/core/types.js';
+import { loadConfig } from '../../../../packages/coderix-core/src/config.js';
+
+// Tool schema + executor imports (avoid index.ts → renderers → React/ink)
+import { schema as bashSchema } from '../../../../packages/coderix-core/src/tools/bash/schema.js';
+import { execute as bashExec } from '../../../../packages/coderix-core/src/tools/bash/executor.js';
+import { schema as readSchema } from '../../../../packages/coderix-core/src/tools/read/schema.js';
+import { execute as readExec } from '../../../../packages/coderix-core/src/tools/read/executor.js';
+import { schema as writeSchema } from '../../../../packages/coderix-core/src/tools/write/schema.js';
+import { execute as writeExec } from '../../../../packages/coderix-core/src/tools/write/executor.js';
+import { schema as editSchema } from '../../../../packages/coderix-core/src/tools/edit/schema.js';
+import { execute as editExec } from '../../../../packages/coderix-core/src/tools/edit/executor.js';
+import { schema as globSchema } from '../../../../packages/coderix-core/src/tools/glob/schema.js';
+import { execute as globExec } from '../../../../packages/coderix-core/src/tools/glob/executor.js';
+import { schema as grepSchema } from '../../../../packages/coderix-core/src/tools/grep/schema.js';
+import { execute as grepExec } from '../../../../packages/coderix-core/src/tools/grep/executor.js';
+import { schema as webFetchSchema } from '../../../../packages/coderix-core/src/tools/web-fetch/schema.js';
+import { execute as webFetchExec } from '../../../../packages/coderix-core/src/tools/web-fetch/executor.js';
+import { schema as webSearchSchema } from '../../../../packages/coderix-core/src/tools/web-search/schema.js';
+import { execute as webSearchExec } from '../../../../packages/coderix-core/src/tools/web-search/executor.js';
+import { schema as todoWriteSchema } from '../../../../packages/coderix-core/src/tools/todo-write/schema.js';
+import { execute as todoWriteExec } from '../../../../packages/coderix-core/src/tools/todo-write/executor.js';
+import { schema as notebookEditSchema } from '../../../../packages/coderix-core/src/tools/notebook-edit/schema.js';
+import { execute as notebookEditExec } from '../../../../packages/coderix-core/src/tools/notebook-edit/executor.js';
+import { schema as sleepSchema } from '../../../../packages/coderix-core/src/tools/sleep/schema.js';
+import { execute as sleepExec } from '../../../../packages/coderix-core/src/tools/sleep/executor.js';
+import { schema as askUserSchema } from '../../../../packages/coderix-core/src/tools/ask-user-question/schema.js';
+import { execute as askUserExec } from '../../../../packages/coderix-core/src/tools/ask-user-question/executor.js';
+import { schema as enterPlanSchema } from '../../../../packages/coderix-core/src/tools/enter-plan-mode/schema.js';
+import { execute as enterPlanExec } from '../../../../packages/coderix-core/src/tools/enter-plan-mode/executor.js';
+import { schema as exitPlanSchema } from '../../../../packages/coderix-core/src/tools/exit-plan-mode/schema.js';
+import { execute as exitPlanExec } from '../../../../packages/coderix-core/src/tools/exit-plan-mode/executor.js';
+import { schema as taskOutputSchema } from '../../../../packages/coderix-core/src/tools/task-output/schema.js';
+import { execute as taskOutputExec } from '../../../../packages/coderix-core/src/tools/task-output/executor.js';
+import { schema as taskStopSchema } from '../../../../packages/coderix-core/src/tools/task-stop/schema.js';
+import { execute as taskStopExec } from '../../../../packages/coderix-core/src/tools/task-stop/executor.js';
+import { schema as enterWorktreeSchema } from '../../../../packages/coderix-core/src/tools/enter-worktree/schema.js';
+import { execute as enterWorktreeExec } from '../../../../packages/coderix-core/src/tools/enter-worktree/executor.js';
+import { schema as exitWorktreeSchema } from '../../../../packages/coderix-core/src/tools/exit-worktree/schema.js';
+import { execute as exitWorktreeExec } from '../../../../packages/coderix-core/src/tools/exit-worktree/executor.js';
 
 // ---------------------------------------------------------------------------
 // Prevent multiple instances (single-instance lock)
@@ -52,6 +96,7 @@ async function bootstrap(): Promise<void> {
       windowManager,
       fileWatcher,
       terminalManager,
+      reloadQueryEngine: () => initQueryEngine(),
     });
 
     // Step 3: Create the window — this must happen before heavy init
@@ -107,13 +152,15 @@ async function initQueryEngine(): Promise<void> {
     throw new Error('IPC bridge not initialized');
   }
 
+  const isReload = ipcBridge.queryEngine !== null;
+
   // Load config from ~/.coderix/settings.json
   const appConfig = loadConfig();
   const model = appConfig.model;
   const apiKey = appConfig.apiKey;
   const baseURL = appConfig.baseUrl;
 
-  console.log(`[Coderix] Config loaded: model=${model}, baseURL=${baseURL}`);
+  console.log(`[Coderix] Config ${isReload ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${baseURL}, apiKey=${apiKey.slice(0, 10)}...`);
 
   let callModel: QueryEngineConfig['callModel'];
   try {
@@ -143,30 +190,38 @@ async function initQueryEngine(): Promise<void> {
     }) as unknown as QueryEngineConfig['callModel'];
   }
 
-  // Register all built-in tool plugins
+  // Register built-in tools via direct schema+executor imports
   const toolRegistry = new ToolRegistry();
-  for (const plugin of plugins) {
-    if (!plugin.isEnabled || plugin.isEnabled()) {
-      toolRegistry.register(
-        {
-          name: plugin.name,
-          description: plugin.schema.description ?? '',
-          input_schema: plugin.schema.input_schema ?? { type: 'object', properties: {} },
-        },
-        async (input, ctx) => {
-          const result = await plugin.executor(input, {
-            cwd: ctx.cwd ?? process.cwd(),
-            allowMutation: true,
-            maxOutput: 50_000,
-            signal: ctx.signal,
-            agentSpawn: (ctx as any).agentSpawn,
-            setPermissionMode: (ctx as any).setPermissionMode,
-            sessionId: (ctx as any).sessionId,
-          } as any);
-          return result as any;
-        },
-      );
-    }
+  const toolList: Array<{ schema: any; executor: any }> = [
+    { schema: bashSchema, executor: bashExec },
+    { schema: readSchema, executor: readExec },
+    { schema: writeSchema, executor: writeExec },
+    { schema: editSchema, executor: editExec },
+    { schema: globSchema, executor: globExec },
+    { schema: grepSchema, executor: grepExec },
+    { schema: webFetchSchema, executor: webFetchExec },
+    { schema: webSearchSchema, executor: webSearchExec },
+    { schema: todoWriteSchema, executor: todoWriteExec },
+    { schema: notebookEditSchema, executor: notebookEditExec },
+    { schema: sleepSchema, executor: sleepExec },
+    { schema: askUserSchema, executor: askUserExec },
+    { schema: enterPlanSchema, executor: enterPlanExec },
+    { schema: exitPlanSchema, executor: exitPlanExec },
+    { schema: taskOutputSchema, executor: taskOutputExec },
+    { schema: taskStopSchema, executor: taskStopExec },
+    { schema: enterWorktreeSchema, executor: enterWorktreeExec },
+    { schema: exitWorktreeSchema, executor: exitWorktreeExec },
+  ];
+  for (const t of toolList) {
+    if (!t.schema || !t.executor) continue;
+    const { name, description, input_schema } = t.schema;
+    toolRegistry.register(
+      { name, description, input_schema },
+      async (input, ctx) => {
+        const result = await t.executor(input, { cwd: ctx.cwd ?? process.cwd() });
+        return { content: String(result.content ?? ''), isError: result.isError ?? false };
+      },
+    );
   }
   console.log(`[Coderix] Registered ${toolRegistry.names.length} tools: ${toolRegistry.names.join(', ')}`);
 
@@ -174,12 +229,18 @@ async function initQueryEngine(): Promise<void> {
     cwd: process.cwd(),
     model,
     customSystemPrompt: undefined,
-    sessionManager: new SessionManager(),
-    toolRegistry,
+    // sessionManager/toolRegistry: initEngine preserves existing ones on reload
+    sessionManager: isReload ? undefined! : new SessionManager(),
+    toolRegistry: isReload ? undefined! : toolRegistry,
     callModel,
   };
 
   await ipcBridge.initEngine(config);
+  // Default to auto mode for desktop — avoid blocking writes with permission prompts
+  if (ipcBridge.queryEngine) {
+    ipcBridge.queryEngine.setPermissionMode(PermissionMode.AUTO);
+    console.log('[Coderix] Permission mode set to: auto');
+  }
   console.log('[Coderix] QueryEngine initialized');
 }
 

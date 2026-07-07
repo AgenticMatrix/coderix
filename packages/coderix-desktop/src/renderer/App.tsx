@@ -24,6 +24,7 @@ import type { ChatViewMessage } from './components/chat/ChatView';
 import { Composer } from './components/composer/Composer';
 import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
+import { GlobalModal } from './components/modals/GlobalModal';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
 import { GlobalModal } from './components/modals';
@@ -112,6 +113,29 @@ export function App(): React.ReactElement {
     return unsubscribe;
   }, []);
 
+  // ── Question request listener (auto-answer for now) ────────────────────
+  useEffect(() => {
+    if (!window.coderixAPI?.onQuestionRequest) return;
+    const unsub = window.coderixAPI.onQuestionRequest((req: any) => {
+      console.log('[App] Question received:', req.toolName, req.questions?.length, 'questions');
+      // Auto-answer with defaults for now (proper UI TBD)
+      const answers: Record<string, string | string[]> = {};
+      if (req.questions) {
+        for (const q of req.questions) {
+          if (q.options && q.options.length > 0) {
+            answers[q.question] = [q.options[0].label];
+          } else {
+            answers[q.question] = '';
+          }
+        }
+      }
+      window.coderixAPI.question.answer(req.toolUseId, answers).catch((err: any) => {
+        console.error('[App] Failed to answer question:', err);
+      });
+    });
+    return unsub;
+  }, []);
+
   // ── Load sessions on mount & auto-create default session ──────────────
   useEffect(() => {
     async function init(): Promise<void> {
@@ -128,6 +152,11 @@ export function App(): React.ReactElement {
     }
     init().catch((err) => console.error('[App] Session init failed:', err));
   }, [loadSessions, createSession, setSessionId]);
+
+  // ── Reload sessions when sidebar opens ─────────────────────────────────
+  useEffect(() => {
+    if (sidebarOpen) loadSessions();
+  }, [sidebarOpen, loadSessions]);
 
   // ── Theme sync to DOM ───────────────────────────────────────────────────
   useEffect(() => {
@@ -182,20 +211,55 @@ export function App(): React.ReactElement {
 
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
-    (id: string) => {
+    async (id: string) => {
       setSessionId(id);
       useSessionStore.getState().setCurrentSessionId(id);
+      // Load session messages from backend
+      try {
+        if (window.coderixAPI?.session?.load) {
+          const session = await window.coderixAPI.session.load(id) as any;
+          if (session?.messages) {
+            const chatMsgs = session.messages.map((m: any) => {
+              let blocks = m.content || [];
+              // Convert string content to text block
+              if (typeof blocks === 'string') {
+                blocks = [{ type: 'text', content: blocks, state: 'done' }];
+              } else if (Array.isArray(blocks)) {
+                // Normalize content blocks: backend uses 'text' field, UI expects 'content' field
+                blocks = blocks.map((b: any) => ({
+                  type: b.type || 'text',
+                  content: b.text || b.content || '',
+                  state: 'done',
+                  ...(b.tool_use_id ? { toolId: b.tool_use_id } : {}),
+                  ...(b.id ? { toolId: b.id } : {}),
+                  ...(b.name ? { toolName: b.name } : {}),
+                  ...(b.input ? { toolInput: b.input } : {}),
+                }));
+              }
+              return {
+                id: m.id || `${Date.now()}-${Math.random()}`,
+                role: m.role as 'user' | 'assistant',
+                blocks,
+                timestamp: m.timestamp || Date.now(),
+              };
+            });
+            useChatStore.setState({ messages: chatMsgs, isStreaming: false });
+          }
+        }
+      } catch (err) {
+        console.error('[App] Failed to load session:', err);
+      }
     },
     [setSessionId],
   );
 
   const handleNewSession = useCallback(async () => {
+    // Clear current messages
+    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '' });
+    useStreamStore.setState({ currentMessage: null });
     await createSession();
-    // Sync chat store sessionId with the newly created session
     const newSid = useSessionStore.getState().currentSessionId;
-    if (newSid) {
-      setSessionId(newSid);
-    }
+    if (newSid) setSessionId(newSid);
   }, [createSession, setSessionId]);
 
   const handleOpenSettings = useCallback(() => {
@@ -224,6 +288,8 @@ export function App(): React.ReactElement {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
           await submitQuery(value, currentSid);
+          // Reload sessions to pick up auto-generated titles
+          useSessionStore.getState().loadSessions();
         } catch (err) {
           console.error('[App] Failed to submit query:', err);
           useChatStore.getState().setError(

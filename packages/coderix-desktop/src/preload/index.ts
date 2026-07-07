@@ -287,6 +287,15 @@ const coderixAPI = {
     },
   },
 
+  // ── Question (AskUserQuestion) ─────────────────────────────────────
+
+  question: {
+    /** Answer a pending question from the engine. */
+    answer(toolUseId: string, answers: Record<string, string | string[]>): Promise<{ status: string }> {
+      return ipcRenderer.invoke('question:answer', { toolUseId, answers });
+    },
+  },
+
   // ── File System ──────────────────────────────────────────────────────
 
   fs: {
@@ -378,9 +387,23 @@ const coderixAPI = {
     getModelList(): Promise<unknown[]> {
       return ipcRenderer.invoke(CH.CONFIG_GET_MODEL_LIST);
     },
+
+    /** Hot-reload QueryEngine with updated config (after model/API key change). */
+    reload(): Promise<{ status: string }> {
+      return ipcRenderer.invoke('config:reload');
+    },
   },
 
   // ── App ──────────────────────────────────────────────────────────────
+
+  // ── Git ─────────────────────────────────────────────────────────────
+
+  git: {
+    /** Get git status: branch + changed files. */
+    status(): Promise<{ branch: string; files: Array<{ file: string; type: string; code: string }> }> {
+      return ipcRenderer.invoke('git:status');
+    },
+  },
 
   app: {
     /** Get the application version. */

@@ -13,14 +13,14 @@ import { ipcMain, BrowserWindow, app, dialog } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve, normalize } from 'node:path';
 import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
 
 import type {
-  Session as SessionType,
+  Session,
   SessionSummary,
   StreamEvent,
   DeferredPermission,
@@ -44,6 +44,7 @@ export interface IpcBridgeConfig {
   windowManager: WindowManager;
   fileWatcher: FileWatcherManager;
   terminalManager: TerminalManager;
+  reloadQueryEngine?: () => Promise<void>;
 }
 
 export interface IpcBridge {
@@ -174,6 +175,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
 
+    // Update session title to first question (if still default)
+    try {
+      const active = sessionManager.getActive();
+      if (active && (active.title === '新对话' || active.title.startsWith('Session '))) {
+        const title = userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
+        active.title = title;
+        const sessionDir = join(homedir(), '.ink-chat-tui', 'sessions', active.id);
+        if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
+        writeFileSync(join(sessionDir, 'session.json'), JSON.stringify(active, null, 2), 'utf-8');
+      }
+    } catch { /* ignore */ }
+
     // Start streaming in background (don't await — send via push channels)
     (async () => {
       try {
@@ -224,7 +237,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             case 'error': {
               const err = event.data as { message?: string; code?: string };
               mainWindow.webContents.send(IPC_CHANNELS.STREAM_ERROR, {
-                message: err?.message ?? 'Unknown error',
+                message: sanitizeErrorMessage(err?.message ?? 'Unknown error'),
                 code: err?.code ?? 'UNKNOWN',
               });
               break;
@@ -245,7 +258,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           }
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const rawMessage = err instanceof Error ? err.message : String(err);
+        const message = sanitizeErrorMessage(rawMessage);
         mainWindow.webContents.send(IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME' });
       } finally {
         if (activeAbortController?.signal.aborted) {
@@ -278,8 +292,23 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
-    if (!sessionManager) return [];
-    return sessionManager.listSessions();
+    if (sessionManager) return sessionManager.listSessions();
+    // Disk fallback before QueryEngine is ready
+    try {
+      const sessionsDir = join(homedir(), '.ink-chat-tui', 'sessions');
+      if (!existsSync(sessionsDir)) return [];
+      return readdirSync(sessionsDir, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .map(e => {
+          const f = join(sessionsDir, e.name, 'session.json');
+          if (!existsSync(f)) return null;
+          try {
+            const d = JSON.parse(readFileSync(f, 'utf-8'));
+            return { id: d.id, title: d.title, turnCount: d.turnCount || 0, model: d.model || '', updatedAt: new Date(d.updatedAt).getTime(), createdAt: new Date(d.createdAt).getTime() };
+          } catch { return null; }
+        })
+        .filter(Boolean);
+    } catch { return []; }
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD, async (_event, sessionId: string) => {
@@ -316,6 +345,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       pendingPermission = null;
     }
     return { status: 'denied' };
+  });
+
+  // ── Question (AskUserQuestion) ──────────────────────────────────────
+
+  ipcMain.handle('question:answer', async (_event, payload: { toolUseId: string; answers: Record<string, string | string[]> }) => {
+    if (pendingQuestion && pendingQuestion.toolUseId === payload.toolUseId) {
+      pendingQuestion.resolve(payload.answers);
+      pendingQuestion = null;
+    }
+    return { status: 'answered' };
   });
 
   ipcMain.handle(IPC_CHANNELS.PERMISSION_SET_MODE, async (_event, mode: string) => {
@@ -404,6 +443,54 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     terminalManager.destroy(payload.sessionId);
   });
 
+  // ── Git ────────────────────────────────────────────────────────────────
+
+  ipcMain.handle('git:status', async () => {
+    const { execSync } = await import('node:child_process');
+    const { existsSync } = await import('node:fs');
+    const { join, dirname } = await import('node:path');
+
+    // Walk up from cwd to find .git directory
+    let cwd = process.cwd();
+    while (!existsSync(join(cwd, '.git')) && cwd !== dirname(cwd)) {
+      cwd = dirname(cwd);
+    }
+    const inRepo = existsSync(join(cwd, '.git'));
+
+    if (!inRepo) {
+      console.log('[Coderix] git:status — no git repo found from', process.cwd());
+      return { branch: '', files: [], commits: [] };
+    }
+
+    try {
+      const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
+      const status = execSync('git status --porcelain', { cwd, encoding: 'utf-8' });
+      const log = execSync('git log --oneline -10', { cwd, encoding: 'utf-8' });
+
+      const files = status.split('\n').filter(Boolean).map((line) => {
+        const code = line.slice(0, 2).trim();
+        const file = line.slice(3);
+        let type: 'modified' | 'added' | 'deleted' | 'untracked' | 'renamed' = 'modified';
+        if (code.includes('?')) type = 'untracked';
+        else if (code.includes('A')) type = 'added';
+        else if (code.includes('D')) type = 'deleted';
+        else if (code.includes('R')) type = 'renamed';
+        return { file, type, code };
+      });
+
+      const commits = log.split('\n').filter(Boolean).map((line) => {
+        const [hash, ...rest] = line.split(' ');
+        return { hash, message: rest.join(' ') };
+      });
+
+      console.log(`[Coderix] git:status — branch=${branch}, files=${files.length}, commits=${commits.length}`);
+      return { branch, files, commits };
+    } catch (e) {
+      console.error('[Coderix] git:status failed:', (e as Error).message);
+      return { branch: '', files: [], commits: [] };
+    }
+  });
+
   // ── Config ─────────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async () => {
@@ -413,13 +500,30 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.CONFIG_SET, async (_event, payload: { key: string; value: unknown }) => {
     const settingsDir = join(homedir(), '.coderix');
     const settingsPath = join(settingsDir, 'settings.json');
-    const settings = loadSettings();
-    (settings as Record<string, unknown>)[payload.key] = payload.value;
-    if (!existsSync(settingsDir)) {
-      mkdirSync(settingsDir, { recursive: true });
+    const current = loadSettings();
+
+    if (!payload.key) {
+      // Empty key → merge value at top level
+      const merged = { ...current, ...(payload.value as Record<string, unknown>) };
+      if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
+    } else {
+      (current as Record<string, unknown>)[payload.key] = payload.value;
+      if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify(current, null, 2), 'utf-8');
     }
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
-    return { key: payload.key, value: payload.value, status: 'saved' };
+    return { status: 'saved' };
+  });
+
+  ipcMain.handle('config:reload', async () => {
+    console.log('[Coderix] config:reload triggered');
+    if (config.reloadQueryEngine) {
+      await config.reloadQueryEngine();
+      console.log('[Coderix] config:reload completed');
+      return { status: 'reloaded' };
+    }
+    console.log('[Coderix] config:reload skipped — no callback');
+    return { status: 'skipped', reason: 'no reload callback' };
   });
 
   ipcMain.handle(IPC_CHANNELS.CONFIG_GET_MODEL_LIST, async () => {
@@ -518,11 +622,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     },
 
     async initEngine(config: QueryEngineConfig): Promise<void> {
-      // Create session manager if not provided
-      sessionManager = config.sessionManager ?? new SessionManager();
+      const isReload = queryEngine !== null;
 
-      // Create tool registry if not provided
-      toolRegistry = config.toolRegistry ?? new ToolRegistry();
+      // Preserve existing session manager and tool registry on reload
+      if (!isReload || !sessionManager) {
+        sessionManager = config.sessionManager ?? new SessionManager();
+      }
+      if (!isReload || !toolRegistry) {
+        toolRegistry = config.toolRegistry ?? new ToolRegistry();
+      }
 
       // Instantiate QueryEngine
       queryEngine = new QueryEngine({
@@ -532,6 +640,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       });
 
       await queryEngine.init();
+      const engineId = Date.now();
+      (queryEngine as any).__engineId = engineId;
+      if (isReload) console.log('[Coderix] QueryEngine reloaded, id:', engineId);
     },
 
     destroy(): void {
@@ -560,6 +671,31 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.APP_CHECK_UPDATE);
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Error message sanitization — strip HTML, friendlier messages
+// ---------------------------------------------------------------------------
+
+function sanitizeErrorMessage(raw: string): string {
+  // Strip HTML tags (some APIs return HTML error pages)
+  const stripped = raw.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, '').trim();
+
+  // Common API errors → user-friendly messages
+  if (raw.includes('401') || raw.includes('Unauthorized'))
+    return '❌ API Key 无效或未配置，请在设置中填入正确的 API Key。';
+  if (raw.includes('403') || raw.includes('Forbidden'))
+    return '❌ API 访问被拒绝（403），请检查 API Key 权限。';
+  if (raw.includes('429') || raw.includes('Too Many Requests'))
+    return '⏳ API 请求频率过高（429），请稍后重试。';
+  if (raw.includes('ENOTFOUND') || raw.includes('ECONNREFUSED') || raw.includes('getaddrinfo'))
+    return '🔌 无法连接到 API 服务器，请检查 Base URL 和网络连接。';
+  if (raw.includes('timeout') || raw.includes('ETIMEDOUT'))
+    return '⏰ API 请求超时，请检查网络或稍后重试。';
+
+  // Truncate long raw messages
+  if (stripped.length > 300) return stripped.slice(0, 300) + '...';
+  return stripped || '未知错误，请检查 API 配置。';
 }
 
 // ---------------------------------------------------------------------------
