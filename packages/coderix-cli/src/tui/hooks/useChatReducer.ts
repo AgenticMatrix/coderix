@@ -177,6 +177,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         inputText: action.text,
         cursorPosition: action.text.length,
         pasteBlocks: action.text === '' ? {} : state.pasteBlocks,
+        pastePreviewVisible: action.text === '' ? false : state.pastePreviewVisible,
       };
 
     case 'ADD_USER_MESSAGE':
@@ -187,6 +188,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         cursorPosition: 0,
         error: null,
         pasteBlocks: {},
+        pastePreviewVisible: false,
       };
 
     case 'START_ASSISTANT_RESPONSE': {
@@ -612,6 +614,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           inputText: newText,
           cursorPosition: pos - prevMarker[0].length + newMarker.length,
           pasteBlocks: { ...state.pasteBlocks, [prevId]: mergedContent },
+          pastePreviewVisible: true,
         };
       }
 
@@ -625,8 +628,16 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         inputText: newText,
         cursorPosition: pos + marker.length,
         pasteBlocks: { ...state.pasteBlocks, [pasteId]: action.text },
+        pastePreviewVisible: true,
       };
     }
+
+    case 'TOGGLE_PASTE_PREVIEW':
+      if (Object.keys(state.pasteBlocks).length === 0) return state;
+      return {
+        ...state,
+        pastePreviewVisible: !state.pastePreviewVisible,
+      };
 
     case 'UPDATE_TOKEN_USAGE': {
       const inputTokens = action.usage.inputTokens ?? 0;
@@ -689,6 +700,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     historyIndex: -1,
     historyScratch: '',
     pasteBlocks: {},
+    pastePreviewVisible: false,
     contentExpanded: false,
     subAgentView: null,
     savedMainMessages: null,
