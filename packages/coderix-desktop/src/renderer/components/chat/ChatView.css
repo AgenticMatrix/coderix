@@ -23,6 +23,8 @@
   overflow-x: hidden;
   padding: 24px 0;
   overscroll-behavior: contain;
+  overflow-anchor: auto;
+  scroll-behavior: auto;
 }
 
 /* Empty state */

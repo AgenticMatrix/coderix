@@ -32,12 +32,6 @@ export function Composer({
       const newValue = e.target.value;
       setInternalValue(newValue);
       onChange?.(newValue);
-
-      const textarea = textareaRef.current;
-      if (textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-      }
     },
     [onChange],
   );
@@ -50,9 +44,6 @@ export function Composer({
           onSubmit?.(currentValue.trim());
           setInternalValue('');
           onChange?.('');
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-          }
         }
       }
       if (e.key === 'Enter' && e.metaKey) {

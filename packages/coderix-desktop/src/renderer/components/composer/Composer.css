@@ -95,7 +95,7 @@
   box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.2);
 }
 
-/* Textarea input */
+/* Textarea input — auto-grow via CSS (no JS reflow, avoids scroll jitter) */
 .composer-input {
   flex: 1;
   background: transparent;
@@ -109,6 +109,7 @@
   font-family: var(--font-sans);
   line-height: 1.5;
   resize: none;
+  field-sizing: content;
   max-height: 200px;
   overflow-y: auto;
   padding: 4px 0;
