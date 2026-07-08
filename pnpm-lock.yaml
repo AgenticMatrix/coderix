@@ -44,6 +44,9 @@ importers:
       shell-quote:
         specifier: ^1.8.4
         version: 1.9.0
+      tree-kill:
+        specifier: ^1.2.2
+        version: 1.2.2
       undici:
         specifier: ^7.27.2
         version: 7.28.0
@@ -130,6 +133,9 @@ importers:
       shell-quote:
         specifier: ^1.8.4
         version: 1.9.0
+      tree-kill:
+        specifier: ^1.2.2
+        version: 1.2.2
       undici:
         specifier: ^7.27.2
         version: 7.28.0
@@ -4509,6 +4515,10 @@ packages:
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
+
+  tree-kill@1.2.2:
+    resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
+    hasBin: true
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
@@ -9395,6 +9405,8 @@ snapshots:
       is-number: 7.0.0
 
   toidentifier@1.0.1: {}
+
+  tree-kill@1.2.2: {}
 
   trim-lines@3.0.1: {}
 

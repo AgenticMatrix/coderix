@@ -18,6 +18,7 @@ import { CdpClient, getCdpClient } from './cdp-client.js';
 import { BROWSER_TOOLS } from './tools.js';
 import { handleBrowserToolCall } from './handlers.js';
 import type { CdpConfig } from './types.js';
+import { onShutdownSignal } from '../../../utils/platform.js';
 
 /**
  * Create an MCP Server pre-configured with all Chrome Use tools.
@@ -113,11 +114,7 @@ export async function runChromeMcpServer(
   log('MCP server ready on stdio');
 
   // Keep alive until stdin closes
-  await new Promise<void>((resolve) => {
-    process.stdin.on('end', resolve);
-    process.on('SIGTERM', resolve);
-    process.on('SIGINT', resolve);
-  });
+  await new Promise<void>((resolve) => onShutdownSignal(resolve));
 
   log('Shutting down...');
   await server.close();

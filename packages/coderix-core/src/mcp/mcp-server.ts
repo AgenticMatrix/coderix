@@ -18,6 +18,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { executeTool, getAnthropicTools } from '../tools/registry.js';
 import type { ExecutorOptions } from '../tools/types.js';
+import { onShutdownSignal } from '../utils/platform.js';
 
 /**
  * Start Coderix as an MCP server over stdio.
@@ -94,11 +95,7 @@ export async function startMcpServer(): Promise<void> {
 
   // Keep the process alive until transport closes
   // StdioServerTransport will close when stdin ends
-  await new Promise<void>((resolve) => {
-    process.stdin.on('end', resolve);
-    process.on('SIGTERM', resolve);
-    process.on('SIGINT', resolve);
-  });
+  await new Promise<void>((resolve) => onShutdownSignal(resolve));
 
   await server.close();
 }

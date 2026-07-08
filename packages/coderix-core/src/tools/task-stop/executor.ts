@@ -1,6 +1,21 @@
+import treeKill from 'tree-kill';
 import type { ToolExecutor } from '../types.js';
 import { getTask, updateTask } from '../../tasks/task-tracker.js';
 import { getSubAgentRegistry } from '../../agents/agent-spawn/registry-ref.js';
+
+/**
+ * Kill a process and its entire child tree.
+ * On Unix: SIGTERM → (wait 2s) → SIGKILL via tree-kill.
+ * On Windows: tree-kill wraps taskkill /F /T /PID.
+ */
+function killTaskProcess(pid: number): void {
+  treeKill(pid, 'SIGTERM', (err) => {
+    if (err) {
+      // Fallback: try native kill
+      try { process.kill(pid); } catch { /* already dead */ }
+    }
+  });
+}
 
 export const execute: ToolExecutor = async (input, _opts) => {
   const taskId = input.task_id as string;
@@ -21,11 +36,16 @@ export const execute: ToolExecutor = async (input, _opts) => {
     }
 
     if (tracked.type === 'bash' && tracked.process) {
-      tracked.process.kill('SIGTERM');
-      // Give it a moment, then SIGKILL if still alive
+      const pid = tracked.process.pid!;
+      killTaskProcess(pid);
+      // Give it a moment, then force-kill if still alive
       setTimeout(() => {
         if (tracked.process && !tracked.process.killed) {
-          tracked.process.kill('SIGKILL');
+          treeKill(pid, 'SIGKILL', (err) => {
+            if (err) {
+              try { tracked.process?.kill(); } catch { /* already dead */ }
+            }
+          });
         }
       }, 2000);
     }

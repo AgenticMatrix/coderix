@@ -41,6 +41,17 @@ export const CODE_EXEC_INTERPRETERS: readonly string[] = [
   'fish',
   'dash',
   'ksh',
+  // Windows: PowerShell and cmd can execute arbitrary scripts
+  'powershell',
+  'powershell.exe',
+  'pwsh',
+  'pwsh.exe',
+  'cmd',
+  'cmd.exe',
+  'cscript',
+  'cscript.exe',
+  'wscript',
+  'wscript.exe',
   // Remote execution
   'ssh',
 ];
@@ -68,6 +79,17 @@ export const DANGEROUS_BASH_BUILTINS: readonly string[] = [
   'systemctl',
   // Container escape risk
   'nsenter',
+  // Windows: PowerShell code execution & privilege escalation
+  'iex',
+  'Invoke-Expression',
+  'Invoke-Command',
+  'icm',
+  'Invoke-WebRequest',
+  'iwr',
+  'Invoke-RestMethod',
+  'irm',
+  'Start-Process',
+  'runas',
 ];
 
 // ── Destructive commands ────────────────────────────────────────────
@@ -86,6 +108,14 @@ export const DESTRUCTIVE_COMMANDS: readonly string[] = [
   'parted',
   'shred',
   'truncate',
+  // Windows: destructive system commands
+  'format',
+  'diskpart',
+  'bcdedit',
+  'del',
+  'rd',
+  'Remove-Item',
+  'Clear-RecycleBin',
 ];
 
 // ── Network exfiltration commands ────────────────────────────────────
@@ -179,6 +209,10 @@ export function containsDangerousRedirect(command: string): boolean {
     />>\s*~\/\.bashrc/,
     />>\s*~\/\.zshrc/,
     />>\s*~\/\.profile/,
+    // Windows: writing to critical system paths
+    />>\s*C:\\Windows\\System32\\/i,
+    />>\s*C:\\Windows\\System32\\drivers\\/i,
+    />>\s*C:\\Windows\\System32\\config\\/i,
   ];
 
   for (const pattern of criticalPaths) {

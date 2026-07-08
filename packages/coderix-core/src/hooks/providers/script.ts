@@ -10,13 +10,14 @@
  * is never blocked by a buggy hook.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import type {
   HookDefinition,
   HookContext,
   HookProvider,
   HookResult,
 } from '../types.js';
+import { IS_WINDOWS } from '../../utils/platform.js';
 
 // ═══════════════════════════════════════════════════════════════════
 // Constants
@@ -27,6 +28,23 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 
 /** Max bytes to read from stdout before giving up. */
 const MAX_STDOUT_BYTES = 64 * 1024; // 64 KiB
+
+// ═══════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Kill a child process and its descendants.
+ * On Windows, uses TerminateProcess (no process group kill available).
+ * On Unix, sends SIGTERM to the process group.
+ */
+function killProcessTree(child: ChildProcess): void {
+  if (IS_WINDOWS) {
+    child.kill(); // TerminateProcess
+  } else {
+    try { process.kill(-child.pid!, 'SIGTERM'); } catch { child.kill('SIGTERM'); }
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // ScriptProvider
@@ -47,8 +65,9 @@ export class ScriptProvider implements HookProvider {
       const child = spawn(hook.command, [], {
         shell: true,  // Allow quoted args, pipes, etc. — user-friendly
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...hook.env },
-        // detached so we can kill the process group on timeout
+        env: { ...process.env, ...hook.env, NoDefaultCurrentDirectoryInExePath: '1' },
+        windowsHide: true,
+        // detached so we can kill the process group on timeout (Unix)
         detached: true,
       });
 
@@ -56,12 +75,7 @@ export class ScriptProvider implements HookProvider {
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
-        try {
-          // Kill the entire process group
-          process.kill(-child.pid!, 'SIGTERM');
-        } catch {
-          child.kill('SIGTERM');
-        }
+        killProcessTree(child);
         resolve({});
       }, timeout);
 
@@ -72,7 +86,7 @@ export class ScriptProvider implements HookProvider {
         // Guard against runaway output
         if (stdout.length > MAX_STDOUT_BYTES) {
           stdout = stdout.slice(0, MAX_STDOUT_BYTES);
-          try { process.kill(-child.pid!, 'SIGTERM'); } catch { child.kill('SIGTERM'); }
+          killProcessTree(child);
         }
       });
 

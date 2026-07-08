@@ -233,4 +233,6 @@ async function handleCliMessage(ws, raw) {
 server.listen(PORT, '127.0.0.1', () => {
   console.log('BRIDGE_READY port=' + PORT);
 });
-process.on('SIGINT', () => process.exit(0));
+if (process.platform !== 'win32') {
+  process.on('SIGINT', () => process.exit(0));
+}

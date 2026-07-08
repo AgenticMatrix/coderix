@@ -106,6 +106,12 @@ export type { CoderSettings, ModelItem, ModelEntry, ModelPrice, WebSearchConfig,
 export { inferProvider, getMaxToolConcurrency, loadConfig, loadSettings } from './config.js';
 export type { AppConfig } from './config.js';
 
+// ── Platform utilities ─────────────────────────────────────────────
+export { IS_WINDOWS, IS_MACOS, onShutdownSignal } from './utils/platform.js';
+export { detectShell } from './utils/shell-detect.js';
+export type { ShellInfo, ShellType } from './utils/shell-detect.js';
+export { toPosixPath, toWindowsPath } from './utils/windows-paths.js';
+
 // ── State primitives ───────────────────────────────────────────────
 export { createStore } from './state/store.js';
 export type { Store } from './state/store.js';

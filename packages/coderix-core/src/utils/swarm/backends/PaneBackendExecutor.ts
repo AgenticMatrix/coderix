@@ -184,10 +184,12 @@ export class PaneBackendExecutor implements TeammateExecutor {
       process.once('exit', () => {
         for (const h of this.cleanupHandlers.values()) h();
       });
-      process.once('SIGHUP', () => {
-        for (const h of this.cleanupHandlers.values()) h();
-        process.exit(0);
-      });
+      if (process.platform !== 'win32') {
+        process.once('SIGHUP', () => {
+          for (const h of this.cleanupHandlers.values()) h();
+          process.exit(0);
+        });
+      }
     }
   }
 }

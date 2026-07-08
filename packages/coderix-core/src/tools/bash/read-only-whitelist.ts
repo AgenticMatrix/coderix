@@ -50,6 +50,14 @@ export const SIMPLE_READ_ONLY_COMMANDS: ReadonlySet<string> = new Set([
   'printenv', 'env',
   // Version info — these are interpreters, but running with no args is read-only
   'node', 'python', 'python3', 'ruby', 'perl',
+  // Windows: read-only built-in commands
+  'dir', 'type', 'findstr', 'where', 'whoami',
+  'tasklist', 'systeminfo', 'ver', 'hostname',
+  'netstat', 'ipconfig', 'ping', 'tracert', 'nslookup',
+  // PowerShell: read-only cmdlets
+  'Get-ChildItem', 'Get-Content', 'Get-Process', 'Get-Service',
+  'Select-String', 'Get-Location', 'Get-Date', 'Get-Help',
+  'Get-Command', 'Get-Module', 'Get-Variable', 'Get-ChildItem',
 ]);
 
 /**

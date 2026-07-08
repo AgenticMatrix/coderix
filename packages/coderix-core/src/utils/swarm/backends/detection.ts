@@ -47,6 +47,21 @@ export function getLeaderITermSessionId(): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Windows Terminal detection
+// ---------------------------------------------------------------------------
+
+/** Whether the process is running inside Windows Terminal. */
+export function isInsideWindowsTerminal(): boolean {
+  return process.platform === 'win32' && !!process.env.WT_SESSION;
+}
+
+/** The leader's Windows Terminal session ID. */
+export function getLeaderWtPaneId(): string | undefined {
+  if (!isInsideWindowsTerminal()) return undefined;
+  return process.env.WT_SESSION || undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Composite detection
 // ---------------------------------------------------------------------------
 
@@ -56,12 +71,13 @@ import type { BackendType } from './types.js';
 export function detectBackend(): BackendType {
   if (isInsideTmux()) return 'tmux';
   if (isInITerm2()) return 'iterm2';
+  if (isInsideWindowsTerminal()) return 'windows-terminal';
   return 'none';
 }
 
 /** Whether any visual pane backend is available. */
 export function hasPaneBackend(): boolean {
-  return isInsideTmux() || isInITerm2();
+  return isInsideTmux() || isInITerm2() || isInsideWindowsTerminal();
 }
 
 /** Whether the leader pane is inside tmux (not just tmux installed on the system). */
