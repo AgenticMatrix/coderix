@@ -78,8 +78,18 @@ export function createTerminalManager(): TerminalManager {
 
     // Platform defaults
     if (process.platform === 'win32') {
-      // Prefer PowerShell on Windows
-      return process.env['COMSPEC'] ?? 'powershell.exe';
+      // Prefer PowerShell 7 (pwsh), then PowerShell 5, then COMSPEC (cmd)
+      try {
+        require('node:fs').accessSync('C:\\Program Files\\PowerShell\\7\\pwsh.exe');
+        return 'pwsh.exe';
+      } catch {}
+      try {
+        require('node:fs').accessSync(
+          'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        );
+        return 'powershell.exe';
+      } catch {}
+      return process.env['COMSPEC'] ?? 'cmd.exe';
     }
 
     return '/bin/zsh';
@@ -97,10 +107,13 @@ export function createTerminalManager(): TerminalManager {
       const shell = config.shell ?? getDefaultShell();
 
       const ptyProcess = nodePty.spawn(shell, [], {
-        name: 'xterm-256color',
+        // Windows ConPTY ignores TERM; passing undefined lets the system choose
+        name: process.platform === 'win32' ? undefined : 'xterm-256color',
         cols: config.cols,
         rows: config.rows,
-        cwd: config.cwd ?? process.env['HOME'] ?? '/',
+        cwd: config.cwd
+          ?? process.env['HOME']
+          ?? (process.platform === 'win32' ? process.env['USERPROFILE'] : '/'),
         env: {
           ...process.env,
           TERM: 'xterm-256color',

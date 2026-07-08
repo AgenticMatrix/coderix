@@ -183,6 +183,10 @@ async function main(): Promise<void> {
   }
 
   if (cliArgs.computerUseMcp) {
+    if (process.platform !== 'darwin') {
+      console.error('Error: --computer-use-mcp is only supported on macOS.');
+      process.exit(1);
+    }
     const { runComputerUseMcpServer } = await import('@coderix/core');
     await runComputerUseMcpServer();
     return;
@@ -190,7 +194,7 @@ async function main(): Promise<void> {
 
   if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
 
-  if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; console.log(`coderix ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}`); process.exit(0); }
+  if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const { detectShell } = await import('@coderix/core'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; const shell = detectShell(); console.log(`coderix ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}\nshell ${shell.path} (${shell.type})`); process.exit(0); }
 
   if (cliArgs.model !== undefined || process.argv.includes('--model') || process.argv.includes('-m')) {
     const { handleModelFlag } = await import('./model-picker.js');

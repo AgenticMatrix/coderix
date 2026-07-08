@@ -91,6 +91,14 @@ export async function handleComputerToolCall(
   name: string,
   args: Record<string, unknown>,
 ): Promise<Array<{ type: string; text?: string; data?: string; mimeType?: string }>> {
+  // Computer Use tools are macOS-only for now
+  if (process.platform !== 'darwin') {
+    return [{
+      type: 'text',
+      text: 'Error: Computer Use tools are currently only supported on macOS. Windows and Linux support is planned for a future release.',
+    }];
+  }
+
   // Most tools require access first
   const requiresAccess = !['request_access', 'list_granted_applications'].includes(name);
   if (requiresAccess && !state.accessRequested) {

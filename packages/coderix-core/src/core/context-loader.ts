@@ -8,9 +8,10 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { homedir, type, release } from 'node:os';
-import { join } from 'node:path';
+import { detectShell } from '../utils/shell-detect.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +22,7 @@ export interface EnvInfo {
   platform: string;
   osVersion: string;
   shell: string;
+  shellType?: string;
   currentDate: string;
   isGitRepo: boolean;
   gitBranch?: string;
@@ -99,11 +101,13 @@ function parseGitStatusSummary(raw: string): string {
 // ---------------------------------------------------------------------------
 
 export function computeEnvInfo(cwd: string, _model?: string): EnvInfo {
+  const shell = detectShell();
   const info: EnvInfo = {
     cwd,
     platform: process.platform,
     osVersion: `${type()} ${release()}`,
-    shell: process.env.SHELL ?? (process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'),
+    shell: shell.path,
+    shellType: shell.type,
     currentDate: new Date().toDateString(),
     isGitRepo: false,
   };

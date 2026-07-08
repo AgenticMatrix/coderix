@@ -12,6 +12,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { IS_WINDOWS } from '../utils/platform.js';
 import type {
   Session,
   SessionFilter,
@@ -367,12 +368,18 @@ export class SessionManager {
     if (this.exitHandlerRegistered) return;
     this.exitHandlerRegistered = true;
 
-    const handler = () => {
-      this.flushAndExit(0);
-    };
-
-    process.once('SIGINT', handler);
-    process.once('SIGTERM', handler);
+    if (IS_WINDOWS) {
+      // Windows: use 'beforeExit' for graceful shutdown (signals not available)
+      process.on('beforeExit', () => {
+        this.flushAndExit(0);
+      });
+    } else {
+      const handler = () => {
+        this.flushAndExit(0);
+      };
+      process.once('SIGINT', handler);
+      process.once('SIGTERM', handler);
+    }
   }
 
   /**

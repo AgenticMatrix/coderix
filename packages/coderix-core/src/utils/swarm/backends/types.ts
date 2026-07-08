@@ -50,7 +50,7 @@ export interface PaneBackend {
 // Backend type and metadata
 // ---------------------------------------------------------------------------
 
-export type BackendType = 'tmux' | 'iterm2' | 'in-process' | 'none';
+export type BackendType = 'tmux' | 'iterm2' | 'windows-terminal' | 'in-process' | 'none';
 
 export interface BackendInfo {
   type: BackendType;

@@ -16,6 +16,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { COMPUTER_TOOLS } from './tools.js';
 import { handleComputerToolCall } from './handlers.js';
+import { onShutdownSignal } from '../../../utils/platform.js';
 
 /**
  * Create an MCP Server pre-configured with all Computer Use tools.
@@ -111,11 +112,7 @@ export async function runComputerUseMcpServer(): Promise<void> {
   log('Supported tools: screenshot, click, type, key, scroll, drag, and more.');
 
   // Keep alive until stdin closes
-  await new Promise<void>((resolve) => {
-    process.stdin.on('end', resolve);
-    process.on('SIGTERM', resolve);
-    process.on('SIGINT', resolve);
-  });
+  await new Promise<void>((resolve) => onShutdownSignal(resolve));
 
   log('Shutting down...');
   await server.close();

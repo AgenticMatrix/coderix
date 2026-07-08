@@ -9,6 +9,82 @@ import {
   type TokenizeResult,
 } from './command-tokenizer.js';
 import { CommandCategory, type ClassificationResult } from './command-classifier.js';
+import { IS_WINDOWS } from '../../utils/platform.js';
+import { toPosixPath } from '../../utils/windows-paths.js';
+import { detectShell } from '../../utils/shell-detect.js';
+
+// ── Shell resolution (cached at module load) ─────────────────────────────
+
+/** The shell binary to use for command execution. */
+const RESOLVED_SHELL: string | true = (() => {
+  if (!IS_WINDOWS) return true; // On Unix, `shell: true` uses $SHELL
+  const shell = detectShell();
+  // Use the detected shell if it's available; fall back to default
+  if (shell.type === 'git-bash' || shell.type === 'pwsh' || shell.type === 'powershell') {
+    return shell.path;
+  }
+  return true; // fallback to cmd.exe via COMSPEC
+})();
+
+/** Whether the resolved shell understands POSIX syntax (bash/zsh/sh). */
+const IS_POSIX_SHELL: boolean = IS_WINDOWS
+  ? detectShell().type === 'git-bash'
+  : true;
+
+// ── Spawn defaults ──────────────────────────────────────────────────────
+
+/** Options applied to every spawn() on every platform. */
+const SPAWN_DEFAULTS = {
+  windowsHide: true,
+  shell: RESOLVED_SHELL,
+  env: {
+    ...process.env,
+    // Prevent Windows from searching CWD for executables (DLL hijacking mitigation)
+    NoDefaultCurrentDirectoryInExePath: '1',
+  },
+} as const;
+
+// ── Command preprocessing ────────────────────────────────────────────────
+
+/**
+ * Regex matching Windows cmd-style null redirects (e.g., `2>nul`, `>NUL`).
+ * On Git Bash these would create a literal file named `nul` — a reserved
+ * Windows device name that is extremely hard to delete.  Rewrite to
+ * POSIX `/dev/null` which Git Bash handles correctly.
+ */
+const NUL_REDIRECT_RE = /(\d?&?>+)\s*[Nn][Uu][Ll](?=\s|$|[|&;)\n])/g;
+
+/**
+ * Regex matching quoted Windows paths: "C:\Program Files\app".
+ * Handled first so spaces within quotes are safe.
+ */
+const QUOTED_WIN_PATH_RE = /(["'])([A-Za-z]:[\\/][\w.\- \\/]+?)\1/g;
+
+/**
+ * Regex matching unquoted Windows paths without spaces.
+ * After quoted paths are processed, this handles the rest.
+ */
+const UNQUOTED_WIN_PATH_RE = /[A-Za-z]:[\\/][\w.\-\\/]+(?=\s|$|"|'|`|;|&|\||\)|\n)/g;
+
+/**
+ * Preprocess a shell command before execution.
+ * - If the shell is POSIX (Git Bash on Windows, or any Unix shell):
+ *   rewrites cmd-style null redirects (2>nul → 2>/dev/null) and converts
+ *   Windows paths to POSIX form.
+ * - If the shell is cmd.exe or PowerShell: no conversion needed; the shell
+ *   understands Windows paths and cmd-style redirects natively.
+ */
+function preprocessCommand(command: string): string {
+  if (!IS_WINDOWS || !IS_POSIX_SHELL) return command;
+  let result = command;
+  // 1. Rewrite Windows null redirects (2>nul → 2>/dev/null)
+  result = result.replace(NUL_REDIRECT_RE, '$1/dev/null');
+  // 2. Convert quoted Windows paths (spaces are safe inside quotes)
+  result = result.replace(QUOTED_WIN_PATH_RE, (_full, quote, path) => quote + toPosixPath(path) + quote);
+  // 3. Convert unquoted Windows paths (no spaces in these)
+  result = result.replace(UNQUOTED_WIN_PATH_RE, (match) => toPosixPath(match));
+  return result;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -100,10 +176,10 @@ function runCommand(command: string, opts: {
 }> {
   return new Promise((resolve) => {
     const child = spawn(command, {
+      ...SPAWN_DEFAULTS,
       cwd: opts.cwd,
-      shell: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...SPAWN_DEFAULTS.env },
     });
 
     let stdout = '';
@@ -181,10 +257,10 @@ function runBackgroundCommand(command: string, opts: {
 }> {
   return new Promise((resolve) => {
     const child = spawn(command, {
+      ...SPAWN_DEFAULTS,
       cwd: opts.cwd,
-      shell: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...SPAWN_DEFAULTS.env },
       detached: true,
     });
 
@@ -255,8 +331,14 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
     return { content: 'Error: bash tool is not available (mutation tools disabled)', isError: true };
   }
 
-  const command = input.command as string;
-  if (!command) return { content: 'Error: command is required', isError: true };
+  const rawCommand = input.command as string;
+  if (!rawCommand) return { content: 'Error: command is required', isError: true };
+
+  // Preprocess: rewrite Windows-isms for Git Bash compatibility.
+  // Security check runs on the raw (unprocessed) command, so classifiers
+  // see what the LLM actually wrote.  Path conversion and null-redirect
+  // rewriting happen just before spawn.
+  const command = preprocessCommand(rawCommand);
 
   // ── Pre-execution security check ──────────────────────────────
   // Tokenize the command, then run the security check hook (if installed).
