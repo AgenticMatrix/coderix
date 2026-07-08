@@ -133,9 +133,6 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
         {displayLines.map((line, i) => (
           <Box key={i} width={maxWidth} backgroundColor={userBgColor}>
             <Text>
-              {i === 0 ? (
-                <><Text color="cyan" bold>You:</Text>{' '}</>
-              ) : null}
               <Text color={userTextColor}>{line}</Text>
             </Text>
           </Box>
@@ -299,11 +296,6 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Box marginBottom={0}>
-        <Text>
-          <Text color="green" bold>Coderix:</Text>
-        </Text>
-      </Box>
       <Box paddingLeft={3} flexDirection="column">
         {/* Render blocks in their natural order */}
         {hasBlocks
