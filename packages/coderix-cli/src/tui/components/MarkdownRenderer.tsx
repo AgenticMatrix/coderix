@@ -706,7 +706,7 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
               <Text color="grey">│</Text>
               {cells.map((cell, ci) => (
                 <React.Fragment key={ci}>
-                  <Box width={innerWidths[ci]! + 2} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
+                  <Box width={innerWidths[ci]!} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
                     <Text bold color={textColor}>
                       <InlineLine tokens={parseInline(cell.trim())} />
                     </Text>
@@ -723,7 +723,7 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
                 <Text color="grey">│</Text>
                 {cells.map((cell, ci) => (
                   <React.Fragment key={ci}>
-                    <Box width={innerWidths[ci]! + 2} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
+                    <Box width={innerWidths[ci]!} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
                       <Text color={textColor}>
                         <InlineLine tokens={parseInline(cell.trim())} />
                       </Text>
