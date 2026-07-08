@@ -135,7 +135,7 @@ function splitTableCells(line: string): string[] {
 
 /** Get the visible display width of a string for terminal column alignment.
  *  Follows wcwidth conventions: CJK, emoji, fullwidth chars = 2, ASCII = 1. */
-function displayWidth(str: string): number {
+export function displayWidth(str: string): number {
   let width = 0;
   for (const ch of str) {
     const cp = ch.codePointAt(0) ?? 0;
@@ -811,7 +811,7 @@ export function MarkdownRenderer({ content, theme }: MarkdownRendererProps) {
 
   // Buffer for accumulated parent padding: App(paddingX=1) + ChatView(paddingX=1)
   // + MessageBubble(paddingLeft=3) + terminal right margin(1) ≈ 6, use 8 for safety.
-  const maxOutputWidth = Math.max(20, termWidth - 8);
+  const maxOutputWidth = Math.max(20, termWidth - 4);
   const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
 
   return (

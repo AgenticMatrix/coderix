@@ -6,7 +6,7 @@ import type {
   TodoUpdateBlock, TurnBoundary, SubagentBlock,
   CompactionBoundary, SpeculationBlock, CompletionBoundary,
 } from '../../types.js';
-import { MarkdownRenderer } from './MarkdownRenderer.js';
+import { MarkdownRenderer, displayWidth } from './MarkdownRenderer.js';
 import { getToolUseRenderer, getToolResultRenderer } from '../../tools/registry.js';;
 import { TodoUpdateBlockRenderer } from './blocks/TodoUpdateBlockRenderer.js';
 import { TurnBoundaryRenderer } from './blocks/TurnBoundaryRenderer.js';
@@ -27,6 +27,29 @@ function blocksText(blocks: Message['blocks']): string {
     .filter((b): b is TextBlock => b.type === 'text')
     .map((b) => b.content)
     .join('');
+}
+
+/** Word-wrap plain text at word boundaries, respecting display width. */
+function wordWrapText(text: string, maxWidth: number): string[] {
+  const result: string[] = [];
+  for (const line of text.split('\n')) {
+    const words = line.split(/(?<=\s)/);
+    let cur = '';
+    let curW = 0;
+    for (const word of words) {
+      const w = displayWidth(word);
+      if (curW === 0 || curW + w <= maxWidth) {
+        cur += word;
+        curW += w;
+      } else {
+        if (cur) result.push(cur);
+        cur = word.replace(/^\s+/, '');
+        curW = displayWidth(cur);
+      }
+    }
+    if (cur) result.push(cur);
+  }
+  return result;
 }
 
 /** Extract thinking text from blocks. */
@@ -285,15 +308,18 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
                   const thinkingLines = block.content.split('\n');
                   const tooLong = thinkingLines.length > 2;
                   const collapsed = tooLong && !message.thinkingExpanded;
-                  const displayText = collapsed
-                    ? thinkingLines.slice(0, 2).join('\n')
-                    : block.content;
+                  const logicalLines = collapsed
+                    ? thinkingLines.slice(0, 2)
+                    : thinkingLines;
+                  const thinkWidth = Math.max(20, maxWidth - 2);
 
                   return (
                     <Box key={idx} flexDirection="column" marginBottom={1}>
                       <Text dimColor color="grey">{'💭 Thinking:'}</Text>
                       <Box paddingLeft={2} flexDirection="column">
-                        <Text dimColor color="grey">{displayText}</Text>
+                        {logicalLines.flatMap(line => wordWrapText(line, thinkWidth)).map((line, i) => (
+                          <Text key={i} dimColor color="grey">{line || ' '}</Text>
+                        ))}
                         {collapsed ? (
                           <Text dimColor color="grey">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
                         ) : null}
