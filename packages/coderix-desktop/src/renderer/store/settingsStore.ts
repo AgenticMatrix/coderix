@@ -58,6 +58,16 @@ interface CoderSettings {
 // Adapters: Core ↔ UI
 // ---------------------------------------------------------------------------
 
+/** Detect default placeholder API keys that ship with Coderix. */
+function isPlaceholderKey(key: string): boolean {
+  const upper = key.toUpperCase();
+  return (
+    upper === 'LOCAL_NO_KEY' ||
+    upper.startsWith('YOUR_') ||
+    upper.startsWith('SK-YOUR-')
+  );
+}
+
 function settingsToUI(config: CoderSettings): SettingsData {
   return {
     providers:
@@ -71,7 +81,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
             temperature: 0.7,
             maxTokens: entry.max_tokens ?? config.max_tokens ?? 32768,
           })) ?? [],
-        connected: !!(entry.auth_token_env && entry.auth_token_env.length > 0 && !entry.auth_token_env.startsWith('sk-your-api-key')),
+        connected: !!(entry.auth_token_env && entry.auth_token_env.length > 0 && !isPlaceholderKey(entry.auth_token_env)),
       })) ?? [],
     defaultModel: config.default_model ?? '',
     defaultPermissionMode: 'auto',
@@ -202,7 +212,9 @@ export const useSettingsStore = create<SettingsStore>()((set) => ({
       const toSave = uiToSettings(data);
       // Pass empty key to trigger top-level merge in CONFIG_SET handler
       await setConfig('', toSave);
-      set({ settings: data, loading: false });
+      // Re-run through settingsToUI to recalculate connected flags
+      const refreshed = settingsToUI(toSave as CoderSettings);
+      set({ settings: refreshed, loading: false });
       // Hot-reload: reinitialize QueryEngine with new model/API key
       if (window.coderixAPI?.config?.reload) {
         await window.coderixAPI.config.reload();

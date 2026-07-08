@@ -123,7 +123,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                   {Object.keys(PROVIDER_CATALOG).map(k => <option key={k} value={k}>{k.charAt(0).toUpperCase() + k.slice(1)}</option>)}
                   {!PROVIDER_CATALOG[p.name.toLowerCase()] && <option value={p.name}>{p.name}</option>}
                 </select>
-                <span style={S.badge(!!(p.apiKey?.length > 0))}>{p.apiKey?.length > 0 ? '已配置' : '未配置'}</span>
+                <span style={S.badge(p.connected)}>{p.connected ? '已配置' : '未配置'}</span>
               </span>
               <button onClick={() => removeProvider(i)} style={{ background: 'none', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer', fontSize: '14px' }}>🗑</button>
             </div>
