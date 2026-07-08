@@ -201,6 +201,8 @@ export interface ChatState extends CoreState {
   historyScratch: string;
   /** Paste block contents keyed by ID (IDs embedded as markers in inputText). */
   pasteBlocks: Record<number, string>;
+  /** When true, paste content preview is shown above the input line. */
+  pastePreviewVisible: boolean;
   /** Global toggle for content-level expansion (thinking, tool results). */
   contentExpanded: boolean;
   /** When set, renders a sub-agent transcript view instead of the main chat. */
@@ -301,6 +303,7 @@ export type ChatAction =
   | { type: 'SET_HISTORY_INDEX'; index: number; scratch?: string }
   // Paste blocks
   | { type: 'ADD_PASTE_BLOCK'; text: string }
+  | { type: 'TOGGLE_PASTE_PREVIEW' }
   // Token usage
   | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage> }
   // Agent cache management

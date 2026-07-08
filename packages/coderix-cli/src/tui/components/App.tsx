@@ -534,6 +534,8 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         inputText={state.inputText}
         cursorPosition={state.cursorPosition}
         isStreaming={state.isStreaming}
+        pasteBlocks={state.pasteBlocks}
+        pastePreviewVisible={state.pastePreviewVisible}
       />
 
       <Box marginTop={1}>

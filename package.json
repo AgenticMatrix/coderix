@@ -1,6 +1,7 @@
 {
   "name": "coderix",
   "version": "0.1.0",
+  "type": "module",
   "description": "Coderix — A fully open-source AI programming assistant for the terminal",
   "bin": {
     "coderix": "./bin/coderix.js"
