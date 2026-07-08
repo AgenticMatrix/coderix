@@ -389,11 +389,7 @@ function InlineTokenElement({ token }: { token: InlineToken }) {
   const { type, content } = token;
 
   if (type === 'code') {
-    return (
-      <Text color="cyan">
-        {content}
-      </Text>
-    );
+    return <Text>{content}</Text>;
   }
 
   if (type === 'math') {
@@ -521,7 +517,7 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
       return (
         <Box marginLeft={2}>
           <Text>
-            <Text color="cyan">  • </Text>
+            <Text>  • </Text>
             <InlineLine tokens={block.tokens} />
           </Text>
         </Box>
