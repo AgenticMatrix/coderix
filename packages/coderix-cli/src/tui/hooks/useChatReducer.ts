@@ -207,10 +207,40 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'START_BLOCK':
+    case 'START_BLOCK': {
+      const isThinking = action.block.type === 'thinking';
+      const isNonThinkingAfterThinking =
+        !isThinking && state.thinkingStartedAt != null;
+
+      let nextState = state;
+
+      if (isThinking) {
+        nextState = { ...nextState, thinkingStartedAt: Date.now() };
+      }
+
+      if (isNonThinkingAfterThinking) {
+        const thinkingMsg = state.messages.find((m) => m.id === action.messageId);
+        const thinkingBlock = thinkingMsg?.blocks.find(
+          (b): b is ThinkingBlock => b.type === 'thinking',
+        );
+        const duration = Date.now() - state.thinkingStartedAt!;
+        const tokens = thinkingBlock
+          ? Math.max(1, Math.round(thinkingBlock.content.length / 4))
+          : 0;
+        nextState = {
+          ...nextState,
+          thinkingStartedAt: undefined,
+          messages: nextState.messages.map((m) =>
+            m.id === action.messageId
+              ? { ...m, thinkingDuration: duration, thinkingTokens: tokens }
+              : m,
+          ),
+        };
+      }
+
       return {
-        ...state,
-        messages: state.messages.map((m) =>
+        ...nextState,
+        messages: nextState.messages.map((m) =>
           m.id === action.messageId
             ? {
                 ...m,
@@ -227,6 +257,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : m,
         ),
       };
+    }
 
     case 'APPEND_BLOCK_DELTA':
       return {
@@ -368,8 +399,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         })),
       };
 
-    case 'FINISH_ASSISTANT_RESPONSE':
-      return { ...state, isStreaming: false };
+    case 'FINISH_ASSISTANT_RESPONSE': {
+      let nextState = { ...state, isStreaming: false };
+      if (state.thinkingStartedAt != null) {
+        const lastMsg = state.messages[state.messages.length - 1];
+        if (lastMsg?.role === 'assistant') {
+          const thinkingBlock = lastMsg.blocks.find(
+            (b): b is ThinkingBlock => b.type === 'thinking',
+          );
+          const duration = Date.now() - state.thinkingStartedAt;
+          const tokens = thinkingBlock
+            ? Math.max(1, Math.round(thinkingBlock.content.length / 4))
+            : 0;
+          nextState = {
+            ...nextState,
+            thinkingStartedAt: undefined,
+            messages: nextState.messages.map((m) =>
+              m.id === lastMsg.id
+                ? { ...m, thinkingDuration: duration, thinkingTokens: tokens }
+                : m,
+            ),
+          };
+        }
+      }
+      return nextState;
+    }
 
     case 'INTERRUPT':
       return { ...state, isStreaming: false };
@@ -708,6 +762,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     lastAgentViewId: null,
     agentPicker: false,
     taskPanelDismissed: false,
+    thinkingStartedAt: undefined,
     todoPanelDismissed: false,
     teamPanelDismissed: false,
     commandPickerIndex: -1,

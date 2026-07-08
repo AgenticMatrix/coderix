@@ -142,6 +142,10 @@ export interface Message {
   thinkingExpanded?: boolean;
   toolsExpanded?: boolean;
   timestamp: number;
+  /** Duration of the thinking phase in ms, set when thinking completes. */
+  thinkingDuration?: number;
+  /** Estimated token count of the thinking content. */
+  thinkingTokens?: number;
 }
 
 // ── App config ──────────────────────────────────────────────────────
@@ -217,6 +221,8 @@ export interface ChatState extends CoreState {
   agentPicker: boolean;
   /** When true, the task panel has been manually dismissed. */
   taskPanelDismissed: boolean;
+  /** Timestamp when the current thinking block started (for duration tracking). */
+  thinkingStartedAt?: number;
   /** When true, the todo panel has been manually dismissed. */
   todoPanelDismissed: boolean;
   /** When true, the team panel has been manually dismissed. */

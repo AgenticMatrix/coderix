@@ -312,10 +312,15 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
                     ? thinkingLines.slice(0, 2)
                     : thinkingLines;
                   const thinkWidth = Math.max(20, maxWidth - 2);
+                  const isThoughtDone = message.thinkingDuration != null;
+
+                  const headerText = isThoughtDone
+                    ? `Thought · ${(message.thinkingDuration! / 1000).toFixed(1)}s · ${message.thinkingTokens} tokens`
+                    : 'Thinking...';
 
                   return (
                     <Box key={idx} flexDirection="column" marginBottom={1}>
-                      <Text dimColor color="grey">{'💭 Thinking:'}</Text>
+                      <Text color={textColor}>{headerText}</Text>
                       <Box paddingLeft={2} flexDirection="column">
                         {logicalLines.flatMap(line => wordWrapText(line, thinkWidth)).map((line, i) => (
                           <Text key={i} dimColor color="grey">{line || ' '}</Text>
