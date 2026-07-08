@@ -76,7 +76,7 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
                 // + is at position 5 (after 4-digit line number + space)
                 const isAdd = line[5] === '+';
                 const isRemove = line[5] === '-';
-                const bgColor = isAdd ? 'rgb(34,92,43)' : isRemove ? 'rgb(122,41,54)' : undefined;
+                const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
                 return (
                   <Box key={i} width="90%" backgroundColor={bgColor}>
                     <Text>{line}</Text>
