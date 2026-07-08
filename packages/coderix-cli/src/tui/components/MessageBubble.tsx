@@ -274,33 +274,12 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
 
   // ── Assistant ─────────────────────────────────────────────
 
-  // Tool collapsing: when an assistant message has many tool_use blocks,
-  // show at most MAX_VISIBLE in full and collapse the rest into a summary.
-  const TOOL_COLLAPSE_THRESHOLD = 3;
-  const MAX_VISIBLE_TOOLS = 2;
-  const toolBlocks = hasBlocks
-    ? message.blocks.filter((b) => b.type === 'tool_use')
-    : [];
-  const totalTools = toolBlocks.length;
-  const shouldCollapseTools =
-    totalTools > TOOL_COLLAPSE_THRESHOLD && !message.toolsExpanded;
-
-  const executingCount = toolBlocks.filter(
-    (b) => (b as ToolUseBlock).state === 'executing',
-  ).length;
-  const pendingCount = toolBlocks.filter(
-    (b) => (b as ToolUseBlock).state === 'pending',
-  ).length;
-  const doneCount = totalTools - executingCount - pendingCount;
-  const hiddenCount = totalTools - MAX_VISIBLE_TOOLS;
-
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box paddingLeft={3} flexDirection="column">
         {/* Render blocks in their natural order */}
         {hasBlocks
           ? (() => {
-              let toolIndex = 0;
               return message.blocks.map((block, idx) => {
                 if (block.type === 'thinking') {
                   const thinkingLines = block.content.split('\n');
@@ -330,36 +309,10 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
                   return <MarkdownRenderer key={idx} content={block.content} theme={theme} />;
                 }
 
-                // Tool collapsing: skip tool_use blocks beyond MAX_VISIBLE_TOOLS
-                if (block.type === 'tool_use' && shouldCollapseTools) {
-                  if (toolIndex >= MAX_VISIBLE_TOOLS) {
-                    toolIndex++;
-                    return null;
-                  }
-                  toolIndex++;
-                }
-
                 return renderBlock(block, idx);
               });
             })()
           : null}
-
-        {/* Tool collapse summary line */}
-        {shouldCollapseTools ? (
-          <Box marginBottom={1}>
-            <Text dimColor>
-              ... {hiddenCount} more tools
-              {executingCount > 0 ? ` · ${executingCount} executing` : ''}
-              {pendingCount > 0 ? ` · ${pendingCount} queued` : ''}
-              {doneCount > 0 ? ` · ${doneCount} completed` : ''}
-              {' '}(Ctrl+E to toggle tools)
-            </Text>
-          </Box>
-        ) : totalTools > TOOL_COLLAPSE_THRESHOLD && message.toolsExpanded ? (
-          <Box marginBottom={1}>
-            <Text dimColor>(Ctrl+E to toggle tools)</Text>
-          </Box>
-        ) : null}
 
         {/* Fallback: legacy string content when no blocks */}
         {!hasBlocks && displayContent ? (

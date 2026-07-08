@@ -5,7 +5,7 @@ import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
 const MAX_DISPLAY_CHARS = 60;
-const COLLAPSE_THRESHOLD = 3;
+const COLLAPSE_THRESHOLD = 1;
 const PER_LINE_CHAR_LIMIT = 100;
 
 function extractCommentLabel(command: string): string | null {
