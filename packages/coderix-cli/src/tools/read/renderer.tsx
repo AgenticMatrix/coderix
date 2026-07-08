@@ -27,15 +27,10 @@ export function ReadRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isDone ? '●' : blinkOn ? '●' : '○';
   const indicatorColor = isDone ? 'green' : 'yellow';
 
-  const COLLAPSE_THRESHOLD = 3;
-
   const resultLines = result?.content
     ? result.content.split('\n').filter((l) => l !== '')
     : [];
   const hasResult = isDone && result && resultLines.length > 0;
-  const tooLong = !props.contentExpanded && resultLines.length > COLLAPSE_THRESHOLD;
-  const displayLines = tooLong ? resultLines.slice(0, COLLAPSE_THRESHOLD) : resultLines;
-  const hiddenCount = resultLines.length - COLLAPSE_THRESHOLD;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -48,18 +43,21 @@ export function ReadRenderer(props: ToolUseRendererProps): React.ReactNode {
           </Text>
           {isExecuting ? (
             <Text dimColor>  Reading  {elapsedSecs}s</Text>
-          ) : isDone ? (
-            <Text dimColor>  Reading consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s</Text>
           ) : null}
-          {hasResult ? (
-            <Box flexDirection="column" paddingLeft={2}>
-              {displayLines.map((line, i) => (
-                <OutputLine key={`out-${i}`} line={line} />
-              ))}
-              {tooLong ? (
-                <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+          {isDone ? (
+            <>
+              {props.contentExpanded && hasResult ? (
+                <Box flexDirection="column">
+                  {resultLines.map((line, i) => (
+                    <Text key={`out-${i}`}>
+                      <Text dimColor>|  </Text>
+                      <OutputLine line={line} />
+                    </Text>
+                  ))}
+                </Box>
               ) : null}
-            </Box>
+              <Text dimColor>  ⎿ Read {resultLines.length} lines, consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s，Ctrl+D to detail</Text>
+            </>
           ) : null}
         </>
       ) : null}

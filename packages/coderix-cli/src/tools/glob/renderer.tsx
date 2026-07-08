@@ -3,8 +3,6 @@ import { Box, Text } from 'ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
-const COLLAPSE_THRESHOLD = 5;
-
 export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
   const pattern = props.input.pattern as string | undefined;
   const isDone = props.state === 'done';
@@ -15,9 +13,6 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
   const resultContent = props.result?.content ?? '';
   const allLines = resultContent.split('\n');
   const resultLines = allLines.filter(l => l !== '');
-  const tooLong = !props.contentExpanded && resultLines.length > COLLAPSE_THRESHOLD;
-  const displayLines = tooLong ? resultLines.slice(0, COLLAPSE_THRESHOLD) : resultLines;
-  const hiddenCount = resultLines.length - COLLAPSE_THRESHOLD;
 
   // Error state
   if (isError) {
@@ -38,7 +33,7 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
     );
   }
 
-  // Done state — always show result content below
+  // Done state
   if (isDone) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -47,20 +42,17 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
           <Text bold>Glob</Text>
           {pattern ? <Text dimColor>({pattern})</Text> : null}
         </Text>
-        <Box paddingLeft={3} flexDirection="column">
-          {resultLines.length > 0 ? (
-            <>
-              {displayLines.map((line, i) => (
-                <Text key={i}>{line}</Text>
-              ))}
-              {tooLong ? (
-                <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
-              ) : null}
-            </>
-          ) : (
-            <Text dimColor>(no matches)</Text>
-          )}
-        </Box>
+        {props.contentExpanded && resultLines.length > 0 ? (
+          <Box flexDirection="column">
+            {resultLines.map((line, i) => (
+              <Text key={i}>
+                <Text dimColor>|  </Text>
+                {line}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
+        <Text dimColor>  ⎿ Found {resultLines.length} files, consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s ，Ctrl+D to detail</Text>
       </Box>
     );
   }
