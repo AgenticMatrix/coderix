@@ -53,7 +53,7 @@ export interface HighlightLine {
 }
 
 /** Parse highlight.js HTML output into an array of tokens. */
-function parseHtmlTokens(html: string): HighlightToken[] {
+export function parseHtmlTokens(html: string): HighlightToken[] {
   const tokens: HighlightToken[] = [];
 
   // Match both <span class="...">text</span> and plain text between spans

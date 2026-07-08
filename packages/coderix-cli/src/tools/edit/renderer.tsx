@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
+import { detectLanguage, highlightDiffLine } from '../shared/diffHighlight.js';
 import type { ToolUseRendererProps } from '../types.js';
 
 const COLLAPSE_THRESHOLD = 5;
@@ -49,6 +50,8 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isError ? '❌' : isDone ? '●' : blinkOn ? '●' : '○';
   const indicatorColor = isError ? 'red' : isDone ? 'green' : 'yellow';
 
+  const lang = hasPath ? detectLanguage(fp) : null;
+
   return (
     <Box flexDirection="column" marginBottom={1}>
       {hasPath ? (
@@ -72,14 +75,14 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
           {isDone && displayDiffLines && displayDiffLines.length > 0 ? (
             <Box paddingLeft={2} flexDirection="column">
               {displayDiffLines.map((line, i) => {
-                // Git-style diff format: "NNNN +text" / "NNNN -text" / "NNNN  text" / "     ..."
-                // + is at position 5 (after 4-digit line number + space)
-                const isAdd = line[5] === '+';
-                const isRemove = line[5] === '-';
+                const { prefix, codeTokens, isAdd, isRemove } = highlightDiffLine(line, lang);
                 const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
                 return (
                   <Box key={i} width="90%" backgroundColor={bgColor}>
-                    <Text>{line}</Text>
+                    <Text color="white">{prefix}</Text>
+                    {codeTokens.map((t, j) => (
+                      <Text key={j} color={t.color}>{t.text}</Text>
+                    ))}
                   </Box>
                 );
               })}
