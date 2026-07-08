@@ -91,6 +91,8 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
   }, [stdout?.columns]);
   const maxWidth = Math.max(20, Math.floor(termWidth * 0.9));
   const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
+  const userBgColor = theme === 'light' ? 'black' : 'white';
+  const userTextColor = theme === 'light' ? '#FFFFFF' : '#000000';
 
   // ── Determine content source ──────────────────────────────
   const hasBlocks = message.blocks && message.blocks.length > 0;
@@ -129,12 +131,12 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     return (
       <Box flexDirection="column" marginBottom={1} width={maxWidth}>
         {displayLines.map((line, i) => (
-          <Box key={i} width={maxWidth} backgroundColor="black">
+          <Box key={i} width={maxWidth} backgroundColor={userBgColor}>
             <Text>
               {i === 0 ? (
                 <><Text color="cyan" bold>You:</Text>{' '}</>
               ) : null}
-              <Text color={textColor}>{line}</Text>
+              <Text color={userTextColor}>{line}</Text>
             </Text>
           </Box>
         ))}
