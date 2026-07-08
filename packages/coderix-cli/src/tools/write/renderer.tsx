@@ -76,11 +76,10 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 // + is at position 5 (after 4-digit line number + space)
                 const isAdd = line[5] === '+';
                 const isRemove = line[5] === '-';
-                // GitHub-style diff colors: green for additions, vermilion for deletions
-                const bgColor = isAdd ? 'rgb(205,255,216)' : isRemove ? 'rgb(255,215,213)' : undefined;
+                const bgColor = isAdd ? 'rgb(34,92,43)' : isRemove ? 'rgb(122,41,54)' : undefined;
                 return (
                   <Box key={i} width="90%" backgroundColor={bgColor}>
-                    <Text color={isAdd || isRemove ? 'black' : undefined}>{line}</Text>
+                    <Text>{line}</Text>
                   </Box>
                 );
               })}
