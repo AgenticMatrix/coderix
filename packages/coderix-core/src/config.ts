@@ -26,6 +26,8 @@ export interface AppConfig {
   autoCompactEnabled: boolean;
   /** Ratio (0–1) at which auto-compaction triggers. Default 0.85. */
   compactThreshold: number;
+  /** UI theme: "dark" (default) or "light". */
+  theme?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -426,7 +426,7 @@ function InlineLine({ tokens }: { tokens: InlineToken[] }) {
 /**
  * Render a single block.
  */
-function BlockElement({ block, termWidth }: { block: Block; termWidth: number }) {
+function BlockElement({ block, termWidth, theme, textColor }: { block: Block; termWidth: number; theme?: string; textColor: string }) {
   switch (block.type) {
     case 'heading':
       return (
@@ -445,7 +445,7 @@ function BlockElement({ block, termWidth }: { block: Block; termWidth: number })
       );
 
     case 'code_block': {
-      const highlighted = highlightCode(block.code, block.language);
+      const highlighted = highlightCode(block.code, block.language, theme);
       return (
         <Box
           flexDirection="column"
@@ -605,14 +605,14 @@ function BlockElement({ block, termWidth }: { block: Block; termWidth: number })
         <Box flexDirection="column" marginY={1}>
           <Text color="grey">{topBorder}</Text>
           {headerLines.map((cells, li) => (
-            <Text key={`h${li}`} bold color="white">
+            <Text key={`h${li}`} bold color={textColor}>
               {'│' + cells.join('│') + '│'}
             </Text>
           ))}
           <Text color="grey">{sepBorder}</Text>
           {rowLines.map((lines, ri) =>
             lines.map((cells, li) => (
-              <Text key={`${ri}-${li}`} color="white">
+              <Text key={`${ri}-${li}`} color={textColor}>
                 {'│' + cells.join('│') + '│'}
               </Text>
             )),
@@ -653,6 +653,7 @@ function BlockElement({ block, termWidth }: { block: Block; termWidth: number })
 
 interface MarkdownRendererProps {
   content: string;
+  theme?: string;
 }
 
 /**
@@ -671,7 +672,7 @@ interface MarkdownRendererProps {
  * - Blockquotes (> text, with nesting support)
  * - Paragraphs
  */
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, theme }: MarkdownRendererProps) {
   const { stdout } = useStdout();
   const [termWidth, setTermWidth] = useState(
     () => stdout?.columns ?? process.stdout.columns ?? 80,
@@ -693,11 +694,12 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   // Buffer for accumulated parent padding: App(paddingX=1) + ChatView(paddingX=1)
   // + MessageBubble(paddingLeft=3) + terminal right margin(1) ≈ 6, use 8 for safety.
   const maxOutputWidth = Math.max(20, termWidth - 8);
+  const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
 
   return (
     <Box flexDirection="column" width={maxOutputWidth}>
       {blocks.map((block, i) => (
-        <BlockElement key={i} block={block} termWidth={maxOutputWidth} />
+        <BlockElement key={i} block={block} termWidth={maxOutputWidth} theme={theme} textColor={textColor} />
       ))}
     </Box>
   );

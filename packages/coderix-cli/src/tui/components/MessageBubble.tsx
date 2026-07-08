@@ -18,6 +18,7 @@ import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.
 interface MessageBubbleProps {
   message: Message;
   contentExpanded?: boolean;
+  theme?: string;
 }
 
 /** Extract display text from blocks (text blocks concatenated). */
@@ -77,7 +78,7 @@ function buildParamSummary(input: Record<string, unknown>): string {
  * Tool blocks are rendered via the tool registry (getToolUseRenderer / getToolResultRenderer),
  * allowing per-tool specialised renderers to be swapped in.
  */
-export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) {
+export function MessageBubble({ message, contentExpanded, theme }: MessageBubbleProps) {
   const { role } = message;
   const { stdout } = useStdout();
   const [termWidth, setTermWidth] = useState(
@@ -89,6 +90,7 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
     }
   }, [stdout?.columns]);
   const maxWidth = Math.max(20, Math.floor(termWidth * 0.9));
+  const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
 
   // ── Determine content source ──────────────────────────────
   const hasBlocks = message.blocks && message.blocks.length > 0;
@@ -132,7 +134,7 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
               {i === 0 ? (
                 <><Text color="cyan" bold>You:</Text>{' '}</>
               ) : null}
-              <Text color="white">{line}</Text>
+              <Text color={textColor}>{line}</Text>
             </Text>
           </Box>
         ))}
@@ -331,7 +333,7 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
                 }
 
                 if (block.type === 'text') {
-                  return <MarkdownRenderer key={idx} content={block.content} />;
+                  return <MarkdownRenderer key={idx} content={block.content} theme={theme} />;
                 }
 
                 // Tool collapsing: skip tool_use blocks beyond MAX_VISIBLE_TOOLS
@@ -367,7 +369,7 @@ export function MessageBubble({ message, contentExpanded }: MessageBubbleProps) 
 
         {/* Fallback: legacy string content when no blocks */}
         {!hasBlocks && displayContent ? (
-          <MarkdownRenderer content={displayContent} />
+          <MarkdownRenderer content={displayContent} theme={theme} />
         ) : null}
       </Box>
     </Box>

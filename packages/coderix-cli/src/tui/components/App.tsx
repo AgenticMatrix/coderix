@@ -427,7 +427,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
       <Static key={`static-${state.contentExpanded}-${state.subAgentView?.agentId ?? 'main'}`} items={staticItems}>
         {(item) => {
           if (item._type === 'header') return <HeaderLogo key="header" />;
-          return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} />;
+          return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} theme={config.theme} />;
         }}
       </Static>
 
@@ -463,7 +463,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
 
         <OffscreenFreeze frozen={state.isFrozen}>
           {live.map((message) => (
-            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} />
+            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} />
           ))}
         </OffscreenFreeze>
 

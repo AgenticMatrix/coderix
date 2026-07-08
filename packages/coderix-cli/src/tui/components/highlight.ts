@@ -7,6 +7,11 @@
 
 import hljs from 'highlight.js';
 
+/** Get the default text color based on theme. */
+function defaultColor(theme?: string): string {
+  return theme === 'light' ? '#000000' : '#FFFFFF';
+}
+
 /** Mappings from highlight.js CSS classes to Ink color names. */
 const COLOR_MAP: Record<string, string> = {
   'hljs-keyword': 'magenta',
@@ -53,8 +58,9 @@ export interface HighlightLine {
 }
 
 /** Parse highlight.js HTML output into an array of tokens. */
-export function parseHtmlTokens(html: string): HighlightToken[] {
+export function parseHtmlTokens(html: string, theme?: string): HighlightToken[] {
   const tokens: HighlightToken[] = [];
+  const defColor = defaultColor(theme);
 
   // Match both <span class="...">text</span> and plain text between spans
   const regex = /<span class="([^"]*)">((?:[^<]|<(?!\/span>))*)<\/span>|([^<]+)/g;
@@ -64,7 +70,7 @@ export function parseHtmlTokens(html: string): HighlightToken[] {
     if (match[3] !== undefined) {
       // Plain text
       const text = unescapeHtml(match[3]);
-      if (text) tokens.push({ text, color: '#FFFFFF' });
+      if (text) tokens.push({ text, color: defColor });
     } else {
       // Span with class
       const classNames = match[1];
@@ -75,7 +81,7 @@ export function parseHtmlTokens(html: string): HighlightToken[] {
       // Resolve color from class names
       const classes = classNames.split(/\s+/);
       const compoundKey = classes.join('.');
-      let color = '#FFFFFF';
+      let color = defColor;
 
       if (COLOR_MAP[compoundKey]) {
         color = COLOR_MAP[compoundKey];
@@ -116,9 +122,11 @@ function unescapeHtml(str: string): string {
 export function highlightCode(
   code: string,
   lang: string,
+  theme?: string,
 ): HighlightLine[] {
   // Strip trailing newline for cleaner output
   const cleanCode = code.replace(/\n+$/, '');
+  const defColor = defaultColor(theme);
 
   let html: string;
 
@@ -133,7 +141,7 @@ export function highlightCode(
   } catch {
     // Highlighting failed — return plain text lines
     return cleanCode.split('\n').map((line) => ({
-      tokens: [{ text: line || ' ', color: '#FFFFFF' }],
+      tokens: [{ text: line || ' ', color: defColor }],
     }));
   }
 
@@ -150,13 +158,13 @@ export function highlightCode(
 
     const trimmed = htmlLine.trim();
     if (!trimmed) {
-      return { tokens: [{ text: ' ', color: '#FFFFFF' }] };
+      return { tokens: [{ text: ' ', color: defColor }] };
     }
 
-    const tokens = parseHtmlTokens(trimmed);
+    const tokens = parseHtmlTokens(trimmed, theme);
     // Prepend leading whitespace as a plain token to preserve indentation
     if (leadingWs) {
-      tokens.unshift({ text: leadingWs, color: '#FFFFFF' });
+      tokens.unshift({ text: leadingWs, color: defColor });
     }
     return { tokens };
   });
