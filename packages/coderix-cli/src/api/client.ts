@@ -194,7 +194,7 @@ export function streamChatBlocks(
                   ? { ...initialInput, _partial: JSON.stringify(initialInput) }
                   : {},
                 state: 'executing',
-                riskLevel: cb.name === 'bash' || cb.name === 'write' || cb.name === 'update'
+                riskLevel: cb.name === 'bash' || cb.name === 'write' || cb.name === 'update' || cb.name === 'edit'
                   ? 'mutation' : 'safe',
               } satisfies ToolUseBlock);
             }

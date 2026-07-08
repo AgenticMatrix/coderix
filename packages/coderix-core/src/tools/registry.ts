@@ -74,6 +74,7 @@ const TOOL_ALIASES: Record<string, string> = {
   'team-dispatch': '',
   'team-status': '',
   'Task': 'Agent',
+  'edit': 'update',
 };
 
 function resolveName(name: string): string {

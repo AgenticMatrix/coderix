@@ -72,6 +72,7 @@ useRendererByName.set('bash', BashRenderer);
 useRendererByName.set('read', ReadRenderer);
 useRendererByName.set('write', WriteRenderer);
 useRendererByName.set('update', UpdateRenderer);
+useRendererByName.set('edit', UpdateRenderer); // backward-compatible alias
 useRendererByName.set('glob', GlobRenderer);
 useRendererByName.set('grep', GrepRenderer);
 useRendererByName.set('WebFetch', WebFetchRenderer);

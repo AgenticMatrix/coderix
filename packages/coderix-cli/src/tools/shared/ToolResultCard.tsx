@@ -15,6 +15,7 @@ const TOOL_ICONS: Record<string, string> = {
   read: '📖',
   write: '✏️',
   update: '✏️',
+  edit: '✏️', // backward-compatible alias
   glob: '🔍',
   grep: '🔎',
   'web-fetch': '🌐',
