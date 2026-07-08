@@ -62,10 +62,10 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isDone ? '●' : blinkOn ? '●' : '○';
   const indicatorColor = isDone ? 'green' : 'yellow';
 
-  const indent = ' '.repeat(5);
+  const indent = ' '.repeat(2);
 
   const displayCmd = ((): string => {
-    if (truncatedDesc) return truncatedCmd;
+    if (truncatedDesc) return truncatedCmd.split('\n').map(l => indent + l).join('\n');
     const lines = truncatedCmd.split('\n');
     return lines.length > 2
       ? lines.slice(0, 2).join('\n') + '…'
@@ -101,12 +101,10 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
           <Text>
             <Text color={indicatorColor}>{indicator} </Text>
             <Text bold>Bash</Text>
-            ({truncatedDesc ? `${truncatedDesc},\n${indent}${displayCmd}` : displayCmd})
+            ({truncatedDesc ? `${truncatedDesc},\n${displayCmd}` : displayCmd})
           </Text>
           {isExecuting ? (
             <Text dimColor>  running  {elapsedSecs}s</Text>
-          ) : isDone ? (
-            <Text dimColor>  Execution consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s</Text>
           ) : null}
 
           {/* Inline result content */}
@@ -121,16 +119,19 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
                 </Text>
               ) : null}
               {displayOutLines.map((line, i) => (
-                <OutputLine key={`out-${i}`} line={line} />
+                <Text key={`out-${i}`} dimColor>
+                  <OutputLine line={line} />
+                </Text>
               ))}
-              {hiddenCount > 0 ? (
-                <Text dimColor>... {hiddenCount} more lines</Text>
-              ) : null}
               {stderrLines.length > 0 ? (
                 <Box flexDirection="column" marginTop={stdoutLines.length > 0 ? 1 : 0}>
-                  {stderrLines.map((line, i) => (
-                    <OutputLine key={`err-${i}`} line={line} isStderr />
-                  ))}
+                  {stderrLines.map((line, i) =>
+                    result.isError ? (
+                      <Text key={`err-${i}`} color="red">{line}</Text>
+                    ) : (
+                      <OutputLine key={`err-${i}`} line={line} isStderr />
+                    )
+                  )}
                 </Box>
               ) : null}
               {result.isError && exitCode != null ? (
@@ -138,7 +139,16 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
                   <Text color="red">Exit code: {exitCode}</Text>
                 </Box>
               ) : null}
+              {!emptiness ? (
+                hiddenCount > 0 ? (
+                  <Text dimColor>... {hiddenCount} more lines, Execution consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s，Ctrl+D to detail</Text>
+                ) : (
+                  <Text dimColor>Execution consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s</Text>
+                )
+              ) : null}
             </Box>
+          ) : isDone ? (
+            <Text dimColor>  Execution consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s</Text>
           ) : null}
         </>
       ) : null}
