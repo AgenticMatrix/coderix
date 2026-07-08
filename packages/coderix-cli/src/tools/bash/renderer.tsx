@@ -62,7 +62,7 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isDone ? '●' : blinkOn ? '●' : '○';
   const indicatorColor = isDone ? 'green' : 'yellow';
 
-  const indent = ' '.repeat(2);
+  const indent = ' '.repeat(4);
 
   const displayCmd = ((): string => {
     if (truncatedDesc) return truncatedCmd.split('\n').map(l => indent + l).join('\n');
@@ -104,12 +104,12 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
             ({truncatedDesc ? `${truncatedDesc},\n${displayCmd}` : displayCmd})
           </Text>
           {isExecuting ? (
-            <Text dimColor>  running  {elapsedSecs}s</Text>
+            <Text dimColor>    running  {elapsedSecs}s</Text>
           ) : null}
 
           {/* Inline result content */}
           {hasResult ? (
-            <Box flexDirection="column" paddingLeft={2}>
+            <Box flexDirection="column" paddingLeft={4}>
               {timedOut ? (
                 <Text color="red">Command timed out</Text>
               ) : null}
@@ -118,11 +118,15 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
                   {result.isError ? '(error — no output)' : 'Done'}
                 </Text>
               ) : null}
-              {displayOutLines.map((line, i) => (
-                <Text key={`out-${i}`} dimColor>
-                  <OutputLine line={line} />
-                </Text>
-              ))}
+              {displayOutLines.map((line, i) =>
+                line.trimStart().startsWith('Error:') ? (
+                  <Text key={`out-${i}`} color="red">{line}</Text>
+                ) : (
+                  <Text key={`out-${i}`} dimColor>
+                    <OutputLine line={line} />
+                  </Text>
+                )
+              )}
               {stderrLines.length > 0 ? (
                 <Box flexDirection="column" marginTop={stdoutLines.length > 0 ? 1 : 0}>
                   {stderrLines.map((line, i) =>
@@ -148,7 +152,7 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
               ) : null}
             </Box>
           ) : isDone ? (
-            <Text dimColor>  Execution consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s</Text>
+            <Text dimColor>    Execution consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s</Text>
           ) : null}
         </>
       ) : null}
