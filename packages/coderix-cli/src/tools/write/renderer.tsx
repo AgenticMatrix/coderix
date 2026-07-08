@@ -55,7 +55,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
         <>
           <Text>
             <Text color={indicatorColor}>{indicator} </Text>
-            <Text bold color={indicatorColor}>Write</Text>
+            <Text bold>Write</Text>
             <Text dimColor>({truncatedPath})</Text>
             {isError ? (
               <Text color="red"> failed</Text>

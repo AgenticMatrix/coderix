@@ -55,7 +55,7 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
         <>
           <Text>
             <Text color={indicatorColor}>{indicator} </Text>
-            <Text bold color={indicatorColor}>Edit</Text>
+            <Text bold>Edit</Text>
             <Text dimColor>({truncatedPath})</Text>
             {isError ? (
               <Text color="red"> failed</Text>
