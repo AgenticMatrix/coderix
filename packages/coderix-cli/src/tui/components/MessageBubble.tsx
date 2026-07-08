@@ -276,7 +276,7 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Box paddingLeft={3} flexDirection="column">
+      <Box flexDirection="column">
         {/* Render blocks in their natural order */}
         {hasBlocks
           ? (() => {

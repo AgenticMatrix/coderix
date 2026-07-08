@@ -380,6 +380,76 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// ─── Word-wrap helpers ─────────────────────────────────────────────────────
+
+/** Split text into word segments, keeping trailing whitespace with each word. */
+function splitIntoWords(text: string): string[] {
+  const parts = text.split(/(?<=\s)/);
+  return parts.length > 0 ? parts : [text];
+}
+
+/** Compute the display width of an inline token. */
+function tokenWidth(token: InlineToken): number {
+  if (token.type === 'link') return displayWidth(token.content) + displayWidth(token.url) + 3; // " (url)"
+  return displayWidth(token.content);
+}
+
+/**
+ * Word-wrap inline tokens to fit within maxWidth.
+ * Returns arrays of tokens, each representing one wrapped line.
+ */
+function wordWrapTokens(tokens: InlineToken[], maxWidth: number): InlineToken[][] {
+  const lines: InlineToken[][] = [];
+  let curLine: InlineToken[] = [];
+  let curWidth = 0;
+
+  function flushLine() {
+    if (curLine.length > 0) {
+      lines.push(curLine);
+      curLine = [];
+      curWidth = 0;
+    }
+  }
+
+  for (const token of tokens) {
+    if (token.type === 'text') {
+      const segments = splitIntoWords(token.content);
+      for (const seg of segments) {
+        const segWidth = displayWidth(seg);
+        if (curWidth === 0 || curWidth + segWidth <= maxWidth) {
+          const last = curLine[curLine.length - 1];
+          if (last && last.type === 'text') {
+            last.content += seg;
+          } else {
+            curLine.push({ type: 'text', content: seg });
+          }
+          curWidth += segWidth;
+        } else {
+          flushLine();
+          const trimmed = seg.replace(/^\s+/, '');
+          if (trimmed) {
+            curLine.push({ type: 'text', content: trimmed });
+            curWidth = displayWidth(trimmed);
+          }
+        }
+      }
+    } else {
+      const tw = tokenWidth(token);
+      if (curWidth === 0 || curWidth + tw <= maxWidth) {
+        curLine.push(token);
+        curWidth += tw;
+      } else {
+        flushLine();
+        curLine.push(token);
+        curWidth = tw;
+      }
+    }
+  }
+
+  flushLine();
+  return lines.length > 0 ? lines : [[]];
+}
+
 // ─── Inline renderer ───────────────────────────────────────────────────────
 
 /**
@@ -455,12 +525,16 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
         </Box>
       );
 
-    case 'paragraph':
+    case 'paragraph': {
+      const lines = wordWrapTokens(block.tokens, termWidth);
       return (
-        <Box width={termWidth}>
-          <InlineLine tokens={block.tokens} />
+        <Box flexDirection="column" width={termWidth}>
+          {lines.map((lineTokens, i) => (
+            <InlineLine key={i} tokens={lineTokens} />
+          ))}
         </Box>
       );
+    }
 
     case 'code_block': {
       const highlighted = highlightCode(block.code, block.language, theme);
@@ -513,15 +587,20 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
       );
     }
 
-    case 'list_item':
+    case 'list_item': {
+      const bulletWidth = 4;
+      const lines = wordWrapTokens(block.tokens, termWidth - bulletWidth);
       return (
-        <Box marginLeft={2}>
-          <Text>
-            <Text>  • </Text>
-            <InlineLine tokens={block.tokens} />
-          </Text>
+        <Box marginLeft={2} flexDirection="column">
+          {lines.map((lineTokens, i) => (
+            <Text key={i}>
+              <Text>{i === 0 ? '  • ' : '    '}</Text>
+              <InlineLine tokens={lineTokens} />
+            </Text>
+          ))}
         </Box>
       );
+    }
 
     case 'horizontal_rule':
       return (
@@ -665,18 +744,19 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
       return (
         <Box flexDirection="column" marginY={1}>
           {block.lines.map((ql, li) => {
-            // Build prefix: "│ │ │ " for nesting level
+            const prefixWidth = ql.level * 2;
+            const lines = wordWrapTokens(ql.tokens, termWidth - prefixWidth);
             const prefix = Array.from({ length: ql.level }, (_, i) => (
               <Text key={i} color={quoteColors[Math.min(i, quoteColors.length - 1)]}>
                 │{' '}
               </Text>
             ));
-            return (
-              <Box key={li}>
+            return lines.map((lineTokens, wi) => (
+              <Box key={`${li}-${wi}`}>
                 <Text dimColor>{prefix}</Text>
-                <InlineLine tokens={ql.tokens} />
+                <InlineLine tokens={lineTokens} />
               </Box>
-            );
+            ));
           })}
         </Box>
       );
