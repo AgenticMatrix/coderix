@@ -21,13 +21,31 @@ export function EnterPlanModeRenderer(
   }
 
   if (isDone) {
+    const resultContent = props.result?.content ?? '';
+    const resultLines = resultContent.split('\n').filter((l) => l !== '');
+
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="green">● </Text>
           <Text bold>EnterPlanMode</Text>
-          <Text dimColor> planning mode active — safe tools only</Text>
         </Text>
+        <Box paddingLeft={4} flexDirection="column">
+          <Text dimColor>planning mode active — safe tools only</Text>
+          {props.contentExpanded && resultLines.length > 0 ? (
+            <Box flexDirection="column" marginTop={1}>
+              {resultLines.map((line, i) => (
+                <Text key={i} dimColor>
+                  <Text dimColor>|  </Text>
+                  {line}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+          <Text dimColor>
+            ⎿ {resultLines.length > 0 ? `${resultLines.length} lines` : '(empty)'}，Ctrl+D to detail
+          </Text>
+        </Box>
       </Box>
     );
   }
