@@ -25,8 +25,8 @@ const COLOR_MAP: Record<string, string> = {
   'hljs-attribute': 'cyan',
   'hljs-symbol': 'cyan',
   'hljs-variable.language_': 'blue',
-  'hljs-params': 'white',
-  'hljs-property': 'white',
+  'hljs-params': '#FFFFFF',
+  'hljs-property': '#FFFFFF',
   'hljs-selector-tag': 'magenta',
   'hljs-selector-class': 'cyan',
   'hljs-selector-id': 'yellow',
@@ -35,7 +35,7 @@ const COLOR_MAP: Record<string, string> = {
   'hljs-subst': 'yellow',
   'hljs-template-variable': 'yellow',
   'hljs-template-expression': 'yellow',
-  'default': 'white',
+  'default': '#FFFFFF',
 };
 
 /**
@@ -64,7 +64,7 @@ export function parseHtmlTokens(html: string): HighlightToken[] {
     if (match[3] !== undefined) {
       // Plain text
       const text = unescapeHtml(match[3]);
-      if (text) tokens.push({ text, color: 'white' });
+      if (text) tokens.push({ text, color: '#FFFFFF' });
     } else {
       // Span with class
       const classNames = match[1];
@@ -75,7 +75,7 @@ export function parseHtmlTokens(html: string): HighlightToken[] {
       // Resolve color from class names
       const classes = classNames.split(/\s+/);
       const compoundKey = classes.join('.');
-      let color = 'white';
+      let color = '#FFFFFF';
 
       if (COLOR_MAP[compoundKey]) {
         color = COLOR_MAP[compoundKey];
@@ -133,7 +133,7 @@ export function highlightCode(
   } catch {
     // Highlighting failed — return plain text lines
     return cleanCode.split('\n').map((line) => ({
-      tokens: [{ text: line || ' ', color: 'white' }],
+      tokens: [{ text: line || ' ', color: '#FFFFFF' }],
     }));
   }
 
@@ -150,13 +150,13 @@ export function highlightCode(
 
     const trimmed = htmlLine.trim();
     if (!trimmed) {
-      return { tokens: [{ text: ' ', color: 'white' }] };
+      return { tokens: [{ text: ' ', color: '#FFFFFF' }] };
     }
 
     const tokens = parseHtmlTokens(trimmed);
     // Prepend leading whitespace as a plain token to preserve indentation
     if (leadingWs) {
-      tokens.unshift({ text: leadingWs, color: 'white' });
+      tokens.unshift({ text: leadingWs, color: '#FFFFFF' });
     }
     return { tokens };
   });

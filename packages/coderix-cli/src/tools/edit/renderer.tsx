@@ -79,7 +79,7 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
                 const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
                 return (
                   <Box key={i} width="90%" backgroundColor={bgColor}>
-                    <Text color="white">{prefix}</Text>
+                    <Text color="#FFFFFF">{prefix}</Text>
                     {codeTokens.map((t, j) => (
                       <Text key={j} color={t.color}>{t.text}</Text>
                     ))}

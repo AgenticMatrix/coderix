@@ -45,7 +45,7 @@ export function highlightDiffLine(
   const isContextLine = !isAdd && !isRemove;
 
   let codeTokens: HighlightToken[] = [
-    { text: codeText || ' ', color: 'white' },
+    { text: codeText || ' ', color: '#FFFFFF' },
   ];
 
   // Only highlight additions and context lines (matching claude-code-coderix)
