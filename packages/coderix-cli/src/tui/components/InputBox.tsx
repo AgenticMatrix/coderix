@@ -120,14 +120,6 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
           ))
         )}
       </Box>
-
-      {isStreaming && (
-        <Box paddingX={1}>
-          <Text dimColor color="yellow">
-            (AI thinking...)
-          </Text>
-        </Box>
-      )}
     </Box>
   );
 }
