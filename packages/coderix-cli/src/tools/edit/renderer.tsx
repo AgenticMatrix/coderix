@@ -11,7 +11,7 @@ function truncatePath(fp: string): string {
   return fp.slice(0, 40) + '...' + fp.slice(-40);
 }
 
-export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
+export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
   const fp = (props.input.file_path as string) || '';
   const truncatedPath = fp ? truncatePath(fp) : '';
   const hasPath = !!fp;
@@ -58,14 +58,14 @@ export function EditRenderer(props: ToolUseRendererProps): React.ReactNode {
         <>
           <Text>
             <Text color={indicatorColor}>{indicator} </Text>
-            <Text bold>Edit</Text>
+            <Text bold>Update</Text>
             <Text dimColor>({truncatedPath})</Text>
             {isError ? (
               <Text color="red"> failed</Text>
             ) : null}
           </Text>
           {isExecuting ? (
-            <Text dimColor color="yellow"> editing {elapsedSecs}s</Text>
+            <Text dimColor color="yellow"> updating {elapsedSecs}s</Text>
           ) : null}
           {isDone && stats ? (
             <Box paddingLeft={2}>

@@ -2,8 +2,8 @@ import type { ToolPlugin } from '../types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
 
-const editPlugin: ToolPlugin = {
-  name: 'edit',
+const updatePlugin: ToolPlugin = {
+  name: 'update',
   schema,
   executor: execute,
   paramSummary: (input) => {
@@ -13,4 +13,4 @@ const editPlugin: ToolPlugin = {
   },
 };
 
-export default editPlugin;
+export default updatePlugin;

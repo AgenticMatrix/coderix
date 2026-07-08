@@ -9,7 +9,7 @@ export interface TurnBoundaryRendererProps {
 /**
  * Renders a turn boundary separator.
  *
- * ──── Turn 3 ✓ · 2 tools · 🔧 Read, ✏️ Edit · ⏱ 4.2s ────
+ * ──── Turn 3 ✓ · 2 tools · 🔧 Read, ✏️ Update · ⏱ 4.2s ────
  */
 export function TurnBoundaryRenderer({ turnId, summary }: TurnBoundaryRendererProps) {
   const parts: string[] = [`Turn ${turnId}`];

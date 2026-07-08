@@ -237,7 +237,7 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                     b.toolName !== 'read' && b.toolName !== 'bash' &&
                     b.toolName !== 'glob' && b.toolName !== 'grep' &&
                     b.toolName !== 'WebSearch' && b.toolName !== 'WebFetch' &&
-                    b.toolName !== 'write' && b.toolName !== 'edit' &&
+                    b.toolName !== 'write' && b.toolName !== 'update' &&
                     b.toolName !== 'Agent' && b.toolName !== 'SendMessage'
                   ),
                 );

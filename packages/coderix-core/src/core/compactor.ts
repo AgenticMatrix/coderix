@@ -104,7 +104,7 @@ const COMPACTABLE_TOOLS = new Set<string>([
   'glob',
   'WebSearch',
   'WebFetch',
-  'edit',
+  'update',
   'write',
 ]);
 

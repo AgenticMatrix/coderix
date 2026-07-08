@@ -262,7 +262,7 @@ async function executeSingleTool(
     };
     sessionManager.trackTool(toolBlock.name);
 
-    if ((toolBlock.name === 'Write' || toolBlock.name === 'Edit') && toolBlock.input) {
+    if ((toolBlock.name === 'Write' || toolBlock.name === 'Update') && toolBlock.input) {
       const input = toolBlock.input as Record<string, unknown>;
       if (typeof input.file_path === 'string') {
         sessionManager.trackModifiedFile(input.file_path);

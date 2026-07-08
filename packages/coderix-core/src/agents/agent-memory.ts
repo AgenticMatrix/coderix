@@ -16,7 +16,7 @@
  *   - 'local'    — local workspace memories (cwd/.coder/memory/)
  *
  * When memory is enabled and the agent declares a scope, the agent's tool
- * allowlist is automatically extended with Read/Write/Edit so the agent can
+ * allowlist is automatically extended with Read/Write/Update so the agent can
  * read from and write to its memory files.
  */
 
@@ -123,7 +123,7 @@ export async function loadAgentMemoryPrompt(
   return [
     `---`,
     `## Agent Memory (${scopeLabel})`,
-    `The following persistent memories are available to this agent. Use Read to review them and Write/Edit to update them.`,
+    `The following persistent memories are available to this agent. Use Read to review them and Write/Update to update them.`,
     '',
     ...parts,
     `---`,
@@ -138,7 +138,7 @@ export async function loadAgentMemoryPrompt(
  * Tools that an agent needs when memory is enabled — allows reading and
  * updating memory files.
  */
-const MEMORY_REQUIRED_TOOLS = ['read', 'write', 'edit'];
+const MEMORY_REQUIRED_TOOLS = ['read', 'write', 'update'];
 
 /**
  * Ensure the agent's tool allowlist includes the tools necessary to access

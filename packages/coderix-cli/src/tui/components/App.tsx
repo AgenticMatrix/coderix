@@ -93,7 +93,7 @@ type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
  * above the current line.
  *
  * Static is re-mounted (via dynamic key) on Ctrl+D / Ctrl+E toggles
- * so expandable blocks (Edit/Write diffs, thinking) reflect the new
+ * so expandable blocks (Update/Write diffs, thinking) reflect the new
  * expand/collapse state. Only the current round has collapsed content,
  * so older messages render identically after remount.
  */
@@ -411,7 +411,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   }, [displayMessages, liveStart]);
 
   // Bump on contentExpanded toggle so <Static> remounts with new state.
-  // Only the current round has expandable blocks (Edit/Write diffs),
+  // Only the current round has expandable blocks (Update/Write diffs),
   // so older messages render identically — no visual difference.
 
   const live = displayMessages.slice(liveStart);

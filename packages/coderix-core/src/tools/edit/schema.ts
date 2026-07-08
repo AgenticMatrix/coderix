@@ -1,8 +1,8 @@
 import type { ToolSchema } from '../types.js';
 
 export const schema: ToolSchema = {
-  name: 'edit',
-  description: 'Performs exact string replacements in files.',
+  name: 'update',
+  description: 'Performs exact string replacements in files (equivalent to the Edit tool).',
   input_schema: {
     type: 'object',
     properties: {

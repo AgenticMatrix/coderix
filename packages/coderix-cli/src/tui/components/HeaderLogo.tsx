@@ -54,11 +54,11 @@ export function HeaderLogo() {
       ),
     },
     {
-      text: '  File Operations: Read / Write / Edit',
+      text: '  File Operations: Read / Write / Update',
       render: (pad) => (
         <Text>
           <Dim>  File Operations:</Dim>
-          <Text color="white"> Read / Write / Edit{' '.repeat(pad)}</Text>
+          <Text color="white"> Read / Write / Update{' '.repeat(pad)}</Text>
         </Text>
       ),
     },

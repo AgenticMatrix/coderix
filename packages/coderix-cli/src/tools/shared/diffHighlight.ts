@@ -1,5 +1,5 @@
 /**
- * Shared diff line syntax highlighting for Write/Edit renderers.
+ * Shared diff line syntax highlighting for Write/Update renderers.
  *
  * Uses highlight.js to colorize code portions of git-style diff lines.
  * Added and context lines get syntax highlighting.

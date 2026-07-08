@@ -75,7 +75,7 @@ export const statuslineSetupAgent: BuiltInAgentDefinition = {
   baseDir: 'built-in',
   whenToUse:
     "Use this agent to configure the user's Coderix status line setting. Handles PS1 conversion from shell config files and updates .coderix/settings.json.",
-  tools: ['read', 'edit'],
+  tools: ['read', 'update'],
   model: 'sonnet',
   maxTurns: 8,
   contextBudget: 60_000,

@@ -14,7 +14,7 @@ const TOOL_ICONS: Record<string, string> = {
   bash: '⚡',
   read: '📖',
   write: '✏️',
-  edit: '✏️',
+  update: '✏️',
   glob: '🔍',
   grep: '🔎',
   'web-fetch': '🌐',

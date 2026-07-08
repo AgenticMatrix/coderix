@@ -117,7 +117,7 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
   // would show results twice — once inline and once as separate messages.
   const inlineTools = new Set([
     'read', 'bash', 'glob', 'grep',
-    'WebSearch', 'WebFetch', 'write', 'edit',
+    'WebSearch', 'WebFetch', 'write', 'update',
     'Agent', 'SendMessage',
   ]);
 

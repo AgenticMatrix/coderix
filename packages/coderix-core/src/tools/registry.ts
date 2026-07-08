@@ -6,7 +6,7 @@ import type { ToolPlugin, ToolMeta, ToolExecutor, ToolResult, ExecutorOptions, R
 import bashPlugin from './bash/index.js';
 import readPlugin from './read/index.js';
 import writePlugin from './write/index.js';
-import editPlugin from './edit/index.js';
+import updatePlugin from './edit/index.js';
 import globPlugin from './glob/index.js';
 import grepPlugin from './grep/index.js';
 import webFetchPlugin from './web-fetch/index.js';
@@ -39,7 +39,7 @@ export const plugins: ToolPlugin[] = [
   bashPlugin,
   readPlugin,
   writePlugin,
-  editPlugin,
+  updatePlugin,
   globPlugin,
   grepPlugin,
   webFetchPlugin,

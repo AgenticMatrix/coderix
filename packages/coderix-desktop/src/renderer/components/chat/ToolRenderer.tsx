@@ -32,11 +32,11 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
       return `Write ${truncatePath(fp)}`;
     },
   },
-  edit: {
+  update: {
     icon: <FileEdit size={13} />,
     label: (input) => {
       const fp = input.file_path as string ?? '';
-      return `Edit ${truncatePath(fp)}`;
+      return `Update ${truncatePath(fp)}`;
     },
   },
   bash: {

@@ -7,7 +7,7 @@ export const exploreAgent: BuiltInAgentDefinition = {
   whenToUse:
     'Fast read-only codebase exploration and search. Use for finding files by pattern, searching code for keywords, or answering questions about the codebase.',
   tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
-  disallowedTools: ['write', 'edit', 'NotebookEdit'],
+  disallowedTools: ['write', 'update', 'NotebookEdit'],
   model: 'haiku',
   maxTurns: 15,
   contextBudget: 80_000,

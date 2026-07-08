@@ -5,7 +5,7 @@ import { computeDiff, formatDiff } from '../shared/diff.js';
 
 export const execute: ToolExecutor = async (input, opts) => {
   if (!opts.allowMutation) {
-    return { content: 'Error: edit tool is not available (mutation tools disabled)', isError: true };
+    return { content: 'Error: update tool is not available (mutation tools disabled)', isError: true };
   }
 
   const filePath = input.file_path as string;
@@ -43,7 +43,7 @@ export const execute: ToolExecutor = async (input, opts) => {
     const diffOutput = formatDiff(diff);
 
     return {
-      content: `File edited: ${filePath}`,
+      content: `File updated: ${filePath}`,
       isError: false,
       metadata: {
         filePath,
@@ -53,6 +53,6 @@ export const execute: ToolExecutor = async (input, opts) => {
       },
     };
   } catch (err) {
-    return { content: `Error editing file: ${(err as Error).message}`, isError: true };
+    return { content: `Error updating file: ${(err as Error).message}`, isError: true };
   }
 };
