@@ -22,7 +22,7 @@ export const execute: ToolExecutor = async (input, options) => {
     ([header, value]) => `${header}: ${Array.isArray(value) ? value.join(', ') : value}`,
   );
 
-  const modeLabel = level === 'high' ? 'all tools blocked' : 'write/edit blocked';
+  const modeLabel = level === 'high' ? 'all tools blocked' : 'write/update blocked';
 
   return {
     content: `${lines.join('\n')}\n\n[Permission: ${modeLabel}]`,

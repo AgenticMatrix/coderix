@@ -3,7 +3,7 @@ import type { ToolSchema } from '../types.js';
 export const schema: ToolSchema = {
   name: 'AskUserQuestion',
   description:
-    'Ask the user a question when you need clarification. Use this when requirements are ambiguous and you need to make a decision that affects the implementation. Supports free-text answers or multiple-choice options.\n\nAfter the user answers, applies a permission level for the remaining operations:\n- "high": All tool calls require user approval (full ASK mode).\n- "low": Only write/edit/bash command modifications require approval; safe tools auto-run.',
+    'Ask the user a question when you need clarification. Use this when requirements are ambiguous and you need to make a decision that affects the implementation. Supports free-text answers or multiple-choice options.\n\nAfter the user answers, applies a permission level for the remaining operations:\n- "high": All tool calls require user approval (full ASK mode).\n- "low": Only write/update/bash command modifications require approval; safe tools auto-run.',
   input_schema: {
     type: 'object',
     properties: {
@@ -11,7 +11,7 @@ export const schema: ToolSchema = {
         type: 'string',
         enum: ['high', 'low'],
         description:
-          'Permission intensity for subsequent tool calls. "high" = every call must be approved. "low" = only write/edit/bash mutations need approval, safe tools auto-run. Default: "low".',
+          'Permission intensity for subsequent tool calls. "high" = every call must be approved. "low" = only write/update/bash mutations need approval, safe tools auto-run. Default: "low".',
         default: 'low',
       },
       questions: {

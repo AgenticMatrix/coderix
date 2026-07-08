@@ -15,7 +15,7 @@ import { GenericToolRenderer, GenericToolResultRenderer } from './base/GenericRe
 import { BashRenderer } from './bash/renderer.js';
 import { ReadRenderer } from './read/renderer.js';
 import { WriteRenderer } from './write/renderer.js';
-import { UpdateRenderer } from './edit/renderer.js';
+import { UpdateRenderer } from './update/renderer.js';
 import { GlobRenderer } from './glob/renderer.js';
 import { GrepRenderer } from './grep/renderer.js';
 import { WebFetchRenderer } from './web-fetch/renderer.js';

@@ -30,8 +30,8 @@ import { schema as readSchema } from '../../../../packages/coderix-core/src/tool
 import { execute as readExec } from '../../../../packages/coderix-core/src/tools/read/executor.js';
 import { schema as writeSchema } from '../../../../packages/coderix-core/src/tools/write/schema.js';
 import { execute as writeExec } from '../../../../packages/coderix-core/src/tools/write/executor.js';
-import { schema as editSchema } from '../../../../packages/coderix-core/src/tools/edit/schema.js';
-import { execute as editExec } from '../../../../packages/coderix-core/src/tools/edit/executor.js';
+import { schema as updateSchema } from '../../../../packages/coderix-core/src/tools/update/schema.js';
+import { execute as updateExec } from '../../../../packages/coderix-core/src/tools/update/executor.js';
 import { schema as globSchema } from '../../../../packages/coderix-core/src/tools/glob/schema.js';
 import { execute as globExec } from '../../../../packages/coderix-core/src/tools/glob/executor.js';
 import { schema as grepSchema } from '../../../../packages/coderix-core/src/tools/grep/schema.js';
@@ -196,7 +196,7 @@ async function initQueryEngine(): Promise<void> {
     { schema: bashSchema, executor: bashExec },
     { schema: readSchema, executor: readExec },
     { schema: writeSchema, executor: writeExec },
-    { schema: editSchema, executor: editExec },
+    { schema: updateSchema, executor: updateExec },
     { schema: globSchema, executor: globExec },
     { schema: grepSchema, executor: grepExec },
     { schema: webFetchSchema, executor: webFetchExec },

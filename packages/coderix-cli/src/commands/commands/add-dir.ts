@@ -60,7 +60,7 @@ export const addDirCommand: SlashCommand = {
         '   - Add these patterns (use the absolute path):',
         `     Read(<path>/**)`,
         `     Write(<path>/**)`,
-        `     Edit(<path>/**)`,
+        `     Update(<path>/**)`,
         '   - Do NOT add duplicates.',
         '',
         '5. Write the updated JSON back with 2-space indentation.',
