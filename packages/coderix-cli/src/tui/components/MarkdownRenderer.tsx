@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text, useStdout } from 'ink';
 
 import { renderLatex } from './latex-to-unicode.js';
@@ -10,8 +10,10 @@ type InlineToken =
   | { type: 'text'; content: string }
   | { type: 'bold'; content: string }
   | { type: 'italic'; content: string }
+  | { type: 'strikethrough'; content: string }
   | { type: 'code'; content: string }
-  | { type: 'math'; content: string };
+  | { type: 'math'; content: string }
+  | { type: 'link'; content: string; url: string };
 
 type Block =
   | { type: 'heading'; level: number; text: string }
@@ -31,31 +33,28 @@ type Block =
  */
 function parseInline(line: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  // Ordered by precedence: code first, then math, then bold, then italic
   const regex =
-    /(`[^`]+`)|(\$\$[^$]+\$\$)|(\$[^$]+\$)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|([^`$*]+)/g;
+    /(`[^`]+`)|(\$\$[^$]+\$\$)|(\$[^$]+\$)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(~~[^~]+~~)|(\[([^\]]+)\]\(([^)]+)\))|([^`$*~[]+)/g;
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(line)) !== null) {
     const [full] = match;
 
     if (match[1]) {
-      // Inline code: `code`
       tokens.push({ type: 'code', content: full.slice(1, -1) });
     } else if (match[2]) {
-      // Display math: $$math$$ (inline fallback)
       tokens.push({ type: 'math', content: full.slice(2, -2) });
     } else if (match[3]) {
-      // Inline math: $math$
       tokens.push({ type: 'math', content: full.slice(1, -1) });
     } else if (match[4]) {
-      // Bold: **text**
       tokens.push({ type: 'bold', content: full.slice(2, -2) });
     } else if (match[5]) {
-      // Italic: *text*
       tokens.push({ type: 'italic', content: full.slice(1, -1) });
     } else if (match[6]) {
-      // Plain text
+      tokens.push({ type: 'strikethrough', content: full.slice(2, -2) });
+    } else if (match[7]) {
+      tokens.push({ type: 'link', content: match[8]!, url: match[9]! });
+    } else if (match[10]) {
       tokens.push({ type: 'text', content: full });
     }
   }
@@ -232,7 +231,8 @@ function parseBlocks(raw: string): Block[] {
   const blocks: Block[] = [];
 
   // Step 1: Split into segments alternating text / code
-  const segments = splitByFences(raw, '```');
+  // Only detect fences at line start to avoid splitting tables
+  const segments = splitByLineStartFence(raw, '```');
   let inCodeBlock = false;
 
   // Step 1b: Also handle $$ math blocks
@@ -247,7 +247,7 @@ function parseBlocks(raw: string): Block[] {
       inCodeBlock = false;
     } else {
       // Split this text segment by $$ fences for math blocks
-      const mathSegs = splitByFences(seg, '$$');
+      const mathSegs = splitByLineStartFence(seg, '$$');
       let inMathBlock = false;
       for (const mseg of mathSegs) {
         if (inMathBlock) {
@@ -347,29 +347,37 @@ function parseBlocks(raw: string): Block[] {
  * Split text by a fence delimiter (``` or $$).
  * Returns alternating [normal, fenced, normal, fenced, ...] segments.
  */
-function splitByFences(text: string, fence: string): string[] {
+/** Split text by a fence that must appear at the start of a line (with optional whitespace).
+ *  Used for ``` code fences and $$ math blocks to avoid splitting inside table cells. */
+function splitByLineStartFence(text: string, fence: string): string[] {
   const parts: string[] = [];
   let remaining = text;
 
   while (remaining.length > 0) {
-    const idx = remaining.indexOf(fence);
-    if (idx === -1) {
+    const re = new RegExp(`^\\s*${escapeRegex(fence)}`, 'm');
+    const match = re.exec(remaining);
+    if (!match) {
       parts.push(remaining);
       break;
     }
+    const idx = match.index;
     parts.push(remaining.slice(0, idx));
-    remaining = remaining.slice(idx + fence.length);
-    const nextIdx = remaining.indexOf(fence);
-    if (nextIdx === -1) {
-      // Unclosed fence — treat remainder as normal text
+    remaining = remaining.slice(idx + match[0].length);
+    const nextMatch = re.exec(remaining);
+    if (!nextMatch) {
       parts.push(remaining);
       break;
     }
+    const nextIdx = nextMatch.index;
     parts.push(remaining.slice(0, nextIdx));
-    remaining = remaining.slice(nextIdx + fence.length);
+    remaining = remaining.slice(nextIdx + nextMatch[0].length);
   }
 
   return parts;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ─── Inline renderer ───────────────────────────────────────────────────────
@@ -402,6 +410,20 @@ function InlineTokenElement({ token }: { token: InlineToken }) {
 
   if (type === 'italic') {
     return <Text italic>{content}</Text>;
+  }
+
+  if (type === 'strikethrough') {
+    return <Text strikethrough>{content}</Text>;
+  }
+
+  if (type === 'link') {
+    return (
+      <Text dimColor>
+        {content}
+        {' '}
+        <Text dimColor>({token.url})</Text>
+      </Text>
+    );
   }
 
   return <Text>{content}</Text>;
@@ -605,16 +627,36 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
         <Box flexDirection="column" marginY={1}>
           <Text color="grey">{topBorder}</Text>
           {headerLines.map((cells, li) => (
-            <Text key={`h${li}`} bold color={textColor}>
-              {'│' + cells.join('│') + '│'}
-            </Text>
+            <Box key={`h${li}`} flexDirection="row">
+              <Text color="grey">│</Text>
+              {cells.map((cell, ci) => (
+                <React.Fragment key={ci}>
+                  <Box width={innerWidths[ci]! + 2} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
+                    <Text bold color={textColor}>
+                      <InlineLine tokens={parseInline(cell.trim())} />
+                    </Text>
+                  </Box>
+                  <Text color="grey">│</Text>
+                </React.Fragment>
+              ))}
+            </Box>
           ))}
           <Text color="grey">{sepBorder}</Text>
           {rowLines.map((lines, ri) =>
             lines.map((cells, li) => (
-              <Text key={`${ri}-${li}`} color={textColor}>
-                {'│' + cells.join('│') + '│'}
-              </Text>
+              <Box key={`${ri}-${li}`} flexDirection="row">
+                <Text color="grey">│</Text>
+                {cells.map((cell, ci) => (
+                  <React.Fragment key={ci}>
+                    <Box width={innerWidths[ci]! + 2} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
+                      <Text color={textColor}>
+                        <InlineLine tokens={parseInline(cell.trim())} />
+                      </Text>
+                    </Box>
+                    <Text color="grey">│</Text>
+                  </React.Fragment>
+                ))}
+              </Box>
             )),
           )}
           <Text color="grey">{botBorder}</Text>
