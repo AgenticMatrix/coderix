@@ -77,11 +77,15 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
               {displayDiffLines.map((line, i) => {
                 const { prefix, codeTokens, isAdd, isRemove } = highlightDiffLine(line, lang);
                 const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
+                const hasBackground = isAdd || isRemove;
+                // Context lines: dim base color to terminal 'white' (gray-white),
+                // but keep highlight colors (magenta, green, etc.) as-is.
+                const dimBase = (c: string) => c === '#FFFFFF' ? 'white' : c;
                 return (
                   <Box key={i} width="90%" backgroundColor={bgColor}>
-                    <Text color="#FFFFFF">{prefix}</Text>
+                    <Text color={hasBackground ? '#FFFFFF' : 'white'}>{prefix}</Text>
                     {codeTokens.map((t, j) => (
-                      <Text key={j} color={t.color}>{t.text}</Text>
+                      <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
                     ))}
                   </Box>
                 );

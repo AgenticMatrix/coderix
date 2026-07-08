@@ -1,9 +1,9 @@
 /**
  * Shared diff line syntax highlighting for Write/Edit renderers.
  *
- * Uses highlight.js to colorize code portions of git-style diff lines,
- * matching claude-code-coderix behavior: deletion lines are NOT highlighted,
- * additions and context lines get full syntax coloring.
+ * Uses highlight.js to colorize code portions of git-style diff lines.
+ * Added and context lines get syntax highlighting.
+ * Deletion lines render as plain text.
  */
 
 import hljs from 'highlight.js';
@@ -32,7 +32,8 @@ export interface DiffLineTokens {
  * - Position 5: marker (+, -, or space)
  * - Position 6+: code text
  *
- * Deletion lines (marker '-') are NOT highlighted — matching claude-code-coderix.
+ * Only added lines (marker '+') get syntax highlighting.
+ * Context and deletion lines render as plain text with default terminal color.
  */
 export function highlightDiffLine(
   line: string,
@@ -42,14 +43,13 @@ export function highlightDiffLine(
   const codeText = line.slice(6);
   const isAdd = line[5] === '+';
   const isRemove = line[5] === '-';
-  const isContextLine = !isAdd && !isRemove;
 
   let codeTokens: HighlightToken[] = [
     { text: codeText || ' ', color: '#FFFFFF' },
   ];
 
-  // Only highlight additions and context lines (matching claude-code-coderix)
-  if ((isAdd || isContextLine) && lang && codeText.trim()) {
+  // Highlight added and context lines
+  if ((isAdd || (!isAdd && !isRemove)) && lang && codeText.trim()) {
     try {
       const result = hljs.highlight(codeText, {
         language: lang,
