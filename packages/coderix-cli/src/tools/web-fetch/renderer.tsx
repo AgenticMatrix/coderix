@@ -3,8 +3,6 @@ import { Box, Text } from 'ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
-const PREVIEW_LINES = 5;
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
@@ -25,11 +23,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
   const byteLength = meta?.byteLength as number | undefined;
 
   const resultContent = props.result?.content ?? '';
-  const contentLines = resultContent.split('\n');
-  const bodyStart = contentLines.findIndex((l) => l === '') + 1 || 4;
-  const bodyLines = contentLines.slice(bodyStart).filter((l) => l !== '');
-  const tooLong = !props.contentExpanded && bodyLines.length > PREVIEW_LINES;
-  const displayLines = tooLong ? bodyLines.slice(0, PREVIEW_LINES) : bodyLines;
+  const bodyLines = resultContent.split('\n').filter((l) => l !== '');
 
   if (isError) {
     return (
@@ -47,6 +41,13 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
 
   if (isDone) {
+    const parts: string[] = [];
+    if (status !== undefined) parts.push(`Status ${status}`);
+    if (contentType) parts.push(contentType);
+    if (bodyLines.length > 0) parts.push(`${bodyLines.length} lines`);
+    else parts.push('(empty)');
+    if (byteLength !== undefined) parts.push(formatBytes(byteLength));
+
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
@@ -54,27 +55,17 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
           <Text bold>WebFetch</Text>
           {url ? <Text dimColor>({finalUrl})</Text> : null}
         </Text>
-        <Box paddingLeft={2} flexDirection="column">
-          {status !== undefined || contentType !== undefined || byteLength !== undefined ? (
-            <Text dimColor>
-              {status !== undefined ? `Status ${status}` : ''}
-              {contentType ? ` · ${contentType}` : ''}
-              {byteLength !== undefined ? ` · ${formatBytes(byteLength)}` : ''}
-            </Text>
-          ) : null}
-          {displayLines.length > 0 ? (
-            <Box flexDirection="column" marginTop={0}>
-              {displayLines.map((line, i) => (
-                <Text key={i} dimColor>{line.slice(0, 100)}</Text>
-              ))}
-              {tooLong ? (
-                <Text dimColor>... {bodyLines.length - PREVIEW_LINES} more lines</Text>
-              ) : null}
-            </Box>
-          ) : (
-            <Text dimColor>(empty response)</Text>
-          )}
-        </Box>
+        {props.contentExpanded && bodyLines.length > 0 ? (
+          <Box flexDirection="column">
+            {bodyLines.map((line, i) => (
+              <Text key={i} dimColor>
+                <Text dimColor>|  </Text>
+                {line.slice(0, 100)}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
+        <Text dimColor>  ⎿ {parts.join(' · ')}，Ctrl+D to detail</Text>
       </Box>
     );
   }
