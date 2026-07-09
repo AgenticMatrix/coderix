@@ -35,9 +35,11 @@ function ThinkingHeader({ active, duration, tokens }: { active: boolean; duratio
   const timeStr = `${seconds.toFixed(1)}s`;
   const tokenStr = tokens != null ? `${tokens} tokens` : null;
 
+  const label = active ? 'Thinking' : 'Thought';
+
   return (
     <Text>
-      <Text>Cogitating</Text>
+      <Text>{label}</Text>
       <Text dimColor> · {timeStr}</Text>
       {tokenStr ? <Text dimColor> · {tokenStr}</Text> : null}
     </Text>
