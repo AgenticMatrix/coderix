@@ -1,20 +1,42 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { builtinModules } from 'node:module'
 
-// Everything gets bundled EXCEPT electron and Node.js builtins.
-// This avoids CJS/ESM interop issues in Electron's Node.js runtime.
-// node:sqlite is NOT a builtin in Electron 33 (Node 20), so we stub it.
+const STUB_PATH = resolve(__dirname, 'src/main/node-sqlite-stub.cjs')
+
+// node:sqlite is a builtin in Node 22+ but NOT in Electron 33 (Node 20).
+// undici's lazy require() gets hoisted to top-level by Rollup in CJS output.
+// This plugin rewrites it to require the local stub so the bundle works in
+// Electron's Node.js runtime without touching the module loader.
+function sqliteStubPlugin(): Plugin {
+  const STUB_RE = /require\(["']node:sqlite["']\)/g
+  const STUB_ABS = JSON.stringify(STUB_PATH)
+  return {
+    name: 'sqlite-stub',
+    generateBundle(_opts, bundle) {
+      for (const [name, chunk] of Object.entries(bundle)) {
+        if (chunk.type === 'chunk' && name.endsWith('.cjs')) {
+          const code = chunk.code as string
+          if (code.includes('node:sqlite')) {
+            chunk.code = code.replace(STUB_RE, `require(${STUB_ABS})`)
+          }
+        }
+      }
+    },
+  }
+}
+
 const external = [
   'electron',
   'electron/main',
-  ...builtinModules.filter(m => m !== 'sqlite'),
-  ...builtinModules.filter(m => m !== 'sqlite').map(m => `node:${m}`),
+  ...builtinModules.flatMap(m => m === 'sqlite' ? [] : [m, `node:${m}`]),
 ]
 
 export default defineConfig({
   main: {
+    plugins: [sqliteStubPlugin()],
     build: {
       outDir: 'dist/main',
       rollupOptions: {
@@ -24,13 +46,16 @@ export default defineConfig({
         external,
         output: {
           format: 'cjs',
+          // Guard: restart Electron if ELECTRON_RUN_AS_NODE is set,
+          // otherwise Electron runs as plain Node.js and require('electron')
+          // returns the npm package path instead of the Electron API.
+          banner: `if(process.env.ELECTRON_RUN_AS_NODE){delete process.env.ELECTRON_RUN_AS_NODE;var c=require('child_process').spawnSync(process.execPath,process.argv.slice(1),{stdio:'inherit',env:process.env});process.exit(c.status!=null?c.status:1)}`,
         },
       },
     },
     resolve: {
       alias: {
-        // Electron 33 (Node 20) doesn't have node:sqlite — stub it
-        'node:sqlite': resolve(__dirname, 'src/main/node-sqlite-stub.cjs'),
+        'node:sqlite': STUB_PATH,
       },
     },
   },
