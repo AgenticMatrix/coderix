@@ -2,10 +2,11 @@ import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, Static } from 'ink';
 
 import type { QueryEngine } from '@coderix/core';
-import type { AppConfig, Message, ContentBlock } from '../../types.js';
+import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
 import { PermissionMode, getSubAgentRegistry } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
+import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
 import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
@@ -49,6 +50,20 @@ function hasActiveTools(msg: Message): boolean {
   return msg.blocks.some(
     (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
   );
+}
+
+/** Find the most recent thinking block across all messages. */
+function findLatestThinking(messages: Message[]): { block: ThinkingBlock; duration?: number; tokens?: number } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === 'assistant') {
+      const thinkingBlock = msg.blocks.find((b): b is ThinkingBlock => b.type === 'thinking');
+      if (thinkingBlock) {
+        return { block: thinkingBlock, duration: msg.thinkingDuration, tokens: msg.thinkingTokens };
+      }
+    }
+  }
+  return null;
 }
 
 /** Find the index where the live zone begins.
@@ -396,6 +411,11 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   if (!state.isFrozen) frozenRef.current = state.messages;
   const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
 
+  // Extract the most recent thinking block to render in the live zone.
+  // Only the latest thinking is shown; once a new thinking session starts,
+  // the previous one is replaced.
+  const latestThinking = useMemo(() => findLatestThinking(displayMessages), [displayMessages]);
+
   // During streaming, keep only the LAST message live.
   // Everything else goes to <Static> and is never redrawn —
   // except on Ctrl+D / Ctrl+E, where the Static key bumps to remount
@@ -427,7 +447,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
       <Static key={`static-${state.contentExpanded}-${state.subAgentView?.agentId ?? 'main'}`} items={staticItems}>
         {(item) => {
           if (item._type === 'header') return <HeaderLogo key="header" />;
-          return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} theme={config.theme} />;
+          return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking />;
         }}
       </Static>
 
@@ -471,9 +491,21 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         )}
 
         <OffscreenFreeze frozen={state.isFrozen}>
+
           {live.map((message) => (
-            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} />
+            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking />
           ))}
+
+          {/* Latest thinking block — always live, below tools/output, closest to input */}
+          {latestThinking && !state.isFrozen && (
+            <ThinkingBlockRenderer
+              content={latestThinking.block.content}
+              thinkingExpanded={latestThinking.block.expanded}
+              thinkingDuration={latestThinking.duration}
+              thinkingTokens={latestThinking.tokens}
+            />
+          )}
+
         </OffscreenFreeze>
 
         {state.approvalReq && (
