@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolRenderer } from './ToolRenderer';
@@ -30,7 +31,7 @@ export function ContentBlockRenderer({
       return (
         <div className="prose prose-sm max-w-none text-[var(--color-text-primary)]">
           <ReactMarkdown
-            remarkPlugins={[remarkMath]}
+            remarkPlugins={[remarkMath, remarkGfm]}
             rehypePlugins={[rehypeKatex]}
             components={{
               // Code blocks — use dedicated CodeBlock component

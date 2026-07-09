@@ -399,9 +399,33 @@ const coderixAPI = {
   // ── Git ─────────────────────────────────────────────────────────────
 
   git: {
-    /** Get git status: branch + changed files. */
-    status(): Promise<{ branch: string; files: Array<{ file: string; type: string; code: string }> }> {
+    /** Get git status: branch + changed files + commits with graph. */
+    status(): Promise<{ branch: string; files: Array<{ file: string; type: string; code: string }>; commits: Array<{ hash: string; message: string; graph: string; refs: string }> }> {
       return ipcRenderer.invoke('git:status');
+    },
+    /** Get diff for a working-tree or staged file. */
+    diff(file: string, staged?: boolean): Promise<{ diff: string; error?: string }> {
+      return ipcRenderer.invoke('git:diff', { file, staged });
+    },
+    /** Get commit history. */
+    log(maxCount?: number): Promise<{ commits: Array<{ hash: string; message: string }> }> {
+      return ipcRenderer.invoke('git:log', { maxCount });
+    },
+    /** Show a commit's details: full diff + changed files. */
+    show(hash: string): Promise<{ diff: string; files: Array<{ file: string; type: string }>; error?: string }> {
+      return ipcRenderer.invoke('git:show', { hash });
+    },
+    /** Stage file(s). */
+    stage(file?: string, all?: boolean): Promise<{ status: string }> {
+      return ipcRenderer.invoke('git:stage', { file, all });
+    },
+    /** Unstage file(s). */
+    unstage(file?: string, all?: boolean): Promise<{ status: string }> {
+      return ipcRenderer.invoke('git:unstage', { file, all });
+    },
+    /** Create a commit with the given message. */
+    commit(message: string): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke('git:commit', { message });
     },
   },
 
