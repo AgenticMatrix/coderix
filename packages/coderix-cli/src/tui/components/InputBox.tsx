@@ -8,6 +8,7 @@ interface InputBoxProps {
   pasteBlocks?: Record<number, string>;
   /** When true, paste content preview is shown above the input line. */
   pastePreviewVisible?: boolean;
+  theme?: string;
 }
 
 const MAX_PREVIEW_LINES = 8;
@@ -18,8 +19,9 @@ const MAX_PREVIEW_LINES = 8;
  * When pastePreviewVisible, pasted content is shown in a preview panel
  * above the input so the user can review it before sending.
  */
-export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible }: InputBoxProps) {
-  const CURSOR_COLOR = '#A855F7';
+export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible, theme }: InputBoxProps) {
+  const PROMPT_COLOR = '#A855F7';
+  const CURSOR_COLOR = theme === 'light' ? '#000000' : '#FFFFFF';
   const showPreview = pastePreviewVisible && pasteBlocks && Object.keys(pasteBlocks).length > 0;
 
   // Split input into lines and locate which line holds the cursor
@@ -83,7 +85,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
         {lines.length === 0 ? (
           <Box flexDirection="row">
             <Box marginRight={1}>
-              <Text color={CURSOR_COLOR} bold>{'❯'}</Text>
+              <Text color={PROMPT_COLOR} bold>{'❯'}</Text>
             </Box>
             <Box flexGrow={1}>
               {!isStreaming ? (
@@ -96,7 +98,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
             <Box key={i} flexDirection="row">
               <Box marginRight={1}>
                 {i === 0 ? (
-                  <Text color={CURSOR_COLOR} bold>{'❯'}</Text>
+                  <Text color={PROMPT_COLOR} bold>{'❯'}</Text>
                 ) : (
                   <Text> </Text>
                 )}

@@ -577,6 +577,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         isStreaming={state.isStreaming}
         pasteBlocks={state.pasteBlocks}
         pastePreviewVisible={state.pastePreviewVisible}
+        theme={config.theme}
       />
 
       <Box marginTop={1}>
