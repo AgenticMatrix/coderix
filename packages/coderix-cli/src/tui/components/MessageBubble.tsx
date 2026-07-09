@@ -162,7 +162,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
         {displayLines.map((line, i) => (
           <Box key={i} flexDirection="row">
             <Box width={2}>
-              <Text color="#4FC3F7" bold>
+              <Text color="#A855F7" bold>
                 {i === 0 ? '❯' : ' '}
               </Text>
             </Box>
