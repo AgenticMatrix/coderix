@@ -15,22 +15,21 @@ import { CompactionBoundaryRenderer } from './blocks/CompactionBoundaryRenderer.
 import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
 
-const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
-const SPINNER_CYCLE = [...SPINNER_FRAMES, ...SPINNER_FRAMES.slice().reverse()];
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 function ThinkingIcon({ active }: { active: boolean }) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_CYCLE.length), 120);
+    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), 120);
     return () => clearInterval(id);
   }, [active]);
 
   return (
     <Box width={2} flexShrink={0}>
       <Text color="#4FC3F7">
-        {active ? SPINNER_CYCLE[frame] : '·'}
+        {active ? SPINNER_FRAMES[frame] : '·'}
       </Text>
     </Box>
   );
