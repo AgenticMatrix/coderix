@@ -155,7 +155,7 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
       : contentLines;
 
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={1} width={maxWidth}>
         {displayLines.map((line, i) => (
           <Box key={i} flexDirection="row">
             <Box width={2}>
