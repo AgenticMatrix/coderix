@@ -363,7 +363,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
 
                 if (block.type === 'text') {
                   return (
-                    <Box key={idx} flexDirection="row">
+                    <Box key={idx} flexDirection="row" marginBottom={1}>
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
                         <MarkdownRenderer content={block.content} theme={theme} />
