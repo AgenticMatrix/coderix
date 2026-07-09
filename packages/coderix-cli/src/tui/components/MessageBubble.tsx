@@ -14,54 +14,14 @@ import { SubagentBlockRenderer } from './blocks/SubagentBlockRenderer.js';
 import { CompactionBoundaryRenderer } from './blocks/CompactionBoundaryRenderer.js';
 import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
-
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-function ThinkingIcon({ active }: { active: boolean }) {
-  const [frame, setFrame] = useState(0);
-
-  useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), 120);
-    return () => clearInterval(id);
-  }, [active]);
-
-  return (
-    <Box width={2} flexShrink={0}>
-      <Text color="#4FC3F7">
-        {active ? SPINNER_FRAMES[frame] : '·'}
-      </Text>
-    </Box>
-  );
-}
-
-function ThinkingHeader({ active, duration, tokens }: { active: boolean; duration?: number; tokens?: number }) {
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    if (!active) return;
-    const start = Date.now();
-    const id = setInterval(() => setElapsed(Date.now() - start), 100);
-    return () => clearInterval(id);
-  }, [active]);
-
-  const seconds = active ? (elapsed / 1000) : ((duration ?? 0) / 1000);
-  const timeStr = `${seconds.toFixed(1)}s`;
-  const tokenStr = tokens != null ? `${tokens} tokens` : null;
-
-  return (
-    <Text>
-      <Text>Cogitating</Text>
-      <Text dimColor> · {timeStr}</Text>
-      {tokenStr ? <Text dimColor> · {tokenStr}</Text> : null}
-    </Text>
-  );
-}
+import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
 
 interface MessageBubbleProps {
   message: Message;
   contentExpanded?: boolean;
   theme?: string;
+  /** When true, thinking blocks are not rendered (handled externally). */
+  hideThinking?: boolean;
 }
 
 /** Extract display text from blocks (text blocks concatenated). */
@@ -144,7 +104,7 @@ function buildParamSummary(input: Record<string, unknown>): string {
  * Tool blocks are rendered via the tool registry (getToolUseRenderer / getToolResultRenderer),
  * allowing per-tool specialised renderers to be swapped in.
  */
-export function MessageBubble({ message, contentExpanded, theme }: MessageBubbleProps) {
+export function MessageBubble({ message, contentExpanded, theme, hideThinking }: MessageBubbleProps) {
   const { role } = message;
   const { stdout } = useStdout();
   const [termWidth, setTermWidth] = useState(
@@ -389,39 +349,15 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
           ? (() => {
               return message.blocks.map((block, idx) => {
                 if (block.type === 'thinking') {
-                  const thinkingLines = block.content.split('\n');
-                  const tooLong = thinkingLines.length > 2;
-                  const collapsed = tooLong && !message.thinkingExpanded;
-                  const logicalLines = collapsed
-                    ? thinkingLines.slice(0, 2)
-                    : thinkingLines;
-                  const thinkWidth = Math.max(20, maxWidth - 2);
-                  const isThoughtDone = message.thinkingDuration != null;
-
+                  if (hideThinking) return null;
                   return (
-                    <Box key={idx} flexDirection="row" marginBottom={1}>
-                      <ThinkingIcon active={!isThoughtDone} />
-                      <Box flexDirection="column" flexGrow={1}>
-                        <Text color={textColor}>
-                          <ThinkingHeader
-                            active={!isThoughtDone}
-                            duration={message.thinkingDuration}
-                            tokens={message.thinkingTokens}
-                          />
-                        </Text>
-                        <Box paddingLeft={2} flexDirection="column">
-                          {logicalLines.flatMap(line => wordWrapText(line, thinkWidth)).map((line, i) => (
-                            <Text key={i} dimColor color="grey">{line || ' '}</Text>
-                          ))}
-                          {collapsed ? (
-                            <Text dimColor color="grey">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
-                          ) : null}
-                          {tooLong && message.thinkingExpanded ? (
-                            <Text dimColor color="grey">{'(Ctrl+D to detail)'}</Text>
-                          ) : null}
-                        </Box>
-                      </Box>
-                    </Box>
+                    <ThinkingBlockRenderer
+                      key={idx}
+                      content={block.content}
+                      thinkingExpanded={message.thinkingExpanded}
+                      thinkingDuration={message.thinkingDuration}
+                      thinkingTokens={message.thinkingTokens}
+                    />
                   );
                 }
 
