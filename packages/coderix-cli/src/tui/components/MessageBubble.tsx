@@ -182,7 +182,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
     // ── Tool use ────────────────────────────────────────────
     if (block.type === 'tool_use') {
       const tu = block as ToolUseBlock;
-      if (tu.toolName === 'task_create' || tu.toolName === 'task_update' || tu.toolName === 'task_list' || tu.toolName === 'task_get') {
+      if (tu.toolName === 'TaskCreate' || tu.toolName === 'TaskUpdate' || tu.toolName === 'TaskList' || tu.toolName === 'TaskGet') {
         return null;
       }
       const Renderer = getToolUseRenderer(tu.toolName);
@@ -206,7 +206,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
     // ── Tool result ─────────────────────────────────────────
     if (block.type === 'tool_result') {
       const tr = block as ToolResultBlock;
-      if (tr.toolName === 'task_create' || tr.toolName === 'task_update' || tr.toolName === 'task_list' || tr.toolName === 'task_get') {
+      if (tr.toolName === 'TaskCreate' || tr.toolName === 'TaskUpdate' || tr.toolName === 'TaskList' || tr.toolName === 'TaskGet') {
         return null;
       }
       const ResultRenderer = getToolResultRenderer(tr.toolName);
