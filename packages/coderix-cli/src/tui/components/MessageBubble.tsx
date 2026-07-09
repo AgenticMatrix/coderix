@@ -182,9 +182,6 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
     // ── Tool use ────────────────────────────────────────────
     if (block.type === 'tool_use') {
       const tu = block as ToolUseBlock;
-      if (tu.toolName === 'TaskCreate' || tu.toolName === 'TaskUpdate' || tu.toolName === 'TaskList' || tu.toolName === 'TaskGet') {
-        return null;
-      }
       const Renderer = getToolUseRenderer(tu.toolName);
       return (
         <Renderer
@@ -206,9 +203,6 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
     // ── Tool result ─────────────────────────────────────────
     if (block.type === 'tool_result') {
       const tr = block as ToolResultBlock;
-      if (tr.toolName === 'TaskCreate' || tr.toolName === 'TaskUpdate' || tr.toolName === 'TaskList' || tr.toolName === 'TaskGet') {
-        return null;
-      }
       const ResultRenderer = getToolResultRenderer(tr.toolName);
       return (
         <Box key={idx} flexDirection="row">
@@ -353,9 +347,16 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
         {/* Render blocks in their natural order */}
         {hasBlocks
           ? (() => {
-              return message.blocks.map((block, idx) => {
+              const visibleBlocks = message.blocks.filter(block => {
+                if (block.type === 'thinking' && hideThinking) return false;
+                if (block.type === 'tool_use' || block.type === 'tool_result') {
+                  const name = (block as ToolUseBlock | ToolResultBlock).toolName;
+                  if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet') return false;
+                }
+                return true;
+              });
+              return visibleBlocks.map((block, idx) => {
                 if (block.type === 'thinking') {
-                  if (hideThinking) return null;
                   return (
                     <ThinkingBlockRenderer
                       key={idx}
@@ -369,7 +370,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
 
                 if (block.type === 'text') {
                   return (
-                    <Box key={idx} flexDirection="row" marginBottom={1}>
+                    <Box key={idx} flexDirection="row">
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
                         <MarkdownRenderer content={block.content} theme={theme} />
