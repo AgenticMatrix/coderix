@@ -448,14 +448,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:status', async () => {
     const { execSync } = await import('node:child_process');
     const { existsSync } = await import('node:fs');
-    const { join, dirname } = await import('node:path');
-
-    // Walk up from cwd to find .git directory
-    let cwd = process.cwd();
-    while (!existsSync(join(cwd, '.git')) && cwd !== dirname(cwd)) {
-      cwd = dirname(cwd);
-    }
-    const inRepo = existsSync(join(cwd, '.git'));
+    let cwd: string;
+    try { cwd = findGitRoot(); } catch { return { branch: '', files: [], commits: [] }; }
+    const inRepo = existsSync(require('node:path').join(cwd, '.git'));
 
     if (!inRepo) {
       console.log('[Coderix] git:status — no git repo found from', process.cwd());
@@ -465,7 +460,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     try {
       const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
       const status = execSync('git status --porcelain', { cwd, encoding: 'utf-8' });
-      const log = execSync('git log --oneline -10', { cwd, encoding: 'utf-8' });
+      const log = execSync('git log --all --oneline --graph --decorate -50', { cwd, encoding: 'utf-8' });
 
       const files = status.split('\n').filter(Boolean).map((line) => {
         const code = line.slice(0, 2).trim();
@@ -479,8 +474,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       });
 
       const commits = log.split('\n').filter(Boolean).map((line) => {
+        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.*)$/);
+        if (match) {
+          const graph = match[1];
+          const hash = match[2];
+          const rest = match[3];
+          const refMatch = rest.match(/\((.+?)\)$/);
+          return {
+            hash,
+            message: refMatch ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest.trim(),
+            graph,
+            refs: refMatch ? refMatch[1] : '',
+          };
+        }
         const [hash, ...rest] = line.split(' ');
-        return { hash, message: rest.join(' ') };
+        return { hash, message: rest.join(' '), graph: '', refs: '' };
       });
 
       console.log(`[Coderix] git:status — branch=${branch}, files=${files.length}, commits=${commits.length}`);
@@ -489,6 +497,95 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       console.error('[Coderix] git:status failed:', (e as Error).message);
       return { branch: '', files: [], commits: [] };
     }
+  });
+
+  ipcMain.handle('git:diff', async (_event, payload: { file: string; staged?: boolean }) => {
+    try {
+      const { execSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      const args = payload.staged ? ['diff', '--staged', '--', payload.file] : ['diff', '--', payload.file];
+      const diff = execSync(`git ${args.join(' ')}`, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      return { diff };
+    } catch (e) { return { diff: '', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:log', async (_event, payload?: { maxCount?: number }) => {
+    try {
+      const { execSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      const n = payload?.maxCount ?? 30;
+      // --graph --all for branch visualization, --decorate for branch names
+      const log = execSync(
+        `git log --all --oneline --graph --decorate -${n}`,
+        { cwd, encoding: 'utf-8' },
+      );
+      const lines = log.split('\n').filter(Boolean);
+      const commits: Array<{ hash: string; message: string; graph: string; refs: string }> = [];
+      for (const line of lines) {
+        // Parse: graph chars | hash message (refs)
+        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.*)$/);
+        if (match) {
+          const graph = match[1];
+          const hash = match[2];
+          const rest = match[3];
+          // Extract refs from parentheses
+          const refMatch = rest.match(/\((.+?)\)$/);
+          commits.push({
+            hash,
+            message: refMatch ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest.trim(),
+            graph,
+            refs: refMatch ? refMatch[1] : '',
+          });
+        }
+      }
+      return { commits };
+    } catch { return { commits: [] as Array<{ hash: string; message: string; graph: string; refs: string }> }; }
+  });
+
+  ipcMain.handle('git:show', async (_event, payload: { hash: string }) => {
+    try {
+      const { execSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      const stat = execSync(`git show --stat --name-status ${payload.hash}`, { cwd, encoding: 'utf-8' });
+      const show = execSync(`git show ${payload.hash}`, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      // Parse --name-status output for changed files
+      const files: Array<{ file: string; type: string }> = [];
+      const lines = stat.split('\n');
+      for (const line of lines) {
+        const match = line.match(/^([MADR]\d{0,3})\s+(.+)$/);
+        if (match) files.push({ file: match[2], type: match[1].charAt(0) });
+      }
+      return { diff: show, files };
+    } catch (e) { return { diff: '', files: [], error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:stage', async (_event, payload: { file?: string; all?: boolean }) => {
+    try {
+      const { execSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      if (payload.all) execSync('git add -A', { cwd, encoding: 'utf-8' });
+      else if (payload.file) execSync(`git add ${payload.file}`, { cwd, encoding: 'utf-8' });
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:unstage', async (_event, payload: { file?: string; all?: boolean }) => {
+    try {
+      const { execSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      if (payload.all) execSync('git reset HEAD', { cwd, encoding: 'utf-8' });
+      else if (payload.file) execSync(`git reset HEAD ${payload.file}`, { cwd, encoding: 'utf-8' });
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:commit', async (_event, payload: { message: string }) => {
+    try {
+      const { execSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      const result = execSync(`git commit -m "${payload.message.replace(/"/g, '\\"')}"`, { cwd, encoding: 'utf-8' });
+      return { status: 'ok', output: result.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
   });
 
   // ── Config ─────────────────────────────────────────────────────────────
@@ -671,6 +768,22 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.APP_CHECK_UPDATE);
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Git helper — find repo root
+// ---------------------------------------------------------------------------
+
+function findGitRoot(): string {
+  let current = process.cwd();
+  const { join, dirname } = require('node:path') as typeof import('node:path');
+  while (!require('node:fs').existsSync(join(current, '.git')) && current !== dirname(current)) {
+    current = dirname(current);
+  }
+  if (!require('node:fs').existsSync(join(current, '.git'))) {
+    throw new Error('Not in a git repository');
+  }
+  return current;
 }
 
 // ---------------------------------------------------------------------------

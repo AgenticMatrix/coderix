@@ -85,6 +85,7 @@ export function App(): React.ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sessions');
+  const [diffData, setDiffData] = useState<{ file: string; diff: string } | null>(null);
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -151,6 +152,17 @@ export function App(): React.ReactElement {
     }
     init().catch((err) => console.error('[App] Session init failed:', err));
   }, [loadSessions, createSession, setSessionId]);
+
+  // ── Git diff event listener ──────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail as { file: string; diff: string };
+      setDiffData(d);
+      if (!useUIStore.getState().detailPanelOpen) useUIStore.getState().toggleDetailPanel();
+    };
+    window.addEventListener('coderix:open-diff', handler);
+    return () => window.removeEventListener('coderix:open-diff', handler);
+  }, []);
 
   // ── Reload sessions when sidebar opens ─────────────────────────────────
   useEffect(() => {
@@ -375,7 +387,7 @@ export function App(): React.ReactElement {
         iconActiveTab={sidebarTab}
         onIconTabChange={setSidebarTab}
         onIconSettings={() => setSettingsOpen(true)}
-        detailPanel={<DetailPanel />}
+        detailPanel={<DetailPanel data={diffData} onClose={() => setDiffData(null)} />}
         detailVisible={detailPanelOpen}
         statusBarProps={{
           model: 'DeepSeek V4 Pro',
