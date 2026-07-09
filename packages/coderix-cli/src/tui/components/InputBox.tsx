@@ -22,6 +22,7 @@ const MAX_PREVIEW_LINES = 8;
 export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible, theme }: InputBoxProps) {
   const PROMPT_COLOR = '#A855F7';
   const CURSOR_COLOR = theme === 'light' ? '#000000' : '#FFFFFF';
+  const CURSOR_TEXT_COLOR = theme === 'light' ? '#FFFFFF' : '#000000';
   const showPreview = pastePreviewVisible && pasteBlocks && Object.keys(pasteBlocks).length > 0;
 
   // Split input into lines and locate which line holds the cursor
@@ -108,7 +109,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
                   <Text>
                     {line.slice(0, cursorCol)}
                     {!isStreaming && line[cursorCol] ? (
-                      <Text backgroundColor={CURSOR_COLOR} color="black">{line[cursorCol]}</Text>
+                      <Text backgroundColor={CURSOR_COLOR} color={CURSOR_TEXT_COLOR}>{line[cursorCol]}</Text>
                     ) : !isStreaming ? (
                       <Text backgroundColor={CURSOR_COLOR}> </Text>
                     ) : null}
