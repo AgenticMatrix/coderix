@@ -1,20 +1,20 @@
 import { Box, Text } from 'ink';
 import { useState, useEffect } from 'react';
 
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const SPINNER_FRAMES = ['◴', '◷', '◶', '◵'];
 
 function ThinkingIcon({ active }: { active: boolean }) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), 120);
+    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), 150);
     return () => clearInterval(id);
   }, [active]);
 
   return (
     <Box width={2} flexShrink={0}>
-      <Text color="#A855F7">
+      <Text bold color="#A855F7">
         {active ? SPINNER_FRAMES[frame] : '●'}
       </Text>
     </Box>
