@@ -131,7 +131,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
             return (
               <Box key={i}>
                 <Text color={isCursor ? 'cyan' : isSelected ? 'green' : 'white'}>
-                  {isCursor ? '>' : ' '}{' '}
+                  {isCursor ? '❯' : ' '}{' '}
                   {isSelected ? (q.multiSelect ? '[x]' : '●') : (q.multiSelect ? '[ ]' : '○')}{' '}
                   {i + 1}. {opt.label}
                 </Text>

@@ -127,10 +127,13 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
   // ── System ────────────────────────────────────────────────
   if (role === 'system') {
     return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Text dimColor>
-          <Text color="grey">[System]</Text> {displayContent}
-        </Text>
+      <Box flexDirection="row" marginBottom={1}>
+        <Box width={2} flexShrink={0} />
+        <Box flexGrow={1}>
+          <Text dimColor>
+            <Text color="grey">[System]</Text> {displayContent}
+          </Text>
+        </Box>
       </Box>
     );
   }
@@ -152,12 +155,17 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
       : contentLines;
 
     return (
-      <Box flexDirection="column" marginBottom={1} width={maxWidth}>
+      <Box flexDirection="column" marginBottom={1}>
         {displayLines.map((line, i) => (
-          <Box key={i} width={maxWidth} backgroundColor={userBgColor}>
-            <Text>
+          <Box key={i} flexDirection="row">
+            <Box width={2}>
+              <Text color="#4FC3F7" bold>
+                {i === 0 ? '❯' : ' '}
+              </Text>
+            </Box>
+            <Box flexGrow={1} backgroundColor={userBgColor}>
               <Text color={userTextColor}>{line}</Text>
-            </Text>
+            </Box>
           </Box>
         ))}
       </Box>
@@ -194,16 +202,20 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
       const tr = block as ToolResultBlock;
       const ResultRenderer = getToolResultRenderer(tr.toolName);
       return (
-        <ResultRenderer
-          key={idx}
-          content={tr.content}
-          isError={tr.isError}
-          truncated={tr.truncated}
-          duration={tr.duration}
-          toolName={tr.toolName}
-          metadata={tr.metadata}
-          contentExpanded={contentExpanded}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <ResultRenderer
+              content={tr.content}
+              isError={tr.isError}
+              truncated={tr.truncated}
+              duration={tr.duration}
+              toolName={tr.toolName}
+              metadata={tr.metadata}
+              contentExpanded={contentExpanded}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -211,11 +223,15 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     if (block.type === 'todo_update') {
       const td = block as TodoUpdateBlock;
       return (
-        <TodoUpdateBlockRenderer
-          key={idx}
-          todos={td.todos}
-          oldTodos={td.oldTodos}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <TodoUpdateBlockRenderer
+              todos={td.todos}
+              oldTodos={td.oldTodos}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -223,11 +239,15 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     if (block.type === 'turn_boundary') {
       const tb = block as TurnBoundary;
       return (
-        <TurnBoundaryRenderer
-          key={idx}
-          turnId={tb.turnId}
-          summary={tb.summary}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <TurnBoundaryRenderer
+              turnId={tb.turnId}
+              summary={tb.summary}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -235,13 +255,17 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     if (block.type === 'subagent') {
       const sa = block as SubagentBlock;
       return (
-        <SubagentBlockRenderer
-          key={idx}
-          agentType={sa.agentType}
-          agentName={sa.agentName}
-          state={sa.state}
-          messageCount={sa.messageCount}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <SubagentBlockRenderer
+              agentType={sa.agentType}
+              agentName={sa.agentName}
+              state={sa.state}
+              messageCount={sa.messageCount}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -249,11 +273,15 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     if (block.type === 'compaction') {
       const cb = block as CompactionBoundary;
       return (
-        <CompactionBoundaryRenderer
-          key={idx}
-          removedCount={cb.removedCount}
-          reason={cb.reason}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <CompactionBoundaryRenderer
+              removedCount={cb.removedCount}
+              reason={cb.reason}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -261,10 +289,14 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     if (block.type === 'speculation') {
       const sp = block as SpeculationBlock;
       return (
-        <SpeculationBlockRenderer
-          key={idx}
-          state={sp.state}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <SpeculationBlockRenderer
+              state={sp.state}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -272,10 +304,14 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
     if (block.type === 'completion') {
       const cp = block as CompletionBoundary;
       return (
-        <CompletionBoundaryRenderer
-          key={idx}
-          stopReason={cp.stopReason}
-        />
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <CompletionBoundaryRenderer
+              stopReason={cp.stopReason}
+            />
+          </Box>
+        </Box>
       );
     }
 
@@ -288,9 +324,14 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
   if (isToolResultOnly) {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Box paddingLeft={3} flexDirection="column">
-          {message.blocks.map((block, idx) => renderBlock(block, idx))}
-        </Box>
+        {message.blocks.map((block, idx) => (
+          <Box key={idx} flexDirection="row">
+            <Box width={2} flexShrink={0} />
+            <Box flexGrow={1}>
+              {renderBlock(block, idx)}
+            </Box>
+          </Box>
+        ))}
       </Box>
     );
   }
@@ -319,25 +360,35 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
                     : 'Thinking...';
 
                   return (
-                    <Box key={idx} flexDirection="column" marginBottom={1}>
-                      <Text color={textColor}>{headerText}</Text>
-                      <Box paddingLeft={2} flexDirection="column">
-                        {logicalLines.flatMap(line => wordWrapText(line, thinkWidth)).map((line, i) => (
-                          <Text key={i} dimColor color="grey">{line || ' '}</Text>
-                        ))}
-                        {collapsed ? (
-                          <Text dimColor color="grey">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
-                        ) : null}
-                        {tooLong && message.thinkingExpanded ? (
-                          <Text dimColor color="grey">{'(Ctrl+D to detail)'}</Text>
-                        ) : null}
+                    <Box key={idx} flexDirection="row" marginBottom={1}>
+                      <Box width={2} flexShrink={0} />
+                      <Box flexDirection="column" flexGrow={1}>
+                        <Text color={textColor}>{headerText}</Text>
+                        <Box paddingLeft={2} flexDirection="column">
+                          {logicalLines.flatMap(line => wordWrapText(line, thinkWidth)).map((line, i) => (
+                            <Text key={i} dimColor color="grey">{line || ' '}</Text>
+                          ))}
+                          {collapsed ? (
+                            <Text dimColor color="grey">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
+                          ) : null}
+                          {tooLong && message.thinkingExpanded ? (
+                            <Text dimColor color="grey">{'(Ctrl+D to detail)'}</Text>
+                          ) : null}
+                        </Box>
                       </Box>
                     </Box>
                   );
                 }
 
                 if (block.type === 'text') {
-                  return <MarkdownRenderer key={idx} content={block.content} theme={theme} />;
+                  return (
+                    <Box key={idx} flexDirection="row">
+                      <Box width={2} flexShrink={0} />
+                      <Box flexGrow={1}>
+                        <MarkdownRenderer content={block.content} theme={theme} />
+                      </Box>
+                    </Box>
+                  );
                 }
 
                 return renderBlock(block, idx);
@@ -347,7 +398,12 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
 
         {/* Fallback: legacy string content when no blocks */}
         {!hasBlocks && displayContent ? (
-          <MarkdownRenderer content={displayContent} theme={theme} />
+          <Box flexDirection="row">
+            <Box width={2} flexShrink={0} />
+            <Box flexGrow={1}>
+              <MarkdownRenderer content={displayContent} theme={theme} />
+            </Box>
+          </Box>
         ) : null}
       </Box>
     </Box>

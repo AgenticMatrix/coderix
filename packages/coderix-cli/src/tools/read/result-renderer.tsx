@@ -10,7 +10,7 @@ export function ReadResultRenderer(props: ToolResultRendererProps): React.ReactN
   const emptiness = lines.length === 0;
 
   return (
-    <Box flexDirection="column" paddingLeft={2}>
+    <Box flexDirection="column">
       {emptiness ? (
         <Text color={isError ? 'red' : 'green'} dimColor>
           {isError ? '(error — no output)' : '(empty)'}

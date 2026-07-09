@@ -433,10 +433,13 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
 
       {/* ── Freeze indicator (pre-allocated to avoid layout shift) ── */}
       {state.isFrozen && (
-        <Box flexShrink={0} height={1}>
-          <Text color="yellow" dimColor>
-            ⏸ Paused — {frozenNewCount > 0 ? `${frozenNewCount} new message(s) — ` : ''}PageDown / End to follow
-          </Text>
+        <Box flexShrink={0} height={1} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <Text color="yellow" dimColor>
+              ⏸ Paused — {frozenNewCount > 0 ? `${frozenNewCount} new message(s) — ` : ''}PageDown / End to follow
+            </Text>
+          </Box>
         </Box>
       )}
       {!state.isFrozen && <Box flexShrink={0} height={0} />}
@@ -445,19 +448,25 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
       <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
         {/* Sub-agent indicator header */}
         {state.subAgentView && (
-          <Box flexShrink={0} marginBottom={1} flexDirection="column">
-            <Text dimColor>--- {state.subAgentView.agentId} ---</Text>
-            <Text dimColor> Esc or Ctrl+T to return to main</Text>
+          <Box flexShrink={0} marginBottom={1} flexDirection="row">
+            <Box width={2} flexShrink={0} />
+            <Box flexDirection="column" flexGrow={1}>
+              <Text dimColor>--- {state.subAgentView.agentId} ---</Text>
+              <Text dimColor> Esc or Ctrl+T to return to main</Text>
+            </Box>
           </Box>
         )}
 
         {displayMessages.length === 0 && !state.isStreaming && (
-          <Box marginY={1}>
-            <Text dimColor>
-              {state.subAgentView
-                ? 'Send a message to continue the conversation with this agent.'
-                : 'Welcome to Coder Chat TUI! Type a message and press Enter to start.'}
-            </Text>
+          <Box marginY={1} flexDirection="row">
+            <Box width={2} flexShrink={0} />
+            <Box flexGrow={1}>
+              <Text dimColor>
+                {state.subAgentView
+                  ? 'Send a message to continue the conversation with this agent.'
+                  : 'Welcome to Coder Chat TUI! Type a message and press Enter to start.'}
+              </Text>
+            </Box>
           </Box>
         )}
 

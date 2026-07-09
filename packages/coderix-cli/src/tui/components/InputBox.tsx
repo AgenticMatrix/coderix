@@ -83,7 +83,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
         {lines.length === 0 ? (
           <Box flexDirection="row">
             <Box marginRight={1}>
-              <Text color={CURSOR_COLOR} bold>{'>'}</Text>
+              <Text color={CURSOR_COLOR} bold>{'❯'}</Text>
             </Box>
             <Box flexGrow={1}>
               {!isStreaming ? (
@@ -96,7 +96,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
             <Box key={i} flexDirection="row">
               <Box marginRight={1}>
                 {i === 0 ? (
-                  <Text color={CURSOR_COLOR} bold>{'>'}</Text>
+                  <Text color={CURSOR_COLOR} bold>{'❯'}</Text>
                 ) : (
                   <Text> </Text>
                 )}

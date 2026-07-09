@@ -51,47 +51,51 @@ export function BaseToolRenderer({
   const statusColor = active ? 'yellow' : isDone ? 'green' : state === 'error' ? 'red' : 'grey';
 
   return (
-    <Box
-      flexDirection="column"
-      marginBottom={1}
-    >
-      {/* Title bar */}
-      <Box flexDirection="row" justifyContent="space-between">
-        <Box marginRight={1}>
-          <Text>
-            <Text color={statusColor}>{statusIcon} </Text>
-            <Text bold color={borderColor}>
-              {toolName}
-            </Text>
-            {paramSummary ? (
-              <Text dimColor> · {paramSummary}</Text>
-            ) : null}
-            {(isExecuting || isPending) ? (
-              <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
-            ) : null}
-          </Text>
-        </Box>
-
-        <Box>
-          {duration !== undefined && isDone ? (
-            <Text dimColor>⏱ {formatDuration(duration)}</Text>
-          ) : isDone ? (
-            <Text dimColor>{elapsedSecs}s</Text>
-          ) : null}
-          {permissionState === 'denied' ? (
-            <Text color="red"> ⛔ denied</Text>
-          ) : permissionState === 'pending' ? (
-            <Text color="yellow"> ⚠ pending</Text>
-          ) : null}
-        </Box>
+    <Box flexDirection="row" marginBottom={1}>
+      {/* Icon column */}
+      <Box width={2} flexShrink={0}>
+        <Text color={statusColor}>{statusIcon}</Text>
       </Box>
 
-      {/* Body */}
-      {expanded && children ? (
-        <Box paddingLeft={2} flexDirection="column" marginTop={0}>
-          {children}
+      {/* Content */}
+      <Box flexDirection="column" flexGrow={1}>
+        {/* Title bar */}
+        <Box flexDirection="row" justifyContent="space-between">
+          <Box marginRight={1}>
+            <Text>
+              <Text bold color={borderColor}>
+                {toolName}
+              </Text>
+              {paramSummary ? (
+                <Text dimColor> · {paramSummary}</Text>
+              ) : null}
+              {(isExecuting || isPending) ? (
+                <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
+              ) : null}
+            </Text>
+          </Box>
+
+          <Box>
+            {duration !== undefined && isDone ? (
+              <Text dimColor>⏱ {formatDuration(duration)}</Text>
+            ) : isDone ? (
+              <Text dimColor>{elapsedSecs}s</Text>
+            ) : null}
+            {permissionState === 'denied' ? (
+              <Text color="red"> ⛔ denied</Text>
+            ) : permissionState === 'pending' ? (
+              <Text color="yellow"> ⚠ pending</Text>
+            ) : null}
+          </Box>
         </Box>
-      ) : null}
+
+        {/* Body */}
+        {expanded && children ? (
+          <Box paddingLeft={2} flexDirection="column" marginTop={0}>
+            {children}
+          </Box>
+        ) : null}
+      </Box>
     </Box>
   );
 }
