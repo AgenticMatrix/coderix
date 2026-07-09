@@ -182,6 +182,9 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
     // ── Tool use ────────────────────────────────────────────
     if (block.type === 'tool_use') {
       const tu = block as ToolUseBlock;
+      if (tu.toolName === 'task_create' || tu.toolName === 'task_update' || tu.toolName === 'task_list' || tu.toolName === 'task_get') {
+        return null;
+      }
       const Renderer = getToolUseRenderer(tu.toolName);
       return (
         <Renderer
@@ -203,6 +206,9 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
     // ── Tool result ─────────────────────────────────────────
     if (block.type === 'tool_result') {
       const tr = block as ToolResultBlock;
+      if (tr.toolName === 'task_create' || tr.toolName === 'task_update' || tr.toolName === 'task_list' || tr.toolName === 'task_get') {
+        return null;
+      }
       const ResultRenderer = getToolResultRenderer(tr.toolName);
       return (
         <Box key={idx} flexDirection="row">
