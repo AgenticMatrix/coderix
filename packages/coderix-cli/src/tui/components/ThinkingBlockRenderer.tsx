@@ -15,7 +15,7 @@ function ThinkingIcon({ active }: { active: boolean }) {
   return (
     <Box width={2} flexShrink={0}>
       <Text color="#4FC3F7">
-        {active ? SPINNER_FRAMES[frame] : '·'}
+        {active ? SPINNER_FRAMES[frame] : '●'}
       </Text>
     </Box>
   );
