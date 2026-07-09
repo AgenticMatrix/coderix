@@ -19,7 +19,7 @@ const MAX_PREVIEW_LINES = 8;
  * above the input so the user can review it before sending.
  */
 export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible }: InputBoxProps) {
-  const CURSOR_COLOR = '#4FC3F7';
+  const CURSOR_COLOR = '#A855F7';
   const showPreview = pastePreviewVisible && pasteBlocks && Object.keys(pasteBlocks).length > 0;
 
   // Split input into lines and locate which line holds the cursor
