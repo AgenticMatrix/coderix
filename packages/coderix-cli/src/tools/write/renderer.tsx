@@ -26,11 +26,12 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const removedLines = meta?.removedLines as number | undefined;
   const diffLines = meta?.diffLines as string[] | undefined;
 
-  // Fallback: if metadata is missing, use raw result content
+  // Fallback: if metadata is missing, strip HTML tags from raw content
   const rawContent = props.result?.content ?? '';
-  const rawLines = rawContent.split('\n').filter(l => l !== '');
-  const effectiveDiffLines = diffLines ?? (rawLines.length > 0 ? rawLines : null);
-  const effectiveAdded = addedLines ?? (effectiveDiffLines ? rawLines.length : undefined);
+  const rawPlain = rawContent.replace(/<[^>]*>/g, '');
+  const rawLines = rawPlain.split('\n').filter(l => l !== '');
+  const effectiveDiffLines = diffLines ?? null;
+  const effectiveAdded = addedLines ?? (rawLines.length > 0 ? rawLines.length : undefined);
   const effectiveRemoved = removedLines;
 
   const tooLong = !props.contentExpanded && effectiveDiffLines && effectiveDiffLines.length > COLLAPSE_THRESHOLD;
