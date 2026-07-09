@@ -35,6 +35,29 @@ function ThinkingIcon({ active }: { active: boolean }) {
   );
 }
 
+function ThinkingHeader({ active, duration, tokens }: { active: boolean; duration?: number; tokens?: number }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - start), 100);
+    return () => clearInterval(id);
+  }, [active]);
+
+  const seconds = active ? (elapsed / 1000) : ((duration ?? 0) / 1000);
+  const timeStr = `${seconds.toFixed(1)}s`;
+  const tokenStr = tokens != null ? `${tokens} tokens` : null;
+
+  return (
+    <Text>
+      <Text>Cogitating</Text>
+      <Text dimColor> · {timeStr}</Text>
+      {tokenStr ? <Text dimColor> · {tokenStr}</Text> : null}
+    </Text>
+  );
+}
+
 interface MessageBubbleProps {
   message: Message;
   contentExpanded?: boolean;
@@ -375,15 +398,17 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
                   const thinkWidth = Math.max(20, maxWidth - 2);
                   const isThoughtDone = message.thinkingDuration != null;
 
-                  const headerText = isThoughtDone
-                    ? `Cogitating · ${(message.thinkingDuration! / 1000).toFixed(1)}s · ${message.thinkingTokens} tokens`
-                    : 'Cogitating…';
-
                   return (
                     <Box key={idx} flexDirection="row" marginBottom={1}>
                       <ThinkingIcon active={!isThoughtDone} />
                       <Box flexDirection="column" flexGrow={1}>
-                        <Text color={textColor}>{headerText}</Text>
+                        <Text color={textColor}>
+                          <ThinkingHeader
+                            active={!isThoughtDone}
+                            duration={message.thinkingDuration}
+                            tokens={message.thinkingTokens}
+                          />
+                        </Text>
                         <Box paddingLeft={2} flexDirection="column">
                           {logicalLines.flatMap(line => wordWrapText(line, thinkWidth)).map((line, i) => (
                             <Text key={i} dimColor color="grey">{line || ' '}</Text>
