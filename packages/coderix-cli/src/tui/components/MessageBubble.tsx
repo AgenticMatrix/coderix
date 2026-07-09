@@ -1,5 +1,5 @@
 import { Box, Text, useStdout } from 'ink';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 
 import type {
   Message, TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock,
@@ -14,6 +14,27 @@ import { SubagentBlockRenderer } from './blocks/SubagentBlockRenderer.js';
 import { CompactionBoundaryRenderer } from './blocks/CompactionBoundaryRenderer.js';
 import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
+
+const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
+const SPINNER_CYCLE = [...SPINNER_FRAMES, ...SPINNER_FRAMES.slice().reverse()];
+
+function ThinkingIcon({ active }: { active: boolean }) {
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_CYCLE.length), 120);
+    return () => clearInterval(id);
+  }, [active]);
+
+  return (
+    <Box width={2} flexShrink={0}>
+      <Text color="#4FC3F7">
+        {active ? SPINNER_CYCLE[frame] : '·'}
+      </Text>
+    </Box>
+  );
+}
 
 interface MessageBubbleProps {
   message: Message;
@@ -356,12 +377,12 @@ export function MessageBubble({ message, contentExpanded, theme }: MessageBubble
                   const isThoughtDone = message.thinkingDuration != null;
 
                   const headerText = isThoughtDone
-                    ? `Thought · ${(message.thinkingDuration! / 1000).toFixed(1)}s · ${message.thinkingTokens} tokens`
-                    : 'Thinking...';
+                    ? `Cogitating · ${(message.thinkingDuration! / 1000).toFixed(1)}s · ${message.thinkingTokens} tokens`
+                    : 'Cogitating…';
 
                   return (
                     <Box key={idx} flexDirection="row" marginBottom={1}>
-                      <Box width={2} flexShrink={0} />
+                      <ThinkingIcon active={!isThoughtDone} />
                       <Box flexDirection="column" flexGrow={1}>
                         <Text color={textColor}>{headerText}</Text>
                         <Box paddingLeft={2} flexDirection="column">
