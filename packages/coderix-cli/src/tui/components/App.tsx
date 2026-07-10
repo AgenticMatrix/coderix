@@ -1,5 +1,5 @@
-import { useEffect, useRef, useMemo, useCallback } from 'react';
-import { Box, Text, Static } from 'ink';
+import { useEffect, useRef, useMemo, useCallback, useLayoutEffect, useState } from 'react';
+import { Box, Text, Static, measureElement, useStdout } from 'ink';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
@@ -116,6 +116,42 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
+
+  // ── Terminal size & layout measurement ──────────────────────
+  const { stdout } = useStdout();
+  const rows = stdout?.rows ?? process.stdout.rows ?? 24;
+  const columns = stdout?.columns ?? process.stdout.columns ?? 80;
+
+  const controlsRef = useRef<any>(null);
+  const [controlsHeight, setControlsHeight] = useState(0);
+  const lastMeasureKeyRef = useRef('');
+
+  useLayoutEffect(() => {
+    if (!controlsRef.current || rows <= 0) return;
+
+    const measureKey = [
+      rows, columns,
+      state.taskPanelDismissed ? 1 : 0,
+      state.todoPanelDismissed ? 1 : 0,
+      state.teamPanelDismissed ? 1 : 0,
+      state.teamPicker ? 1 : 0,
+      state.inputText.includes('\n') ? 1 : 0,
+      state.pastePreviewVisible ? 1 : 0,
+      Object.keys(state.pasteBlocks ?? {}).length,
+    ].join(':');
+
+    if (measureKey === lastMeasureKeyRef.current) return;
+    lastMeasureKeyRef.current = measureKey;
+
+    const measured = measureElement(controlsRef.current);
+    setControlsHeight(prev => (prev === measured.height ? prev : measured.height));
+  });
+
+  const outerPadding = 2; // padding={1} top + bottom
+  const freezeHeight = state.isFrozen ? 1 : 0;
+  const liveMaxHeight = controlsHeight > 0
+    ? Math.max(1, rows - outerPadding - freezeHeight - controlsHeight)
+    : undefined;
 
   // Sync ChatState → AppState.ui so components reading via useAppState see the latest
   useEffect(() => {
@@ -464,8 +500,15 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
       )}
       {!state.isFrozen && <Box flexShrink={0} height={0} />}
 
-      {/* ── Live zone: only the current streaming message ──────── */}
-      <Box flexDirection="column" flexGrow={1} flexShrink={1} paddingX={1}>
+      {/* ── Live zone: max-height capped to prevent pushing controls ── */}
+      <Box
+        flexDirection="column"
+        flexGrow={1}
+        flexShrink={1}
+        maxHeight={liveMaxHeight}
+        overflow={liveMaxHeight ? 'hidden' : undefined}
+        paddingX={1}
+      >
         {/* Sub-agent indicator header */}
         {state.subAgentView && (
           <Box flexShrink={0} marginBottom={1} flexDirection="row">
@@ -560,60 +603,62 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         )}
       </Box>
 
-      <TaskPanel
-        dismissed={state.taskPanelDismissed}
-        onDismissReset={handleTaskDismissReset}
-      />
+      <Box ref={controlsRef} flexDirection="column" flexShrink={0}>
+        <TaskPanel
+          dismissed={state.taskPanelDismissed}
+          onDismissReset={handleTaskDismissReset}
+        />
 
-      <TodoPanel
-        dismissed={state.todoPanelDismissed}
-        onDismissReset={handleTodoDismissReset}
-      />
+        <TodoPanel
+          dismissed={state.todoPanelDismissed}
+          onDismissReset={handleTodoDismissReset}
+        />
 
-      <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
-      <InputBox
-        inputText={state.inputText}
-        cursorPosition={state.cursorPosition}
-        isStreaming={state.isStreaming}
-        pasteBlocks={state.pasteBlocks}
-        pastePreviewVisible={state.pastePreviewVisible}
-        theme={config.theme}
-      />
-
-      <Box marginTop={1}>
-        <StatusBar
-          model={state.model}
+        <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
+        <InputBox
+          inputText={state.inputText}
+          cursorPosition={state.cursorPosition}
           isStreaming={state.isStreaming}
-          isFrozen={state.isFrozen}
-          error={state.error}
-          totalChars={stats.totalChars}
-          inputTokens={stats.inputTokens}
-          outputTokens={stats.outputTokens}
-          realUsage={stats.realUsage}
-          accumulatedCost={stats.accumulatedCost}
-          currency={config.currency}
-          maxContext={config.maxContext}
-          compactThreshold={config.compactThreshold}
-          processMemory={processMemory}
-          processCount={totalProcs}
+          pasteBlocks={state.pasteBlocks}
+          pastePreviewVisible={state.pastePreviewVisible}
+          theme={config.theme}
+        />
+
+        <Box marginTop={1}>
+          <StatusBar
+            model={state.model}
+            isStreaming={state.isStreaming}
+            isFrozen={state.isFrozen}
+            error={state.error}
+            totalChars={stats.totalChars}
+            inputTokens={stats.inputTokens}
+            outputTokens={stats.outputTokens}
+            realUsage={stats.realUsage}
+            accumulatedCost={stats.accumulatedCost}
+            currency={config.currency}
+            maxContext={config.maxContext}
+            compactThreshold={config.compactThreshold}
+            processMemory={processMemory}
+            processCount={totalProcs}
+          />
+        </Box>
+
+        <TeamPanel
+          dismissed={state.teamPanelDismissed}
+          onDismissReset={handleTeamDismissReset}
+          focused={state.teamPicker}
+          onFocusRequest={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
+          viewedAgentId={state.subAgentView?.agentId ?? null}
+          onSelect={(agentId) => {
+            if (agentId === '__main__') {
+              dispatch({ type: 'HIDE_TEAM_PICKER' });
+              dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
+            } else {
+              dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
+            }
+          }}
         />
       </Box>
-
-      <TeamPanel
-        dismissed={state.teamPanelDismissed}
-        onDismissReset={handleTeamDismissReset}
-        focused={state.teamPicker}
-        onFocusRequest={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
-        viewedAgentId={state.subAgentView?.agentId ?? null}
-        onSelect={(agentId) => {
-          if (agentId === '__main__') {
-            dispatch({ type: 'HIDE_TEAM_PICKER' });
-            dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
-          } else {
-            dispatch({ type: 'OPEN_SUBAGENT_VIEW', agentId });
-          }
-        }}
-      />
     </Box>
   );
 }

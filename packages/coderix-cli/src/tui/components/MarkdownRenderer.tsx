@@ -772,6 +772,45 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
 interface MarkdownRendererProps {
   content: string;
   theme?: string;
+  /** Maximum number of visible lines before truncation. Useful for streaming
+   *  output to prevent rendering thousands of lines that get clipped anyway. */
+  maxLines?: number;
+}
+
+/** Rough line-count estimate for a block. Fast approximation — doesn't need
+ *  to be exact, just enough to stop runaway rendering during streaming. */
+function estimateBlockLines(block: Block, termWidth: number): number {
+  switch (block.type) {
+    case 'heading':
+    case 'horizontal_rule':
+      return 2; // heading + blank line, or rule + blank
+    case 'code_block': {
+      const codeLines = block.code.split('\n').length;
+      return codeLines + 2; // top border + bottom border
+    }
+    case 'math_block':
+      return block.content.split('\n').length + 2;
+    case 'paragraph': {
+      const text = block.tokens.map(t => 'content' in t ? String(t.content) : '').join('');
+      return Math.max(1, Math.ceil(text.length / Math.max(1, termWidth - 4))) + 1;
+    }
+    case 'list_item': {
+      const text = block.tokens.map(t => 'content' in t ? String(t.content) : '').join('');
+      return Math.max(1, Math.ceil(text.length / Math.max(1, termWidth - 6)));
+    }
+    case 'table':
+      return block.rows.length + 3; // header + separator + rows + bottom border
+    case 'blockquote': {
+      let lines = 0;
+      for (const ql of block.lines) {
+        const text = ql.tokens.map(t => 'content' in t ? String(t.content) : '').join('');
+        lines += Math.max(1, Math.ceil(text.length / Math.max(1, termWidth - ql.level * 2)));
+      }
+      return lines + 1;
+    }
+    default:
+      return 1;
+  }
 }
 
 /**
@@ -790,7 +829,7 @@ interface MarkdownRendererProps {
  * - Blockquotes (> text, with nesting support)
  * - Paragraphs
  */
-export function MarkdownRenderer({ content, theme }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererProps) {
   const { stdout } = useStdout();
   const [termWidth, setTermWidth] = useState(
     () => stdout?.columns ?? process.stdout.columns ?? 80,
@@ -814,11 +853,32 @@ export function MarkdownRenderer({ content, theme }: MarkdownRendererProps) {
   const maxOutputWidth = Math.max(20, termWidth - 4);
   const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
 
+  // Truncate blocks when maxLines is set (streaming performance optimization)
+  let visibleBlocks = blocks;
+  let truncated = false;
+  if (maxLines && maxLines > 0) {
+    let lineCount = 0;
+    let truncateAt = blocks.length;
+    for (let i = 0; i < blocks.length; i++) {
+      const est = estimateBlockLines(blocks[i]!, maxOutputWidth);
+      if (lineCount + est > maxLines) {
+        truncateAt = i;
+        truncated = true;
+        break;
+      }
+      lineCount += est;
+    }
+    visibleBlocks = blocks.slice(0, truncateAt);
+  }
+
   return (
     <Box flexDirection="column" width={maxOutputWidth}>
-      {blocks.map((block, i) => (
+      {visibleBlocks.map((block, i) => (
         <BlockElement key={i} block={block} termWidth={maxOutputWidth} theme={theme} textColor={textColor} />
       ))}
+      {truncated && (
+        <Text dimColor>{'... ' + (blocks.length - visibleBlocks.length) + ' more blocks ...'}</Text>
+      )}
     </Box>
   );
 }

@@ -24,6 +24,22 @@ import type { AppState } from '../../state/AppState.js';
 import { nextMessageId } from './useChatReducer.js';
 import { useDeltaThrottle } from './streamHelpers.js';
 
+// Batched updates: merge multiple React state dispatches into a single
+// Ink render pass, eliminating intermediate-frame flicker during streaming.
+let batchedUpdates: ((fn: () => void) => void) | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Reconciler = require('react-reconciler');
+  batchedUpdates =
+    typeof Reconciler?.batchedUpdates === 'function'
+      ? Reconciler.batchedUpdates
+      : typeof Reconciler?.default?.batchedUpdates === 'function'
+        ? Reconciler.default.batchedUpdates
+        : null;
+} catch {
+  // react-reconciler not available (unlikely — it's a transitive dep of react)
+}
+
 // ---------------------------------------------------------------------------
 // Block mapping: core ContentBlock → TUI ContentBlock
 // ---------------------------------------------------------------------------
@@ -156,7 +172,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
 
   // ── Delta throttling: batch APPEND_BLOCK_DELTA dispatches to reduce
   //    re-renders during streaming so terminal text selection isn't disrupted.
-  const { pendingDeltasRef, flushDeltas, scheduleFlush } = useDeltaThrottle(routeDispatch);
+  const { pendingDeltasRef, flushDeltas, scheduleFlush } = useDeltaThrottle(routeDispatch, batchedUpdates);
 
   /**
    * Run a single agent turn: user input → QueryEngine → dispatch → React render.
@@ -317,32 +333,39 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                 };
 
                 // Inject results into tool_use blocks for inline display
-                for (const block of blocks) {
-                  if (block.type === 'tool_result' && block.toolId) {
-                    routeDispatch({
-                      type: 'SET_TOOL_USE_RESULT',
-                      toolId: block.toolId,
-                      duration: block.duration,
-                      result: {
-                        content: block.content,
-                        isError: block.isError,
-                        metadata: block.metadata,
-                      },
-                    });
-                    // Accumulate sub-agent token cost into main agent total
-                    const subTokenUsage = block.metadata?.tokenUsage as Record<string, number> | undefined;
-                    if (subTokenUsage) {
+                const applyResults = () => {
+                  for (const block of blocks) {
+                    if (block.type === 'tool_result' && block.toolId) {
                       routeDispatch({
-                        type: 'UPDATE_TOKEN_USAGE',
-                        usage: {
-                          inputTokens: subTokenUsage.inputTokens ?? 0,
-                          outputTokens: subTokenUsage.outputTokens ?? 0,
-                          cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
-                          cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                        type: 'SET_TOOL_USE_RESULT',
+                        toolId: block.toolId,
+                        duration: block.duration,
+                        result: {
+                          content: block.content,
+                          isError: block.isError,
+                          metadata: block.metadata,
                         },
                       });
+                      // Accumulate sub-agent token cost into main agent total
+                      const subTokenUsage = block.metadata?.tokenUsage as Record<string, number> | undefined;
+                      if (subTokenUsage) {
+                        routeDispatch({
+                          type: 'UPDATE_TOKEN_USAGE',
+                          usage: {
+                            inputTokens: subTokenUsage.inputTokens ?? 0,
+                            outputTokens: subTokenUsage.outputTokens ?? 0,
+                            cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
+                            cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                          },
+                        });
+                      }
                     }
                   }
+                };
+                if (batchedUpdates) {
+                  batchedUpdates(applyResults);
+                } else {
+                  applyResults();
                 }
 
                 // Dispatch to TUI: exclude results shown inline by use renderers
@@ -399,28 +422,40 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   metadata?: Record<string, unknown>;
                 } | undefined;
                 if (completed?.toolUseId) {
-                  routeDispatch({
-                    type: 'SET_TOOL_USE_RESULT',
-                    toolId: completed.toolUseId,
-                    duration: completed.duration,
-                    result: {
-                      content: completed.content ?? '',
-                      isError: completed.isError ?? false,
-                      metadata: completed.metadata,
-                    },
-                  });
-                  // Accumulate sub-agent token cost into main agent total
-                  const subTokenUsage = completed.metadata?.tokenUsage as Record<string, number> | undefined;
-                  if (subTokenUsage) {
+                  const toolId = completed.toolUseId;
+                  const duration = completed.duration;
+                  const content = completed.content ?? '';
+                  const isError = completed.isError ?? false;
+                  const cMetadata = completed.metadata;
+                  const applyCompleted = () => {
                     routeDispatch({
-                      type: 'UPDATE_TOKEN_USAGE',
-                      usage: {
-                        inputTokens: subTokenUsage.inputTokens ?? 0,
-                        outputTokens: subTokenUsage.outputTokens ?? 0,
-                        cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
-                        cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                      type: 'SET_TOOL_USE_RESULT',
+                      toolId,
+                      duration,
+                      result: {
+                        content,
+                        isError,
+                        metadata: cMetadata,
                       },
                     });
+                    // Accumulate sub-agent token cost into main agent total
+                    const subTokenUsage = cMetadata?.tokenUsage as Record<string, number> | undefined;
+                    if (subTokenUsage) {
+                      routeDispatch({
+                        type: 'UPDATE_TOKEN_USAGE',
+                        usage: {
+                          inputTokens: subTokenUsage.inputTokens ?? 0,
+                          outputTokens: subTokenUsage.outputTokens ?? 0,
+                          cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
+                          cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
+                        },
+                      });
+                    }
+                  };
+                  if (batchedUpdates) {
+                    batchedUpdates(applyCompleted);
+                  } else {
+                    applyCompleted();
                   }
                 }
               }

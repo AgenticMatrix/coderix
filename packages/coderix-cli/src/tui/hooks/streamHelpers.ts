@@ -16,7 +16,10 @@ interface PendingDelta {
   text: string;
 }
 
-export function useDeltaThrottle(dispatch: React.Dispatch<ChatAction>) {
+export function useDeltaThrottle(
+  dispatch: React.Dispatch<ChatAction>,
+  batchedUpdates?: ((fn: () => void) => void) | null,
+) {
   const pendingDeltasRef = useRef<PendingDelta[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -27,10 +30,17 @@ export function useDeltaThrottle(dispatch: React.Dispatch<ChatAction>) {
       clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
     }
-    for (const d of deltas) {
-      dispatch({ type: 'APPEND_BLOCK_DELTA', messageId: d.messageId, deltaType: d.deltaType, text: d.text });
+    const apply = () => {
+      for (const d of deltas) {
+        dispatch({ type: 'APPEND_BLOCK_DELTA', messageId: d.messageId, deltaType: d.deltaType, text: d.text });
+      }
+    };
+    if (batchedUpdates) {
+      batchedUpdates(apply);
+    } else {
+      apply();
     }
-  }, [dispatch]);
+  }, [dispatch, batchedUpdates]);
 
   const scheduleFlush = useCallback(() => {
     if (flushTimerRef.current !== null) return;

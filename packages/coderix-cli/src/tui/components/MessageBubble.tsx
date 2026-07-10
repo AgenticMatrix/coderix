@@ -22,6 +22,8 @@ interface MessageBubbleProps {
   theme?: string;
   /** When true, thinking blocks are not rendered (handled externally). */
   hideThinking?: boolean;
+  /** Maximum output lines for text blocks (streaming performance). */
+  maxLines?: number;
 }
 
 /** Extract display text from blocks (text blocks concatenated). */
@@ -104,7 +106,7 @@ function buildParamSummary(input: Record<string, unknown>): string {
  * Tool blocks are rendered via the tool registry (getToolUseRenderer / getToolResultRenderer),
  * allowing per-tool specialised renderers to be swapped in.
  */
-export function MessageBubble({ message, contentExpanded, theme, hideThinking }: MessageBubbleProps) {
+export function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines }: MessageBubbleProps) {
   const { role } = message;
   const { stdout } = useStdout();
   const [termWidth, setTermWidth] = useState(
@@ -373,7 +375,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
                     <Box key={idx} flexDirection="row">
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
-                        <MarkdownRenderer content={block.content} theme={theme} />
+                        <MarkdownRenderer content={block.content} theme={theme} maxLines={maxLines} />
                       </Box>
                     </Box>
                   );
@@ -389,7 +391,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking }:
           <Box flexDirection="row">
             <Box width={2} flexShrink={0} />
             <Box flexGrow={1}>
-              <MarkdownRenderer content={displayContent} theme={theme} />
+              <MarkdownRenderer content={displayContent} theme={theme} maxLines={maxLines} />
             </Box>
           </Box>
         ) : null}
