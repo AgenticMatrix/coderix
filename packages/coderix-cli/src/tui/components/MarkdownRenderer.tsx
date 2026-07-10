@@ -464,7 +464,7 @@ function InlineTokenElement({ token }: { token: InlineToken }) {
 
   if (type === 'math') {
     return (
-      <Text italic color="cyan">
+      <Text italic color="#88CCEE">
         {renderLatex(content)}
       </Text>
     );
@@ -575,11 +575,11 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
           paddingX={2}
           paddingY={1}
           borderStyle="round"
-          borderColor="cyan"
+          borderColor="#88CCEE"
           flexDirection="column"
         >
           {lines.map((line, i) => (
-            <Text key={i} italic color="cyan">
+            <Text key={i} italic color="#88CCEE">
               {line || ' '}
             </Text>
           ))}
@@ -782,7 +782,7 @@ interface MarkdownRendererProps {
  * - Bold (**text**) and italic (*text*)
  * - Inline code (`code`) with background
  * - Fenced code blocks (```lang ... ```) with border
- * - Inline math ($formula$) in cyan italic
+ * - Inline math ($formula$) in light blue italic
  * - Display math blocks ($$...$$) with rounded border
  * - Unordered lists (- item or * item)
  * - Horizontal rules (---, ***, ___)
