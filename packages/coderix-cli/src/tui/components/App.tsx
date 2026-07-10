@@ -506,7 +506,6 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         flexGrow={1}
         flexShrink={1}
         maxHeight={liveMaxHeight}
-        overflow={liveMaxHeight ? 'hidden' : undefined}
         paddingX={1}
       >
         {/* Sub-agent indicator header */}
@@ -536,7 +535,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
         <OffscreenFreeze frozen={state.isFrozen}>
 
           {live.map((message) => (
-            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking />
+            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking maxLines={liveMaxHeight} />
           ))}
 
           {/* Latest thinking block — always live, below tools/output, closest to input */}

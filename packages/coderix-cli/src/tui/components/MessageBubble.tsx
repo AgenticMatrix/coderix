@@ -106,6 +106,16 @@ function buildParamSummary(input: Record<string, unknown>): string {
  * Tool blocks are rendered via the tool registry (getToolUseRenderer / getToolResultRenderer),
  * allowing per-tool specialised renderers to be swapped in.
  */
+
+/** Truncate raw text to the last N lines.  Works at the string level (before
+ *  markdown parsing) so that React reconciliation is never starved — the
+ *  visible text prefix always grows continuously during streaming. */
+function truncateTextByLines(text: string, maxLines: number): string {
+  const lines = text.split('\n');
+  if (lines.length <= maxLines) return text;
+  return lines.slice(-maxLines).join('\n');
+}
+
 export function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines }: MessageBubbleProps) {
   const { role } = message;
   const { stdout } = useStdout();
@@ -371,11 +381,14 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking, m
                 }
 
                 if (block.type === 'text') {
+                  const textContent = maxLines
+                    ? truncateTextByLines(block.content, maxLines)
+                    : block.content;
                   return (
                     <Box key={idx} flexDirection="row">
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
-                        <MarkdownRenderer content={block.content} theme={theme} maxLines={maxLines} />
+                        <MarkdownRenderer content={textContent} theme={theme} />
                       </Box>
                     </Box>
                   );
@@ -391,7 +404,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking, m
           <Box flexDirection="row">
             <Box width={2} flexShrink={0} />
             <Box flexGrow={1}>
-              <MarkdownRenderer content={displayContent} theme={theme} maxLines={maxLines} />
+              <MarkdownRenderer content={maxLines ? truncateTextByLines(displayContent, maxLines) : displayContent} theme={theme} />
             </Box>
           </Box>
         ) : null}

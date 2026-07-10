@@ -853,9 +853,8 @@ export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererP
   const maxOutputWidth = Math.max(20, termWidth - 4);
   const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
 
-  // Truncate blocks when maxLines is set (streaming performance optimization)
+  // Truncate blocks when maxLines is set (prevents pushing controls)
   let visibleBlocks = blocks;
-  let truncated = false;
   if (maxLines && maxLines > 0) {
     let lineCount = 0;
     let truncateAt = blocks.length;
@@ -863,7 +862,6 @@ export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererP
       const est = estimateBlockLines(blocks[i]!, maxOutputWidth);
       if (lineCount + est > maxLines) {
         truncateAt = i;
-        truncated = true;
         break;
       }
       lineCount += est;
@@ -876,9 +874,6 @@ export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererP
       {visibleBlocks.map((block, i) => (
         <BlockElement key={i} block={block} termWidth={maxOutputWidth} theme={theme} textColor={textColor} />
       ))}
-      {truncated && (
-        <Text dimColor>{'... ' + (blocks.length - visibleBlocks.length) + ' more blocks ...'}</Text>
-      )}
     </Box>
   );
 }
