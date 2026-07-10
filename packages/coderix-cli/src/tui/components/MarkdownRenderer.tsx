@@ -459,7 +459,7 @@ function InlineTokenElement({ token }: { token: InlineToken }) {
   const { type, content } = token;
 
   if (type === 'code') {
-    return <Text>{content}</Text>;
+    return <Text color="#88CCEE">{content}</Text>;
   }
 
   if (type === 'math') {
