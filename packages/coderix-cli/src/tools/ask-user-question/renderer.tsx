@@ -41,7 +41,7 @@ export function AskUserQuestionRenderer(
           <Text bold>AskUserQuestion</Text>
           {firstHeader ? <Text bold> {firstHeader}</Text> : null}
         </Text>
-        <Box paddingLeft={4} flexDirection="column">
+        <Box paddingLeft={3} flexDirection="column">
           {questions?.map((q, i) => {
             const answer = answers?.[q.header];
             const answerStr = answer
