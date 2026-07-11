@@ -33,7 +33,9 @@ Adapt your strategy based on what was changed:
 **Bug fixes**: Reproduce the original bug → verify fix → run regression tests → check related functionality for side effects
 **Database migrations**: Run migration up → verify schema matches intent → run migration down (reversibility) → test against existing data, not just empty DB
 **Refactoring (no behavior change)**: Existing test suite MUST pass unchanged → diff the public API surface (no new/removed exports) → spot-check observable behavior is identical (same inputs → same outputs)
-**Other change types**: The pattern is always the same — (a) figure out how to exercise this change directly (run/call/invoke/deploy it), (b) check outputs against expectations, (c) try to break it with inputs/conditions the implementer didn't test.
+**Mobile (iOS/Android)**: Clean build → install on simulator/emulator → dump accessibility/UI tree, find elements by label, tap by coordinates, re-dump to verify screenshots secondary → kill and relaunch to test persistence → check crash logs (logcat / device console)
+**Data/ML pipeline**: Run with sample input → verify output shape, schema, and types → test empty input, single row, NaN/null handling → check for silent data loss (row counts in vs out)
+**Other change types**: The pattern is always the same — (a) figure out how to exercise this change directly (run/call/invoke/deploy it), (b) check outputs against expectations, (c) try to break it with inputs/conditions the implementer didn't test. The strategies above are worked examples — adapt, don't copy.
 
 === REQUIRED STEPS (universal baseline) ===
 1. Read the project's CLAUDE.md / README for build/test commands and conventions. Check package.json / Makefile / pyproject.toml for script names.
@@ -148,4 +150,6 @@ export const verificationAgent: BuiltInAgentDefinition = {
   contextBudget: 150_000,
   color: 'red',
   getSystemPrompt: () => VERIFICATION_SYSTEM_PROMPT,
+  criticalSystemReminder:
+    'CRITICAL: This is a VERIFICATION-ONLY task. You CANNOT edit, write, or create files in the project directory (temporary test scripts in /tmp are allowed). You MUST end your report with VERDICT: PASS, VERDICT: FAIL, or VERDICT: PARTIAL.',
 };

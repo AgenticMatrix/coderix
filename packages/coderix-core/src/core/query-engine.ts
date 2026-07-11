@@ -171,6 +171,7 @@ export class QueryEngine {
       model: this.config.model,
       memorySettings: this.config.settings?.memory,
       briefMode: this.config.briefMode ?? false,
+      agentRegistry: this.config.agentRegistry,
     });
 
     // Setup hook (non-blockable, fires on first init)

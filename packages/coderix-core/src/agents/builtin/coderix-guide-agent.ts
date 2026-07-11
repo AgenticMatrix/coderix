@@ -35,11 +35,11 @@ function getGuideSystemPrompt(): string {
 
 **Approach:**
 1. Determine which domain the user's question falls into
-2. Use WebFetch to fetch the relevant documentation
+2. Use WebFetch to fetch the relevant documentation (fetch from the project's docs site)
 3. Identify the most relevant sections from the docs
 4. Provide clear, actionable guidance based on documentation
 5. Use WebSearch if docs don't cover the topic
-6. Reference local project files (CLAUDE.md, .coderix/ directory) when relevant using bash/read/glob/grep
+6. Reference local project files (CODERIX.md, .coderix/ directory) when relevant using bash/read/glob/grep
 
 **Guidelines:**
 - Always prioritize documentation over assumptions

@@ -216,7 +216,10 @@ function buildForkedMessages(
     ],
   };
 
-  return [forkMessage];
+  // Build cache-identical fork messages for prompt cache sharing.
+  // Include full parent history so the fork has context, followed by the
+  // fork prefix message with placeholder tool_results and directive.
+  return [...parentMessages, forkMessage];
 }
 
 /** Worktree path-translation notice injected when fork uses worktree isolation. */
@@ -247,6 +250,8 @@ interface RunAgentParams {
   subToolRegistry: ToolRegistry;
   subAbortController: AbortController;
   cwd: string;
+  /** Enable Anthropic prompt cache annotations (for fork agents). */
+  enableCacheControl?: boolean;
 }
 
 async function runAgentLoop(params: RunAgentParams): Promise<{
@@ -262,7 +267,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   const {
     agentId, agentType, prompt, agentSpawn,
     systemPromptText, effectiveModel, effectiveMaxTurns, effectiveContextBudget,
-    initialMessages, subToolRegistry, subAbortController, cwd,
+    initialMessages, subToolRegistry, subAbortController, cwd, enableCacheControl,
   } = params;
 
   const subPermissionEngine = new PermissionEngine(cwd);
@@ -306,6 +311,7 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
       maxToolConcurrency: DEFAULT_MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
       hookManager: agentSpawn.hookManager,
+      enableCacheControl,
     });
 
     for await (const msg of generator) {
@@ -784,11 +790,12 @@ async function executeFork(
     }
   }
 
-  // Inherit parent tools (minus globally disallowed)
+  // Inherit parent tools exactly — no filtering for fork. Byte-identical
+  // tool definitions preserve the API request prefix for prompt cache hits.
+  // Recursion is prevented by the isInForkChild() guard above.
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
-  const filteredDefs = parentDefs.filter(t => !GLOBAL_DISALLOWED_FOR_SUBAGENTS.has(t.name));
   const subToolRegistry = new ToolRegistry();
-  for (const def of filteredDefs) {
+  for (const def of parentDefs) {
     const registration = agentSpawn.toolRegistry.get(def.name);
     if (registration) {
       subToolRegistry.register(def, registration.execute);
@@ -858,6 +865,7 @@ async function executeFork(
         systemPromptText, effectiveModel, subToolRegistry, subAbortController,
         effectiveMaxTurns, effectiveContextBudget, initialMessages,
         cwd,
+        enableCacheControl: true,
       }).then(async result => {
         let cleanupNote = '';
         if (worktreePath) {
@@ -933,6 +941,7 @@ async function executeFork(
       systemPromptText, effectiveModel, subToolRegistry, subAbortController,
       effectiveMaxTurns, effectiveContextBudget, initialMessages,
       cwd,
+      enableCacheControl: true,
     }),
   );
 

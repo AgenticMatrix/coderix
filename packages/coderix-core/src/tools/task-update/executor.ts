@@ -36,9 +36,15 @@ export const execute: ToolExecutor = async (input, _opts) => {
 
   let content = `Task #${task.id} updated: ${updatedFields.join(', ')}${statusNote}`;
 
-  // Verification nudge: when the main-thread agent closes out the last task
-  // in a list of 3+ tasks and none was a verification step, append a reminder.
+  // TaskList follow-up nudge: when a task is marked completed, remind the
+  // agent to check for the next available task.
   if (statusInput === 'completed') {
+    content +=
+      '\n\nTask completed. Call TaskList now to find your next available task ' +
+      'or check if your work unblocked others.';
+
+    // Verification nudge: when the main-thread agent closes out the last task
+    // in a list of 3+ tasks and none was a verification step, append a reminder.
     const allTasks = await listTasks();
     const allDone = allTasks.every(t => t.status === 'completed');
     if (

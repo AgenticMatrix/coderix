@@ -3,7 +3,7 @@ import type { ToolSchema } from '../types.js';
 export const schema: ToolSchema = {
   name: 'TaskCreate',
   description:
-    'Create a new task in the task list. Each task has a unique ID and tracks its own status and dependencies. Use this to break complex work into manageable, trackable steps.',
+    'Create a new task in the task list. Each task has a unique ID and tracks its own status and dependencies.\n\nUse this proactively for: (1) complex multi-step tasks with 3+ steps, (2) non-trivial tasks that need careful planning, (3) the user provides multiple tasks, (4) after receiving new instructions — immediately capture them as tasks, (5) when you start working — mark it in_progress BEFORE beginning.\n\nSkip for: single straightforward tasks, trivial tasks, purely conversational/informational requests.\n\nCreate tasks with clear, actionable subjects in imperative form. After creating tasks, use TaskUpdate to set up dependencies.',
   input_schema: {
     type: 'object',
     properties: {

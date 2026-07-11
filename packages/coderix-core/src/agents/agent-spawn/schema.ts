@@ -2,18 +2,50 @@ import type { ToolSchema } from '../../tools/types.js';
 
 export const schema: ToolSchema = {
   name: 'Agent',
-  description: `Launch a new agent to handle complex, multi-step tasks. Each agent type has
-specific capabilities and tools available to it.
+  description: `Launch a new agent to handle complex, multi-step tasks autonomously.
 
-Four spawn paths:
-- Standard: provide agent_type to launch a pre-defined sub-agent
-- Fork: omit agent_type to fork the parent with full context (faster, shares prompt cache)
-- Swarm teammate: provide team_name + name to spawn a process-level teammate
-  (tmux/iTerm2/in-process backends — requires CODERIX_EXPERIMENTAL_AGENT_TEAMS)
-- Resume: provide agent_id + resume=true to continue a stopped/completed agent
-  (restores full conversation transcript and toolset)
+The Agent tool spawns specialized sub-agents that work in parallel. Each agent type has specific capabilities:
+- explore: Fast, read-only codebase search. Use for finding files by pattern (e.g. "src/components/**/*.tsx"), searching for symbols, or answering "where is X defined?".
+- plan: Architecture design before implementation. Use for designing the strategy and identifying critical files for a task.
+- general-purpose: Full tool access for complex multi-step research and implementation.
 
-Sub-agents cannot spawn further sub-agents (depth limit = 1).`,
+Prefer to fork (omit agent_type) when the work benefits from full conversation context — forking inherits your history and shares the prompt cache, so it's faster and smarter about the task. Fork by default for open-ended research and for implementation work that spans more than a couple of files.
+
+When NOT to use the Agent tool:
+- Reading a specific file path — use Read directly, it's faster
+- Searching for a specific class or function definition — use Glob or Grep directly
+- Searching code within 1-3 known files — use Read directly
+- Simple, single-step tasks you can handle without delegation overhead
+
+Usage notes:
+- Always include a short description (3-5 words) summarizing what the agent will do.
+- Launch multiple independent agents in parallel by sending a single message with multiple Agent tool calls — this maximizes throughput.
+- When the agent finishes, it returns one message back to you. The result is not visible to the user — relay a concise summary to the user.
+- You can run agents in the background using the background parameter. You will be notified on completion — do NOT sleep, poll, or proactively check on their progress.
+- Use foreground (the default) when you need the agent's results before you can proceed. Use background when you have genuinely independent work to do in parallel.
+- To continue a previously spawned agent, use agent_id + resume: true. This restores the agent's full transcript and is preferred over spawning a new one for follow-up work.
+- Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.).
+- If the agent description mentions it should be used proactively, try to use it without the user asking first.
+- If the user specifies "in parallel", you MUST send a single message with multiple Agent tool use content blocks.
+- isolation: "worktree" runs the agent in a temporary git worktree, isolating all file operations.
+
+Writing the prompt:
+The agent starts with zero context — it hasn't seen your conversation or the user's request. Brief it like a smart colleague who just walked in:
+- Explain what you're trying to accomplish and why.
+- Describe what you've already learned or ruled out.
+- Give enough context for the agent to make judgment calls instead of blindly following a narrow instruction.
+- If you need a short response, say so ("report in under 200 words").
+- Include exact file paths, line numbers, and what specifically to change.
+
+Never delegate understanding. Don't write "based on your findings, fix the bug" or "based on the research, implement it." Write prompts that prove you understood the situation.
+
+Spawn paths:
+- Standard: provide agent_type to launch a pre-defined sub-agent.
+- Fork: omit agent_type to fork the parent with full context.
+- Swarm teammate: provide team_name + name for a process-level teammate (requires CODERIX_EXPERIMENTAL_AGENT_TEAMS).
+- Resume: provide agent_id + resume: true to continue a stopped or completed agent.
+
+Sub-agents cannot spawn further sub-agents.`,
 
   input_schema: {
     type: 'object',

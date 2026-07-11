@@ -86,7 +86,8 @@ const WHAT_NOT_TO_SAVE_SECTION = [
   '- Commit history, recent changes, or authorship → use `git log` / `git blame`.',
   '- Specific bugs and their fixes → the corrected code and the commit message are the record.',
   '- Anything already written in CODERIX.md → that file serves the same purpose.',
-  '- Transient state: work-in-progress, current task details, open questions.',
+  '- Ephemeral task details: in-progress work, temporary state, current conversation context.',
+  '- Debugging solutions or fix recipes → the fix is in the code; the commit message has context.',
   '',
   'This rule holds even when the user says "remember this for next time."',
   'If they ask you to memorize a weekly activity summary, push back: ask what',
@@ -98,13 +99,16 @@ const WHAT_NOT_TO_SAVE_SECTION = [
 const WHEN_TO_ACCESS_SECTION = [
   '## When to read memories',
   '- If the conversation touches a topic you have stored memories about, check them.',
-  '- Always look up memories when the user says "what do you remember" or "recall".',
+  '- If the user references prior-conversation work or says "what do you remember"',
+  '  or "recall", you MUST access memory.',
   '- If the user tells you to disregard memories: act as if none exist for this query.',
   '  Do not mention, compare against, or apply any recalled information.',
   '- Memories age. A stored fact reflects what was true *at the time it was written*.',
   '  Before relying on a memory, verify it against the file system or codebase.',
   '  When a memory disagrees with what you observe now, the current state wins —',
   '  and you should update or delete the memory to prevent future confusion.',
+  '- A memory that names a specific function, file, or flag is a claim it existed',
+  '  when the memory was written: verify before acting on it.',
 ];
 
 /** Rules for safely acting on information retrieved from memory. */

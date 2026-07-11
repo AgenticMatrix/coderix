@@ -146,7 +146,7 @@ export function createCallModelFromClient(
   model: string,
 ): (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage> {
   return async function* (params: CallModelParams) {
-    const { system, messages, tools, signal } = params;
+    const { system, messages, tools, signal, cacheControl, thinking: thinkingConfig } = params;
 
     // Convert messages to Anthropic format
     const { system: extraSystem, messages: apiMessages } =
@@ -156,6 +156,11 @@ export function createCallModelFromClient(
     const combinedSystem = [system, extraSystem]
       .filter(Boolean)
       .join('\n\n');
+
+    // Build system parameter: use cache_control annotation when enabled (fork agents)
+    const systemParam = cacheControl && combinedSystem
+      ? [{ type: 'text' as const, text: combinedSystem, cache_control: { type: 'ephemeral' as const } }]
+      : (combinedSystem || undefined);
 
     const anthropicTools = tools.length > 0 ? toAnthropicTools(tools) : undefined;
 
@@ -171,11 +176,11 @@ export function createCallModelFromClient(
       const stream = await client.messages.create({
         model,
         max_tokens: 32768,
-        system: combinedSystem || undefined,
+        system: systemParam,
         messages: apiMessages,
         ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
         stream: true,
-        thinking: { type: 'enabled', budget_tokens: 16000 },
+        thinking: thinkingConfig ?? { type: 'enabled', budget_tokens: 16000 },
       });
 
       for await (const event of stream) {

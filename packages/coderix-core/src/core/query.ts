@@ -55,6 +55,7 @@ import { classifyError } from './error-recovery.js';
 import { loadCodeAgentContext } from './context-loader.js';
 import { loadMemoryPrompt } from '../memory/prompt-builder.js';
 import { loadMemoryConfig } from '../memory/config.js';
+import { listTasks } from '../tasks/store.js';
 import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
 import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
 import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
@@ -98,6 +99,8 @@ export interface QueryConfig {
   readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
   /** Clear transient caches after compaction. */
   clearCaches?: () => void;
+  /** When true, pass cacheControl to the model call (fork sub-agents). */
+  enableCacheControl?: boolean;
 }
 
 export interface CallModelParams {
@@ -105,6 +108,10 @@ export interface CallModelParams {
   messages: Message[];
   tools: unknown[];
   signal: AbortSignal;
+  /** When true, annotate the system prompt with cache_control for Anthropic prompt caching. */
+  cacheControl?: boolean;
+  /** Optional thinking config override. Falls back to enabled(16000) if omitted. */
+  thinking?: { type: 'enabled'; budget_tokens: number } | { type: 'disabled' };
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +129,28 @@ function createToolErrorResult(toolUseId: string, error: string): ToolResultBloc
     content: error,
     is_error: true,
   };
+}
+
+const TASK_TOOL_NAMES = new Set(['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']);
+
+/**
+ * Check whether any task management tools were used in the most recent
+ * assistant message. Used to decide whether to inject a task reminder.
+ */
+function recentlyUsedTaskTools(messages: Message[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== 'assistant') continue;
+    if (!Array.isArray(msg.content)) continue;
+    for (const block of msg.content) {
+      if (block.type === 'tool_use' && block.name && TASK_TOOL_NAMES.has(block.name)) {
+        return true;
+      }
+    }
+    // Only check the most recent assistant message
+    break;
+  }
+  return false;
 }
 
 // ── Dynamic bash risk assessment ────────────────────────────────────
@@ -194,6 +223,8 @@ interface ExecuteSingleToolOpts {
   subAgentRegistry?: SubAgentRegistry;
   systemPromptAssembler?: SystemPromptAssembler;
   agentRegistry?: AgentRegistry;
+  /** Rendered system prompt for fork sub-agent inheritance. */
+  systemPrompt?: SystemPrompt;
   setPermissionMode?: (mode: string) => void;
   getPermissionMode?: () => PermissionMode;
   planModeState?: PlanModeState | null;
@@ -206,7 +237,7 @@ async function executeSingleTool(
   toolBlock: ToolUseBlock,
   opts: ExecuteSingleToolOpts,
 ): Promise<ToolResultBlock> {
-  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, setPermissionMode, getPermissionMode, planModeState, getCoreState, emitToolRequest, readFileTracker } = opts;
+  const { sessionId, cwd, toolRegistry, checkpointManager, sessionManager, hookManager, abortController, callModel, subAgentRegistry, systemPromptAssembler, agentRegistry, systemPrompt, setPermissionMode, getPermissionMode, planModeState, getCoreState, emitToolRequest, readFileTracker } = opts;
   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
 
   // PreToolUse hook
@@ -246,6 +277,7 @@ async function executeSingleTool(
       hookManager,
       systemPromptAssembler,
       agentRegistry,
+      renderedSystemPrompt: systemPrompt,
     } : undefined,
   };
   const toolStartTime = Date.now();
@@ -342,6 +374,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
   let systemPrompt = config.systemPrompt;
   let turnCount = 0;
   let totalCost = 0;
+
+  // ── Task reminder throttle ──────────────────────────────────────
+  // Only inject task reminders every N turns to avoid spamming.
+  const TASK_REMINDER_INTERVAL = 10;
+  let turnsSinceTaskReminder = TASK_REMINDER_INTERVAL; // Start ready
 
   // ── Plan mode state (lives across turns while in plan mode) ──
   // Wrapped in an object so TypeScript doesn't narrow the let binding
@@ -470,6 +507,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       subAgentRegistry: config.subAgentRegistry,
       systemPromptAssembler: config.systemPromptAssembler,
       agentRegistry: config.agentRegistry,
+      systemPrompt: config.systemPrompt,
       setPermissionMode: (mode: string) => {
         const previousMode = permissionEngine.getMode();
         const newMode = mode as PermissionMode;
@@ -526,6 +564,46 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         pm.current.needsExitAttachment = false;
       }
 
+      // ── Task status reminder ──────────────────────────────────────
+      // When there are active tasks but the agent hasn't used task
+      // management tools recently, inject a reminder to update task
+      // statuses. Throttled to at most once per TASK_REMINDER_INTERVAL
+      // turns to avoid spamming.
+      if (agentRole !== 'worker') {
+        try {
+          const usedTaskTools = recentlyUsedTaskTools(messages);
+          if (usedTaskTools) {
+            // Agent is actively managing tasks — reset the counter
+            turnsSinceTaskReminder = 0;
+          }
+
+          if (turnsSinceTaskReminder >= TASK_REMINDER_INTERVAL) {
+            const activeTasks = (await listTasks()).filter(
+              t => t.status === 'pending' || t.status === 'in_progress',
+            );
+            if (activeTasks.length > 0 && !usedTaskTools) {
+              const taskLines = activeTasks.slice(0, 8).map(
+                t => `- #${t.id} [${t.status}] ${t.subject}`,
+              );
+              const overflow = activeTasks.length > 8
+                ? `\n... and ${activeTasks.length - 8} more tasks`
+                : '';
+              const reminder =
+                '<system-reminder>\n' +
+                '## Task Status Reminder\n\n' +
+                'You have active tasks. Use TaskUpdate to mark them in_progress before\n' +
+                'starting work, and completed as soon as you finish. Do not batch updates.\n\n' +
+                taskLines.join('\n') + overflow + '\n' +
+                '</system-reminder>';
+              systemText = reminder + '\n\n' + systemText;
+              turnsSinceTaskReminder = 0;
+            }
+          }
+        } catch {
+          // Task store might not be available — silently skip
+        }
+      }
+
       // === PreMessage hook (blockable) ===
       if (hookManager) {
         const messageSummaries = messages.slice(-10).map((m) => ({
@@ -574,6 +652,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         messages,
         tools: toolDefinitions,
         signal: abortController.signal,
+        cacheControl: config.enableCacheControl,
       })) {
         // ── Stream events ──────────────────────────────────────────
         if ('type' in event) {
@@ -1119,6 +1198,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     }
 
     turnCount++;
+    turnsSinceTaskReminder++;
 
     // ── Increment plan mode turn counter ───────────────────────
     if (pm.current && permissionEngine.getMode() === PermissionMode.PLAN) {

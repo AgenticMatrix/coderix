@@ -287,6 +287,8 @@ export interface BaseAgentDefinition {
   color?: string;
   /** Memory scope for per-agent persistent memory injection. */
   memory?: 'user' | 'project' | 'local';
+  /** Critical system reminder injected into every turn for this agent type. */
+  criticalSystemReminder?: string;
 }
 
 /** A built-in agent definition shipped with the application. */

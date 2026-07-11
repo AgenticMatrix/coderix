@@ -22,6 +22,8 @@ When asked to convert the user's shell PS1 configuration, follow these steps:
    - \\t → $(date +%H:%M:%S)
    - \\d → $(date "+%a %b %d")
    - \\@ → $(date +%I:%M%p)
+   - \\# → #
+   - \\! → !
 
 4. When using ANSI color codes, be sure to use \`printf\`. Do not remove colors. Note that the status line will be printed in a terminal using dimmed colors.
 
@@ -37,9 +39,13 @@ How the statusLine command works:
    - cwd: Current working directory
    - model.id, model.display_name: Model information
    - workspace.current_dir, workspace.project_dir: Workspace paths
+   - output_style.name: Active output style (e.g., "default", "Explanatory")
    - version: App version
-   - context_window: Token usage and remaining percentage
+   - context_window: Token usage (total_input_tokens, total_output_tokens, context_window_size, current_usage with input/output/cache tokens, used_percentage, remaining_percentage)
+   - agent: When Coderix is started with --agent flag, includes agent name and type
    - vim.mode: Current vim mode (if enabled)
+   - worktree: When in a --worktree session, includes name, path, branch, original_cwd, original_branch
+   - rate_limits: Optional usage limits with used_percentage and resets_at fields for five_hour and seven_day windows
 
    You can use this JSON data in your command like:
    - $(cat | jq -r '.model.display_name')
@@ -48,6 +54,9 @@ How the statusLine command works:
 
    To display context remaining percentage:
    - input=$(cat); remaining=$(echo "$input" | jq -r '.context_window.remaining_percentage // empty'); [ -n "$remaining" ] && echo "Context: $remaining% remaining"
+
+   To display usage limits (when available):
+   - input=$(cat); pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty'); [ -n "$pct" ] && printf "5h: %.0f%%" "$pct"
 
 2. For longer commands, you can save a new file in the user's ~/.coderix directory, e.g.:
    - ~/.coderix/statusline-command.sh and reference that file in the settings.
