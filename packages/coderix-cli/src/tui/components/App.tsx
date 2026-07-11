@@ -7,7 +7,7 @@ import { PermissionMode, getSubAgentRegistry } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
-import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
+import { ThinkingBlockRenderer, ActivityLine, type ActivityPhase } from './ThinkingBlockRenderer.js';
 import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
@@ -516,10 +516,43 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   if (!state.isFrozen) frozenRef.current = state.messages;
   const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
 
-  // Extract the most recent thinking block to render in the live zone.
-  // Only the latest thinking is shown; once a new thinking session starts,
-  // the previous one is replaced.
+  // ── Turn-level phase detection ────────────────────────────────
+  // thinking: latest thinking block is still in progress (no duration)
+  // executing: last message has active tools or running sub-agents
+  // streaming: assistant text is arriving
+  // idle: no activity
   const latestThinking = useMemo(() => findLatestThinking(displayMessages), [displayMessages]);
+
+  const currentPhase = useMemo<ActivityPhase>(() => {
+    if (state.error) return 'idle';
+    if (latestThinking && latestThinking.duration == null) return 'thinking';
+    const lastMsg = state.messages[state.messages.length - 1];
+    if (lastMsg && hasActiveTools(lastMsg)) return 'executing';
+    for (const agent of Object.values(agentsRef.current)) {
+      if (agent.status === 'running') return 'executing';
+    }
+    if (state.isStreaming) return 'streaming';
+    return 'idle';
+  }, [state.error, latestThinking, state.messages, state.isStreaming, agentTick]);
+
+  // Turn elapsed timer — resets when phase becomes idle
+  const turnStartRef = useRef<number>(Date.now());
+  const [turnElapsed, setTurnElapsed] = useState(0);
+
+  useEffect(() => {
+    if (currentPhase === 'idle') {
+      setTurnElapsed(0);
+      return;
+    }
+    turnStartRef.current = Date.now();
+    setTurnElapsed(0);
+  }, [currentPhase === 'idle']);
+
+  useEffect(() => {
+    if (currentPhase === 'idle') return;
+    const id = setInterval(() => setTurnElapsed(Date.now() - turnStartRef.current), 100);
+    return () => clearInterval(id);
+  }, [currentPhase]);
 
   // During streaming, keep only the LAST message live.
   // Everything else goes to <Static> and is never redrawn —
@@ -607,14 +640,22 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
             <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking maxLines={liveMaxHeight} />
           ))}
 
-          {/* Latest thinking block — always live, below tools/output, closest to input */}
+          {/* Activity line — shows for all active phases (Thinking/Executing/Streaming) */}
+          {currentPhase !== 'idle' && !state.isFrozen && (
+            <ActivityLine
+              phase={currentPhase}
+              turnElapsed={turnElapsed}
+              turnOutputTokens={state.turnOutputTokens}
+            />
+          )}
+
+          {/* Thinking content (collapsible) — stays visible after thinking completes */}
           {latestThinking && !state.isFrozen && (
             <ThinkingBlockRenderer
               content={latestThinking.block.content}
               thinkingExpanded={latestThinking.block.expanded}
               thinkingDuration={latestThinking.duration}
               thinkingTokens={latestThinking.tokens}
-              turnOutputTokens={state.turnOutputTokens}
             />
           )}
 
