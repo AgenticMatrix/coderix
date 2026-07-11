@@ -31,17 +31,17 @@ export function ExitPlanModeRenderer(
   if (isDone) {
     const planFile = props.result?.metadata?.planFile as string | undefined;
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column">
         <Text>
           <Text color="green">● </Text>
           <Text bold>ExitPlanMode</Text>
           <Text dimColor> plan approved</Text>
         </Text>
-        {planFile && (
+        {planFile ? (
           <Box paddingLeft={3}>
-            <Text dimColor>Saved to {planFile}</Text>
+            <Text dimColor>⎿ Saved to {planFile}</Text>
           </Box>
-        )}
+        ) : null}
       </Box>
     );
   }

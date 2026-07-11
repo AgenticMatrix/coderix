@@ -33,6 +33,7 @@ import { AskUserQuestionResultRenderer } from './ask-user-question/result-render
 import { EnterPlanModeRenderer } from './enter-plan-mode/renderer.js';
 import { EnterPlanModeResultRenderer } from './enter-plan-mode/result-renderer.js';
 import { ExitPlanModeRenderer } from './exit-plan-mode/renderer.js';
+import { ExitPlanModeResultRenderer } from './exit-plan-mode/result-renderer.js';
 import { NotebookEditRenderer } from './notebook-edit/renderer.js';
 import { AgentRenderer } from './agent/renderer.js';
 import { SendMessageRenderer } from './send-message/renderer.js';
@@ -109,6 +110,7 @@ resultRendererByName.set('WebFetch', WebFetchResultRenderer);
 resultRendererByName.set('WebSearch', WebSearchResultRenderer);
 resultRendererByName.set('write', WriteResultRenderer);
 resultRendererByName.set('EnterPlanMode', EnterPlanModeResultRenderer);
+resultRendererByName.set('ExitPlanMode', ExitPlanModeResultRenderer);
 resultRendererByName.set('AskUserQuestion', AskUserQuestionResultRenderer);
 
 // Generic fallback for known (executor-less) tool names
