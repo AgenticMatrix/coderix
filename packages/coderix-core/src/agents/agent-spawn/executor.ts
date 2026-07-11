@@ -356,10 +356,18 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
           break;
         case 'system':
           if (msg.subtype === 'progress') {
+            const usage = subSessionManager.getActive().tokenUsage;
             agentSpawn.subAgentRegistry.update(agentId, {
               turnCount: assistantTurnCount,
               messageCount: transcript.length,
               toolCount,
+              tokenUsage: {
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                cacheCreationInputTokens: usage.cacheCreationInputTokens,
+                cacheReadInputTokens: usage.cacheReadInputTokens,
+                totalTokens: usage.totalTokens,
+              },
             });
           }
           break;

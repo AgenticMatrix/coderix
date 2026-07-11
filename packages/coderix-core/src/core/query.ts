@@ -1066,6 +1066,16 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     });
     if (usage.totalCost) sessionManager.addCost(usage.totalCost);
 
+    // Yield cumulative session token usage so sub-agents can forward
+    // per-turn tokens to the TUI for real-time cost accumulation.
+    const sessionUsage = sessionManager.getActive()?.tokenUsage;
+    if (sessionUsage) {
+      yield {
+        type: 'system', subtype: 'progress',
+        data: { tokenUsage: { ...sessionUsage } },
+      };
+    }
+
     // === Stop hook (end-of-turn) ===
     if (hookManager) {
       const recentMessages = messages.slice(-5).map((m) => ({

@@ -174,12 +174,20 @@ export interface DeferredQuestion {
 }
 
 export interface ToolProgress {
-  toolName: string;
-  toolUseId: string;
-  status: 'started' | 'running' | 'completed';
+  toolName?: string;
+  toolUseId?: string;
+  status?: 'started' | 'running' | 'completed';
   message?: string;
   percent?: number;
   is_error?: boolean;
+  /** Cumulative session token usage (yielded every turn for real-time cost tracking). */
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationInputTokens?: number;
+    cacheReadInputTokens?: number;
+    totalTokens?: number;
+  };
 }
 
 export interface CompactMetadata {

@@ -4,6 +4,7 @@ import { Box, Text, Static, measureElement, useStdout } from 'ink';
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
 import { PermissionMode, getSubAgentRegistry } from '@coderix/core';
+import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
 import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
@@ -184,32 +185,79 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     engine.setBriefMode(state.briefMode);
   }, [state.briefMode, engine]);
 
-  // ── Agent cache cleanup ───────────────────────────────────────
-  // When an agent finishes (done / error / stopped), evict its
-  // transcript from subAgentMessageCache and free the raw transcript
-  // on the SubAgentRecord to reduce memory pressure.
-  const agents = useAppState(s => s.agents);
+  // ── Agent state via manual subscription (avoids full App re-render) ──
+  // useAppState(s => s.agents) would cause the entire App to re-render on
+  // every agent_update event (1-5/sec during sub-agent execution), which
+  // cascades through expensive useMemo/useEffect blocks and makes the TUI
+  // unresponsive during sub-agent activity.
+  //
+  // Instead, we subscribe directly to the store and keep agent state in a
+  // ref. Token deltas dispatch UPDATE_TOKEN_USAGE without triggering React
+  // re-renders. Only meaningful status transitions (start/stop) cause a
+  // lightweight re-render via agentTick.
+  const agentsRef = useRef<Record<string, SubAgentRecord>>({});
+  const [agentTick, setAgentTick] = useState(0);
   const subAgentViewIdRef = useRef(state.subAgentView?.agentId ?? null);
   subAgentViewIdRef.current = state.subAgentView?.agentId ?? null;
   const prevAgentStatusesRef = useRef<Record<string, string>>({});
+  const agentTokensRef = useRef<Record<string, { input: number; output: number; cacheCreation: number; cacheRead: number }>>({});
 
   useEffect(() => {
-    for (const [id, agent] of Object.entries(agents)) {
-      const prevStatus = prevAgentStatusesRef.current[id];
-      const curStatus = agent.status;
+    const unsub = store.subscribe(() => {
+      const next = store.getState().agents;
+      const prev = agentsRef.current;
 
-      if (prevStatus === 'running' && curStatus !== 'running') {
-        // Agent just finished — evict from TUI message cache
-        // (unless currently viewing it). Keep the raw transcript in
-        // the registry so the user can re-enter the panel later.
-        if (subAgentViewIdRef.current !== id) {
-          dispatch({ type: 'EVICT_AGENT_CACHE', agentId: id });
+      // Detect status transitions for cache eviction and tick updates
+      let needsTick = false;
+      for (const [id, agent] of Object.entries(next)) {
+        const prevStatus = prevAgentStatusesRef.current[id];
+        const curStatus = agent.status;
+        if (prevStatus === 'running' && curStatus !== 'running') {
+          if (subAgentViewIdRef.current !== id) {
+            dispatch({ type: 'EVICT_AGENT_CACHE', agentId: id });
+          }
+          needsTick = true;
+        } else if (prevStatus !== 'running' && curStatus === 'running') {
+          needsTick = true;
         }
+        prevAgentStatusesRef.current[id] = curStatus;
+      }
+      // Clean up stale entries from prevAgentStatusesRef
+      for (const id of Object.keys(prevAgentStatusesRef.current)) {
+        if (!next[id]) delete prevAgentStatusesRef.current[id];
       }
 
-      prevAgentStatusesRef.current[id] = curStatus;
-    }
-  }, [agents]);
+      // Token delta tracking — dispatch only the incremental cost
+      for (const [id, agent] of Object.entries(next)) {
+        if (agent.status !== 'running') continue;
+        const tu = agent.tokenUsage;
+        if (!tu) continue;
+        const prevTokens = agentTokensRef.current[id] || { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
+        const curr = {
+          input: tu.inputTokens,
+          output: tu.outputTokens,
+          cacheCreation: tu.cacheCreationInputTokens ?? 0,
+          cacheRead: tu.cacheReadInputTokens ?? 0,
+        };
+        const deltaInput = curr.input - prevTokens.input;
+        const deltaOutput = curr.output - prevTokens.output;
+        const deltaCacheCreation = curr.cacheCreation - prevTokens.cacheCreation;
+        const deltaCacheRead = curr.cacheRead - prevTokens.cacheRead;
+        if (deltaInput > 0 || deltaOutput > 0 || deltaCacheCreation > 0 || deltaCacheRead > 0) {
+          dispatch({
+            type: 'UPDATE_TOKEN_USAGE',
+            usage: { inputTokens: deltaInput, outputTokens: deltaOutput, cacheCreationInputTokens: deltaCacheCreation, cacheReadInputTokens: deltaCacheRead },
+          });
+        }
+        agentTokensRef.current[id] = curr;
+      }
+
+      agentsRef.current = next;
+      if (needsTick) setAgentTick(t => t + 1);
+    });
+
+    return unsub;
+  }, [store, dispatch]);
 
   const messagesRef = useRef(state.messages);
   const currentSessionRef = useRef<string>('');
@@ -286,7 +334,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     onExit: () => process.exit(0),
     blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker || state.sessionPicker,
     teamPicker: state.teamPicker,
-    agentCount: Object.keys(agents).length,
+    agentCount: Object.keys(agentsRef.current).length,
     subAgentView: state.subAgentView,
     lastAgentViewId: state.lastAgentViewId,
     commandPickerIndex: state.commandPickerIndex,
@@ -451,11 +499,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // Count running sub-agents (in-process, not visible to ps)
   const runningAgentCount = useMemo(() => {
     let count = 0;
-    for (const agent of Object.values(agents)) {
+    for (const agent of Object.values(agentsRef.current)) {
       if (agent.status === 'running') count++;
     }
     return count;
-  }, [agents]);
+  }, [agentTick]);
 
   // Total: main process + OS child processes + in-process sub-agents
   const totalProcs = 1 + osProcessCount + runningAgentCount;
