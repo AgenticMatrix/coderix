@@ -47,4 +47,14 @@ export class ToolRegistry {
   get names(): string[] {
     return Array.from(this.tools.keys());
   }
+
+  /** Get the interrupt behavior for a tool.
+   *  Default: 'cancel' for safe tools, 'block' for mutation/destructive. */
+  getInterruptBehavior(name: string): 'cancel' | 'block' {
+    const tool = this.tools.get(name);
+    if (tool?.definition.interruptBehavior) return tool.definition.interruptBehavior;
+    if (tool?.definition.riskLevel === 'safe') return 'cancel';
+    // Default: block for mutation/destructive or unknown tools
+    return 'block';
+  }
 }

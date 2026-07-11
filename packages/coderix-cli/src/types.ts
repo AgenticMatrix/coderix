@@ -253,6 +253,8 @@ export interface ChatState extends CoreState {
   turnOutputTokens: number;
   /** Timestamp when the current turn started (user message sent). */
   turnStartedAt: number;
+  /** Number of messages queued while tools are running. */
+  queuedCount: number;
 }
 
 // ── Chat actions ────────────────────────────────────────────────────
@@ -324,7 +326,10 @@ export type ChatAction =
   | { type: 'EVICT_AGENT_CACHE'; agentId: string }
   | { type: 'TOGGLE_BRIEF_MODE' }
   // Internal: route an action to savedMainMessages when in sub-agent view
-  | { type: 'ROUTE_TO_SAVED_MAIN'; action: ChatAction };
+  | { type: 'ROUTE_TO_SAVED_MAIN'; action: ChatAction }
+  // Message queue
+  | { type: 'QUEUED_MESSAGE' }
+  | { type: 'DEQUEUED_MESSAGE' };
 
 // ── Streaming callbacks (API client → App) ──────────────────────────
 

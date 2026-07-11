@@ -400,6 +400,11 @@ export interface ToolDefinition {
   /** Maximum tool result size in characters before persistence (default: 50_000).
    *  Infinity disables persistence for this tool. */
   maxResultSizeChars?: number;
+  /** Whether this tool can be safely cancelled mid-execution.
+   *  'cancel' = safe to abort and re-submit.
+   *  'block'  = must complete before new messages are processed.
+   *  Default: derived from riskLevel. */
+  interruptBehavior?: 'cancel' | 'block';
 }
 
 export interface ToolExecutionResult {

@@ -826,6 +826,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'TOGGLE_BRIEF_MODE':
       return { ...state, briefMode: !state.briefMode };
 
+    case 'QUEUED_MESSAGE':
+      return { ...state, queuedCount: state.queuedCount + 1 };
+
+    case 'DEQUEUED_MESSAGE':
+      return { ...state, queuedCount: Math.max(0, state.queuedCount - 1) };
+
     default:
       return state;
   }
@@ -887,6 +893,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     briefMode: false,
     turnOutputTokens: 0,
     turnStartedAt: 0,
+    queuedCount: 0,
   };
 }
 

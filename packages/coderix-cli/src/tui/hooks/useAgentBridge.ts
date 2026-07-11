@@ -7,7 +7,7 @@
  * Key function: map QueryEngine.submitMessage() events → ChatAction dispatches.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { QueryEngine, QueryEngineEvent } from '@coderix/core';
 import type {
   Message,
@@ -160,6 +160,8 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         case 'FINISH_ASSISTANT_RESPONSE':
         case 'INTERRUPT':
         case 'UPDATE_TOKEN_USAGE':
+        case 'QUEUED_MESSAGE':
+        case 'DEQUEUED_MESSAGE':
           dispatch({ type: 'ROUTE_TO_SAVED_MAIN', action });
           return;
         default:
@@ -178,19 +180,21 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
    * Run a single agent turn: user input → QueryEngine → dispatch → React render.
    */
   const runAgentTurn = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { fromQueue?: boolean }) => {
       const trimmed = text.trim();
       if (trimmed.length === 0) return;
 
-      // ── Create and dispatch user message ────────────────────
-      const userMsg: Message = {
-        id: nextMessageId(),
-        role: 'user',
-        content: trimmed,
-        blocks: [{ type: 'text', content: trimmed } satisfies TextBlock],
-        timestamp: Date.now(),
-      };
-      routeDispatch({ type: 'ADD_USER_MESSAGE', message: userMsg });
+      // Skip ADD_USER_MESSAGE when processing from queue (already in chat)
+      if (!options?.fromQueue) {
+        const userMsg: Message = {
+          id: nextMessageId(),
+          role: 'user',
+          content: trimmed,
+          blocks: [{ type: 'text', content: trimmed } satisfies TextBlock],
+          timestamp: Date.now(),
+        };
+        routeDispatch({ type: 'ADD_USER_MESSAGE', message: userMsg });
+      }
 
       // ── Agent loop via QueryEngine ──────────────────────────
       try {
@@ -536,6 +540,12 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
               flushDeltas();
               // Safety net: ensure isStreaming is false after turn completes
               routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: 0 });
+              routeDispatch({ type: 'DEQUEUED_MESSAGE' });
+              break;
+
+            // ── Queued event ────────────────────────────────────
+            case 'queued':
+              routeDispatch({ type: 'QUEUED_MESSAGE' });
               break;
           }
         }
@@ -546,6 +556,18 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
     },
     [engine, routeDispatch, flushDeltas, scheduleFlush, setAppState],
   );
+
+  // Ref to avoid circular dependency in the drain callback
+  const runAgentTurnRef = useRef(runAgentTurn);
+  runAgentTurnRef.current = runAgentTurn;
+
+  // Subscribe to queue drain events so queued messages auto-process
+  useEffect(() => {
+    const unsub = engine.onQueueDrain((message) => {
+      runAgentTurnRef.current(message, { fromQueue: true });
+    });
+    return unsub;
+  }, [engine]);
 
   return { runAgentTurn };
 }

@@ -22,6 +22,8 @@ export class ToolExecutionQueue {
   private _completedResults: ToolResultBlock[] = [];
   private _allSettled: Promise<void> | null = null;
   private _resolveAll: (() => void) | null = null;
+  /** Called whenever the running count changes. */
+  onChange?: (runningCount: number) => void;
 
   constructor(maxConcurrency: number, signal: AbortSignal) {
     this.maxConcurrency = maxConcurrency;
@@ -120,6 +122,7 @@ export class ToolExecutionQueue {
 
     const promise = this._executeSlot(block, execute);
     this.running.set(block.id, promise);
+    this.onChange?.(this.running.size);
   }
 
   private async _executeSlot(
@@ -173,6 +176,8 @@ export class ToolExecutionQueue {
       const next = this.pending.shift()!;
       next.startFn();
     }
+
+    this.onChange?.(this.running.size);
 
     // Signal all-settled if the queue is drained
     if (

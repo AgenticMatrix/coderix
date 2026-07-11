@@ -101,6 +101,8 @@ export interface QueryConfig {
   clearCaches?: () => void;
   /** When true, pass cacheControl to the model call (fork sub-agents). */
   enableCacheControl?: boolean;
+  /** Callback when the ToolExecutionQueue running count changes. */
+  onToolQueueChange?: (count: number) => void;
 }
 
 export interface CallModelParams {
@@ -495,6 +497,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     let buildingBlock: BuildingBlock | null = null;
     const orderedBlocks: ToolUseBlock[] = [];
     const queue = new ToolExecutionQueue(maxToolConcurrency, abortController.signal);
+    queue.onChange = config.onToolQueueChange ?? undefined;
     const execOpts: ExecuteSingleToolOpts = {
       sessionId,
       cwd,

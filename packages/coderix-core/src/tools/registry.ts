@@ -189,3 +189,12 @@ export function hasExecutor(toolName: string): boolean {
   const enabled = isEnabledByName.get(resolved);
   return !enabled || enabled();
 }
+
+/** Get the interrupt behavior for a tool.
+ *  Default: 'cancel' for safe tools, 'block' for mutation/destructive. */
+export function getInterruptBehavior(toolName: string): 'cancel' | 'block' {
+  const meta = getToolMeta(toolName);
+  if (meta?.interruptBehavior) return meta.interruptBehavior;
+  if (meta?.riskLevel === 'safe') return 'cancel';
+  return 'block';
+}

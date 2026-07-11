@@ -18,6 +18,11 @@ export interface ToolMeta {
   riskLevel: 'safe' | 'mutation' | 'destructive';
   /** When true, this tool can execute concurrently with other safe tools. */
   isConcurrencySafe?: boolean;
+  /** Whether this tool can be safely cancelled mid-execution.
+   *  'cancel' = safe to abort and re-submit.
+   *  'block'  = must complete before new messages are processed.
+   *  Default: 'cancel' for safe tools, 'block' for mutation/destructive. */
+  interruptBehavior?: 'cancel' | 'block';
 }
 
 /** Anthropic tool definition + our metadata. */

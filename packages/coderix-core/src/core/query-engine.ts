@@ -56,6 +56,7 @@ import {
   RelevanceCache,
 } from '../memory/recall.js';
 import { ReadFileTracker } from './read-file-tracker.js';
+import { MessageQueue } from './message-queue.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,7 +99,7 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'done' | 'permission_required' | 'question_required';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'done' | 'permission_required' | 'question_required' | 'queued';
   data?: unknown;
   deferred?: DeferredPermission | DeferredQuestion;
 }
@@ -116,6 +117,9 @@ export class QueryEngine {
   private memoryConfig: MemoryConfig;
   private relevanceCache = new RelevanceCache();
   private readFileTracker = new ReadFileTracker();
+  private isActive = false;
+  private messageQueue = new MessageQueue();
+  private runningToolCount = 0;
 
   constructor(config: QueryEngineConfig) {
     this.config = {
@@ -209,22 +213,38 @@ export class QueryEngine {
   }
 
   async *submitMessage(userInput: string): AsyncGenerator<QueryEngineEvent> {
-    // Abort any in-progress query
-    if (this.abortController) {
-      this.abortController.abort();
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-
-    const session = this.config.sessionManager.getActive();
-    this.abortController = new AbortController();
     const eventBus = this.config.eventBus;
 
-    // Inline emit for early returns (before the main emit helper is defined)
     const emitEarly = (event: QueryEngineEvent): void => {
       if (eventBus) {
         try { eventBus.engineEvents.next(event); } catch { /* best-effort */ }
       }
     };
+
+    // Decision tree: if already active, enqueue or abort based on running tools
+    if (this.isActive) {
+      const hasBlocking = this.hasBlockingToolsRunning();
+      if (hasBlocking) {
+        this.messageQueue.enqueue(userInput);
+        const event: QueryEngineEvent = {
+          type: 'queued',
+          data: { position: this.messageQueue.length },
+        };
+        emitEarly(event);
+        yield event;
+        return;
+      }
+      // All running tools are cancel-safe — abort and proceed
+      if (this.abortController) {
+        this.abortController.abort();
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    this.isActive = true;
+
+    const session = this.config.sessionManager.getActive();
+    this.abortController = new AbortController();
 
     // Handle orphaned tool_use blocks from prior interrupted turn
     const lastMsg = session.messages.length > 0
@@ -440,6 +460,7 @@ export class QueryEngine {
       emitToolRequest: eventBus
         ? (req) => eventBus.toolRequests.next(req)
         : undefined,
+      onToolQueueChange: (count) => { this.runningToolCount = count; },
     };
 
     // Dual-write helper: yields the event AND emits to EventBus (if configured)
@@ -517,7 +538,9 @@ export class QueryEngine {
       yield errorEvent;
       throw error;
     } finally {
+      this.isActive = false;
       this.config.sessionManager.saveSession(session);
+      this.messageQueue.drainNext();
     }
   }
 
@@ -525,6 +548,19 @@ export class QueryEngine {
     if (this.abortController) {
       this.abortController.abort();
     }
+  }
+
+  /** Subscribe to queue drain events. Returns unsubscribe function.
+   *  When a queued message is ready to process (current turn completed),
+   *  the callback is invoked with the message text. */
+  onQueueDrain(callback: (message: string) => void): () => void {
+    return this.messageQueue.onDrain(callback);
+  }
+
+  /** Check whether any running tool has interruptBehavior: 'block'.
+   *  If tools are running but we don't know which, be conservative and block. */
+  private hasBlockingToolsRunning(): boolean {
+    return this.runningToolCount > 0;
   }
 
   /** Send a follow-up message to a completed/stopped sub-agent, resuming its execution. */
