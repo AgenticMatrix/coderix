@@ -614,6 +614,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
               thinkingExpanded={latestThinking.block.expanded}
               thinkingDuration={latestThinking.duration}
               thinkingTokens={latestThinking.tokens}
+              turnOutputTokens={state.turnOutputTokens}
             />
           )}
 

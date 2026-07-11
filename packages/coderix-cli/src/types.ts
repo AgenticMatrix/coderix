@@ -249,6 +249,10 @@ export interface ChatState extends CoreState {
   cacheReadPrice: number;
   /** Brief mode toggle — reduces response verbosity to save context. */
   briefMode: boolean;
+  /** Cumulative output tokens since the last user message (turn-level, includes sub-agents). */
+  turnOutputTokens: number;
+  /** Timestamp when the current turn started (user message sent). */
+  turnStartedAt: number;
 }
 
 // ── Chat actions ────────────────────────────────────────────────────

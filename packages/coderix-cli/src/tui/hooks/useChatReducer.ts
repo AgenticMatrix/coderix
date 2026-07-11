@@ -189,6 +189,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         error: null,
         pasteBlocks: {},
         pastePreviewVisible: false,
+        turnOutputTokens: 0,
+        turnStartedAt: Date.now(),
+        isFrozen: false,
       };
 
     case 'START_ASSISTANT_RESPONSE': {
@@ -811,6 +814,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         tokenUsage,
         accumulatedCost: state.accumulatedCost + turnCost,
+        turnOutputTokens: state.turnOutputTokens + outputTokens,
       };
     }
 
@@ -881,6 +885,8 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     outputPrice,
     cacheReadPrice,
     briefMode: false,
+    turnOutputTokens: 0,
+    turnStartedAt: 0,
   };
 }
 
