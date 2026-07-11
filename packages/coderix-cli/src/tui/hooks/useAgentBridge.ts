@@ -351,6 +351,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                       if (subTokenUsage) {
                         routeDispatch({
                           type: 'UPDATE_TOKEN_USAGE',
+                          skipDisplay: true,
                           usage: {
                             inputTokens: subTokenUsage.inputTokens ?? 0,
                             outputTokens: subTokenUsage.outputTokens ?? 0,
@@ -443,6 +444,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     if (subTokenUsage) {
                       routeDispatch({
                         type: 'UPDATE_TOKEN_USAGE',
+                        skipDisplay: true,
                         usage: {
                           inputTokens: subTokenUsage.inputTokens ?? 0,
                           outputTokens: subTokenUsage.outputTokens ?? 0,

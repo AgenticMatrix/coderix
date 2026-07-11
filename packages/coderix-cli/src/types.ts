@@ -315,7 +315,7 @@ export type ChatAction =
   | { type: 'ADD_PASTE_BLOCK'; text: string }
   | { type: 'TOGGLE_PASTE_PREVIEW' }
   // Token usage
-  | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage> }
+  | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage>; skipDisplay?: boolean }
   // Agent cache management
   | { type: 'EVICT_AGENT_CACHE'; agentId: string }
   | { type: 'TOGGLE_BRIEF_MODE' }

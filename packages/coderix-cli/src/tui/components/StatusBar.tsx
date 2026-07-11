@@ -137,12 +137,11 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
     return () => clearInterval(id);
   }, [isStreaming]);
 
-  // ctx = cache_read + cache_creation + output + input (real API tokens)
+  // ctx = output + input + cache_read (real API tokens, excluding cache_creation which is billed but not in input context)
   const ctxTokens =
-    realUsage.cacheReadInputTokens +
-    realUsage.cacheCreationInputTokens +
     realUsage.outputTokens +
-    realUsage.inputTokens;
+    realUsage.inputTokens +
+    realUsage.cacheReadInputTokens;
 
   const contextMax = maxContext ?? 131072;
 

@@ -234,12 +234,14 @@ export function needsCompaction(
 /**
  * Extract the total context token count from the last API response.
  *
- * Returns the sum of input_tokens + cache_read + cache_creation + output_tokens.
- * This represents the full context size after the last API call completed:
+ * Returns the sum of input_tokens + cache_read_input_tokens only.
+ * This represents the actual input context size sent to the model:
  *   - input_tokens: tokens sent to the model (uncached portion)
  *   - cache_read_input_tokens: tokens served from the prompt cache
- *   - cache_creation_input_tokens: tokens written to the cache
- *   - output_tokens: tokens the model generated (now part of the conversation)
+ *
+ * output_tokens and cache_creation_input_tokens are excluded:
+ *   - output_tokens are model-generated tokens (not part of the input context)
+ *   - cache_creation_input_tokens are written to cache (billed but not read)
  *
  * With prompt caching (DeepSeek, Anthropic), input_tokens may be small
  * while cache_read is large — the sum is the true context size.
@@ -257,9 +259,7 @@ export function tokenCountFromLastAPIResponse(
       if (usage?.input_tokens && usage.input_tokens > 0) {
         return (
           usage.input_tokens +
-          (usage.cache_read_input_tokens ?? 0) +
-          (usage.cache_creation_input_tokens ?? 0) +
-          (usage.output_tokens ?? 0)
+          (usage.cache_read_input_tokens ?? 0)
         );
       }
     }
