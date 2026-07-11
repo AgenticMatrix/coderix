@@ -29,6 +29,8 @@ interface CliArgs {
   chromeMcp: boolean;
   chromeMcpPort?: number;
   computerUseMcp: boolean;
+  resume?: string;       // undefined=not passed, ''=flag without value, string=session ID
+  continueFlag: boolean; // -c / --continue
 }
 
 function parseCliArgs(argv: string[]): CliArgs {
@@ -41,6 +43,7 @@ function parseCliArgs(argv: string[]): CliArgs {
     acp: false,
     chromeMcp: false,
     computerUseMcp: false,
+    continueFlag: false,
   };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -59,6 +62,17 @@ function parseCliArgs(argv: string[]): CliArgs {
       case '--chrome-mcp': args.chromeMcp = true; break;
       case '--chrome-mcp-port': args.chromeMcpPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.chromeMcpPort)) i++; break;
       case '--computer-use-mcp': args.computerUseMcp = true; break;
+      case '--resume': case '-r': {
+        const nextArg = argv[i + 1];
+        if (nextArg && !nextArg.startsWith('-')) {
+          args.resume = nextArg;
+          i++;
+        } else {
+          args.resume = '';
+        }
+        break;
+      }
+      case '--continue': case '-c': args.continueFlag = true; break;
       default: if (!arg.startsWith('-') && !args.query) positional.push(arg); break;
     }
   }
@@ -163,6 +177,62 @@ async function runPrintMode(queryText: string): Promise<void> {
   if (fullText) process.stdout.write('\n'); process.exit(0);
 }
 
+// ── Session table (for --resume without TTY) ────────────────────────
+
+function printSessionTable(sessions: Array<{ id: string; title: string; turnCount: number; model: string; updatedAt: Date }>): void {
+  if (sessions.length === 0) {
+    console.log('No previous sessions found.');
+    return;
+  }
+  console.log('Recent sessions:\n');
+  for (let i = 0; i < Math.min(sessions.length, 20); i++) {
+    const s = sessions[i]!;
+    const updated = s.updatedAt.toISOString().split('T')[0];
+    const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
+    const title = isAuto ? '--' : s.title.length > 48 ? s.title.slice(0, 48) + '...' : s.title;
+    const empty = s.turnCount === 0 ? ' (empty)' : '';
+    console.log(
+      `  ${String(i + 1).padEnd(3)} ${s.id.slice(0, 8).padEnd(9)} ${String(s.turnCount).padStart(4)}t  ${s.model.padEnd(18)} ${updated}  ${title}${empty}`,
+    );
+  }
+  console.log('\n  --resume <id>  resume a session');
+  console.log('  --resume last  resume the most recent session\n');
+}
+
+// ── Sub-agent restore ────────────────────────────────────────────────
+
+async function restoreSubAgents(
+  subAgentIds: string[],
+  subAgentRegistry: any,
+): Promise<void> {
+  const { readAgentMetadata, getAgentTranscript } = await import('@coderix/core');
+  for (const agentId of subAgentIds) {
+    try {
+      const meta = await readAgentMetadata(agentId);
+      if (!meta) continue;
+      const transcript = await getAgentTranscript(agentId);
+      subAgentRegistry.register({
+        id: agentId,
+        name: `${meta.agentType}-${agentId.slice(0, 8)}`,
+        agentType: meta.agentType,
+        status: 'done',
+        prompt: meta.description ?? '',
+        description: meta.displayDescription,
+        createdAt: meta.createdAt,
+        finishedAt: meta.finishedAt,
+        turnCount: transcript?.filter((m: any) => m.role === 'assistant').length ?? 0,
+        messageCount: transcript?.length ?? 0,
+        toolCount: 0,
+        abortController: new AbortController(),
+        notified: true,
+        transcript: transcript ?? [],
+      });
+    } catch {
+      // Agent data missing or corrupted — skip
+    }
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -192,7 +262,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
+  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --resume, -r [id]     Resume a session by ID, or open interactive picker\n  --continue, -c        Resume the most recent conversation\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
 
   if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const { detectShell } = await import('@coderix/core'); const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; const shell = detectShell(); console.log(`coderix ${pkg.version}\nnode ${process.version}\n${process.platform} ${process.arch}\nshell ${shell.path} (${shell.type})`); process.exit(0); }
 
@@ -231,7 +301,63 @@ async function main(): Promise<void> {
   const { createCallModelFromClient } = await import('@coderix/core');
   const client = createClient(config); const callModel = createCallModelFromClient(client, config.model);
   const { SessionManager } = await import('@coderix/core');
-  const sm = new SessionManager(); sm.create({ cwd: process.cwd(), model: config.model });
+  const sm = new SessionManager();
+  let initialMessages: any[] | null = null;
+  let showSessionPicker = false;
+  let hasPreloadedSession = false;
+
+  // ── Handle --resume / --continue ──────────────────────────────
+  if (cliArgs.continueFlag || cliArgs.resume !== undefined) {
+    if (cliArgs.continueFlag) {
+      try {
+        const session = sm.continueLatest();
+        if (session && session.messages.length > 0) {
+          const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
+          initialMessages = convert(session.messages);
+          hasPreloadedSession = true;
+        }
+      } catch { /* no sessions exist, fall through to create new */ }
+    } else if (cliArgs.resume === '') {
+      // --resume without value
+      if (!process.stdout.isTTY) {
+        printSessionTable(sm.list());
+        process.exit(0);
+      }
+      showSessionPicker = true;
+    } else if (cliArgs.resume === 'last') {
+      try {
+        const list = sm.list();
+        const last = list.find((s) => s.turnCount > 0);
+        if (last) {
+          sm.resume(last.id);
+          const session = sm.getActive()!;
+          if (session.messages.length > 0) {
+            const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
+            initialMessages = convert(session.messages);
+            hasPreloadedSession = true;
+          }
+        }
+      } catch { /* fall through */ }
+    } else {
+      try {
+        sm.resume(cliArgs.resume!);
+        const session = sm.getActive()!;
+        if (session.messages.length > 0) {
+          const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
+          initialMessages = convert(session.messages);
+          hasPreloadedSession = true;
+        }
+      } catch (e) {
+        process.stderr.write(`Error: Session not found: ${cliArgs.resume}\n`);
+        process.exit(1);
+      }
+    }
+  }
+
+  // Only create a new session if no session was loaded via resume
+  if (!hasPreloadedSession) {
+    sm.create({ cwd: process.cwd(), model: config.model });
+  }
   const { setTaskListId } = await import('@coderix/core');
   setTaskListId(sm.getActive().id);
 
@@ -247,6 +373,13 @@ async function main(): Promise<void> {
   const { setSubAgentRegistry } = await import('@coderix/core');
   setSubAgentRegistry(subAgentRegistry);
   const { registry: agentRegistry } = await buildAgentReg(process.cwd());
+
+  // Restore sub-agents from disk for resumed sessions
+  const activeSession = sm.getActive();
+  if (activeSession?.metadata.subAgentIds?.length) {
+    await restoreSubAgents(activeSession.metadata.subAgentIds, subAgentRegistry);
+  }
+
   const settings = loadSettings();
   const mcpPluginsTui = await initMcpAndGetPlugins(process.cwd());
   // ── Create EventBus for core→UI communication ─────────────────────
@@ -284,7 +417,7 @@ async function main(): Promise<void> {
   const { AppStateProvider } = await import('../state/AppStateContext.js');
   const { waitUntilExit } = render(
     <AppStateProvider store={appStore}>
-      <App config={config} engine={engine} store={appStore} sessionManager={sm} />
+      <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} showSessionPicker={showSessionPicker} />
     </AppStateProvider>,
     { exitOnCtrlC: false, patchConsole: true },
   );

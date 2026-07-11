@@ -12,6 +12,7 @@ import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
 import { QuestionPrompt } from './QuestionPrompt.js';
 import { SubAgentPicker } from './SubAgentPicker.js';
+import { SessionPicker } from './SessionPicker.js';
 import { TaskPanel } from './TaskPanel.js';
 import { TodoPanel } from './TodoPanel.js';
 import { TeamPanel } from './TeamPanel.js';
@@ -35,6 +36,10 @@ interface AppProps {
   engine: QueryEngine;
   store: Store<AppState>;
   sessionManager: SessionManager;
+  /** Pre-loaded messages from a resumed session (--resume / --continue). */
+  initialMessages?: Message[] | null;
+  /** When true, show the session picker on mount (--resume with no value). */
+  showSessionPicker?: boolean;
 }
 
 /** True when a user message contains only tool_result blocks. */
@@ -112,7 +117,7 @@ type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
  * expand/collapse state. Only the current round has collapsed content,
  * so older messages render identically after remount.
  */
-export function App({ config, engine, store, sessionManager }: AppProps) {
+export function App({ config, engine, store, sessionManager, initialMessages, showSessionPicker }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
@@ -157,6 +162,22 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
   useEffect(() => {
     store.setState(state);
   }, [state]);
+
+  // ── Resume: load pre-loaded session messages on mount ──────────
+  const hasLoadedInitialRef = useRef(false);
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0 && !hasLoadedInitialRef.current) {
+      hasLoadedInitialRef.current = true;
+      dispatch({ type: 'LOAD_CHAT', messages: initialMessages, turns: [], isStreaming: false });
+    }
+  }, [initialMessages]);
+
+  // ── Resume: show session picker on mount (--resume with no value)
+  useEffect(() => {
+    if (showSessionPicker) {
+      dispatch({ type: 'SHOW_SESSION_PICKER' });
+    }
+  }, [showSessionPicker]);
 
   // Sync briefMode → QueryEngine (rebuilds system prompt on toggle)
   useEffect(() => {
@@ -263,7 +284,7 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
     onSend: runAgentTurn,
     onInterrupt: () => engine.interrupt(),
     onExit: () => process.exit(0),
-    blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker,
+    blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker || state.sessionPicker,
     teamPicker: state.teamPicker,
     agentCount: Object.keys(agents).length,
     subAgentView: state.subAgentView,
@@ -597,6 +618,29 @@ export function App({ config, engine, store, sessionManager }: AppProps) {
                 }
               }}
               onCancel={() => dispatch({ type: 'HIDE_MEMORY_PICKER' })}
+            />
+          </Box>
+        )}
+
+        {state.sessionPicker && (
+          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+            <SessionPicker
+              sessions={sessionManager.list().map((s) => ({
+                id: s.id,
+                title: s.title,
+                turnCount: s.turnCount,
+                model: s.model,
+                updatedAt: s.updatedAt,
+              }))}
+              onSelect={(sessionId) => {
+                dispatch({ type: 'HIDE_SESSION_PICKER' });
+                const session = sessionManager.resume(sessionId);
+                if (session && session.messages.length > 0) {
+                  const msgs = convertTranscriptToMessages(session.messages);
+                  dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false });
+                }
+              }}
+              onCancel={() => dispatch({ type: 'HIDE_SESSION_PICKER' })}
             />
           </Box>
         )}

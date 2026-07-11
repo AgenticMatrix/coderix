@@ -2,7 +2,7 @@
  * SessionManager — Session lifecycle management
  *
  * Manages session creation, resume, fork, rewind, and persistence.
- * Sessions are stored as JSON files in ~/.ink-chat-tui/sessions/.
+ * Sessions are stored as JSON files in ~/.coderix/sessions/.
  *
  * Session management for persisting agent conversation state.
  */
@@ -26,7 +26,7 @@ import { tokenCountWithEstimation } from './token-budget.js';
 // Constants
 // ---------------------------------------------------------------------------
 
-const SESSIONS_DIR = join(homedir(), '.ink-chat-tui', 'sessions');
+const SESSIONS_DIR = join(homedir(), '.coderix', 'sessions');
 
 // ---------------------------------------------------------------------------
 // SessionManager
@@ -241,10 +241,18 @@ export class SessionManager {
       session.turnCount++;
     }
 
-    // Save on first message (lazy-init) and periodically (every 5)
+    // Save on first message (lazy-init).
+    // After that, throttle saves: small sessions every 5 messages,
+    // large sessions (>200 messages) only every 20 to avoid
+    // JSON.stringify spikes during long conversations.
     const saved = (session as any)._saved;
-    if (!saved || session.messages.length % 5 === 0) {
+    if (!saved) {
       (session as any)._saved = true;
+      this.saveSession(session);
+      return;
+    }
+    const skip = session.messages.length > 200 ? 20 : 5;
+    if (session.messages.length % skip === 0) {
       this.saveSession(session);
     }
   }
@@ -288,6 +296,19 @@ export class SessionManager {
     const session = this.getActive();
     if (!session.metadata.toolsUsed!.includes(toolName)) {
       session.metadata.toolsUsed!.push(toolName);
+    }
+  }
+
+  /**
+   * Track a spawned sub-agent in the active session's metadata.
+   */
+  trackSubAgent(agentId: string): void {
+    const session = this.getActive();
+    if (!session.metadata.subAgentIds) {
+      session.metadata.subAgentIds = [];
+    }
+    if (!session.metadata.subAgentIds.includes(agentId)) {
+      session.metadata.subAgentIds.push(agentId);
     }
   }
 

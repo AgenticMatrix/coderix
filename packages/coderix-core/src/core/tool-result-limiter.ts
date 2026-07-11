@@ -27,7 +27,7 @@ export const DEFAULT_MAX_RESULT_SIZE_CHARS = 50_000;
 export const MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200_000;
 
 /** Tool results persisted to this directory. */
-export const TOOL_RESULTS_DIR = join(homedir(), '.ink-chat-tui', 'tool-results');
+export const TOOL_RESULTS_DIR = join(homedir(), '.coderix', 'tool-results');
 
 /** Tag used to identify persisted output messages. */
 const PERSISTED_OUTPUT_TAG = '<persisted-output>';

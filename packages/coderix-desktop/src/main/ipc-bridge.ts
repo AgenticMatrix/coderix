@@ -181,7 +181,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       if (active && (active.title === '新对话' || active.title.startsWith('Session '))) {
         const title = userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
         active.title = title;
-        const sessionDir = join(homedir(), '.ink-chat-tui', 'sessions', active.id);
+        const sessionDir = join(homedir(), '.coderix', 'sessions', active.id);
         if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
         writeFileSync(join(sessionDir, 'session.json'), JSON.stringify(active, null, 2), 'utf-8');
       }
@@ -295,7 +295,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (sessionManager) return sessionManager.listSessions();
     // Disk fallback before QueryEngine is ready
     try {
-      const sessionsDir = join(homedir(), '.ink-chat-tui', 'sessions');
+      const sessionsDir = join(homedir(), '.coderix', 'sessions');
       if (!existsSync(sessionsDir)) return [];
       return readdirSync(sessionsDir, { withFileTypes: true })
         .filter(e => e.isDirectory())

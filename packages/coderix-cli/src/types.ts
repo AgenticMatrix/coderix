@@ -231,6 +231,8 @@ export interface ChatState extends CoreState {
   teamPicker: boolean;
   /** When true, the memory picker overlay is shown. */
   memoryPicker: boolean;
+  /** When true, the session picker overlay is shown. */
+  sessionPicker: boolean;
   /** Selected index in the command picker dropdown (-1 = hidden). */
   commandPickerIndex: number;
   /** When true, display is frozen (user scrolled up during streaming). */
@@ -291,6 +293,8 @@ export type ChatAction =
   | { type: 'HIDE_TEAM_PICKER' }
   | { type: 'SHOW_MEMORY_PICKER' }
   | { type: 'HIDE_MEMORY_PICKER' }
+  | { type: 'SHOW_SESSION_PICKER' }
+  | { type: 'HIDE_SESSION_PICKER' }
   | { type: 'FREEZE_DISPLAY' }
   | { type: 'UNFREEZE_DISPLAY' }
   | { type: 'SET_MODE'; mode: AgentMode }

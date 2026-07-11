@@ -420,6 +420,8 @@ export interface SessionMetadata {
   notes?: string;
   filesModified?: string[];
   toolsUsed?: string[];
+  /** Sub-agent IDs spawned during this session. Used to restore on resume. */
+  subAgentIds?: string[];
 }
 
 // ── Session filter / summary ──────────────────────────────────────────

@@ -571,6 +571,8 @@ async function executeStandardSubagent(
     notified: false,
   });
 
+  agentSpawn.sessionManager.trackSubAgent(agentId);
+
   if (isBackground) {
     // ── Async path: fire-and-forget ─────────────────────────────────
     const spawnTime = Date.now();
@@ -842,6 +844,8 @@ async function executeFork(
     abortController: subAbortController,
     notified: false,
   });
+
+  agentSpawn.sessionManager.trackSubAgent(agentId);
 
   if (isBackground) {
     const spawnTime = Date.now();

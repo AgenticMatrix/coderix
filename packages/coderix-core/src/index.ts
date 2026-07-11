@@ -44,6 +44,8 @@ export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types
 // ── Agents ─────────────────────────────────────────────────────────
 export { buildAgentRegistry } from './agents/registry.js';
 export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';
+export { readAgentMetadata, getAgentTranscript, saveAgentTranscript, writeAgentMetadata } from './agents/agent-persistence.js';
+export type { AgentMetadata } from './agents/agent-persistence.js';
 
 // ── Skills ─────────────────────────────────────────────────────────
 export { getSkillRegistry } from './skills/index.js';

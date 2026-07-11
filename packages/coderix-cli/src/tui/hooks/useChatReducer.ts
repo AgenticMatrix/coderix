@@ -386,18 +386,29 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ),
       };
 
-    case 'UPDATE_BLOCK_STATE':
-      return {
-        ...state,
-        messages: state.messages.map((m) => ({
-          ...m,
-          blocks: m.blocks.map((b) =>
-            b.type === 'tool_use' && b.toolId === action.toolId
-              ? { ...b, state: action.state }
-              : b,
-          ),
-        })),
-      };
+    case 'UPDATE_BLOCK_STATE': {
+      const msgs = state.messages;
+      // Scan from the end — tool_use blocks are in recent messages
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i]!;
+        const found = m.blocks.some(
+          (b) => b.type === 'tool_use' && b.toolId === action.toolId,
+        );
+        if (found) {
+          const newMsgs = msgs.slice(0);
+          newMsgs[i] = {
+            ...m,
+            blocks: m.blocks.map((b) =>
+              b.type === 'tool_use' && b.toolId === action.toolId
+                ? { ...b, state: action.state }
+                : b,
+            ),
+          };
+          return { ...state, messages: newMsgs };
+        }
+      }
+      return state;
+    }
 
     case 'FINISH_ASSISTANT_RESPONSE': {
       let nextState = { ...state, isStreaming: false };
@@ -545,6 +556,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'HIDE_MEMORY_PICKER':
       return { ...state, memoryPicker: false };
+
+    case 'SHOW_SESSION_PICKER':
+      return { ...state, sessionPicker: true };
+
+    case 'HIDE_SESSION_PICKER':
+      return { ...state, sessionPicker: false };
 
     case 'FREEZE_DISPLAY':
       return { ...state, isFrozen: true };
@@ -768,6 +785,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     commandPickerIndex: -1,
     teamPicker: false,
     memoryPicker: false,
+    sessionPicker: false,
     isFrozen: false,
     tokenUsage: { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 },
     accumulatedCost: 0,
