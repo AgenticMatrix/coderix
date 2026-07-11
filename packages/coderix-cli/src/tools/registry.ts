@@ -29,6 +29,7 @@ import { TaskOutputRenderer } from './task-output/renderer.js';
 import { TaskStopRenderer } from './task-stop/renderer.js';
 import { SkillRenderer } from './skill/renderer.js';
 import { AskUserQuestionRenderer } from './ask-user-question/renderer.js';
+import { AskUserQuestionResultRenderer } from './ask-user-question/result-renderer.js';
 import { EnterPlanModeRenderer } from './enter-plan-mode/renderer.js';
 import { EnterPlanModeResultRenderer } from './enter-plan-mode/result-renderer.js';
 import { ExitPlanModeRenderer } from './exit-plan-mode/renderer.js';
@@ -108,6 +109,7 @@ resultRendererByName.set('WebFetch', WebFetchResultRenderer);
 resultRendererByName.set('WebSearch', WebSearchResultRenderer);
 resultRendererByName.set('write', WriteResultRenderer);
 resultRendererByName.set('EnterPlanMode', EnterPlanModeResultRenderer);
+resultRendererByName.set('AskUserQuestion', AskUserQuestionResultRenderer);
 
 // Generic fallback for known (executor-less) tool names
 for (const name of KNOWN_TOOL_NAMES) {

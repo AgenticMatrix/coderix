@@ -19,7 +19,7 @@ export function AskUserQuestionRenderer(
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column">
         <Text>
           <Text color="red">❌ </Text>
           <Text bold>AskUserQuestion</Text>
@@ -33,23 +33,29 @@ export function AskUserQuestionRenderer(
     const answers = props.result?.metadata?.answers as
       | Record<string, string | string[]>
       | undefined;
+    const firstHeader = questions?.[0]?.header ?? '';
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column">
         <Text>
           <Text color="green">● </Text>
           <Text bold>AskUserQuestion</Text>
-          {questions?.map((q, i) => (
-            <Text key={i} dimColor>
-              {' '}
-              {q.header}:{' '}
-              {answers?.[q.header]
-                ? Array.isArray(answers[q.header])
-                  ? (answers[q.header] as string[]).join(', ')
-                  : answers[q.header]
-                : '(no answer)'}
-            </Text>
-          ))}
+          {firstHeader ? <Text bold> {firstHeader}</Text> : null}
         </Text>
+        <Box paddingLeft={4} flexDirection="column">
+          {questions?.map((q, i) => {
+            const answer = answers?.[q.header];
+            const answerStr = answer
+              ? Array.isArray(answer)
+                ? answer.join(', ')
+                : answer
+              : '(no answer)';
+            return (
+              <Text key={i} dimColor>
+                ⎿  {q.header}: {answerStr}
+              </Text>
+            );
+          })}
+        </Box>
       </Box>
     );
   }
@@ -58,7 +64,7 @@ export function AskUserQuestionRenderer(
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column">
       <Text>
         <Text color="yellow">{indicator} </Text>
         <Text bold>AskUserQuestion</Text>
