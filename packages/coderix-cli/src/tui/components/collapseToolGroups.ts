@@ -67,15 +67,17 @@ function isReadBlock(block: ToolUseBlock): { isRead: boolean; isList: boolean } 
 function getSearchHint(block: ToolUseBlock): string {
   if (block.toolName === 'grep') {
     const pattern = (block.input.pattern as string) ?? '';
-    return pattern.length > 60 ? pattern.slice(0, 57) + '...' : pattern;
+    const hint = `grep (${pattern})`;
+    return hint.length > 80 ? hint.slice(0, 77) + '...' : hint;
   }
   if (block.toolName === 'glob') {
     const pattern = (block.input.pattern as string) ?? '';
-    return pattern.length > 60 ? pattern.slice(0, 57) + '...' : pattern;
+    const hint = `glob (${pattern})`;
+    return hint.length > 80 ? hint.slice(0, 77) + '...' : hint;
   }
   if (block.toolName === 'bash') {
     const cmd = (block.input.command as string) ?? '';
-    const cleaned = '$ ' + cmd.replace(/\s+/g, ' ').trim();
+    const cleaned = `bash(${cmd.replace(/\s+/g, ' ').trim()})`;
     return cleaned.length > 80 ? cleaned.slice(0, 77) + '...' : cleaned;
   }
   return '';
@@ -115,25 +117,31 @@ export function collapseToolGroups(
     let searchCount = 0;
     let readCount = 0;
     let listCount = 0;
-    let latestHint = '';
+    const searchHints: string[] = [];
+    let readHint = '';
     let isActive = false;
 
     for (const block of group) {
       if (block.toolName === 'grep' || block.toolName === 'glob') {
         searchCount++;
-        latestHint = getSearchHint(block);
+        const hint = getSearchHint(block);
+        if (hint) searchHints.push(hint);
       } else if (block.toolName === 'read') {
         readCount++;
-        latestHint = getReadHint(block);
+        const hint = getReadHint(block);
+        if (hint) readHint = hint;
       } else if (block.toolName === 'bash') {
         const cmd = (block.input.command as string) ?? '';
         const detected = detectBashCommandType(cmd);
-        if (detected.isSearch) searchCount++;
-        if (detected.isList) listCount++;
         if (detected.isSearch) {
-          latestHint = getSearchHint(block);
-        } else if (detected.isList) {
-          latestHint = getReadHint(block);
+          searchCount++;
+          const hint = getSearchHint(block);
+          if (hint) searchHints.push(hint);
+        }
+        if (detected.isList) {
+          listCount++;
+          const hint = getReadHint(block);
+          if (hint) readHint = hint;
         }
       }
       if (block.state === 'executing' || block.state === 'pending') {
@@ -143,6 +151,9 @@ export function collapseToolGroups(
 
     // Determine group type: if there are search tools, it's search; otherwise read
     const groupType: 'search' | 'read' = searchCount > 0 ? 'search' : 'read';
+    const latestHint = groupType === 'search'
+      ? searchHints.join(', ')
+      : readHint;
 
     result.push({
       type: groupType === 'search' ? 'search' : 'read',
