@@ -28,6 +28,7 @@ export interface ToolUseRendererProps {
     metadata?: Record<string, unknown>;
   };
   contentExpanded?: boolean;
+  termWidth?: number;
 }
 
 export interface ToolResultRendererProps {

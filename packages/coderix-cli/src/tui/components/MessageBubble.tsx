@@ -208,6 +208,7 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking, m
           duration={tu.duration}
           result={tu.result}
           contentExpanded={contentExpanded}
+          termWidth={termWidth}
         />
       );
     }

@@ -52,6 +52,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicatorColor = isError ? 'red' : isDone ? 'green' : 'yellow';
 
   const lang = hasPath ? detectLanguage(fp) : null;
+  const diffWidth = Math.floor((props.termWidth ?? 80) * 0.81);
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -83,7 +84,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 // but keep highlight colors (magenta, green, etc.) as-is.
                 const dimBase = (c: string) => c === '#FFFFFF' ? 'white' : c;
                 return (
-                  <Box key={i} width="90%" backgroundColor={bgColor}>
+                  <Box key={i} width={diffWidth} backgroundColor={bgColor}>
                     <Text color={hasBackground ? '#FFFFFF' : 'white'}>{prefix}</Text>
                     {codeTokens.map((t, j) => (
                       <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
@@ -92,7 +93,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 );
               })}
               {tooLong ? (
-                <Box width="90%">
+                <Box width={diffWidth}>
                   <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
                 </Box>
               ) : null}
