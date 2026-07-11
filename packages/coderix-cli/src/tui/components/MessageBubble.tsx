@@ -15,6 +15,9 @@ import { CompactionBoundaryRenderer } from './blocks/CompactionBoundaryRenderer.
 import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
 import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
+import { collapseToolGroups } from './collapseToolGroups.js';
+import { CollapsedGroupRenderer } from './CollapsedGroupRenderer.js';
+import type { CollapsedGroup } from './collapseToolGroups.js';
 
 interface MessageBubbleProps {
   message: Message;
@@ -368,7 +371,23 @@ export function MessageBubble({ message, contentExpanded, theme, hideThinking, m
                 }
                 return true;
               });
-              return visibleBlocks.map((block, idx) => {
+              const groupedBlocks = collapseToolGroups(visibleBlocks as unknown as Array<{ type: string; toolName?: string; [key: string]: unknown }>);
+              return groupedBlocks.map((item, idx) => {
+                // Check for collapsed group
+                if ((item as CollapsedGroup).blocks) {
+                  const group = item as unknown as CollapsedGroup;
+                  return (
+                    <CollapsedGroupRenderer
+                      key={idx}
+                      group={group}
+                      contentExpanded={contentExpanded}
+                      termWidth={termWidth}
+                    />
+                  );
+                }
+
+                const block = item as unknown as Message['blocks'][number];
+
                 if (block.type === 'thinking') {
                   return (
                     <ThinkingBlockRenderer
