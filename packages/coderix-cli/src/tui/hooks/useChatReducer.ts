@@ -259,10 +259,76 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'APPEND_BLOCK_DELTA':
+    case 'APPEND_BLOCK_DELTA': {
+      const msgs = state.messages;
+      const lastIdx = msgs.length - 1;
+
+      // Fast path: during streaming, the target is always the last message
+      if (lastIdx >= 0 && msgs[lastIdx]!.id === action.messageId) {
+        const m = msgs[lastIdx]!;
+        const newMsgs = msgs.slice(0, -1);
+
+        if (m.blocks.length === 0) {
+          const newBlock: ContentBlock =
+            action.deltaType === 'thinking'
+              ? { type: 'thinking', content: action.text } satisfies ThinkingBlock
+              : { type: 'text', content: action.deltaType === 'text' ? action.text : '' };
+          newMsgs.push({
+            ...m,
+            blocks: [newBlock],
+            content: action.deltaType === 'text' ? action.text : m.content,
+            thinking: action.deltaType === 'thinking' ? action.text : m.thinking,
+          });
+          return { ...state, messages: newMsgs };
+        }
+
+        const blocks = m.blocks.slice();
+        const blockIdx = blocks.length - 1;
+        const lastBlock = { ...blocks[blockIdx]! };
+
+        if (action.deltaType === 'text' && lastBlock.type === 'text') {
+          (lastBlock as TextBlock).content += action.text;
+        } else if (action.deltaType === 'thinking') {
+          if (lastBlock.type === 'thinking') {
+            (lastBlock as ThinkingBlock).content += action.text;
+          } else {
+            blocks.push({
+              type: 'thinking',
+              content: action.text,
+            } satisfies ThinkingBlock);
+            newMsgs.push({
+              ...m,
+              blocks,
+              content: getMessageText({ ...m, blocks }),
+              thinking: getMessageThinking({ ...m, blocks }),
+            });
+            return { ...state, messages: newMsgs };
+          }
+        } else if (action.deltaType === 'json' && lastBlock.type === 'tool_use') {
+          const partialStr = ((lastBlock.input as Record<string, unknown>)._partial as string || '') + action.text;
+          try {
+            const parsed = JSON.parse(partialStr) as Record<string, unknown>;
+            lastBlock.input = { ...parsed, _partial: partialStr };
+          } catch {
+            lastBlock.input = { ...lastBlock.input, _partial: partialStr };
+          }
+        }
+
+        blocks[blockIdx] = lastBlock;
+        newMsgs.push({
+          ...m,
+          blocks,
+          content: getMessageText({ ...m, blocks }),
+          thinking: getMessageThinking({ ...m, blocks }),
+        });
+        return { ...state, messages: newMsgs };
+      }
+
+      // Slow path: scan all messages (should be rare — only if messageId
+      // doesn't match the last message, e.g. during sub-agent transcript load)
       return {
         ...state,
-        messages: state.messages.map((m) => {
+        messages: msgs.map((m) => {
           if (m.id !== action.messageId) return m;
 
           if (m.blocks.length === 0) {
@@ -279,8 +345,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           }
 
           const blocks = [...m.blocks];
-          const lastIdx = blocks.length - 1;
-          const lastBlock = { ...blocks[lastIdx] };
+          const lastIdx2 = blocks.length - 1;
+          const lastBlock = { ...blocks[lastIdx2] };
 
           if (action.deltaType === 'text' && lastBlock.type === 'text') {
             (lastBlock as TextBlock).content += action.text;
@@ -301,8 +367,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             }
           } else if (action.deltaType === 'json' && lastBlock.type === 'tool_use') {
             const partialStr = ((lastBlock.input as Record<string, unknown>)._partial as string || '') + action.text;
-            // Try to parse the accumulated JSON so keys like `command` and `description`
-            // are directly accessible to renderers during streaming.
             try {
               const parsed = JSON.parse(partialStr) as Record<string, unknown>;
               lastBlock.input = { ...parsed, _partial: partialStr };
@@ -314,7 +378,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             }
           }
 
-          blocks[lastIdx] = lastBlock;
+          blocks[lastIdx2] = lastBlock;
           return {
             ...m,
             blocks,
@@ -323,6 +387,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           };
         }),
       };
+    }
 
     case 'SET_TOOL_USE_RESULT':
       return {
@@ -366,25 +431,43 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }),
       };
 
-    case 'APPEND_ASSISTANT_TEXT':
+    case 'APPEND_ASSISTANT_TEXT': {
+      const msgs = state.messages;
+      const lastIdx = msgs.length - 1;
+      if (lastIdx >= 0 && msgs[lastIdx]!.id === action.id) {
+        const m = msgs[lastIdx]!;
+        const newMsgs = msgs.slice(0, -1);
+        newMsgs.push({ ...m, content: m.content + action.text });
+        return { ...state, messages: newMsgs };
+      }
       return {
         ...state,
-        messages: state.messages.map((m) =>
+        messages: msgs.map((m) =>
           m.id === action.id
             ? { ...m, content: m.content + action.text }
             : m,
         ),
       };
+    }
 
-    case 'APPEND_ASSISTANT_THINKING':
+    case 'APPEND_ASSISTANT_THINKING': {
+      const msgs = state.messages;
+      const lastIdx = msgs.length - 1;
+      if (lastIdx >= 0 && msgs[lastIdx]!.id === action.id) {
+        const m = msgs[lastIdx]!;
+        const newMsgs = msgs.slice(0, -1);
+        newMsgs.push({ ...m, thinking: (m.thinking ?? '') + action.text });
+        return { ...state, messages: newMsgs };
+      }
       return {
         ...state,
-        messages: state.messages.map((m) =>
+        messages: msgs.map((m) =>
           m.id === action.id
             ? { ...m, thinking: (m.thinking ?? '') + action.text }
             : m,
         ),
       };
+    }
 
     case 'UPDATE_BLOCK_STATE': {
       const msgs = state.messages;
