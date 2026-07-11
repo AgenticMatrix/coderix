@@ -801,7 +801,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const turnCost =
         (inputTokens / 1_000_000) * state.inputPrice +
         (outputTokens / 1_000_000) * state.outputPrice +
-        ((cacheCreationInputTokens + cacheReadInputTokens) / 1_000_000) * state.cacheReadPrice;
+        (cacheReadInputTokens / 1_000_000) * state.cacheReadPrice;
       // skipDisplay: sub-agent tokens should accumulate cost without
       // overwriting the main agent's ctx display data
       const tokenUsage = action.skipDisplay
