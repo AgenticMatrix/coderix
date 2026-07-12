@@ -151,7 +151,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
     const measured = measureElement(controlsRef.current);
     setControlsHeight(prev => (prev === measured.height ? prev : measured.height));
-  });
+  }, [rows, columns, state.taskPanelDismissed, state.todoPanelDismissed, state.teamPanelDismissed, state.teamPicker, state.inputText, state.pastePreviewVisible, state.pasteBlocks]);
 
   const outerPadding = 2; // padding={1} top + bottom
   const freezeHeight = state.isFrozen ? 1 : 0;
