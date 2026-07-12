@@ -1,5 +1,8 @@
-import { exec } from 'node:child_process/promises';
+import { exec as execCb } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { ToolExecutor } from '../types.js';
+
+const execAsync = promisify(execCb);
 
 export const execute: ToolExecutor = async (input, opts) => {
   const pattern = input.pattern as string;
@@ -18,7 +21,7 @@ export const execute: ToolExecutor = async (input, opts) => {
   const cmd = `rg ${argsStr} "${pattern.replace(/"/g, '\\"')}" "${searchPath}"`;
 
   try {
-    const { stdout, stderr } = await exec(cmd, {
+    const { stdout, stderr } = await execAsync(cmd, {
       cwd: opts.cwd,
       maxBuffer: opts.maxOutput,
       encoding: 'utf-8',
