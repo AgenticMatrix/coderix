@@ -119,7 +119,7 @@ function truncateTextByLines(text: string, maxLines: number): string {
   return lines.slice(-maxLines).join('\n');
 }
 
-export function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines }: MessageBubbleProps) {
   const { role } = message;
   const { stdout } = useStdout();
   const [termWidth, setTermWidth] = useState(
