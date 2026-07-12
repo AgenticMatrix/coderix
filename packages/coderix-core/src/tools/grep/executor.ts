@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { exec } from 'node:child_process/promises';
 import type { ToolExecutor } from '../types.js';
 
 export const execute: ToolExecutor = async (input, opts) => {
@@ -18,13 +18,12 @@ export const execute: ToolExecutor = async (input, opts) => {
   const cmd = `rg ${argsStr} "${pattern.replace(/"/g, '\\"')}" "${searchPath}"`;
 
   try {
-    const output = execSync(cmd, {
+    const { stdout, stderr } = await exec(cmd, {
       cwd: opts.cwd,
-      timeout: 30_000,
       maxBuffer: opts.maxOutput,
       encoding: 'utf-8',
     });
-    const trimmed = output.trim();
+    const trimmed = (stdout || stderr || '').trim();
     if (trimmed.length > opts.maxOutput) {
       return {
         content: trimmed.slice(0, opts.maxOutput) + '\n... (output truncated)',
@@ -33,11 +32,11 @@ export const execute: ToolExecutor = async (input, opts) => {
     }
     return { content: trimmed || '(no matches)', isError: false };
   } catch (err) {
-    const stderr = (err as { stderr?: string }).stderr ?? '';
-    const stdout = (err as { stdout?: string }).stdout ?? '';
-    if (stderr.includes('No such file') || stderr.includes('error')) {
-      return { content: `Error: ${stderr}`, isError: true };
+    const stderrMsg = (err as { stderr?: string }).stderr ?? '';
+    const stdoutMsg = (err as { stdout?: string }).stdout ?? '';
+    if (stderrMsg.includes('No such file') || stderrMsg.includes('error')) {
+      return { content: `Error: ${stderrMsg}`, isError: true };
     }
-    return { content: stdout.trim() || '(no matches)', isError: false };
+    return { content: stdoutMsg.trim() || '(no matches)', isError: false };
   }
 };
