@@ -86,7 +86,7 @@ function getSearchHint(block: ToolUseBlock): string {
 function getReadHint(block: ToolUseBlock): string {
   if (block.toolName === 'read') {
     const fp = (block.input.file_path as string) ?? '';
-    return fp.length > 60 ? '...' + fp.slice(-57) : fp;
+    return fp.length > 150 ? '...' + fp.slice(-147) : fp;
   }
   if (block.toolName === 'bash') {
     const cmd = (block.input.command as string) ?? '';
