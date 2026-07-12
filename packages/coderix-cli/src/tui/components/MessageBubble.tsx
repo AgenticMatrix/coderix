@@ -431,4 +431,4 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
       </Box>
     </Box>
   );
-}
+});
