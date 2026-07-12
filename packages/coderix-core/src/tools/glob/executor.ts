@@ -11,7 +11,7 @@ export const execute: ToolExecutor = async (input, opts) => {
   try {
     const baseDir = resolve(opts.cwd, searchPath);
     const results: string[] = [];
-    walkDir(baseDir, pattern, baseDir, results);
+    await walkDir(baseDir, pattern, baseDir, results);
     const output = results.join('\n') || '(no matches)';
 
     if (output.length > opts.maxOutput) {
