@@ -17,7 +17,7 @@ import {
   writeAgentMetadata,
 } from '../../../agents/agent-persistence.js';
 
-const MAX_RESUME_TURNS = 15;
+const MAX_RESUME_TURNS = 200;
 const CONTEXT_BUDGET = 120_000;
 const MAX_CONCURRENCY = 8;
 

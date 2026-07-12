@@ -123,7 +123,7 @@ export class QueryEngine {
 
   constructor(config: QueryEngineConfig) {
     this.config = {
-      maxTurns: 100,
+      maxTurns: 500,
       contextBudget: 180_000,
       compactThreshold: 0.85,
       model: 'deepseek-v4-pro',
@@ -740,7 +740,7 @@ export class QueryEngine {
         sessionManager: subSessionManager,
         checkpointManager: subCheckpointManager,
         abortController: subAbortController,
-        maxTurns: agentDef?.maxTurns ?? 15,
+        maxTurns: agentDef?.maxTurns ?? 200,
         contextBudget: agentDef?.contextBudget ?? 120_000,
         compactThreshold: 0.85,
         autoCompactEnabled: this.config.autoCompactEnabled ?? true,

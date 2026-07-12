@@ -159,9 +159,9 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
       ) : isStreaming && isFrozen ? (
         <Text color="yellow">⏸ Paused</Text>
       ) : isStreaming ? (
-        <Text color="yellow" dimColor>● Streaming</Text>
+        <Text color="yellow" dimColor>● Busy</Text>
       ) : (
-        <Text color="green" dimColor>✓ Ready</Text>
+        <Text color="green" dimColor>✓ Idle</Text>
       )}
 
       <Sep />

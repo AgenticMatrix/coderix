@@ -36,7 +36,7 @@ import {
   saveAgentTranscript,
 } from '../agent-persistence.js';
 
-const DEFAULT_MAX_TURNS = 20;
+const DEFAULT_MAX_TURNS = 200;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
 const DEFAULT_MAX_CONCURRENCY = 8;
 
@@ -1087,7 +1087,7 @@ async function executeResume(
 
   // ── Look up agent definition ─────────────────────────────────────────
   const agentDef = agentSpawn.agentRegistry?.get(agentType);
-  const effectiveMaxTurns = agentDef?.maxTurns ?? 15;
+  const effectiveMaxTurns = agentDef?.maxTurns ?? 200;
 
   // ── Build resumed messages ───────────────────────────────────────────
   const resumedMessages: Message[] = [

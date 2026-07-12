@@ -52,7 +52,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicatorColor = isError ? 'red' : isDone ? 'green' : 'yellow';
 
   const lang = hasPath ? detectLanguage(fp) : null;
-  const diffWidth = Math.floor((props.termWidth ?? 80) * 0.81);
+  const diffWidth = Math.max(20, Math.floor((props.termWidth ?? 80) * 0.9) - 2);
 
   return (
     <Box flexDirection="column" marginBottom={1}>

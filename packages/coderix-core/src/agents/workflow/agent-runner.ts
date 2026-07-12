@@ -167,7 +167,7 @@ function createStructuredOutputTool(schema: JsonSchema): {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MAX_TURNS = 20;
+const DEFAULT_MAX_TURNS = 200;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
 const DEFAULT_MAX_CONCURRENCY = 8;
 
