@@ -68,7 +68,7 @@ const PHASE_NAMES: Record<ActivityPhase, string> = {
   idle: '',
   thinking: 'Thinking',
   executing: 'Executing',
-  streaming: 'Busy',
+  streaming: 'Streaming',
 };
 
 export interface ActivityLineProps {
