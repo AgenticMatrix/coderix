@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFile, writeFile, access } from 'node:fs/promises';
 import type { ToolExecutor } from '../types.js';
 
 interface NotebookCell {
@@ -16,17 +16,18 @@ interface Notebook {
   nbformat_minor: number;
 }
 
-function readNotebook(path: string): Notebook {
-  if (!existsSync(path)) throw new Error(`File not found: ${path}`);
+async function readNotebook(path: string): Promise<Notebook> {
+  try { await access(path); }
+  catch { throw new Error(`File not found: ${path}`); }
   let raw: string;
-  try { raw = readFileSync(path, 'utf-8'); }
+  try { raw = await readFile(path, 'utf-8'); }
   catch { throw new Error(`Cannot read file: ${path}`); }
   try { return JSON.parse(raw) as Notebook; }
   catch { throw new Error(`Invalid notebook JSON: ${path}`); }
 }
 
-function writeNotebook(path: string, nb: Notebook): void {
-  writeFileSync(path, JSON.stringify(nb, null, 1) + '\n', 'utf-8');
+async function writeNotebook(path: string, nb: Notebook): Promise<void> {
+  await writeFile(path, JSON.stringify(nb, null, 1) + '\n', 'utf-8');
 }
 
 function sourceToString(source: string[]): string {
@@ -44,7 +45,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
   if (!path.endsWith('.ipynb')) return { content: 'File must be a .ipynb notebook.', isError: true };
 
   try {
-    const nb = readNotebook(path);
+    const nb = await readNotebook(path);
 
     switch (action) {
       case 'list': {
@@ -88,7 +89,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
           return { content: `Cell index ${idx} out of range (0-${nb.cells.length - 1}).`, isError: true };
         }
         nb.cells[idx]!.source = stringToSource(source);
-        writeNotebook(path, nb);
+        await writeNotebook(path, nb);
         return {
           content: `Cell [${idx}] updated.`,
           isError: false,
@@ -114,7 +115,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
           newCell.execution_count = null;
         }
         nb.cells.splice(insertIdx, 0, newCell);
-        writeNotebook(path, nb);
+        await writeNotebook(path, nb);
         return {
           content: `${cellType} cell inserted at [${insertIdx}].`,
           isError: false,
@@ -130,7 +131,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
         }
         const cellType = nb.cells[idx]!.cell_type;
         nb.cells.splice(idx, 1);
-        writeNotebook(path, nb);
+        await writeNotebook(path, nb);
         return {
           content: `${cellType} cell [${idx}] deleted.`,
           isError: false,

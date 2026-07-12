@@ -1,4 +1,4 @@
-import { writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { writeFile, readFile, access } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import type { ToolExecutor } from '../types.js';
 import { computeDiff, formatDiff } from '../shared/diff.js';
@@ -24,19 +24,25 @@ export const execute: ToolExecutor = async (input, opts) => {
   try {
     const fullPath = resolve(opts.cwd, filePath);
     const relPath = relative(opts.cwd, fullPath) || filePath;
-    const fileExists = existsSync(fullPath);
+    let fileExists = false;
+    try {
+      await access(fullPath);
+      fileExists = true;
+    } catch {
+      // file does not exist
+    }
 
     let oldLines: string[] = [];
     if (fileExists) {
       try {
-        const oldContent = readFileSync(fullPath, 'utf-8');
+        const oldContent = await readFile(fullPath, 'utf-8');
         oldLines = oldContent.split('\n');
       } catch {
         // If we can't read, treat as new file
       }
     }
 
-    writeFileSync(fullPath, content, 'utf-8');
+    await writeFile(fullPath, content, 'utf-8');
     const newLines = content.split('\n');
 
     if (fileExists && oldLines.length > 0) {

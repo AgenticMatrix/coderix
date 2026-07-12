@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { ToolExecutor } from '../types.js';
 import { computeDiff, formatDiff } from '../shared/diff.js';
@@ -19,7 +19,7 @@ export const execute: ToolExecutor = async (input, opts) => {
 
   try {
     const fullPath = resolve(opts.cwd, filePath);
-    const oldContent = readFileSync(fullPath, 'utf-8');
+    const oldContent = await readFile(fullPath, 'utf-8');
 
     if (!oldContent.includes(oldStr)) {
       return { content: `Error: old_string not found in ${filePath}`, isError: true };
@@ -32,7 +32,7 @@ export const execute: ToolExecutor = async (input, opts) => {
       newContent = oldContent.replace(oldStr, newStr);
     }
 
-    writeFileSync(fullPath, newContent, 'utf-8');
+    await writeFile(fullPath, newContent, 'utf-8');
 
     // Compute diff
     const oldLines = oldContent.split('\n');

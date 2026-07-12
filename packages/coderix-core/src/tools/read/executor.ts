@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { ToolExecutor } from '../types.js';
 
@@ -13,7 +13,7 @@ export const execute: ToolExecutor = async (input, opts) => {
 
   try {
     const fullPath = resolve(opts.cwd, filePath);
-    const content = readFileSync(fullPath, 'utf-8');
+    const content = await readFile(fullPath, 'utf-8');
     const lines = content.split('\n');
     const startLine = offset ? offset - 1 : 0;
     const endLine = limit ? startLine + limit : lines.length;
