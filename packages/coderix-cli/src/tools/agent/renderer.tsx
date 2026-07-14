@@ -72,7 +72,6 @@ interface ToolCallSummary {
 }
 
 const POLL_MS = 250;
-const FOLD_THRESHOLD = 5;
 
 export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const agentType = props.input.agent_type as string | undefined;
@@ -92,11 +91,12 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const headerText = shortDesc ? `${label} (${shortDesc})` : label;
 
   const doneToolCalls: ToolCallSummary[] = (props.result?.metadata?.toolCalls as ToolCallSummary[]) ?? [];
+  const doneTurnCount = props.result?.metadata?.turnCount as number | undefined;
+  const doneToolCount = props.result?.metadata?.toolCount as number | undefined;
 
-  // Poll registry for live tool calls during execution.
-  // Use a ref (always current, survives React batching) + a tick counter
-  // to force re-renders so the tool tree grows progressively.
+  // Poll registry for live tool calls and counts during execution.
   const liveCallsRef = useRef<ToolCallSummary[]>([]);
+  const liveCountsRef = useRef<{ turnCount: number; toolCount: number }>({ turnCount: 0, toolCount: 0 });
   const [liveTick, setLiveTick] = useState(0);
   const isActive = isExecuting || isPending;
 
@@ -123,10 +123,18 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
           .sort((a, b) => b.createdAt - a.createdAt);
 
         const agent = matching[0];
-        if (agent?.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
+        if (!agent) return;
+
+        let changed = false;
+        if (agent.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
           liveCallsRef.current = [...agent.liveToolCalls];
-          setLiveTick(t => t + 1);
+          changed = true;
         }
+        if (agent.turnCount !== liveCountsRef.current.turnCount || agent.toolCount !== liveCountsRef.current.toolCount) {
+          liveCountsRef.current = { turnCount: agent.turnCount, toolCount: agent.toolCount };
+          changed = true;
+        }
+        if (changed) setLiveTick(t => t + 1);
       } catch {
         // Ignore poll errors
       }
@@ -143,15 +151,11 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
 
   const displayCalls = liveCallsRef.current.length > 0 ? liveCallsRef.current : doneToolCalls;
-  const tooLong = displayCalls.length > FOLD_THRESHOLD && !props.contentExpanded;
-  const visibleCalls = tooLong ? displayCalls.slice(0, FOLD_THRESHOLD) : displayCalls;
-  const hiddenCount = displayCalls.length - FOLD_THRESHOLD;
+  const lastCall = displayCalls.length > 0 ? displayCalls[displayCalls.length - 1] : null;
 
-  const resultContent = props.result?.content;
-  const resultFirstLine = resultContent ? resultContent.split('\n')[0]?.trim() : null;
-  const resultPreview = resultFirstLine
-    ? (resultFirstLine.length > 100 ? resultFirstLine.slice(0, 97) + '...' : resultFirstLine)
-    : null;
+  const turnCount = isDone ? (doneTurnCount ?? liveCountsRef.current.turnCount) : liveCountsRef.current.turnCount;
+  const toolCount = isDone ? (doneToolCount ?? liveCountsRef.current.toolCount) : liveCountsRef.current.toolCount;
+  const showCounts = turnCount > 0 || toolCount > 0;
 
   if (isError) {
     return (
@@ -175,33 +179,22 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>{headerText}</Text>
+        {showCounts ? (
+          <Text dimColor> {toolCount} tools used, {turnCount} LLM turns,</Text>
+        ) : null}
         {showTimer ? (
           <Text dimColor color="ansi:yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
         {isolation ? <Text dimColor> isolated: {isolation}</Text> : null}
-        {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
+        {isDone ? <Text dimColor> {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>
-      {displayCalls.length > 0 && (
+      {lastCall && (
         <Box flexDirection="column" marginLeft={2}>
-          {visibleCalls.map((tc, i) => {
-            const prefix = tooLong ? '├── ' : (i === visibleCalls.length - 1 ? '└── ' : '├── ');
-            const detail = formatToolCallDetail(tc);
-            return (
-              <Text key={i}>
-                <Text dimColor>{prefix}</Text>
-                <Text bold>{toolLabel(tc.name)}</Text>
-                <Text dimColor>({detail})</Text>
-              </Text>
-            );
-          })}
-          {tooLong && (
-            <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
-          )}
-        </Box>
-      )}
-      {resultPreview && (
-        <Box marginLeft={1}>
-          <Text dimColor>{resultPreview}</Text>
+          <Text>
+            <Text dimColor>└── </Text>
+            <Text bold>{toolLabel(lastCall.name)}</Text>
+            <Text dimColor>({formatToolCallDetail(lastCall)})</Text>
+          </Text>
         </Box>
       )}
     </Box>
