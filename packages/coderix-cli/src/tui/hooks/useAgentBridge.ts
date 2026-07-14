@@ -350,20 +350,6 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                           metadata: block.metadata,
                         },
                       });
-                      // Accumulate sub-agent token cost into main agent total
-                      const subTokenUsage = block.metadata?.tokenUsage as Record<string, number> | undefined;
-                      if (subTokenUsage) {
-                        routeDispatch({
-                          type: 'UPDATE_TOKEN_USAGE',
-                          skipDisplay: true,
-                          usage: {
-                            inputTokens: subTokenUsage.inputTokens ?? 0,
-                            outputTokens: subTokenUsage.outputTokens ?? 0,
-                            cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
-                            cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
-                          },
-                        });
-                      }
                     }
                   }
                 };
@@ -443,20 +429,6 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                         metadata: cMetadata,
                       },
                     });
-                    // Accumulate sub-agent token cost into main agent total
-                    const subTokenUsage = cMetadata?.tokenUsage as Record<string, number> | undefined;
-                    if (subTokenUsage) {
-                      routeDispatch({
-                        type: 'UPDATE_TOKEN_USAGE',
-                        skipDisplay: true,
-                        usage: {
-                          inputTokens: subTokenUsage.inputTokens ?? 0,
-                          outputTokens: subTokenUsage.outputTokens ?? 0,
-                          cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
-                          cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
-                        },
-                      });
-                    }
                   };
                   if (batchedUpdates) {
                     batchedUpdates(applyCompleted);

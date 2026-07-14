@@ -151,19 +151,6 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                     if (currentAssistantId) {
                       flushDeltas();
                       dispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId });
-                      const stopMsg = ev.message as Record<string, unknown> | undefined;
-                      const stopUsage = stopMsg?.usage as Record<string, number> | undefined;
-                      if (stopUsage) {
-                        dispatch({
-                          type: 'UPDATE_TOKEN_USAGE',
-                          usage: {
-                            inputTokens: stopUsage.input_tokens ?? 0,
-                            outputTokens: stopUsage.output_tokens ?? 0,
-                            cacheCreationInputTokens: stopUsage.cache_creation_input_tokens ?? 0,
-                            cacheReadInputTokens: stopUsage.cache_read_input_tokens ?? 0,
-                          },
-                        });
-                      }
                       currentAssistantId = null;
                     }
                     break;
@@ -215,19 +202,6 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                         metadata: block.metadata,
                       },
                     });
-                    // Accumulate sub-agent token cost into total
-                    const subTokenUsage = block.metadata?.tokenUsage as Record<string, number> | undefined;
-                    if (subTokenUsage) {
-                      dispatch({
-                        type: 'UPDATE_TOKEN_USAGE',
-                        usage: {
-                          inputTokens: subTokenUsage.inputTokens ?? 0,
-                          outputTokens: subTokenUsage.outputTokens ?? 0,
-                          cacheCreationInputTokens: subTokenUsage.cacheCreationInputTokens ?? 0,
-                          cacheReadInputTokens: subTokenUsage.cacheReadInputTokens ?? 0,
-                        },
-                      });
-                    }
                   }
                 }
 
