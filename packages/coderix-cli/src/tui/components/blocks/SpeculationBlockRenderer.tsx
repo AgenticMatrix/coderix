@@ -1,14 +1,15 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import type { SpeculationState } from '../../../types.js';
 
 export interface SpeculationBlockRendererProps {
   state: SpeculationState;
 }
 
-const CONFIG: Record<SpeculationState, { icon: string; color: string; label: string }> = {
-  predicting: { icon: '🔮', color: 'grey', label: 'Predicting...' },
-  used: { icon: '✅', color: 'green', label: 'Speculation used' },
-  discarded: { icon: '❌', color: 'grey', label: 'Speculation discarded' },
+const CONFIG: Record<SpeculationState, { icon: string; color: Color; label: string }> = {
+  predicting: { icon: '🔮', color: 'ansi:blackBright', label: 'Predicting...' },
+  used: { icon: '✅', color: 'ansi:green', label: 'Speculation used' },
+  discarded: { icon: '❌', color: 'ansi:blackBright', label: 'Speculation discarded' },
 };
 
 /**

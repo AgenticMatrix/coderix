@@ -1,4 +1,5 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import { useState, useEffect } from 'react';
 
 const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
@@ -41,7 +42,7 @@ function formatTokens(n: number): string {
  * All characters remain visible at the base color; the wave adds a gentle
  * brightness boost without replacing characters with white.
  */
-export function ShimmerText({ text, color = '#FFFFFF', active = true }: { text: string; color?: string; active?: boolean }) {
+export function ShimmerText({ text, color = '#FFFFFF', active = true }: { text: string; color?: Color; active?: boolean }) {
   const [pos, setPos] = useState(0);
   const chars = text.split('');
 
@@ -133,13 +134,13 @@ export function ThinkingBlockRenderer({ content, thinkingExpanded, thinkingDurat
       <Box flexDirection="column" flexGrow={1}>
         <Box paddingLeft={0} flexDirection="column">
           {logicalLines.map((line, i) => (
-            <Text key={i} dimColor color="grey">{line || ' '}</Text>
+            <Text key={i} dimColor color="ansi:blackBright">{line || ' '}</Text>
           ))}
           {collapsed ? (
-            <Text dimColor color="grey">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
+            <Text dimColor color="ansi:blackBright">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
           ) : null}
           {tooLong && thinkingExpanded ? (
-            <Text dimColor color="grey">{'(Ctrl+D to detail)'}</Text>
+            <Text dimColor color="ansi:blackBright">{'(Ctrl+D to detail)'}</Text>
           ) : null}
         </Box>
       </Box>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, useStdout } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
+import { useTerminalSize } from '@coderix/ink';
 
 import { renderLatex } from './latex-to-unicode.js';
 import { highlightCode } from './highlight.js';
@@ -514,7 +516,7 @@ function InlineLine({ tokens }: { tokens: InlineToken[] }) {
 /**
  * Render a single block.
  */
-function BlockElement({ block, termWidth, theme, textColor }: { block: Block; termWidth: number; theme?: string; textColor: string }) {
+function BlockElement({ block, termWidth, theme, textColor }: { block: Block; termWidth: number; theme?: string; textColor: Color }) {
   switch (block.type) {
     case 'heading':
       return (
@@ -545,10 +547,10 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
           paddingX={2}
           paddingY={1}
           borderStyle="single"
-          borderColor="grey"
+          borderColor="ansi:blackBright"
         >
           {block.language ? (
-            <Text dimColor color="yellow">
+            <Text dimColor color="ansi:yellow">
               {block.language}
             </Text>
           ) : null}
@@ -605,7 +607,7 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
     case 'horizontal_rule':
       return (
         <Box marginY={1}>
-          <Text dimColor color="grey">
+          <Text dimColor color="ansi:blackBright">
             {'─'.repeat(40)}
           </Text>
         </Box>
@@ -700,10 +702,10 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
 
       return (
         <Box flexDirection="column" marginY={1}>
-          <Text color="grey">{topBorder}</Text>
+          <Text color="ansi:blackBright">{topBorder}</Text>
           {headerLines.map((cells, li) => (
             <Box key={`h${li}`} flexDirection="row">
-              <Text color="grey">│</Text>
+              <Text color="ansi:blackBright">│</Text>
               {cells.map((cell, ci) => (
                 <React.Fragment key={ci}>
                   <Box width={innerWidths[ci]!} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
@@ -711,16 +713,16 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
                       <InlineLine tokens={parseInline(cell.trim())} />
                     </Text>
                   </Box>
-                  <Text color="grey">│</Text>
+                  <Text color="ansi:blackBright">│</Text>
                 </React.Fragment>
               ))}
             </Box>
           ))}
-          <Text color="grey">{sepBorder}</Text>
+          <Text color="ansi:blackBright">{sepBorder}</Text>
           {rowLines.map((lines, ri) =>
             lines.map((cells, li) => (
               <Box key={`${ri}-${li}`} flexDirection="row">
-                <Text color="grey">│</Text>
+                <Text color="ansi:blackBright">│</Text>
                 {cells.map((cell, ci) => (
                   <React.Fragment key={ci}>
                     <Box width={innerWidths[ci]!} justifyContent={alignments[ci] === 'center' ? 'center' : alignments[ci] === 'right' ? 'flex-end' : 'flex-start'}>
@@ -728,26 +730,26 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
                         <InlineLine tokens={parseInline(cell.trim())} />
                       </Text>
                     </Box>
-                    <Text color="grey">│</Text>
+                    <Text color="ansi:blackBright">│</Text>
                   </React.Fragment>
                 ))}
               </Box>
             )),
           )}
-          <Text color="grey">{botBorder}</Text>
+          <Text color="ansi:blackBright">{botBorder}</Text>
         </Box>
       );
     }
 
     case 'blockquote': {
-      const quoteColors = ['grey', 'yellow', 'magenta'];
+      const quoteColors = ['ansi:blackBright', 'ansi:yellow', 'ansi:magenta'];
       return (
         <Box flexDirection="column" marginY={1}>
           {block.lines.map((ql, li) => {
             const prefixWidth = ql.level * 2;
             const lines = wordWrapTokens(ql.tokens, termWidth - prefixWidth);
             const prefix = Array.from({ length: ql.level }, (_, i) => (
-              <Text key={i} color={quoteColors[Math.min(i, quoteColors.length - 1)]}>
+              <Text key={i} color={quoteColors[Math.min(i, quoteColors.length - 1)] as Color}>
                 │{' '}
               </Text>
             ));
@@ -830,17 +832,16 @@ function estimateBlockLines(block: Block, termWidth: number): number {
  * - Paragraphs
  */
 export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererProps) {
-  const { stdout } = useStdout();
+  const { columns } = useTerminalSize();
   const [termWidth, setTermWidth] = useState(
-    () => stdout?.columns ?? process.stdout.columns ?? 80,
+    () => columns ?? process.stdout.columns ?? 80,
   );
 
   useEffect(() => {
-    const cols = stdout?.columns;
-    if (cols && cols !== termWidth) {
-      setTermWidth(cols);
+    if (columns && columns !== termWidth) {
+      setTermWidth(columns);
     }
-  }, [stdout?.columns]);
+  }, [columns]);
 
   const blocks = parseBlocks(content);
 

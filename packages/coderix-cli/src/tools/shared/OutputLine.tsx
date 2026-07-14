@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Text } from 'ink';
+import { Text } from '@coderix/ink';
 
 export interface OutputLineProps {
   line: string;
@@ -51,7 +51,7 @@ export function OutputLine({ line, isStderr }: OutputLineProps): React.ReactNode
 
   if (!formatted.trim()) return null;
 
-  const color = isStderr ? 'yellow' : undefined;
+  const color = isStderr ? 'ansi:yellow' : undefined;
 
   // JSON output — split into lines so multi-line JSON renders correctly
   const jsonLines = formatted.split('\n');
@@ -59,7 +59,7 @@ export function OutputLine({ line, isStderr }: OutputLineProps): React.ReactNode
     return (
       <>
         {jsonLines.map((l, i) => (
-          <Text key={i} color={color} dimColor={isStderr && color === 'yellow'}>
+          <Text key={i} color={color} dimColor={isStderr && color === 'ansi:yellow'}>
             {l || ' '}
           </Text>
         ))}

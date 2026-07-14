@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -18,10 +18,10 @@ export function SkillRenderer(props: ToolUseRendererProps): React.ReactNode {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>Skill</Text>
           {skillName ? <Text dimColor> {skillName}</Text> : null}
-          <Text color="red"> not found</Text>
+          <Text color="ansi:red"> not found</Text>
         </Text>
       </Box>
     );
@@ -33,7 +33,7 @@ export function SkillRenderer(props: ToolUseRendererProps): React.ReactNode {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="green">● </Text>
+          <Text color="ansi:green">● </Text>
           <Text bold>Skill</Text>
           {skillName ? <Text> {skillName}</Text> : null}
           <Text dimColor> loaded</Text>
@@ -53,11 +53,11 @@ export function SkillRenderer(props: ToolUseRendererProps): React.ReactNode {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>Skill</Text>
         {skillName ? <Text dimColor> /{skillName}</Text> : null}
         {isExecuting ? (
-          <Text dimColor color="yellow">
+          <Text dimColor color="ansi:yellow">
             {' '}
             loading {elapsedSecs}s
           </Text>

@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import type { TurnSummary } from '../../../types.js';
 
 export interface TurnBoundaryRendererProps {
@@ -29,7 +29,7 @@ export function TurnBoundaryRenderer({ turnId, summary }: TurnBoundaryRendererPr
 
   return (
     <Box flexDirection="row" marginBottom={1} marginTop={0}>
-      <Text dimColor color="grey">{line}</Text>
+      <Text dimColor color="ansi:blackBright">{line}</Text>
     </Box>
   );
 }

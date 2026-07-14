@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback, useLayoutEffect, useState } from 'react';
-import { Box, Text, Static, measureElement, useStdout } from 'ink';
+import { Box, Text, measureElement } from '@coderix/ink';
+import { useTerminalSize } from '@coderix/ink';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
@@ -124,9 +125,9 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   const setAppState = useSetAppState();
 
   // ── Terminal size & layout measurement ──────────────────────
-  const { stdout } = useStdout();
-  const rows = stdout?.rows ?? process.stdout.rows ?? 24;
-  const columns = stdout?.columns ?? process.stdout.columns ?? 80;
+  const { rows: termRows, columns: termCols } = useTerminalSize();
+  const rows = termRows ?? process.stdout.rows ?? 24;
+  const columns = termCols ?? process.stdout.columns ?? 80;
 
   const controlsRef = useRef<any>(null);
   const [controlsHeight, setControlsHeight] = useState(0);
@@ -582,19 +583,17 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   return (
     <Box flexDirection="column" height="100%" padding={1}>
       {/* ── Static zone: re-renders on Ctrl+D / Ctrl+E ────────────── */}
-      <Static key={`static-${state.contentExpanded}-${state.subAgentView?.agentId ?? 'main'}`} items={staticItems}>
-        {(item) => {
-          if (item._type === 'header') return <HeaderLogo key="header" />;
-          return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking />;
-        }}
-      </Static>
+      {staticItems.map((item) => {
+        if (item._type === 'header') return <HeaderLogo key="header" />;
+        return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking />;
+      })}
 
       {/* ── Freeze indicator (pre-allocated to avoid layout shift) ── */}
       {state.isFrozen && (
         <Box flexShrink={0} height={1} flexDirection="row">
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
-            <Text color="yellow" dimColor>
+            <Text color="ansi:yellow" dimColor>
               ⏸ Paused — {frozenNewCount > 0 ? `${frozenNewCount} new message(s) — ` : ''}PageDown / End to follow
             </Text>
           </Box>

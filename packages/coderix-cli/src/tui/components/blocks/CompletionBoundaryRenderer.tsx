@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 
 export interface CompletionBoundaryRendererProps {
   stopReason: string;
@@ -21,9 +21,9 @@ export function CompletionBoundaryRenderer({ stopReason }: CompletionBoundaryRen
 
   return (
     <Box flexDirection="row" marginBottom={1} marginTop={0}>
-      <Text dimColor color="green">
+      <Text dimColor color="ansi:green">
         ✓ {label}
-        <Text dimColor color="grey"> ({stopReason})</Text>
+        <Text dimColor color="ansi:blackBright"> ({stopReason})</Text>
       </Text>
     </Box>
   );

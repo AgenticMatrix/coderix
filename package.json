@@ -28,7 +28,6 @@
     "electron": "^33.4.11",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
-    "ink": "^7.0.5",
     "proper-lockfile": "^4.1.2",
     "react": "^19.2.4",
     "shell-quote": "^1.8.4",

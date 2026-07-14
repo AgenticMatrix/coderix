@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import type { TodoItem } from '../../../types.js';
 
 export interface TodoUpdateBlockRendererProps {
@@ -34,13 +34,13 @@ export function TodoUpdateBlockRenderer({ todos, oldTodos }: TodoUpdateBlockRend
     <Box
       flexDirection="column"
       borderStyle="single"
-      borderColor="cyan"
+      borderColor="ansi:cyan"
       paddingX={1}
       marginBottom={1}
       width="90%"
     >
       <Box marginBottom={0}>
-        <Text bold color="cyan">
+        <Text bold color="ansi:cyan">
           📋 Tasks
         </Text>
         {oldTodos ? (
@@ -54,9 +54,9 @@ export function TodoUpdateBlockRenderer({ todos, oldTodos }: TodoUpdateBlockRend
           <Box key={i} flexDirection="row" paddingLeft={1}>
             <Text>
               <Text>{icon} </Text>
-              <Text color="white">{i + 1}. {todo.content}</Text>
+              <Text color="ansi:white">{i + 1}. {todo.content}</Text>
               {todo.status && todo.status !== 'pending' ? (
-                <Text dimColor color="grey"> ← {label}</Text>
+                <Text dimColor color="ansi:blackBright"> ← {label}</Text>
               ) : null}
             </Text>
           </Box>

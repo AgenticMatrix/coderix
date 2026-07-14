@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 
 import type { Message } from '../../types.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -29,7 +29,7 @@ export function ChatView({ messages, isStreaming }: ChatViewProps) {
 
       {isStreaming && (
         <Box marginTop={1}>
-          <Text color="yellow" dimColor>
+          <Text color="ansi:yellow" dimColor>
             ● Generating...
           </Text>
         </Box>

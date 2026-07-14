@@ -1,4 +1,5 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import type { ToolUseRendererProps } from '../types.js';
 import { useToolTimer } from '../shared/useToolTimer.js';
 
@@ -8,9 +9,9 @@ const STATE_ICON: Record<string, string> = {
 };
 
 const RISK_COLOR: Record<string, string> = {
-  safe: 'green',
-  mutation: 'yellow',
-  destructive: 'red',
+  safe: 'ansi:green',
+  mutation: 'ansi:yellow',
+  destructive: 'ansi:red',
 };
 
 function formatDuration(ms: number): string {
@@ -37,7 +38,7 @@ export function BaseToolRenderer({
   expanded = true,
   children,
 }: ToolUseRendererProps) {
-  const borderColor = riskLevel ? RISK_COLOR[riskLevel] : 'grey';
+  const borderColor = (riskLevel ? RISK_COLOR[riskLevel] : 'ansi:blackBright') as Color;
   const isExecuting = state === 'executing';
   const isPending = state === 'pending';
   const isDone = state === 'done';
@@ -48,7 +49,7 @@ export function BaseToolRenderer({
   const statusIcon = active
     ? (blinkOn ? '●' : '○')
     : STATE_ICON[state];
-  const statusColor = active ? 'yellow' : isDone ? 'green' : state === 'error' ? 'red' : 'grey';
+  const statusColor = (active ? 'ansi:yellow' : isDone ? 'ansi:green' : state === 'error' ? 'ansi:red' : 'ansi:blackBright') as Color;
 
   return (
     <Box flexDirection="row" marginBottom={1}>
@@ -70,7 +71,7 @@ export function BaseToolRenderer({
                 <Text dimColor> · {paramSummary}</Text>
               ) : null}
               {(isExecuting || isPending) ? (
-                <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
+                <Text dimColor color="ansi:yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
               ) : null}
             </Text>
           </Box>
@@ -82,9 +83,9 @@ export function BaseToolRenderer({
               <Text dimColor>{elapsedSecs}s</Text>
             ) : null}
             {permissionState === 'denied' ? (
-              <Text color="red"> ⛔ denied</Text>
+              <Text color="ansi:red"> ⛔ denied</Text>
             ) : permissionState === 'pending' ? (
-              <Text color="yellow"> ⚠ pending</Text>
+              <Text color="ansi:yellow"> ⚠ pending</Text>
             ) : null}
           </Box>
         </Box>

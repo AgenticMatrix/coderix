@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { getSubAgentRegistry } from '@coderix/core';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
@@ -92,17 +92,17 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
       return (
         <Box flexDirection="column" marginBottom={1}>
           <Text>
-            <Text color="red">❌ </Text>
+            <Text color="ansi:red">❌ </Text>
             <Text bold>SendMessage</Text>
             <Text dimColor> {headerText}</Text>
-            <Text color="red"> failed</Text>
+            <Text color="ansi:red"> failed</Text>
           </Text>
         </Box>
       );
     }
 
     const indicator = isDone ? '●' : (blinkOn ? '●' : '○');
-    const indicatorColor = isDone ? 'green' : 'yellow';
+    const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
     const showTimer = (isExecuting || isPending) && !isDone;
 
     return (
@@ -112,7 +112,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           <Text bold>SendMessage</Text>
           <Text dimColor> {headerText}</Text>
           {showTimer ? (
-            <Text dimColor color="yellow"> {elapsedSecs}s</Text>
+            <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
           ) : null}
           {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
         </Text>
@@ -178,17 +178,17 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>SendMessage</Text>
           <Text dimColor> {headerText}</Text>
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
   }
 
   const indicator = isDone ? '●' : (blinkOn ? '●' : '○');
-  const indicatorColor = isDone ? 'green' : 'yellow';
+  const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
   const statusText = isPending ? 'queued' : '';
   const showTimer = (isExecuting || isPending) && !isDone;
 
@@ -199,7 +199,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
         <Text bold>SendMessage</Text>
         <Text dimColor> {headerText}</Text>
         {showTimer ? (
-          <Text dimColor color="yellow"> {statusText} {elapsedSecs}s</Text>
+          <Text dimColor color="ansi:yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
         {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>

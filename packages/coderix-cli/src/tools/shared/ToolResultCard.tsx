@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { ShellTimeDisplay } from './ShellTimeDisplay.js';
 
 export interface ToolResultCardProps {
@@ -38,7 +38,7 @@ export function ToolResultCard({
   isError,
   children,
 }: ToolResultCardProps): React.ReactNode {
-  const borderColor = isError ? 'red' : 'grey';
+  const borderColor = isError ? 'ansi:red' : 'ansi:blackBright';
   const icon = toolName ? (TOOL_ICONS[toolName] ?? TOOL_ICONS.default) : '';
   const label = toolName ?? '';
 

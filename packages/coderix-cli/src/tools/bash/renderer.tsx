@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { OutputLine } from '../shared/OutputLine.js';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
@@ -60,7 +60,7 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
   const { elapsedSecs, blinkOn } = useToolTimer(isActive);
 
   const indicator = isDone ? '●' : blinkOn ? '●' : '○';
-  const indicatorColor = isDone ? 'green' : 'yellow';
+  const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
 
   const indent = ' '.repeat(4);
 
@@ -111,16 +111,16 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
           {hasResult ? (
             <Box flexDirection="column" paddingLeft={4}>
               {timedOut ? (
-                <Text color="red">Command timed out</Text>
+                <Text color="ansi:red">Command timed out</Text>
               ) : null}
               {emptiness ? (
-                <Text color={result.isError ? 'red' : 'green'} dimColor>
+                <Text color={result.isError ? 'ansi:red' : 'ansi:green'} dimColor>
                   {result.isError ? '(error — no output)' : 'Done'}
                 </Text>
               ) : null}
               {displayOutLines.map((line, i) =>
                 line.trimStart().startsWith('Error:') ? (
-                  <Text key={`out-${i}`} color="red">{line}</Text>
+                  <Text key={`out-${i}`} color="ansi:red">{line}</Text>
                 ) : (
                   <Text key={`out-${i}`} dimColor>
                     <OutputLine line={line} />
@@ -131,7 +131,7 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
                 <Box flexDirection="column" marginTop={stdoutLines.length > 0 ? 1 : 0}>
                   {stderrLines.map((line, i) =>
                     result.isError ? (
-                      <Text key={`err-${i}`} color="red">{line}</Text>
+                      <Text key={`err-${i}`} color="ansi:red">{line}</Text>
                     ) : (
                       <OutputLine key={`err-${i}`} line={line} isStderr />
                     )
@@ -140,7 +140,7 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
               ) : null}
               {result.isError && exitCode != null ? (
                 <Box marginTop={(stdoutLines.length > 0 || stderrLines.length > 0) ? 1 : 0}>
-                  <Text color="red">Exit code: {exitCode}</Text>
+                  <Text color="ansi:red">Exit code: {exitCode}</Text>
                 </Box>
               ) : null}
               {!emptiness ? (

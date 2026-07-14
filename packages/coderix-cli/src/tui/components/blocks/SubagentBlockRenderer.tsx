@@ -1,4 +1,5 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import type { SubagentType, SubagentState } from '../../../types.js';
 
 export interface SubagentBlockRendererProps {
@@ -29,9 +30,9 @@ const STATE_ICON: Record<SubagentState, string> = {
 };
 
 const STATE_COLOR: Record<SubagentState, string> = {
-  running: 'yellow',
-  done: 'green',
-  error: 'red',
+  running: 'ansi:yellow',
+  done: 'ansi:green',
+  error: 'ansi:red',
 };
 
 /**
@@ -49,7 +50,7 @@ export function SubagentBlockRenderer({
   const icon = AGENT_ICON[agentType] ?? '🤖';
   const label = AGENT_LABEL[agentType] ?? agentType;
   const stateIcon = STATE_ICON[state];
-  const stateColor = STATE_COLOR[state];
+  const stateColor = STATE_COLOR[state] as Color;
 
   return (
     <Box

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import { getTaskListId } from '@coderix/core';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -51,8 +52,8 @@ const STATUS_ICON: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   pending: undefined as unknown as string,
-  in_progress: 'yellow',
-  completed: 'green',
+  in_progress: 'ansi:yellow',
+  completed: 'ansi:green',
 };
 
 /**
@@ -127,7 +128,7 @@ export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
   const hasActive = activeCount > 0;
 
   return (
-    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="grey">
+    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
       <Box>
         <Text bold>Todo </Text>
         <Text dimColor>
@@ -141,7 +142,7 @@ export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
         const icon = todo.status === 'in_progress'
           ? HOURGLASS_FRAMES[frame]
           : STATUS_ICON[todo.status] ?? '?';
-        const color = STATUS_COLOR[todo.status];
+        const color = STATUS_COLOR[todo.status] as Color;
         const label = todo.status === 'in_progress' && todo.activeForm
           ? todo.activeForm
           : todo.content;

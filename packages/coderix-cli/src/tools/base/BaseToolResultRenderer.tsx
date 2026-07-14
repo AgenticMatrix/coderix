@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import type { ToolResultRendererProps } from '../types.js';
 
 /**
@@ -24,7 +24,7 @@ export function BaseToolResultRenderer({
 
   return (
     <Box flexDirection="column">
-      <Text color={isError ? 'red' : 'white'}>
+      <Text color={isError ? 'ansi:red' : 'ansi:white'}>
         {displayText || (isError ? '(error — no output)' : '(empty)')}
       </Text>
       {tooLong && (
@@ -33,7 +33,7 @@ export function BaseToolResultRenderer({
         </Text>
       )}
       {truncated && (
-        <Text dimColor color="yellow">
+        <Text dimColor color="ansi:yellow">
           (output truncated)
         </Text>
       )}

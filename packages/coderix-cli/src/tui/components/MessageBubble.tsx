@@ -1,4 +1,5 @@
-import { Box, Text, useStdout } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import { useTerminalSize } from '@coderix/ink';
 import { useState, useEffect, memo } from 'react';
 
 import type {
@@ -121,18 +122,18 @@ function truncateTextByLines(text: string, maxLines: number): string {
 
 export const MessageBubble = memo(function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines }: MessageBubbleProps) {
   const { role } = message;
-  const { stdout } = useStdout();
+  const { columns } = useTerminalSize();
   const [termWidth, setTermWidth] = useState(
-    () => stdout?.columns ?? process.stdout.columns ?? 80,
+    () => columns ?? process.stdout.columns ?? 80,
   );
   useEffect(() => {
-    if (stdout?.columns && stdout.columns !== termWidth) {
-      setTermWidth(stdout.columns);
+    if (columns && columns !== termWidth) {
+      setTermWidth(columns);
     }
-  }, [stdout?.columns]);
+  }, [columns]);
   const maxWidth = Math.max(20, Math.floor(termWidth * 0.9));
   const textColor = theme === 'light' ? '#000000' : '#FFFFFF';
-  const userBgColor = theme === 'light' ? 'black' : 'white';
+  const userBgColor = theme === 'light' ? 'ansi:black' : 'ansi:white';
   const userTextColor = theme === 'light' ? '#FFFFFF' : '#000000';
 
   // ── Determine content source ──────────────────────────────
@@ -149,7 +150,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
         <Box width={2} flexShrink={0} />
         <Box flexGrow={1}>
           <Text dimColor>
-            <Text color="grey">[System]</Text> {displayContent}
+            <Text color="ansi:blackBright">[System]</Text> {displayContent}
           </Text>
         </Box>
       </Box>

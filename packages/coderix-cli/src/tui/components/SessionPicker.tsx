@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput } from '@coderix/ink';
 import { useState } from 'react';
 
 interface SessionSummary {
@@ -68,8 +68,8 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
 
   if (sessions.length === 0) {
     return (
-      <Box borderStyle="double" borderColor="cyan" flexDirection="column" paddingX={1}>
-        <Text bold color="cyan">Sessions</Text>
+      <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+        <Text bold color="ansi:cyan">Sessions</Text>
         <Text dimColor>No previous sessions found.</Text>
         <Text dimColor>Press Esc to close.</Text>
       </Box>
@@ -77,8 +77,8 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
   }
 
   return (
-    <Box borderStyle="double" borderColor="cyan" flexDirection="column" paddingX={1}>
-      <Text bold color="cyan">
+    <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+      <Text bold color="ansi:cyan">
         Sessions ({filtered.length}) — select one to resume
       </Text>
       {filter ? <Text dimColor>Filter: "{filter}"</Text> : null}
@@ -97,7 +97,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
           <Text key={s.id}>
             <Text
               bold={isSelected}
-              color={isSelected ? 'cyan' : undefined}
+              color={isSelected ? 'ansi:cyan' : undefined}
               dimColor={!isSelected}
               inverse={isSelected}
             >

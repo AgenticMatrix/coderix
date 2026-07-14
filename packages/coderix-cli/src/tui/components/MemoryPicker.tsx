@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput } from '@coderix/ink';
 import { useState, useEffect, useRef } from 'react';
 import { homedir } from 'os';
 import { resolve } from 'path';
@@ -82,11 +82,11 @@ export function MemoryPicker({ cwd, onSelect, onCancel }: MemoryPickerProps) {
   });
 
   const statusText = config.enabled ? 'on' : 'off';
-  const statusColor = config.enabled ? 'green' : 'yellow';
+  const statusColor = config.enabled ? 'ansi:green' : 'ansi:yellow';
 
   return (
-    <Box borderStyle="round" borderColor="cyan" flexDirection="column" paddingX={1} paddingY={1}>
-      <Text bold color="cyan">
+    <Box borderStyle="round" borderColor="ansi:cyan" flexDirection="column" paddingX={1} paddingY={1}>
+      <Text bold color="ansi:cyan">
         Memory
       </Text>
 
@@ -109,7 +109,7 @@ export function MemoryPicker({ cwd, onSelect, onCancel }: MemoryPickerProps) {
           <Text key={opt.key}>
             <Text
               bold={isSelected}
-              color={isSelected ? 'cyan' : undefined}
+              color={isSelected ? 'ansi:cyan' : undefined}
               dimColor={!isSelected}
               inverse={isSelected}
             >
@@ -122,7 +122,7 @@ export function MemoryPicker({ cwd, onSelect, onCancel }: MemoryPickerProps) {
       })}
 
       {loadError && (
-        <Text color="red">  Error: {loadError}</Text>
+        <Text color="ansi:red">  Error: {loadError}</Text>
       )}
 
       <Text>{' '}</Text>

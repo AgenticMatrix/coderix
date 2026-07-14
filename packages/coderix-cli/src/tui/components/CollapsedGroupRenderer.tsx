@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import type { CollapsedGroup } from './collapseToolGroups.js';
 import { getToolUseRenderer } from '../../tools/registry.js';
 
@@ -42,7 +42,7 @@ export function CollapsedGroupRenderer({
   const summary = buildSummary(group);
   const isActive = group.isActive;
   const indicator = isActive ? '○' : '●';
-  const indicatorColor = isActive ? 'yellow' : 'green';
+  const indicatorColor = isActive ? 'ansi:yellow' : 'ansi:green';
 
   // When expanded, show each individual tool
   if (contentExpanded) {

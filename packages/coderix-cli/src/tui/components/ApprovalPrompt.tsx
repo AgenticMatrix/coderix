@@ -6,7 +6,7 @@
  *
  * Ported from Coderix's prompts.tsx ApprovalPrompt.
  */
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput } from '@coderix/ink';
 import { useState } from 'react';
 import type { ApprovalRequest } from '../../types.js';
 
@@ -63,11 +63,11 @@ export function ApprovalPrompt({ req, onChoice }: ApprovalPromptProps) {
   return (
     <Box
       borderStyle="double"
-      borderColor="yellow"
+      borderColor="ansi:yellow"
       flexDirection="column"
       paddingX={1}
     >
-      <Text bold color="yellow">
+      <Text bold color="ansi:yellow">
         Approval required — {req.description}
       </Text>
 
@@ -92,7 +92,7 @@ export function ApprovalPrompt({ req, onChoice }: ApprovalPromptProps) {
         <Text key={o}>
           <Text
             bold={sel === i}
-            color={sel === i ? 'yellow' : undefined}
+            color={sel === i ? 'ansi:yellow' : undefined}
             dimColor={sel !== i}
             inverse={sel === i}
           >

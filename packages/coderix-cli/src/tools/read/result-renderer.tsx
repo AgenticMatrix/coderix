@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { OutputLine } from '../shared/OutputLine.js';
 import type { ToolResultRendererProps } from '../types.js';
 
@@ -12,7 +12,7 @@ export function ReadResultRenderer(props: ToolResultRendererProps): React.ReactN
   return (
     <Box flexDirection="column">
       {emptiness ? (
-        <Text color={isError ? 'red' : 'green'} dimColor>
+        <Text color={isError ? 'ansi:red' : 'ansi:green'} dimColor>
           {isError ? '(error — no output)' : '(empty)'}
         </Text>
       ) : (

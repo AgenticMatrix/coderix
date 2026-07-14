@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { getSkillRegistry } from '@coderix/core';;
 
 const CADUCEUS_ART = [
@@ -26,11 +26,11 @@ export function HeaderLogo() {
   const artMaxLen = Math.max(...logoLines.map((l) => l.length));
 
   const Kw = ({ children }: { children: string }) => (
-    <Text bold color="grey">{children}</Text>
+    <Text bold color="ansi:blackBright">{children}</Text>
   );
 
   const Dim = ({ children }: { children: string }) => (
-    <Text dimColor color="grey">{children}</Text>
+    <Text dimColor color="ansi:blackBright">{children}</Text>
   );
 
   const rightPanel: { text: string; render: (pad: number) => React.ReactNode }[] = [
@@ -39,7 +39,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Kw>CodeRix</Kw>
-          <Text color="white"> v0.1.0{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> v0.1.0{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -49,7 +49,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Kw>tools:</Kw>
-          <Text color="white"> 33{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> 33{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -58,7 +58,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Dim>  File Operations:</Dim>
-          <Text color="white"> Read / Write / Update{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> Read / Write / Update{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -67,7 +67,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Dim>  Terminal:</Dim>
-          <Text color="white"> Bash{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> Bash{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -76,7 +76,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Dim>  Agent:</Dim>
-          <Text color="white"> Explore / Plan / general-purpose{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> Explore / Plan / general-purpose{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -85,7 +85,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Dim>  Task Management:</Dim>
-          <Text color="white"> TaskCreate / TaskUpdate / TaskList / TaskGet{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> TaskCreate / TaskUpdate / TaskList / TaskGet{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -111,7 +111,7 @@ export function HeaderLogo() {
           render: (pad) => (
             <Text>
               <Kw>skills:</Kw>
-              <Text color="white"> {count}{' '.repeat(pad)}</Text>
+              <Text color="ansi:white"> {count}{' '.repeat(pad)}</Text>
             </Text>
           ),
         },
@@ -124,7 +124,7 @@ export function HeaderLogo() {
           render: (pad) => (
             <Text>
               <Dim>{label}</Dim>
-              <Text color="white">{desc}{' '.repeat(pad)}</Text>
+              <Text color="ansi:white">{desc}{' '.repeat(pad)}</Text>
             </Text>
           ),
         });
@@ -137,7 +137,7 @@ export function HeaderLogo() {
       render: (pad) => (
         <Text>
           <Kw>workspace:</Kw>
-          <Text color="white"> {process.cwd()}{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> {process.cwd()}{' '.repeat(pad)}</Text>
         </Text>
       ),
     },
@@ -157,15 +157,15 @@ export function HeaderLogo() {
     const rightEntry = rightPanel[lineIdx];
     const rightJsx = rightEntry
       ? rightEntry.render(rightMaxLen - rightEntry.text.length)
-      : <Text color="white">{' '.repeat(rightMaxLen)}</Text>;
+      : <Text color="ansi:white">{' '.repeat(rightMaxLen)}</Text>;
 
     return (
       <Text key={lineIdx}>
-        <Text color="grey">│ </Text>
+        <Text color="ansi:blackBright">│ </Text>
         <Text color="#AB47BC">{artPadded}</Text>
-        <Text color="grey"> │ </Text>
+        <Text color="ansi:blackBright"> │ </Text>
         {rightJsx}
-        <Text color="grey"> │</Text>
+        <Text color="ansi:blackBright"> │</Text>
       </Text>
     );
   };
@@ -174,9 +174,9 @@ export function HeaderLogo() {
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="grey">{topBorder}</Text>
+      <Text color="ansi:blackBright">{topBorder}</Text>
       {Array.from({ length: totalLines }, (_, i) => renderLine(i))}
-      <Text color="grey">{botBorder}</Text>
+      <Text color="ansi:blackBright">{botBorder}</Text>
     </Box>
   );
 }

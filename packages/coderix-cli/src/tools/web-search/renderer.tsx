@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 import type { SearchResult } from '@coderix/core';
@@ -18,10 +18,10 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">✕ </Text>
+          <Text color="ansi:red">✕ </Text>
           <Text bold>WebSearch</Text>
           {query ? <Text>(&quot;{query}&quot;)</Text> : null}
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
@@ -31,7 +31,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="green">● </Text>
+          <Text color="ansi:green">● </Text>
           <Text bold>WebSearch</Text>
           {query ? <Text>(&quot;{query}&quot;)</Text> : null}
         </Text>
@@ -48,11 +48,11 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>WebSearch</Text>
         {query ? <Text dimColor>(&quot;{query}&quot;)</Text> : null}
         {isExecuting ? (
-          <Text dimColor color="yellow"> searching {elapsedSecs}s</Text>
+          <Text dimColor color="ansi:yellow"> searching {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

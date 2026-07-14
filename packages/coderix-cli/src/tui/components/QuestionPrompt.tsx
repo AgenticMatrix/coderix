@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text } from 'ink';
-import { useInput } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import { useInput } from '@coderix/ink';
 
 export interface QuestionPromptProps {
   questions: Array<{
@@ -108,7 +108,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
   });
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} paddingY={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor="ansi:cyan" paddingX={1} paddingY={1}>
       {/* Progress indicator for multi-question */}
       {questions.length > 1 && (
         <Text dimColor>
@@ -116,7 +116,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
         </Text>
       )}
 
-      <Text bold color="cyan">
+      <Text bold color="ansi:cyan">
         Q: {q.question}
       </Text>
 
@@ -130,7 +130,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
             const isCursor = cursorIndex === i;
             return (
               <Box key={i}>
-                <Text color={isCursor ? 'cyan' : isSelected ? 'green' : 'white'}>
+                <Text color={isCursor ? 'ansi:cyan' : isSelected ? 'ansi:green' : 'ansi:white'}>
                   {isCursor ? '❯' : ' '}{' '}
                   {isSelected ? (q.multiSelect ? '[x]' : '●') : (q.multiSelect ? '[ ]' : '○')}{' '}
                   {i + 1}. {opt.label}
@@ -145,7 +145,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       {options.length === 0 && (
         <Box marginTop={1}>
           <Text dimColor>Your answer: </Text>
-          <Text color="white">{customText || '█'}</Text>
+          <Text color="ansi:white">{customText || '█'}</Text>
         </Box>
       )}
 

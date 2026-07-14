@@ -412,10 +412,10 @@ async function main(): Promise<void> {
   const { attachPersistence } = await import('../state/persistence-bridge.js');
   attachPersistence(appStore);
 
-  const { render } = await import('ink');
+  const { renderSync } = await import('@coderix/ink');
   const { App } = await import('../tui/components/App.js');
   const { AppStateProvider } = await import('../state/AppStateContext.js');
-  const { waitUntilExit } = render(
+  const { waitUntilExit } = renderSync(
     <AppStateProvider store={appStore}>
       <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} showSessionPicker={showSessionPicker} />
     </AppStateProvider>,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -30,10 +30,10 @@ export function NotebookEditRenderer(
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">{'❌'} </Text>
+          <Text color="ansi:red">{'❌'} </Text>
           <Text bold>NotebookEdit</Text>
           <Text dimColor> {label}{detail}</Text>
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
@@ -44,7 +44,7 @@ export function NotebookEditRenderer(
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="green">{'●'} </Text>
+          <Text color="ansi:green">{'●'} </Text>
           <Text bold>NotebookEdit</Text>
           <Text dimColor> {label}{detail}</Text>
         </Text>
@@ -60,12 +60,12 @@ export function NotebookEditRenderer(
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>NotebookEdit</Text>
         <Text dimColor> {label}{detail}</Text>
         {path ? <Text dimColor> {path.slice(-40)}</Text> : null}
         {isExecuting ? (
-          <Text dimColor color="yellow"> editing {elapsedSecs}s</Text>
+          <Text dimColor color="ansi:yellow"> editing {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

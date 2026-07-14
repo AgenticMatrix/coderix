@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -31,10 +31,10 @@ export function TaskGetRenderer(props: ToolUseRendererProps): React.ReactNode {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>TaskGet</Text>
           {taskId ? <Text dimColor> · #{taskId}</Text> : null}
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
@@ -45,7 +45,7 @@ export function TaskGetRenderer(props: ToolUseRendererProps): React.ReactNode {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="green">● </Text>
+          <Text color="ansi:green">● </Text>
           <Text bold>TaskGet</Text>
           <Text dimColor>(</Text>
           <Text>{summary}</Text>
@@ -75,11 +75,11 @@ export function TaskGetRenderer(props: ToolUseRendererProps): React.ReactNode {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>TaskGet</Text>
         {taskId ? <Text dimColor> · #{taskId}</Text> : null}
         {(isExecuting || isPending) ? (
-          <Text dimColor color="yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
+          <Text dimColor color="ansi:yellow"> {isExecuting ? 'running' : 'pending'} {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

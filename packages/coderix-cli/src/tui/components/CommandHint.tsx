@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { listCommandNames, findSlashCommand } from '../../commands/index.js';
 
 interface CommandHintProps {
@@ -44,7 +44,7 @@ export function CommandHint({ inputText, selectedIndex }: CommandHintProps) {
   );
 
   return (
-    <Box borderStyle="round" borderColor="cyan" flexDirection="column" paddingX={1}>
+    <Box borderStyle="round" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
       <Text dimColor>Commands</Text>
       {displayGroup.map((cmd, i) => {
         const isSelected = i === selIdx;
@@ -53,7 +53,7 @@ export function CommandHint({ inputText, selectedIndex }: CommandHintProps) {
           <Text key={cmd}>
             <Text
               bold={isSelected}
-              color={isSelected ? 'cyan' : undefined}
+              color={isSelected ? 'ansi:cyan' : undefined}
               dimColor={!isSelected}
             >
               {isSelected ? '❯ ' : '  '}/{cmd.padEnd(22)}

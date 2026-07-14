@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import { detectLanguage, highlightDiffLine } from '../shared/diffHighlight.js';
 import type { ToolUseRendererProps } from '../types.js';
@@ -49,7 +50,7 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
   const stats = parts.length > 0 ? parts.join(', ') : undefined;
 
   const indicator = isError ? '❌' : isDone ? '●' : blinkOn ? '●' : '○';
-  const indicatorColor = isError ? 'red' : isDone ? 'green' : 'yellow';
+  const indicatorColor = isError ? 'ansi:red' : isDone ? 'ansi:green' : 'ansi:yellow';
 
   const lang = hasPath ? detectLanguage(fp) : null;
   const diffWidth = Math.max(20, Math.floor((props.termWidth ?? 80) * 0.9) - 2);
@@ -63,11 +64,11 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
             <Text bold>Update</Text>
             <Text dimColor>({truncatedPath})</Text>
             {isError ? (
-              <Text color="red"> failed</Text>
+              <Text color="ansi:red"> failed</Text>
             ) : null}
           </Text>
           {isExecuting ? (
-            <Text dimColor color="yellow"> updating {elapsedSecs}s</Text>
+            <Text dimColor color="ansi:yellow"> updating {elapsedSecs}s</Text>
           ) : null}
           {isDone && stats ? (
             <Box paddingLeft={2}>
@@ -80,12 +81,12 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
                 const { prefix, codeTokens, isAdd, isRemove } = highlightDiffLine(line, lang);
                 const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
                 const hasBackground = isAdd || isRemove;
-                // Context lines: dim base color to terminal 'white' (gray-white),
+                // Context lines: dim base color to terminal 'ansi:white' (gray-white),
                 // but keep highlight colors (magenta, green, etc.) as-is.
-                const dimBase = (c: string) => c === '#FFFFFF' ? 'white' : c;
+                const dimBase = (c: Color): Color => c === '#FFFFFF' ? 'ansi:white' : c;
                 return (
                   <Box key={i} width={diffWidth} backgroundColor={bgColor}>
-                    <Text color={hasBackground ? '#FFFFFF' : 'white'}>{prefix}</Text>
+                    <Text color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
                     {codeTokens.map((t, j) => (
                       <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
                     ))}

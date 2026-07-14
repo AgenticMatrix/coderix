@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { OutputLine } from '../shared/OutputLine.js';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
@@ -25,7 +25,7 @@ export function ReadRenderer(props: ToolUseRendererProps): React.ReactNode {
   const { elapsedSecs, blinkOn } = useToolTimer(isActive);
 
   const indicator = isDone ? '●' : blinkOn ? '●' : '○';
-  const indicatorColor = isDone ? 'green' : 'yellow';
+  const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
 
   const resultLines = result?.content
     ? result.content.split('\n').filter((l) => l !== '')

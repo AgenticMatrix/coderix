@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import { listTasks } from '@coderix/core';
 import type { Task } from '@coderix/core';
 
@@ -20,8 +21,8 @@ const STATUS_ICON: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   pending: undefined as unknown as string,
-  in_progress: 'yellow',
-  completed: 'green',
+  in_progress: 'ansi:yellow',
+  completed: 'ansi:green',
 };
 
 /**
@@ -127,7 +128,7 @@ export function TaskPanel({ dismissed, onDismissReset }: TaskPanelProps) {
   }
 
   return (
-    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="grey">
+    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
       <Box>
         <Text bold>Tasks </Text>
         <Text dimColor>
@@ -142,7 +143,7 @@ export function TaskPanel({ dismissed, onDismissReset }: TaskPanelProps) {
         // Non-active in_progress → ○
         const displayStatus = isActive ? 'active' : task.status === 'in_progress' ? 'pending' : task.status;
         const icon = isActive ? SPINNER_FRAMES[spinnerIndex] : (STATUS_ICON[displayStatus] ?? '?');
-        const color = isActive ? 'yellow' : STATUS_COLOR[displayStatus];
+        const color = (isActive ? 'ansi:yellow' : STATUS_COLOR[displayStatus]) as Color;
 
         const ownerTag = task.owner ? ` [${task.owner}]` : '';
         const blockedByTag = task.blockedBy.length > 0

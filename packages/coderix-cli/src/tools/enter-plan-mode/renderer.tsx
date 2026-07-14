@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import type { ToolUseRendererProps } from '../types.js';
 
 export function EnterPlanModeRenderer(
@@ -12,9 +12,9 @@ export function EnterPlanModeRenderer(
     return (
       <Box flexDirection="column">
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>EnterPlanMode</Text>
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
@@ -27,7 +27,7 @@ export function EnterPlanModeRenderer(
     return (
       <Box flexDirection="column">
         <Text>
-          <Text color="green">● </Text>
+          <Text color="ansi:green">● </Text>
           <Text bold>EnterPlanMode</Text>
         </Text>
         <Box paddingLeft={4} flexDirection="column">
@@ -55,7 +55,7 @@ export function EnterPlanModeRenderer(
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="yellow">○ </Text>
+        <Text color="ansi:yellow">○ </Text>
         <Text bold>EnterPlanMode</Text>
         <Text dimColor> switching to plan mode...</Text>
       </Text>

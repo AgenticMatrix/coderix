@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 
 interface InputBoxProps {
   inputText: string;
@@ -80,7 +80,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
         paddingX={1}
         paddingY={0}
         borderStyle="single"
-        borderColor="grey"
+        borderColor="ansi:blackBright"
         flexDirection="column"
       >
         {lines.length === 0 ? (

@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 
 export interface CompactionBoundaryRendererProps {
   removedCount: number;
@@ -16,7 +16,7 @@ export function CompactionBoundaryRenderer({
 }: CompactionBoundaryRendererProps) {
   return (
     <Box flexDirection="row" marginBottom={1} marginTop={0}>
-      <Text dimColor color="yellow">
+      <Text dimColor color="ansi:yellow">
         ── 📦 Context compacted · {removedCount} messages removed · {reason} ──
       </Text>
     </Box>

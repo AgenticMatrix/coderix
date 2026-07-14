@@ -6,40 +6,41 @@
  */
 
 import hljs from 'highlight.js';
+import type { Color } from '@coderix/ink';
 
 /** Get the default text color based on theme. */
-function defaultColor(theme?: string): string {
+function defaultColor(theme?: string): Color {
   return theme === 'light' ? '#000000' : '#FFFFFF';
 }
 
 /** Mappings from highlight.js CSS classes to Ink color names. */
-const COLOR_MAP: Record<string, string> = {
-  'hljs-keyword': 'magenta',
-  'hljs-built_in': 'yellow',
-  'hljs-type': 'yellow',
-  'hljs-literal': 'yellow',
-  'hljs-number': 'yellow',
-  'hljs-regexp': 'yellow',
-  'hljs-string': 'green',
-  'hljs-comment': 'grey',
-  'hljs-meta': 'grey',
+const COLOR_MAP: Record<string, Color> = {
+  'hljs-keyword': 'ansi:magenta',
+  'hljs-built_in': 'ansi:yellow',
+  'hljs-type': 'ansi:yellow',
+  'hljs-literal': 'ansi:yellow',
+  'hljs-number': 'ansi:yellow',
+  'hljs-regexp': 'ansi:yellow',
+  'hljs-string': 'ansi:green',
+  'hljs-comment': 'ansi:blackBright',
+  'hljs-meta': 'ansi:blackBright',
   'hljs-title.function_': '#88CCEE',
   'hljs-title.class_': '#88CCEE',
   'hljs-function': '#88CCEE',
   'hljs-attr': '#88CCEE',
   'hljs-attribute': '#88CCEE',
   'hljs-symbol': '#88CCEE',
-  'hljs-variable.language_': 'blue',
+  'hljs-variable.language_': 'ansi:blue',
   'hljs-params': '#FFFFFF',
   'hljs-property': '#FFFFFF',
-  'hljs-selector-tag': 'magenta',
+  'hljs-selector-tag': 'ansi:magenta',
   'hljs-selector-class': '#88CCEE',
-  'hljs-selector-id': 'yellow',
-  'hljs-addition': 'green',
-  'hljs-deletion': 'red',
-  'hljs-subst': 'yellow',
-  'hljs-template-variable': 'yellow',
-  'hljs-template-expression': 'yellow',
+  'hljs-selector-id': 'ansi:yellow',
+  'hljs-addition': 'ansi:green',
+  'hljs-deletion': 'ansi:red',
+  'hljs-subst': 'ansi:yellow',
+  'hljs-template-variable': 'ansi:yellow',
+  'hljs-template-expression': 'ansi:yellow',
   'default': '#FFFFFF',
 };
 
@@ -48,7 +49,7 @@ const COLOR_MAP: Record<string, string> = {
  */
 export interface HighlightToken {
   text: string;
-  color: string;
+  color: Color;
   bold?: boolean;
 }
 
@@ -81,7 +82,7 @@ export function parseHtmlTokens(html: string, theme?: string): HighlightToken[] 
       // Resolve color from class names
       const classes = classNames.split(/\s+/);
       const compoundKey = classes.join('.');
-      let color = defColor;
+      let color: Color = defColor;
 
       if (COLOR_MAP[compoundKey]) {
         color = COLOR_MAP[compoundKey];

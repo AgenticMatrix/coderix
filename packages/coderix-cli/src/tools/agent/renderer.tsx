@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { getSubAgentRegistry } from '@coderix/core';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
@@ -157,16 +157,16 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>{headerText}</Text>
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
   }
 
   const indicator = isDone ? '●' : (blinkOn ? '●' : '○');
-  const indicatorColor = isDone ? 'green' : 'yellow';
+  const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
   const statusText = isPending ? 'queued' : '';
   const showTimer = (isExecuting || isPending) && !isDone;
 
@@ -176,7 +176,7 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>{headerText}</Text>
         {showTimer ? (
-          <Text dimColor color="yellow"> {statusText} {elapsedSecs}s</Text>
+          <Text dimColor color="ansi:yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
         {isolation ? <Text dimColor> isolated: {isolation}</Text> : null}
         {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}

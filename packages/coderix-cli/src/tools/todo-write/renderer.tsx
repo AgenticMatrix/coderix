@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -27,9 +27,9 @@ export function TodoWriteRenderer(props: ToolUseRendererProps): React.ReactNode 
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>TodoWrite</Text>
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
@@ -40,7 +40,7 @@ export function TodoWriteRenderer(props: ToolUseRendererProps): React.ReactNode 
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text>
-          <Text color="green">● </Text>
+          <Text color="ansi:green">● </Text>
           <Text bold>TodoWrite</Text>
           {summary ? <Text dimColor> - {summary}</Text> : null}
         </Text>
@@ -54,10 +54,10 @@ export function TodoWriteRenderer(props: ToolUseRendererProps): React.ReactNode 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>TodoWrite</Text>
         {isExecuting ? (
-          <Text dimColor color="yellow"> running {elapsedSecs}s</Text>
+          <Text dimColor color="ansi:yellow"> running {elapsedSecs}s</Text>
         ) : null}
       </Text>
     </Box>

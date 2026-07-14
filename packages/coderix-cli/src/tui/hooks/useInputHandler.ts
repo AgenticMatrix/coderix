@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useInput, usePaste } from 'ink';
+import { useInput } from '@coderix/ink';
 
 import type { Message, ChatAction } from '../../types.js';
 import { expandPasteMarkers } from './useChatReducer.js';
@@ -93,35 +93,6 @@ export function useInputHandler({
   slashRef.current = onSlashCommand;
   const inputRef = useRef(inputText);
   inputRef.current = inputText;
-
-  // ── Bracketed paste handler ─────────────────────────────────
-  // usePaste enables bracketed paste mode (\x1b[?2004h) so the
-  // terminal wraps pasted text in \x1b[200~...\x1b[201~ markers.
-  // Ink routes these to a dedicated 'paste' channel, bypassing
-  // useInput entirely.  Without this, Windows terminals that lack
-  // bracketed-paste support (or don't have it enabled) deliver
-  // each line of a multi-line paste as separate key events, so
-  // \r\n between lines triggers Enter and sends fragments.
-  usePaste(
-    (text) => {
-      // Ignore paste while streaming or blocked
-      if (isStreaming || blocked) return;
-
-      if (text.includes('\n') || text.includes('\r')) {
-        // Second paste toggles the preview panel above the input line.
-        if (Object.keys(pasteBlocks).length > 0) {
-          dispatch({ type: 'TOGGLE_PASTE_PREVIEW' });
-          return;
-        }
-        // First multi-line paste → paste block (marker + stored content)
-        dispatch({ type: 'ADD_PASTE_BLOCK', text });
-      } else {
-        // Single-line paste → insert at cursor
-        dispatch({ type: 'INSERT_CHAR', char: text });
-      }
-    },
-    { isActive: true },
-  );
 
   useInput(
     (input, key) => {

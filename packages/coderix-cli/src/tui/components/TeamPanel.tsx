@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput } from '@coderix/ink';
 import { listTeams, loadTeamConfig } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamConfig, TeamMember } from '@coderix/core';
@@ -257,7 +257,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   if (errorCount > 0) parts.push(`${errorCount} error`);
 
   return (
-    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="grey">
+    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
       <Box>
         <Text bold>Agents </Text>
         {visible.length === 1 ? (
@@ -280,7 +280,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
                   {isCursor ? '>' : ' '}
                 </Text>
                 {' '}
-                <Text color={isViewed ? 'green' : 'grey'}>{isViewed ? '●' : '○'} </Text>
+                <Text color={isViewed ? 'ansi:green' : 'ansi:blackBright'}>{isViewed ? '●' : '○'} </Text>
                 <Text bold={isCursor}>main</Text>
                 <Text dimColor> · Return to main agent (Enter toggle, Esc defocus)</Text>
               </Text>
@@ -291,10 +291,10 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const isCursor = focused && cursorIndex === i;
         const isViewed = viewedAgentId === m.agentId;
         const icon = isViewed ? '●' : '○';
-        const iconColor = isViewed ? 'green' : 'grey';
+        const iconColor = isViewed ? 'ansi:green' : 'ansi:blackBright';
         const label = memberLabel(m);
         const statusText = statusLabel(m, now);
-        const statusColor = m.status === 'running' ? 'yellow' : m.status === 'error' ? 'red' : undefined;
+        const statusColor = m.status === 'running' ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -21,9 +21,9 @@ export function AskUserQuestionRenderer(
     return (
       <Box flexDirection="column">
         <Text>
-          <Text color="red">❌ </Text>
+          <Text color="ansi:red">❌ </Text>
           <Text bold>AskUserQuestion</Text>
-          <Text color="red"> failed</Text>
+          <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
@@ -37,7 +37,7 @@ export function AskUserQuestionRenderer(
     return (
       <Box flexDirection="column">
         <Text>
-          <Text color="green">● </Text>
+          <Text color="ansi:green">● </Text>
           <Text bold>AskUserQuestion</Text>
           {firstHeader ? <Text bold> {firstHeader}</Text> : null}
         </Text>
@@ -66,11 +66,11 @@ export function AskUserQuestionRenderer(
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="yellow">{indicator} </Text>
+        <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>AskUserQuestion</Text>
         <Text dimColor> {questionText.slice(0, 80)}</Text>
         {isExecuting ? (
-          <Text dimColor color="yellow">
+          <Text dimColor color="ansi:yellow">
             {' '}
             waiting {elapsedSecs}s
           </Text>

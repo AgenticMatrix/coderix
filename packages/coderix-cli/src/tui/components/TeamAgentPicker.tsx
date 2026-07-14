@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput } from '@coderix/ink';
+import type { Color } from '@coderix/ink';
 import { listTeams, loadTeamConfig } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamMember } from '@coderix/core';
@@ -19,10 +20,10 @@ const STATUS_ICON: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  running: 'yellow',
-  done: 'green',
-  error: 'red',
-  stopped: 'grey',
+  running: 'ansi:yellow',
+  done: 'ansi:green',
+  error: 'ansi:red',
+  stopped: 'ansi:blackBright',
 };
 
 interface SelectableMember {
@@ -140,8 +141,8 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
 
   if (members.length === 0) {
     return (
-      <Box borderStyle="double" borderColor="cyan" flexDirection="column" paddingX={1}>
-        <Text bold color="cyan">Team Members</Text>
+      <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+        <Text bold color="ansi:cyan">Team Members</Text>
         <Text dimColor>No selectable members.</Text>
         <Text dimColor>Sub-agents and team members will appear here when they are running.</Text>
         <Text>{' '}</Text>
@@ -151,8 +152,8 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
   }
 
   return (
-    <Box borderStyle="double" borderColor="cyan" flexDirection="column" paddingX={1}>
-      <Text bold color="cyan">
+    <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+      <Text bold color="ansi:cyan">
         Team Members ({members.length}) — select to view transcript
       </Text>
 
@@ -162,7 +163,7 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
         const { member: m, teamName } = item;
         const icon = AGENT_ICONS[m.agentType] ?? '\u{1F916}';
         const statusIcon = STATUS_ICON[m.status] ?? '?';
-        const statusColor = STATUS_COLOR[m.status] ?? 'white';
+        const statusColor = (STATUS_COLOR[m.status] ?? 'ansi:white') as Color;
         const isSelected = sel === i;
         const label = m.task ? `${m.task.slice(0, 50)}` : m.name;
 
@@ -170,7 +171,7 @@ export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
           <Text key={`${teamName}-${m.agentId}`}>
             <Text
               bold={isSelected}
-              color={isSelected ? 'cyan' : undefined}
+              color={isSelected ? 'ansi:cyan' : undefined}
               inverse={isSelected}
             >
               {isSelected ? '> ' : '  '}

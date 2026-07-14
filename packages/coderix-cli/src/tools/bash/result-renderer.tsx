@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 import { OutputLine } from '../shared/OutputLine.js';
 import { ToolResultCard } from '../shared/ToolResultCard.js';
 import type { ToolResultRendererProps } from '../types.js';
@@ -30,13 +30,13 @@ export function BashResultRenderer(props: ToolResultRendererProps): React.ReactN
         {/* Timed out message */}
         {timedOut ? (
           <Box marginBottom={1}>
-            <Text color="red">Command timed out</Text>
+            <Text color="ansi:red">Command timed out</Text>
           </Box>
         ) : null}
 
         {/* Completely empty output */}
         {emptiness ? (
-          <Text color={isError ? 'red' : 'green'} dimColor>
+          <Text color={isError ? 'ansi:red' : 'ansi:green'} dimColor>
             {isError ? '(error — no output)' : 'Done'}
           </Text>
         ) : null}
@@ -62,7 +62,7 @@ export function BashResultRenderer(props: ToolResultRendererProps): React.ReactN
         {/* Exit code badge (only on error and when exit code is meaningful) */}
         {isError && exitCode != null ? (
           <Box marginTop={(stdoutLines.length > 0 || stderrLines.length > 0) ? 1 : 0}>
-            <Text color="red">Exit code: {exitCode}</Text>
+            <Text color="ansi:red">Exit code: {exitCode}</Text>
           </Box>
         ) : null}
       </Box>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text } from '@coderix/ink';
 
 import type { TokenUsage } from '../../types.js';
 
@@ -83,7 +83,7 @@ function ContextBar({ used, max }: { used: number; max: number }) {
   const empty = barWidth - filled;
   const pct = Math.round(ratio * 100);
 
-  const barColor = ratio > 0.9 ? 'red' : ratio > 0.7 ? 'yellow' : 'green';
+  const barColor = ratio > 0.9 ? 'ansi:red' : ratio > 0.7 ? 'ansi:yellow' : 'ansi:green';
 
   return (
     <Text>
@@ -150,18 +150,18 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
     ? Math.max(0, Math.round(compactThreshold * 100) - Math.round((ctxTokens / contextMax) * 100))
     : null;
 
-  const Sep = () => <Text dimColor color="grey"> │ </Text>;
+  const Sep = () => <Text dimColor color="ansi:blackBright"> │ </Text>;
 
   return (
     <Box paddingX={1} flexDirection="row">
       {error ? (
-        <Text color="red">⚠ {error}</Text>
+        <Text color="ansi:red">⚠ {error}</Text>
       ) : isStreaming && isFrozen ? (
-        <Text color="yellow">⏸ Paused</Text>
+        <Text color="ansi:yellow">⏸ Paused</Text>
       ) : isStreaming ? (
-        <Text color="yellow" dimColor>● Busy</Text>
+        <Text color="ansi:yellow" dimColor>● Busy</Text>
       ) : (
-        <Text color="green" dimColor>✓ Idle</Text>
+        <Text color="ansi:green" dimColor>✓ Idle</Text>
       )}
 
       <Sep />
@@ -170,7 +170,7 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
       <ContextBar used={ctxTokens} max={contextMax} />
       <Text dimColor> {formatTokens(ctxTokens)}/{formatTokens(contextMax)}</Text>
       {compactDistance !== null && compactDistance <= 10 && (
-        <Text dimColor color="yellow">
+        <Text dimColor color="ansi:yellow">
           {' '}({compactDistance}% until compact)
         </Text>
       )}
@@ -188,7 +188,7 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
       <Sep />
 
       {isStreaming ? (
-        <Text color="yellow">⏲ {formatDuration(responseSeconds)}</Text>
+        <Text color="ansi:yellow">⏲ {formatDuration(responseSeconds)}</Text>
       ) : (
         <Text dimColor>⏲ 0s</Text>
       )}
@@ -197,9 +197,9 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
 
       <Text>
         <Text dimColor>Model: </Text>
-        <Text color="magenta" bold>{model}</Text>
+        <Text color="ansi:magenta" bold>{model}</Text>
         {!error && !isStreaming ? (
-          <Text color="green" dimColor> ✓</Text>
+          <Text color="ansi:green" dimColor> ✓</Text>
         ) : null}
       </Text>
 
@@ -207,14 +207,14 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
 
       <Text>
         <Text dimColor>Mem </Text>
-        <Text color="cyan">{formatMemory(processMemory)}</Text>
+        <Text color="ansi:cyan">{formatMemory(processMemory)}</Text>
       </Text>
 
       <Sep />
 
       <Text>
         <Text dimColor>Procs </Text>
-        <Text color="cyan">{processCount}</Text>
+        <Text color="ansi:cyan">{processCount}</Text>
       </Text>
 
       <Sep />
