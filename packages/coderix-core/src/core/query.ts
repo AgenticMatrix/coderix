@@ -265,6 +265,7 @@ async function executeSingleTool(
     sessionId,
     cwd,
     signal: abortController.signal,
+    toolUseId: toolBlock.id,
     setPermissionMode,
     getPermissionMode,
     planModeState: planModeState ?? undefined,

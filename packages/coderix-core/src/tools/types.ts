@@ -59,14 +59,16 @@ export interface ExecutorOptions {
   getCoreState?: () => import('../state/core-state.js').CoreState;
   /** Emit a tool request to the frontend (background tasks, agent registration). */
   emitToolRequest?: (req: import('../state/observable.js').ToolRequestEvent) => void;
+  /** Anthropic tool_use_id — used to match renderer to registry entry. */
+  toolUseId?: string;
   /** Track recently read files for post-compact restoration. */
   readFileTracker?: import('../core/read-file-tracker.js').ReadFileTracker;
 }
 
 /** Executor options with all core fields resolved (non-optional) but
  *  agentSpawn, sessionId, setPermissionMode kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>;
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'toolUseId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'toolUseId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,

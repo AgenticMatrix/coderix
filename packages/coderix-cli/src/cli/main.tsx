@@ -112,6 +112,7 @@ async function buildToolRegistry(mcpPlugins?: any[]): Promise<any> {
             getPermissionMode: ctx.getPermissionMode,
             planModeState: ctx.planModeState,
             readFileTracker: ctx.readFileTracker,
+            toolUseId: ctx.toolUseId,
           });
           return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
         }

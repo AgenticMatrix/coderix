@@ -68,6 +68,7 @@ function buildAcpToolRegistry(): ToolRegistry {
             getPermissionMode: (ctx as any).getPermissionMode,
             planModeState: (ctx as any).planModeState,
             sessionId: (ctx as any).sessionId,
+            toolUseId: (ctx as any).toolUseId,
           } as any);
           return result as any;
         },

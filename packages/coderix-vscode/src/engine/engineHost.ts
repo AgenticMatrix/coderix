@@ -136,6 +136,7 @@ export class EngineHost {
               setPermissionMode: ctx.setPermissionMode,
               getCoreState: ctx.getCoreState,
               emitToolRequest: ctx.emitToolRequest,
+              toolUseId: ctx.toolUseId,
             });
             return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
           } catch (err) {

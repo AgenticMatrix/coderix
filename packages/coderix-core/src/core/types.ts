@@ -377,6 +377,8 @@ export interface ToolContext {
   env?: Record<string, string>;
   timeoutMs?: number;
   agentSpawn?: AgentSpawnContext;
+  /** Anthropic tool_use_id — used to match renderer to registry entry. */
+  toolUseId?: string;
   /** Switch permission mode (for enter/exit-plan-mode tools). */
   setPermissionMode?: (mode: string) => void;
   /** Plan mode state — populated when plan mode is active. */

@@ -89,6 +89,7 @@ function buildToolRegistry(): ToolRegistry {
             bashTimeout: ctx.timeoutMs ?? 30_000,
             agentSpawn: ctx.agentSpawn,
             setPermissionMode: ctx.setPermissionMode,
+            toolUseId: ctx.toolUseId,
           });
           return {
             content: r.content,

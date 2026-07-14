@@ -54,7 +54,7 @@ function buildToolRegistry(): ToolRegistry {
       input_schema: inputSchema, riskLevel, isConcurrencySafe: meta?.isConcurrencySafe ?? false,
     }, async (input: Record<string, unknown>, ctx: any) => {
       try {
-        const r = await plugin.executor(input, { cwd: ctx.cwd ?? process.cwd(), allowMutation: true, maxOutput: 50_000, bashTimeout: ctx.timeoutMs ?? 30_000, agentSpawn: ctx.agentSpawn, setPermissionMode: ctx.setPermissionMode, getPermissionMode: ctx.getPermissionMode, planModeState: ctx.planModeState, readFileTracker: ctx.readFileTracker });
+        const r = await plugin.executor(input, { cwd: ctx.cwd ?? process.cwd(), allowMutation: true, maxOutput: 50_000, bashTimeout: ctx.timeoutMs ?? 30_000, agentSpawn: ctx.agentSpawn, setPermissionMode: ctx.setPermissionMode, getPermissionMode: ctx.getPermissionMode, planModeState: ctx.planModeState, readFileTracker: ctx.readFileTracker, toolUseId: ctx.toolUseId });
         return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
       } catch (err) { return { content: `Tool error: ${(err as Error).message}`, isError: true }; }
     });

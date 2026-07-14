@@ -201,7 +201,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
       const Renderer = getToolUseRenderer(tu.toolName);
       return (
         <Renderer
-          key={idx}
+          key={tu.toolId}
           toolName={tu.toolName}
           toolId={tu.toolId}
           input={tu.input}

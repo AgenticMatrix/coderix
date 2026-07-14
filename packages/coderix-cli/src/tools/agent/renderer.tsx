@@ -116,11 +116,9 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
             if (isResume && props.input.agent_id) {
               return a.id === props.input.agent_id;
             }
-            const expectedType = agentType || 'fork';
-            if (expectedType === 'fork') return a.agentType === 'general-purpose';
-            return a.agentType === expectedType;
-          })
-          .sort((a, b) => b.createdAt - a.createdAt);
+            // Match by tool_use_id — unique per agent spawn
+            return props.toolId ? a.toolUseId === props.toolId : false;
+          });
 
         const agent = matching[0];
         if (!agent) return;

@@ -443,7 +443,7 @@ async function cleanupAgentWorktree(wt: WorktreeCleanup, hookManager?: import('.
 async function executeStandardSubagent(
   input: Record<string, unknown>,
   agentSpawn: AgentSpawnContext,
-  options: { cwd?: string; sessionId?: string; agentId?: string },
+  options: { cwd?: string; sessionId?: string; agentId?: string; toolUseId?: string },
 ): Promise<ToolResult> {
   const agentTypeInput = input.agent_type as string;
   const prompt = input.prompt as string;
@@ -577,6 +577,7 @@ async function executeStandardSubagent(
     status: 'running',
     prompt,
     description,
+    toolUseId: options.toolUseId,
     createdAt: Date.now(),
     turnCount: 0,
     messageCount: 0,
@@ -757,6 +758,7 @@ async function executeFork(
   modelOverride: string | undefined,
   isolation: 'worktree' | undefined,
   agentSpawn: AgentSpawnContext,
+  toolUseId?: string,
   bgSessionId?: string,
 ): Promise<ToolResult> {
   const agentType = 'fork';
@@ -852,6 +854,7 @@ async function executeFork(
     status: 'running',
     prompt,
     description,
+    toolUseId,
     createdAt: Date.now(),
     turnCount: 0,
     messageCount: 0,
@@ -1263,7 +1266,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // ── Path 2: Fork mode — no agent_type → inherit parent context ────
   if (!agentTypeInput && isForkSubagentEnabled()) {
-    return executeFork(prompt, description, modelOverride, isolation, agentSpawn, options.sessionId);
+    return executeFork(prompt, description, modelOverride, isolation, agentSpawn, options.toolUseId, options.sessionId);
   }
 
   // ── Path 3: Standard subagent — explicit agent_type ───────────────
@@ -1271,5 +1274,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     cwd: options.cwd,
     sessionId: options.sessionId,
     agentId: options.agentId,
+    toolUseId: options.toolUseId,
   });
 };
