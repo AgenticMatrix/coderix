@@ -516,8 +516,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return nextState;
     }
 
-    case 'INTERRUPT':
-      return { ...state, isStreaming: false };
+    case 'INTERRUPT': {
+      // Mark all pending/executing tool blocks as done so the UI
+      // transitions out of 'wait' status phase immediately.
+      const msgs = state.messages.map((m) => {
+        if (m.role !== 'assistant') return m;
+        let changed = false;
+        const blocks = m.blocks.map((b) => {
+          if (b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing')) {
+            changed = true;
+            return { ...b, state: 'done' as const };
+          }
+          return b;
+        });
+        return changed ? { ...m, blocks } : m;
+      });
+      return { ...state, isStreaming: false, messages: msgs };
+    }
 
     case 'SHOW_EXIT_HINT':
       return { ...state, exitHint: true };

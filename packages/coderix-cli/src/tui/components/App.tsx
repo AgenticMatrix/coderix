@@ -274,7 +274,10 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       engine.interrupt();
       getSubAgentRegistry()?.abortAll();
     },
-    onExit: () => process.exit(0),
+    onExit: () => {
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      process.exit(0);
+    },
     blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker || state.sessionPicker,
     teamPicker: state.teamPicker,
     agentCount: Object.keys(agentsRef.current).length,
@@ -293,6 +296,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       isStreaming: state.isStreaming,
       inputText: state.inputText,
       onExit: () => {
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
         process.exit(0);
       },
       listSessions: () =>

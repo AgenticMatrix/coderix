@@ -46,6 +46,12 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       return;
     }
 
+    // Ctrl+C denies the question (same as Esc)
+    if ((key.ctrl && (input === 'c' || input === '\x03')) || input === '\x03') {
+      submitCurrent('');
+      return;
+    }
+
     if (key.return) {
       if (options.length > 0 && selected.length > 0) {
         submitCurrent(q.multiSelect ? selected : selected[0]!);

@@ -96,6 +96,16 @@ export function useInputHandler({
   slashRef.current = onSlashCommand;
   const inputRef = useRef(inputText);
   inputRef.current = inputText;
+  const statusRef = useRef(statusPhase);
+  statusRef.current = statusPhase;
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
+  const killRef = useRef(onKillAll);
+  killRef.current = onKillAll;
+  const interruptRef = useRef(onInterrupt);
+  interruptRef.current = onInterrupt;
+  const exitRef = useRef(onExit);
+  exitRef.current = onExit;
   const exitPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const DOUBLE_PRESS_MS = 500;
 
@@ -112,11 +122,17 @@ export function useInputHandler({
 
       // Ctrl+C: smart 4-tier handler
       if (isCtrlC) {
+        // When a modal (ask/approve) is open, let its own useInput
+        // handler process Ctrl+C.  Don't also run 4-tier logic here,
+        // which would race with the modal's deferred resolution and
+        // leave the tool stuck in executing state.
+        if (blockedRef.current) return;
+
         // Tier 1: busy (main agent streaming/thinking) → interrupt it.
         // If no tools have been executed yet, undo the turn and restore
         // the user's input so they can edit and re-submit.
-        if (statusPhase === 'busy') {
-          onInterrupt();
+        if (statusRef.current === 'busy') {
+          interruptRef.current();
           // Check if any tool_use blocks exist after the last user message
           let hasTools = false;
           let lastUserIdx = -1;
@@ -136,8 +152,8 @@ export function useInputHandler({
           return;
         }
         // Tier 2: wait (sub-agents / background tools) → kill them all
-        if (statusPhase === 'wait') {
-          onKillAll();
+        if (statusRef.current === 'wait') {
+          killRef.current();
           dispatch({ type: 'INTERRUPT' });
           return;
         }
@@ -158,7 +174,7 @@ export function useInputHandler({
           clearTimeout(exitPressTimerRef.current);
           exitPressTimerRef.current = null;
           dispatch({ type: 'HIDE_EXIT_HINT' });
-          onExit();
+          exitRef.current();
         } else {
           // First press → show hint, start timer
           dispatch({ type: 'SHOW_EXIT_HINT' });
@@ -179,7 +195,7 @@ export function useInputHandler({
           dispatch({ type: 'HIDE_TEAM_PICKER' });
           return;
         }
-        if (blocked) return;
+        if (blockedRef.current) return;
         dispatch({ type: 'SET_INPUT', text: '' });
         dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
         return;

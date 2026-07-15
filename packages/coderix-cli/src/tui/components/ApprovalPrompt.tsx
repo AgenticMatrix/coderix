@@ -33,6 +33,12 @@ export function ApprovalPrompt({ req, onChoice }: ApprovalPromptProps) {
       return;
     }
 
+    // Ctrl+C denies the approval
+    if (key.ctrl) {
+      onChoice('deny');
+      return;
+    }
+
     if (key.return) {
       onChoice(OPTS[sel]!);
       return;
