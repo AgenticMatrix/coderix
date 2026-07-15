@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { ToolExecutor, ToolResult } from '../types.js';
 import type { ToolRequestEvent } from '../../state/observable.js';
-import { registerTask, updateTask } from '../../tasks/task-tracker.js';
+import { registerTask, updateTask, notifyTaskCompletion } from '../../tasks/task-tracker.js';
 import type { TrackedTask } from '../../tasks/task-tracker.js';
 import {
   tokenizeCommand,
@@ -442,6 +442,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         };
         updateTask(taskId, { status: newStatus, finishedAt: Date.now() });
         emitTaskUpdate(opts.emitToolRequest, taskId, updatedTask);
+		notifyTaskCompletion(taskId);
         result.child.unref();
       });
 
@@ -501,6 +502,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         };
         updateTask(taskId, { status: newStatus, finishedAt: Date.now() });
         emitTaskUpdate(opts.emitToolRequest, taskId, updatedTask);
+		notifyTaskCompletion(taskId);
         result.child.unref();
       });
 

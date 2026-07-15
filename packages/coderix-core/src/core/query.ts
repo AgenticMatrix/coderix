@@ -56,6 +56,7 @@ import { loadCodeAgentContext } from './context-loader.js';
 import { loadMemoryPrompt } from '../memory/prompt-builder.js';
 import { loadMemoryConfig } from '../memory/config.js';
 import { listTasks } from '../tasks/store.js';
+import { drainTaskNotifications } from '../tasks/task-tracker.js';
 import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
 import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
 import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
@@ -1188,27 +1189,29 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     messages.push(userMsg);
     yield { type: 'user', message: userMsg };
 
-    // === Inject completed background sub-agent results ===
+    // === Inject completed background agent + bash task results ===
     // Placed AFTER tool_use/tool_result pair to avoid breaking the API
     // requirement that tool_use blocks must have tool_result blocks in
     // the immediately following message.
     let notificationJustDrained = false;
+    const allNotifications: string[] = [];
     if (config.subAgentRegistry) {
-      const agentNotifications = config.subAgentRegistry.drainNotifications();
-      if (agentNotifications.length > 0) {
-        notificationJustDrained = true;
-        const resultMsg = {
-          role: 'user' as const,
-          content: [
-            {
-              type: 'text' as const,
-              text: '<background-agent-notifications>\n' + agentNotifications.join('\n\n') + '\n</background-agent-notifications>',
-            },
-          ],
-        };
-        messages.push(resultMsg);
-        yield { type: 'user' as const, message: resultMsg };
-      }
+      allNotifications.push(...config.subAgentRegistry.drainNotifications());
+    }
+    allNotifications.push(...drainTaskNotifications());
+    if (allNotifications.length > 0) {
+      notificationJustDrained = true;
+      const resultMsg = {
+        role: 'user' as const,
+        content: [
+          {
+            type: 'text' as const,
+            text: '<background-agent-notifications>\n' + allNotifications.join('\n\n') + '\n</background-agent-notifications>',
+          },
+        ],
+      };
+      messages.push(resultMsg);
+      yield { type: 'user' as const, message: resultMsg };
     }
 
     turnCount++;

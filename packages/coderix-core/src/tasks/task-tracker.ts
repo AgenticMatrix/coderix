@@ -48,3 +48,47 @@ export function listTasks(): TrackedTask[] {
 export function unregisterTask(id: string): void {
   tasks.delete(id);
 }
+
+// ── Background task notification queue ──────────────────────
+
+const _pendingNotifications: string[] = [];
+
+/**
+ * Called when a background bash task completes (process exits).
+ * Builds a structured <task-notification> that will be injected
+ * into the conversation on the next tool-execution cycle.
+ */
+export function notifyTaskCompletion(taskId: string): void {
+  const task = tasks.get(taskId);
+  if (!task) return;
+
+  const elapsed = ((task.finishedAt ?? Date.now()) - task.createdAt) / 1000;
+  const status = task.status === 'error' ? 'failed' : task.status === 'stopped' ? 'killed' : 'completed';
+
+  const lines: string[] = [
+    '<task-notification>',
+    `  <task_id>${task.id}</task_id>`,
+    `  <task_type>${task.type}</task_type>`,
+    `  <status>${status}</status>`,
+    `  <description>${task.description}</description>`,
+    `  <elapsed>${elapsed.toFixed(1)}s</elapsed>`,
+  ];
+
+  if (task.error) {
+    lines.push(`  <error>${task.error}</error>`);
+  }
+
+  if (task.result) {
+    lines.push(`  <result>${task.result.slice(0, 2000)}</result>`);
+  }
+
+  lines.push('</task-notification>');
+  _pendingNotifications.push(lines.join('\n'));
+}
+
+/** Drain and return all pending background task notifications. */
+export function drainTaskNotifications(): string[] {
+  if (_pendingNotifications.length === 0) return [];
+  const drained = _pendingNotifications.splice(0);
+  return drained;
+}

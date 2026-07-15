@@ -464,7 +464,7 @@ async function executeStandardSubagent(
   const agentType = agentTypeInput;
   const agentId = options.agentId ?? `sub-${shortId()}`;
   const subAbortController = new AbortController();
-  const isBackground = false;
+  const isBackground = backgroundOverride ?? false;
 
   // Build filtered tool registry from the agent definition
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
@@ -757,6 +757,7 @@ async function executeFork(
   description: string | undefined,
   modelOverride: string | undefined,
   isolation: 'worktree' | undefined,
+  background: boolean | undefined,
   agentSpawn: AgentSpawnContext,
   toolUseId?: string,
   bgSessionId?: string,
@@ -764,8 +765,7 @@ async function executeFork(
   const agentType = 'fork';
   const agentId = `fork-${shortId()}`;
   const subAbortController = new AbortController();
-  // Fork agents always run in foreground so the user can see real-time progress
-  const isBackground = false;
+  const isBackground = background ?? false;
 
   // ── Recursion guard ──────────────────────────────────────────────────
   const parentSession = agentSpawn.sessionManager.getActive();
@@ -1266,7 +1266,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   // ── Path 2: Fork mode — no agent_type → inherit parent context ────
   if (!agentTypeInput && isForkSubagentEnabled()) {
-    return executeFork(prompt, description, modelOverride, isolation, agentSpawn, options.toolUseId, options.sessionId);
+    return executeFork(prompt, description, modelOverride, isolation, backgroundOverride, agentSpawn, options.toolUseId, options.sessionId);
   }
 
   // ── Path 3: Standard subagent — explicit agent_type ───────────────

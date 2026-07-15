@@ -90,6 +90,8 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const shortDesc = description || (prompt ? (prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt) : '');
   const headerText = shortDesc ? `${label} (${shortDesc})` : label;
 
+  const isBackground = props.result?.metadata?.background === true;
+
   const doneToolCalls: ToolCallSummary[] = (props.result?.metadata?.toolCalls as ToolCallSummary[]) ?? [];
   const doneTurnCount = props.result?.metadata?.turnCount as number | undefined;
   const doneToolCount = props.result?.metadata?.toolCount as number | undefined;
@@ -98,7 +100,9 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const liveCallsRef = useRef<ToolCallSummary[]>([]);
   const liveCountsRef = useRef<{ turnCount: number; toolCount: number }>({ turnCount: 0, toolCount: 0 });
   const [liveTick, setLiveTick] = useState(0);
-  const isActive = isExecuting || isPending;
+  // Background agents keep polling even after the tool_use block is "done"
+  const [bgRunning, setBgRunning] = useState(isBackground);
+  const isActive = isExecuting || isPending || (isDone && isBackground);
 
   useEffect(() => {
     if (!isActive) return;
@@ -109,19 +113,20 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
         if (!registry) return;
 
         const running = registry.list().filter(a => a.status === 'running');
-        if (running.length === 0) return;
-
         const matching = running
           .filter(a => {
             if (isResume && props.input.agent_id) {
               return a.id === props.input.agent_id;
             }
-            // Match by tool_use_id — unique per agent spawn
             return props.toolId ? a.toolUseId === props.toolId : false;
           });
 
         const agent = matching[0];
-        if (!agent) return;
+        if (!agent) {
+          // Agent no longer in registry or completed — stop background polling
+          if (isBackground) setBgRunning(false);
+          return;
+        }
 
         let changed = false;
         if (agent.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
@@ -167,10 +172,12 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
     );
   }
 
-  const indicator = isDone ? '●' : (blinkOn ? '●' : '○');
-  const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
-  const statusText = isPending ? 'queued' : '';
-  const showTimer = (isExecuting || isPending) && !isDone;
+  // Background agents show live status even when tool_use block is "done"
+  const trulyDone = isDone && !bgRunning;
+  const indicator = trulyDone ? '●' : (blinkOn ? '●' : '○');
+  const indicatorColor = trulyDone ? 'ansi:green' : 'ansi:yellow';
+  const statusText = isPending ? 'queued' : (bgRunning ? 'background' : '');
+  const showTimer = (isExecuting || isPending || bgRunning) && !trulyDone;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -184,7 +191,7 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
           <Text dimColor color="ansi:yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
         {isolation ? <Text dimColor> isolated: {isolation}</Text> : null}
-        {isDone ? <Text dimColor> {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
+        {trulyDone ? <Text dimColor> {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>
       {lastCall && (
         <Box flexDirection="column" marginLeft={2}>
