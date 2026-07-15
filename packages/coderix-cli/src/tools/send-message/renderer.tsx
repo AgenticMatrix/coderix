@@ -43,9 +43,9 @@ function formatToolCallDetail(tc: ToolCallSummary): string {
   const parts: string[] = [];
   if (desc) parts.push(desc);
   if (keyValue) {
-    parts.push(keyValue.length > 50 ? keyValue.slice(0, 47) + '...' : keyValue);
+    parts.push(keyValue.length > 90 ? keyValue.slice(0, 87) + '...' : keyValue);
   } else if (!desc) {
-    const str = tc.input.length > 60 ? tc.input.slice(0, 57) + '...' : tc.input;
+    const str = tc.input.length > 100 ? tc.input.slice(0, 97) + '...' : tc.input;
     parts.push(str);
   }
 
@@ -215,7 +215,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
       {lastCall && (
         <Box flexDirection="column" marginLeft={2}>
           <Text>
-            <Text dimColor>└── </Text>
+            <Text dimColor>└ </Text>
             <Text bold>{toolLabel(lastCall.name)}</Text>
             <Text dimColor>({formatToolCallDetail(lastCall)})</Text>
           </Text>
