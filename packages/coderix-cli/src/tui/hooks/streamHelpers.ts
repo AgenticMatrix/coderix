@@ -21,13 +21,18 @@ export const DELTA_FLUSH_INTERVAL = 60;
  *  without letting a single large file read blow up the heap. */
 export const MAX_RESULT_LENGTH = 100_000;
 
-/** Truncate tool result content to MAX_RESULT_LENGTH, appending a human-
- *  readable notice showing how much was omitted. */
+/** Truncate long tool result content to MAX_RESULT_LENGTH by keeping the
+ *  first and last HALF_CAP characters, with an omission notice in between.
+ *  This preserves both the header/context (front) and the tail/errors (back)
+ *  of large outputs like build logs and stack traces. */
 export function truncateResult(content: string): string {
   if (!content || content.length <= MAX_RESULT_LENGTH) return content || '';
   const omitted = content.length - MAX_RESULT_LENGTH;
   const kb = Math.round(omitted / 1024);
-  return content.slice(0, MAX_RESULT_LENGTH) + `\n[...truncated ${kb} KB]`;
+  const half = Math.floor(MAX_RESULT_LENGTH / 2);
+  const head = content.slice(0, half);
+  const tail = content.slice(-half);
+  return `${head}\n\n[...truncated ${kb} KB in middle]\n\n${tail}`;
 }
 
 interface PendingDelta {
