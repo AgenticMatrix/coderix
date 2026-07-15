@@ -187,7 +187,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
               </Text>
             </Box>
             <Box flexGrow={1} backgroundColor={userBgColor}>
-              <Text color={userTextColor}>{line}</Text>
+              <Text color={userTextColor}>{line || ' '}</Text>
             </Box>
           </Box>
         ))}
