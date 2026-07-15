@@ -31,7 +31,7 @@ export function ExitPlanModeRenderer(
   if (isDone) {
     const planFile = props.result?.metadata?.planFile as string | undefined;
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>ExitPlanMode</Text>

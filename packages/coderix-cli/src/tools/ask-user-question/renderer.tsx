@@ -19,7 +19,7 @@ export function AskUserQuestionRenderer(
 
   if (isError) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>AskUserQuestion</Text>
@@ -35,7 +35,7 @@ export function AskUserQuestionRenderer(
       | undefined;
     const firstHeader = questions?.[0]?.header ?? '';
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>AskUserQuestion</Text>

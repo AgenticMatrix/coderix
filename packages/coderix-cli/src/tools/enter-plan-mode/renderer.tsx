@@ -10,7 +10,7 @@ export function EnterPlanModeRenderer(
 
   if (isError) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>EnterPlanMode</Text>
@@ -25,7 +25,7 @@ export function EnterPlanModeRenderer(
     const resultLines = resultContent.split('\n').filter((l) => l !== '');
 
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>EnterPlanMode</Text>
