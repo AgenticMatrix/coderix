@@ -616,36 +616,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           />
         )}
 
-        {/* ── Activity & thinking (during streaming/execution) ── */}
-        <OffscreenFreeze frozen={state.isFrozen}>
-          {!state.isFrozen && (
-            <ActivityLine
-              phase={currentPhase}
-              turnElapsed={turnElapsed}
-              turnOutputTokens={state.turnOutputTokens}
-              completed={completedTurn}
-            />
-          )}
-          {latestThinking && !state.isFrozen && (
-            <ThinkingBlockRenderer
-              content={latestThinking.block.content}
-              thinkingExpanded={latestThinking.block.expanded}
-              thinkingDuration={latestThinking.duration}
-              thinkingTokens={latestThinking.tokens}
-            />
-          )}
-        </OffscreenFreeze>
-
-        {/* ── Approval / Question / Picker modals ─────────────── */}
-        {state.approvalReq && (
-          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
-            <ApprovalPrompt
-              req={state.approvalReq}
-              onChoice={handleApprovalChoice}
-            />
-          </Box>
-        )}
-
+        {/* ── Ask / Task panels (above activity line) ──────── */}
         {state.questionReq && (
           <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
             <QuestionPrompt
@@ -655,6 +626,46 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           </Box>
         )}
 
+        <TaskPanel
+          dismissed={state.taskPanelDismissed}
+          onDismissReset={handleTaskDismissReset}
+        />
+
+        <TodoPanel
+          dismissed={state.todoPanelDismissed}
+          onDismissReset={handleTodoDismissReset}
+        />
+
+        {state.approvalReq && (
+          <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
+            <ApprovalPrompt
+              req={state.approvalReq}
+              onChoice={handleApprovalChoice}
+            />
+          </Box>
+        )}
+
+        {/* ── Activity & thinking (during streaming/execution) ── */}
+        <OffscreenFreeze frozen={state.isFrozen}>
+          {latestThinking && !state.isFrozen && (
+            <ThinkingBlockRenderer
+              content={latestThinking.block.content}
+              thinkingExpanded={latestThinking.block.expanded}
+              thinkingDuration={latestThinking.duration}
+              thinkingTokens={latestThinking.tokens}
+            />
+          )}
+          {!state.isFrozen && (
+            <ActivityLine
+              phase={currentPhase}
+              turnElapsed={turnElapsed}
+              turnOutputTokens={state.turnOutputTokens}
+              completed={completedTurn}
+            />
+          )}
+        </OffscreenFreeze>
+
+        {/* ── Picker modals ─────────────── */}
         {state.agentPicker && (
           <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
             <SubAgentPicker
@@ -713,16 +724,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       </ScrollBox>
 
       <Box flexDirection="column" flexShrink={0}>
-        <TaskPanel
-          dismissed={state.taskPanelDismissed}
-          onDismissReset={handleTaskDismissReset}
-        />
-
-        <TodoPanel
-          dismissed={state.todoPanelDismissed}
-          onDismissReset={handleTodoDismissReset}
-        />
-
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
         <InputBox
           inputText={state.inputText}
