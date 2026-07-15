@@ -44,6 +44,8 @@ interface AppProps {
   initialMessages?: Message[] | null;
   /** When true, show the session picker on mount (--resume with no value). */
   showSessionPicker?: boolean;
+  /** Called when the user exits (double Ctrl+C). Uses Ink unmount for clean teardown. */
+  onExit?: () => void;
 }
 
 /** Find the most recent thinking block across all messages. */
@@ -60,10 +62,21 @@ function findLatestThinking(messages: Message[]): { block: ThinkingBlock; durati
   return null;
 }
 
-export function App({ config, engine, store, sessionManager, initialMessages, showSessionPicker }: AppProps) {
+export function App({ config, engine, store, sessionManager, initialMessages, showSessionPicker, onExit: onExitProp }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
+
+  // Clean exit: prefer parent-provided unmount (Ink restores terminal),
+  // fall back to raw process.exit.
+  const handleExit = useCallback(() => {
+    if (onExitProp) {
+      onExitProp();
+    } else {
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+      process.exit(0);
+    }
+  }, [onExitProp]);
 
   // ── Terminal size & layout measurement ──────────────────────
   const { rows: termRows, columns: termCols } = useTerminalSize();
@@ -274,10 +287,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       engine.interrupt();
       getSubAgentRegistry()?.abortAll();
     },
-    onExit: () => {
-      if (process.stdin.isTTY) process.stdin.setRawMode(false);
-      process.exit(0);
-    },
+    onExit: handleExit,
     blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker || state.sessionPicker,
     teamPicker: state.teamPicker,
     agentCount: Object.keys(agentsRef.current).length,
@@ -295,10 +305,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       model: config.model,
       isStreaming: state.isStreaming,
       inputText: state.inputText,
-      onExit: () => {
-        if (process.stdin.isTTY) process.stdin.setRawMode(false);
-        process.exit(0);
-      },
+      onExit: handleExit,
       listSessions: () =>
         sessionManager.list().map((s) => ({
           id: s.id,

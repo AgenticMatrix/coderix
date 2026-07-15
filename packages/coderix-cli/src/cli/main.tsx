@@ -416,9 +416,15 @@ async function main(): Promise<void> {
   const { renderSync } = await import('@coderix/ink');
   const { App } = await import('../tui/components/App.js');
   const { AppStateProvider } = await import('../state/AppStateContext.js');
-  const { waitUntilExit } = renderSync(
+  const { waitUntilExit, unmount } = renderSync(
     <AppStateProvider store={appStore}>
-      <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} showSessionPicker={showSessionPicker} />
+      <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} showSessionPicker={showSessionPicker} onExit={() => {
+        // Restore terminal before unmounting so tsx watch can read Ctrl+C
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
+        unmount();
+        // Safety net: force exit if unmount doesn't tear down cleanly
+        setTimeout(() => process.exit(0), 300);
+      }} />
     </AppStateProvider>,
     { exitOnCtrlC: false, patchConsole: true },
   );
