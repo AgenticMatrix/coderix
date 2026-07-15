@@ -2,10 +2,10 @@ import React from 'react';
 import { Box, Text } from '@coderix/ink';
 import type { Color } from '@coderix/ink';
 import { useToolTimer } from '../shared/useToolTimer.js';
-import { detectLanguage, highlightDiffLine } from '../shared/diffHighlight.js';
+import { detectLanguage, highlightDiffLine, groupDiffHunks } from '../shared/diffHighlight.js';
 import type { ToolUseRendererProps } from '../types.js';
 
-const COLLAPSE_THRESHOLD = 5;
+const HUNK_CONTEXT = 3;
 
 function truncatePath(fp: string): string {
   if (fp.length <= 80) return fp;
@@ -35,10 +35,6 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
   const effectiveAdded = addedLines ?? (rawLines.length > 0 ? rawLines.length : undefined);
   const effectiveRemoved = removedLines;
 
-  const tooLong = !props.contentExpanded && effectiveDiffLines && effectiveDiffLines.length > COLLAPSE_THRESHOLD;
-  const displayDiffLines = tooLong ? effectiveDiffLines.slice(0, COLLAPSE_THRESHOLD) : effectiveDiffLines;
-  const hiddenCount = effectiveDiffLines ? effectiveDiffLines.length - COLLAPSE_THRESHOLD : 0;
-
   // Build stats
   const parts: string[] = [];
   if (effectiveAdded !== undefined && effectiveAdded > 0) {
@@ -54,6 +50,28 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
 
   const lang = hasPath ? detectLanguage(fp) : null;
   const diffWidth = Math.max(20, Math.floor((props.termWidth ?? 80) * 0.9) - 2);
+
+  // Group diff into hunks around changes, with ... between non-adjacent hunks
+  const hunks = effectiveDiffLines && !props.contentExpanded
+    ? groupDiffHunks(effectiveDiffLines, HUNK_CONTEXT)
+    : effectiveDiffLines
+      ? [{ lines: effectiveDiffLines, skippedBefore: 0 }]
+      : [];
+
+  function renderDiffLine(line: string, i: number) {
+    const { prefix, codeTokens, isAdd, isRemove } = highlightDiffLine(line, lang);
+    const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
+    const hasBackground = isAdd || isRemove;
+    const dimBase = (c: Color): Color => c === '#FFFFFF' ? 'ansi:white' : c;
+    return (
+      <Box key={i} width={diffWidth} backgroundColor={bgColor}>
+        <Text color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
+        {codeTokens.map((t, j) => (
+          <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
+        ))}
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -75,29 +93,22 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
               <Text dimColor>{stats}</Text>
             </Box>
           ) : null}
-          {isDone && displayDiffLines && displayDiffLines.length > 0 ? (
+          {isDone && hunks.length > 0 ? (
             <Box paddingLeft={2} flexDirection="column">
-              {displayDiffLines.map((line, i) => {
-                const { prefix, codeTokens, isAdd, isRemove } = highlightDiffLine(line, lang);
-                const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
-                const hasBackground = isAdd || isRemove;
-                // Context lines: dim base color to terminal 'ansi:white' (gray-white),
-                // but keep highlight colors (magenta, green, etc.) as-is.
-                const dimBase = (c: Color): Color => c === '#FFFFFF' ? 'ansi:white' : c;
-                return (
-                  <Box key={i} width={diffWidth} backgroundColor={bgColor}>
-                    <Text color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
-                    {codeTokens.map((t, j) => (
-                      <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
-                    ))}
-                  </Box>
-                );
-              })}
-              {tooLong ? (
-                <Box width={diffWidth}>
-                  <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
-                </Box>
-              ) : null}
+              {hunks.map((hunk, hi) => (
+                <React.Fragment key={hi}>
+                  {hunk.skippedBefore > 0 ? (
+                    <Box width={diffWidth}>
+                      <Text dimColor>... {hunk.skippedBefore} unchanged lines</Text>
+                    </Box>
+                  ) : hi > 0 ? (
+                    <Box width={diffWidth}>
+                      <Text dimColor>...</Text>
+                    </Box>
+                  ) : null}
+                  {hunk.lines.map((line, i) => renderDiffLine(line, i))}
+                </React.Fragment>
+              ))}
             </Box>
           ) : null}
         </>

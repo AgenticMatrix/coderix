@@ -63,3 +63,63 @@ export function highlightDiffLine(
 
   return { prefix, codeTokens, isAdd, isRemove };
 }
+
+export interface DiffHunkGroup {
+  lines: string[];
+  /** How many unchanged lines were skipped before this hunk. */
+  skippedBefore: number;
+}
+
+/**
+ * Group diff lines into hunks around changed lines.
+ *
+ * Each hunk includes up to `contextLines` unchanged lines before and after
+ * the changed region. Large unchanged gaps between hunks are collapsed and
+ * counted as `skippedBefore` so the renderer can show "... N unchanged lines".
+ */
+export function groupDiffHunks(
+  diffLines: string[],
+  contextLines = 3,
+): DiffHunkGroup[] {
+  const groups: DiffHunkGroup[] = [];
+  let current: string[] = [];
+  let contextAfter: string[] = [];
+  let skipped = 0;
+
+  for (const line of diffLines) {
+    const isChanged = line.length > 5 && (line[5] === '+' || line[5] === '-');
+
+    if (isChanged) {
+      // Flush any pending context-after into the current hunk
+      if (contextAfter.length > 0) {
+        current.push(...contextAfter);
+        contextAfter = [];
+        skipped = 0;
+      }
+      current.push(line);
+    } else if (current.length > 0) {
+      // Inside a hunk: collect trailing context
+      if (contextAfter.length < contextLines) {
+        contextAfter.push(line);
+      } else {
+        // Trailing context is full — close hunk and start skipping
+        current.push(...contextAfter);
+        groups.push({ lines: current, skippedBefore: skipped > 0 ? skipped : 0 });
+        current = [];
+        contextAfter = [];
+        skipped = 1;
+      }
+    } else {
+      // Outside any hunk: count skipped lines
+      skipped++;
+    }
+  }
+
+  // Last hunk
+  if (current.length > 0) {
+    current.push(...contextAfter);
+    groups.push({ lines: current, skippedBefore: skipped > 0 ? skipped : 0 });
+  }
+
+  return groups;
+}
