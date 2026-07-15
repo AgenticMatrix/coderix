@@ -450,6 +450,32 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     return 'idle';
   }, [state.error, latestThinking, state.messages, state.isStreaming, agentTick]);
 
+  // ── Status bar phase ──────────────────────────────────────────
+  // busy: main agent is active (streaming / thinking / sync tool execution)
+  // wait: sub-agents or background tools are running
+  // idle: nothing active
+  const statusPhase = useMemo<'busy' | 'wait' | 'idle'>(() => {
+    if (state.error) return 'idle';
+    // Busy: ONLY when main agent API is actively streaming (never during sub-agent view)
+    if (!state.subAgentView && state.isStreaming) return 'busy';
+    // Wait: check MAIN agent's messages for pending tools
+    // Use savedMainMessages when in sub-agent view since state.messages is the sub-agent's
+    const mainMessages = state.subAgentView
+      ? (state.savedMainMessages ?? [])
+      : state.messages;
+    const lastMsg = mainMessages[mainMessages.length - 1];
+    const hasActiveTools =
+      lastMsg?.blocks.some(
+        (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
+      ) ?? false;
+    if (hasActiveTools) return 'wait';
+    // Wait: sub-agents running
+    for (const agent of Object.values(agentsRef.current)) {
+      if (agent.status === 'running') return 'wait';
+    }
+    return 'idle';
+  }, [state.error, state.isStreaming, state.subAgentView, state.messages, state.savedMainMessages, agentTick]);
+
   // Turn elapsed timer — resets when phase becomes idle
   const turnStartRef = useRef<number>(Date.now());
   const [turnElapsed, setTurnElapsed] = useState(0);
@@ -682,7 +708,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         <Box marginTop={1}>
           <StatusBar
             model={state.model}
-            isStreaming={state.isStreaming}
+            statusPhase={statusPhase}
             isFrozen={state.isFrozen}
             error={state.error}
             totalChars={stats.totalChars}

@@ -5,7 +5,9 @@ import type { TokenUsage } from '../../types.js';
 
 interface StatusBarProps {
   model: string;
-  isStreaming: boolean;
+  /** Current activity phase: busy (main agent streaming/thinking/executing),
+   *  wait (sub-agents or background tools running), idle (nothing active). */
+  statusPhase: 'busy' | 'wait' | 'idle';
   isFrozen?: boolean;
   error: string | null;
   /** Total character count of all messages (for context estimation). */
@@ -103,13 +105,15 @@ function ContextBar({ used, max }: { used: number; max: number }) {
  * Procs = number of processes in the tree.
  * Timers update every second in real-time.
  */
-export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, processMemory, processCount }: StatusBarProps) {
+export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
   const streamStartRef = useRef<number | null>(null);
 
-  // Track streaming start/stop
+  const isStreaming = statusPhase === 'busy';
+
+  // Track turn start/stop
   useEffect(() => {
     if (isStreaming && streamStartRef.current === null) {
       streamStartRef.current = Date.now();
@@ -120,7 +124,7 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
     }
   }, [isStreaming]);
 
-  // Tick timer ONLY during streaming
+  // Tick timer ONLY during active turn
   useEffect(() => {
     if (!isStreaming) return;
 
@@ -156,12 +160,14 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
     <Box paddingX={1} flexDirection="row">
       {error ? (
         <Text color="ansi:red">⚠ {error}</Text>
-      ) : isStreaming && isFrozen ? (
+      ) : isFrozen ? (
         <Text color="ansi:yellow">⏸ Paused</Text>
-      ) : isStreaming ? (
-        <Text color="ansi:yellow">● Busy</Text>
+      ) : statusPhase === 'busy' ? (
+        <Text color="ansi:red">◉ Busy</Text>
+      ) : statusPhase === 'wait' ? (
+        <Text color="ansi:yellow">◎ Wait</Text>
       ) : (
-        <Text color="ansi:green">✓ Idle</Text>
+        <Text color="ansi:green">○ Idle</Text>
       )}
 
       <Sep />
@@ -187,7 +193,7 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
 
       <Sep />
 
-      {isStreaming ? (
+      {statusPhase !== 'idle' ? (
         <Text color="ansi:yellow">⏲ {formatDuration(responseSeconds)}</Text>
       ) : (
         <Text dimColor>⏲ 0s</Text>
@@ -198,9 +204,6 @@ export function StatusBar({ model, isStreaming, isFrozen, error, totalChars, inp
       <Text>
         <Text dimColor>Model: </Text>
         <Text color="ansi:magenta" bold>{model}</Text>
-        {!error && !isStreaming ? (
-          <Text color="ansi:green" dimColor> ✓</Text>
-        ) : null}
       </Text>
 
       <Sep />
