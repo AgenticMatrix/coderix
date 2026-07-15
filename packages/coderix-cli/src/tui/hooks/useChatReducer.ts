@@ -193,6 +193,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         pasteBlocks: {},
         pastePreviewVisible: false,
         turnOutputTokens: 0,
+        turnEstimatedTokens: 0,
         turnStartedAt: Date.now(),
         isFrozen: false,
       };
@@ -260,6 +261,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'APPEND_BLOCK_DELTA': {
       const msgs = state.messages;
       const lastIdx = msgs.length - 1;
+      // Estimate tokens from this delta (text/thinking only). Real count replaces on message_stop.
+      const deltaTokens = action.deltaType !== 'json'
+        ? Math.max(1, Math.round(action.text.length / 4))
+        : 0;
 
       // Fast path: during streaming, the target is always the last message
       if (lastIdx >= 0 && msgs[lastIdx]!.id === action.messageId) {
@@ -275,7 +280,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             ...m,
             blocks: [newBlock],
           });
-          return { ...state, messages: newMsgs };
+          return { ...state, messages: newMsgs, turnEstimatedTokens: state.turnEstimatedTokens + deltaTokens, turnOutputTokens: state.turnOutputTokens + deltaTokens };
         }
 
         const blocks = m.blocks.slice();
@@ -296,7 +301,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               ...m,
               blocks,
             });
-            return { ...state, messages: newMsgs };
+            return { ...state, messages: newMsgs, turnEstimatedTokens: state.turnEstimatedTokens + deltaTokens, turnOutputTokens: state.turnOutputTokens + deltaTokens };
           }
         } else if (action.deltaType === 'json' && lastBlock.type === 'tool_use') {
           const partialStr = ((lastBlock.input as Record<string, unknown>)._partial as string || '') + action.text;
@@ -313,13 +318,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           ...m,
           blocks,
         });
-        return { ...state, messages: newMsgs };
+        return { ...state, messages: newMsgs, turnEstimatedTokens: state.turnEstimatedTokens + deltaTokens, turnOutputTokens: state.turnOutputTokens + deltaTokens };
       }
 
       // Slow path: scan all messages (should be rare — only if messageId
       // doesn't match the last message, e.g. during sub-agent transcript load)
       return {
         ...state,
+        turnEstimatedTokens: state.turnEstimatedTokens + deltaTokens,
+        turnOutputTokens: state.turnOutputTokens + deltaTokens,
         messages: msgs.map((m) => {
           if (m.id !== action.messageId) return m;
 
@@ -835,11 +842,17 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const tokenUsage = action.skipDisplay
         ? state.tokenUsage
         : { inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens };
+      // Replace estimated tokens with real API count.
+      // During streaming, deltas are estimated as chars/4. When the response
+      // completes, we subtract the estimates and add the real output_tokens.
+      const realOutputTokens = outputTokens;
+      const correctedOutput = state.turnOutputTokens - state.turnEstimatedTokens + realOutputTokens;
       return {
         ...state,
         tokenUsage,
         accumulatedCost: state.accumulatedCost + turnCost,
-        turnOutputTokens: state.turnOutputTokens + outputTokens,
+        turnOutputTokens: correctedOutput,
+        turnEstimatedTokens: 0,
       };
     }
 
@@ -920,6 +933,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     cacheReadPrice,
     briefMode: false,
     turnOutputTokens: 0,
+    turnEstimatedTokens: 0,
     turnStartedAt: 0,
     queuedCount: 0,
   };

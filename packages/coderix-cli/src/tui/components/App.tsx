@@ -53,7 +53,7 @@ function findLatestThinking(messages: Message[]): { block: ThinkingBlock; durati
     if (msg.role === 'assistant') {
       const thinkingBlock = msg.blocks.find((b): b is ThinkingBlock => b.type === 'thinking');
       if (thinkingBlock) {
-        return { block: thinkingBlock, duration: msg.thinkingDuration, tokens: msg.thinkingTokens };
+        return { block: thinkingBlock, duration: msg.thinkingDuration, tokens: msg.thinkingTokens ?? Math.round(thinkingBlock.content.length / 4) };
       }
     }
   }

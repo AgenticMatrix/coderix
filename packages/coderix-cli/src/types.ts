@@ -257,6 +257,8 @@ export interface ChatState extends CoreState {
   briefMode: boolean;
   /** Cumulative output tokens since the last user message (turn-level, includes sub-agents). */
   turnOutputTokens: number;
+  /** Estimated output tokens accumulated from deltas during streaming (chars/4). Reset when UPDATE_TOKEN_USAGE replaces with real count. */
+  turnEstimatedTokens: number;
   /** Timestamp when the current turn started (user message sent). */
   turnStartedAt: number;
   /** Number of messages queued while tools are running. */
