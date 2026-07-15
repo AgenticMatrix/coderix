@@ -19,7 +19,7 @@ import type {
 } from '../../types.js';
 import type { AppState } from '../../state/AppState.js';
 import { nextMessageId } from './useChatReducer.js';
-import { useDeltaThrottle } from './streamHelpers.js';
+import { useDeltaThrottle, truncateResult } from './streamHelpers.js';
 
 // ── Block mapper (same logic as useAgentBridge's mapCoreBlockToTui) ──────
 
@@ -49,7 +49,7 @@ function mapCoreBlockToTui(
         type: 'tool_result',
         toolId: block.tool_use_id ?? '',
         toolName: '',
-        content: contentStr,
+        content: truncateResult(contentStr),
         isError: block.is_error ?? false,
         duration: (block as Record<string, unknown>).duration as number | undefined,
         metadata: (block as Record<string, unknown>).metadata as Record<string, unknown> | undefined,
@@ -88,7 +88,7 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
       const userMsg: Message = {
         id: nextMessageId(),
         role: 'user',
-        content: trimmed,
+        content: '',
         blocks: [{ type: 'text', content: trimmed } satisfies TextBlock],
         timestamp: Date.now(),
       };
@@ -119,6 +119,7 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                     if (!currentAssistantId) break;
                     const cb = ev.content_block as Record<string, unknown> | undefined;
                     if (!cb) break;
+                    flushDeltas(true);
                     const tuiBlock = mapCoreBlockToTui(cb as Parameters<typeof mapCoreBlockToTui>[0]);
                     if (tuiBlock.type === 'tool_use' && tuiBlock.toolId) {
                       toolNameMapRef.current.set(tuiBlock.toolId, tuiBlock.toolName);
@@ -143,13 +144,13 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                   }
                   case 'content_block_stop':
                     if (currentAssistantId) {
-                      flushDeltas();
+                      flushDeltas(true);
                       dispatch({ type: 'STOP_BLOCK', messageId: currentAssistantId });
                     }
                     break;
                   case 'message_stop':
                     if (currentAssistantId) {
-                      flushDeltas();
+                      flushDeltas(true);
                       dispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId });
                       currentAssistantId = null;
                     }
@@ -164,7 +165,7 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                   const toolResultMsg: Message = {
                     id: nextMessageId(),
                     role: 'user',
-                    content: rawContent,
+                    content: '',
                     blocks: [{ type: 'text', content: rawContent } satisfies TextBlock],
                     timestamp: Date.now(),
                   };
@@ -285,12 +286,12 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
             }
 
             case 'done':
-              flushDeltas();
+              flushDeltas(true);
               break;
           }
         }
       } catch (err) {
-        flushDeltas();
+        flushDeltas(true);
         dispatch({ type: 'SET_ERROR', error: (err as Error).message });
       }
     },

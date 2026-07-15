@@ -28,6 +28,10 @@ interface MessageBubbleProps {
   hideThinking?: boolean;
   /** Maximum output lines for text blocks (streaming performance). */
   maxLines?: number;
+  /** When true, text blocks render with a bounded LRU parse-result cache.
+   *  Limits per-render allocations during streaming without sacrificing
+   *  markdown rendering quality. */
+  streaming?: boolean;
 }
 
 /** Extract display text from blocks (text blocks concatenated). */
@@ -120,7 +124,7 @@ function truncateTextByLines(text: string, maxLines: number): string {
   return lines.slice(-maxLines).join('\n');
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, contentExpanded, theme, hideThinking, maxLines, streaming }: MessageBubbleProps) {
   const { role } = message;
   const { columns } = useTerminalSize();
   const [termWidth, setTermWidth] = useState(
@@ -138,7 +142,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
 
   // ── Determine content source ──────────────────────────────
   const hasBlocks = message.blocks && message.blocks.length > 0;
-  const displayContent = hasBlocks ? blocksText(message.blocks) : message.content;
+  const displayContent = hasBlocks ? blocksText(message.blocks) : (message.content || '');
   const thinkingContent = hasBlocks
     ? (blocksThinking(message.blocks) ?? message.thinking)
     : message.thinking;
@@ -409,7 +413,11 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
                     <Box key={idx} flexDirection="row">
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
-                        <MarkdownRenderer content={textContent} theme={theme} />
+                        <MarkdownRenderer
+                          content={textContent}
+                          theme={theme}
+                          streaming={streaming}
+                        />
                       </Box>
                     </Box>
                   );
@@ -425,7 +433,11 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
           <Box flexDirection="row">
             <Box width={2} flexShrink={0} />
             <Box flexGrow={1}>
-              <MarkdownRenderer content={maxLines ? truncateTextByLines(displayContent, maxLines) : displayContent} theme={theme} />
+              <MarkdownRenderer
+                content={maxLines ? truncateTextByLines(displayContent, maxLines) : displayContent}
+                theme={theme}
+                streaming={streaming}
+              />
             </Box>
           </Box>
         ) : null}

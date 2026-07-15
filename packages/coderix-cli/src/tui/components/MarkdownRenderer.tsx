@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, Text } from '@coderix/ink';
 import type { Color } from '@coderix/ink';
 import { useTerminalSize } from '@coderix/ink';
@@ -777,6 +777,10 @@ interface MarkdownRendererProps {
   /** Maximum number of visible lines before truncation. Useful for streaming
    *  output to prevent rendering thousands of lines that get clipped anyway. */
   maxLines?: number;
+  /** When true, use a bounded LRU cache (last 5 parses) to limit parse-result
+   *  retention during fast re-renders. Old entries are explicitly evicted
+   *  instead of relying on GC to catch up. */
+  streaming?: boolean;
 }
 
 /** Rough line-count estimate for a block. Fast approximation — doesn't need
@@ -831,7 +835,7 @@ function estimateBlockLines(block: Block, termWidth: number): number {
  * - Blockquotes (> text, with nesting support)
  * - Paragraphs
  */
-export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, theme, maxLines, streaming }: MarkdownRendererProps) {
   const { columns } = useTerminalSize();
   const [termWidth, setTermWidth] = useState(
     () => columns ?? process.stdout.columns ?? 80,
@@ -843,7 +847,37 @@ export function MarkdownRenderer({ content, theme, maxLines }: MarkdownRendererP
     }
   }, [columns]);
 
-  const blocks = parseBlocks(content);
+  // ── Bounded LRU cache for streaming parse results ──────────────────
+  // During streaming, content grows every render → parseBlocks allocates
+  // a fresh Block[] each time. Without a bound, React may hold multiple
+  // copies across concurrent / deferred renders. Max 5 entries keeps the
+  // working set small without hurting the common case (cache always hits
+  // the last entry when the stream stabilises briefly).
+  const cacheRef = useRef<Array<{ key: string; blocks: Block[] }>>([]);
+  const MAX_CACHE = 5;
+
+  const blocks = useMemo(() => {
+    if (!streaming) return parseBlocks(content);
+
+    const cache = cacheRef.current;
+    for (let i = 0; i < cache.length; i++) {
+      if (cache[i]!.key === content) {
+        // Move to end (LRU), then return cached blocks
+        if (i < cache.length - 1) {
+          const entry = cache[i]!;
+          cache.splice(i, 1);
+          cache.push(entry);
+        }
+        return cache[cache.length - 1]!.blocks;
+      }
+    }
+
+    // Miss — parse and evict oldest if full
+    const result = parseBlocks(content);
+    cache.push({ key: content, blocks: result });
+    while (cache.length > MAX_CACHE) cache.shift();
+    return result;
+  }, [content, streaming]);
 
   if (blocks.length === 0) {
     return null;

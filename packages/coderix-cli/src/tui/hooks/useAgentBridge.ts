@@ -22,7 +22,7 @@ import type {
 } from '../../types.js';
 import type { AppState } from '../../state/AppState.js';
 import { nextMessageId } from './useChatReducer.js';
-import { useDeltaThrottle } from './streamHelpers.js';
+import { useDeltaThrottle, truncateResult } from './streamHelpers.js';
 
 // Batched updates: merge multiple React state dispatches into a single
 // Ink render pass, eliminating intermediate-frame flicker during streaming.
@@ -73,7 +73,7 @@ function mapCoreBlockToTui(
         type: 'tool_result',
         toolId: block.tool_use_id ?? '',
         toolName: '',
-        content: contentStr,
+        content: truncateResult(contentStr),
         isError: block.is_error ?? false,
         duration: (block as Record<string, unknown>).duration as number | undefined,
         metadata: (block as Record<string, unknown>).metadata as Record<string, unknown> | undefined,
@@ -93,18 +93,11 @@ function mapCoreBlockToTui(
 // ---------------------------------------------------------------------------
 
 function createAssistantMessage(id: number, blocks: TuiContentBlock[]): Message {
-  const textContent = blocks
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.content)
-    .join('');
-  const thinkingBlock = blocks.find((b): b is ThinkingBlock => b.type === 'thinking');
-
   return {
     id,
     role: 'assistant',
-    content: textContent,
+    content: '',
     blocks,
-    thinking: thinkingBlock?.content,
     timestamp: Date.now(),
   };
 }
@@ -189,7 +182,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         const userMsg: Message = {
           id: nextMessageId(),
           role: 'user',
-          content: trimmed,
+          content: '',
           blocks: [{ type: 'text', content: trimmed } satisfies TextBlock],
           timestamp: Date.now(),
         };
@@ -228,6 +221,9 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     if (!currentAssistantId) break;
                     const cb = ev.content_block as Record<string, unknown> | undefined;
                     if (!cb) break;
+                    // Flush any pending text before starting a new block so
+                    // accumulated text isn't lost across block transitions.
+                    flushDeltas(true);
                     const tuiBlock = mapCoreBlockToTui(cb as Parameters<typeof mapCoreBlockToTui>[0]);
                     pendingBlocks = [...pendingBlocks, tuiBlock];
                     // Record tool_use_id → toolName for inline result filtering
@@ -256,7 +252,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
 
                   case 'content_block_stop':
                     if (currentAssistantId) {
-                      flushDeltas();
+                      flushDeltas(true);
                       routeDispatch({ type: 'STOP_BLOCK', messageId: currentAssistantId });
                     }
                     break;
@@ -267,7 +263,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                     // not received (malformed stream, provider edge case).
                     routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId ?? 0 });
                     if (currentAssistantId) {
-                      flushDeltas();
+                      flushDeltas(true);
                       // Track final token usage
                       const stopMsg = ev.message as Record<string, unknown> | undefined;
                       const stopUsage = stopMsg?.usage as Record<string, number> | undefined;
@@ -305,7 +301,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   const toolResultMsg: Message = {
                     id: nextMessageId(),
                     role: 'user',
-                    content: rawContent,
+                    content: '',
                     blocks: [
                       {
                         type: 'text',
@@ -415,7 +411,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                 if (completed?.toolUseId) {
                   const toolId = completed.toolUseId;
                   const duration = completed.duration;
-                  const content = completed.content ?? '';
+                  const content = truncateResult(completed.content ?? '');
                   const isError = completed.isError ?? false;
                   const cMetadata = completed.metadata;
                   const applyCompleted = () => {
@@ -509,7 +505,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
 
             // ── Done event ───────────────────────────────────────
             case 'done':
-              flushDeltas();
+              flushDeltas(true);
               // Safety net: ensure isStreaming is false after turn completes
               routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: 0 });
               routeDispatch({ type: 'DEQUEUED_MESSAGE' });
@@ -522,7 +518,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
           }
         }
       } catch (err) {
-        flushDeltas();
+        flushDeltas(true);
         routeDispatch({ type: 'SET_ERROR', error: (err as Error).message });
       }
     },

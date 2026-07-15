@@ -4,6 +4,7 @@ import type {
   ChatState, ChatAction, Message, ContentBlock,
   TextBlock, ThinkingBlock,
 } from '../../types.js';
+import { truncateResult } from './streamHelpers.js';
 
 let messageIdCounter = 0;
 export function nextMessageId(): number {
@@ -35,11 +36,11 @@ function coreBlockToTui(block: Record<string, unknown>): ContentBlock {
         type: 'tool_result',
         toolId: (block.tool_use_id as string) ?? '',
         toolName: (block.name as string) ?? '',
-        content: typeof block.content === 'string'
+        content: truncateResult(typeof block.content === 'string'
           ? block.content
           : Array.isArray(block.content)
             ? (block.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
-            : '',
+            : ''),
         isError: (block.is_error as boolean) ?? false,
       };
     default:
@@ -248,14 +249,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             ? {
                 ...m,
                 blocks: [...m.blocks, action.block],
-                content: getMessageText({
-                  ...m,
-                  blocks: [...m.blocks, action.block],
-                }),
-                thinking: getMessageThinking({
-                  ...m,
-                  blocks: [...m.blocks, action.block],
-                }),
               }
             : m,
         ),
@@ -279,8 +272,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           newMsgs.push({
             ...m,
             blocks: [newBlock],
-            content: action.deltaType === 'text' ? action.text : m.content,
-            thinking: action.deltaType === 'thinking' ? action.text : m.thinking,
           });
           return { ...state, messages: newMsgs };
         }
@@ -302,8 +293,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             newMsgs.push({
               ...m,
               blocks,
-              content: getMessageText({ ...m, blocks }),
-              thinking: getMessageThinking({ ...m, blocks }),
             });
             return { ...state, messages: newMsgs };
           }
@@ -321,8 +310,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         newMsgs.push({
           ...m,
           blocks,
-          content: getMessageText({ ...m, blocks }),
-          thinking: getMessageThinking({ ...m, blocks }),
         });
         return { ...state, messages: newMsgs };
       }
@@ -342,8 +329,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
             return {
               ...m,
               blocks: [newBlock],
-              content: action.deltaType === 'text' ? action.text : m.content,
-              thinking: action.deltaType === 'thinking' ? action.text : m.thinking,
             };
           }
 
@@ -364,8 +349,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
               return {
                 ...m,
                 blocks,
-                content: getMessageText({ ...m, blocks }),
-                thinking: getMessageThinking({ ...m, blocks }),
               };
             }
           } else if (action.deltaType === 'json' && lastBlock.type === 'tool_use') {
@@ -385,8 +368,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           return {
             ...m,
             blocks,
-            content: getMessageText({ ...m, blocks }),
-            thinking: getMessageThinking({ ...m, blocks }),
           };
         }),
       };
@@ -403,7 +384,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
                   ...b,
                   state: 'done' as const,
                   duration: action.duration,
-                  result: action.result,
+                  result: action.result ? {
+                    content: truncateResult(action.result.content),
+                    isError: action.result.isError,
+                    metadata: action.result.metadata,
+                  } : undefined,
                 }
               : b,
           ),

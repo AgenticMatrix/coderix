@@ -1,5 +1,6 @@
-import { useEffect, useRef, useMemo, useCallback, useLayoutEffect, useState } from 'react';
-import { Box, Text, measureElement } from '@coderix/ink';
+import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import { Box, Text, ScrollBox } from '@coderix/ink';
+import type { ScrollBoxHandle } from '@coderix/ink';
 import { useTerminalSize } from '@coderix/ink';
 
 import type { QueryEngine } from '@coderix/core';
@@ -21,6 +22,7 @@ import { TeamPanel } from './TeamPanel.js';
 import { MemoryPicker } from './MemoryPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { CommandHint } from './CommandHint.js';
+import { VirtualMessageList } from './VirtualMessageList.js';
 import { useChatReducer, convertTranscriptToMessages } from '../hooks/useChatReducer.js';;
 import { useAgentBridge } from '../hooks/useAgentBridge.js';;
 import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
@@ -44,21 +46,6 @@ interface AppProps {
   showSessionPicker?: boolean;
 }
 
-/** True when a user message contains only tool_result blocks. */
-function isToolResultOnly(m: Message): boolean {
-  return m.role === 'user' && m.blocks.length > 0 && m.blocks.every((b) => b.type === 'tool_result');
-}
-
-/** Check whether a message contains any tool_use blocks that are still
- *  pending or executing.  When true, the message must stay in the Live
- *  zone so that tool timers, blinking indicators, and inline progress
- *  update correctly. */
-function hasActiveTools(msg: Message): boolean {
-  return msg.blocks.some(
-    (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
-  );
-}
-
 /** Find the most recent thinking block across all messages. */
 function findLatestThinking(messages: Message[]): { block: ThinkingBlock; duration?: number; tokens?: number } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -73,52 +60,6 @@ function findLatestThinking(messages: Message[]): { block: ThinkingBlock; durati
   return null;
 }
 
-/** Find the index where the live zone begins.
- *
- *  During streaming we keep only the LAST message live (the currently-
- *  streaming assistant). Everything else is promoted to <Static>,
- *  minimizing the Ink output area that rewrites on every text delta.
- *
- *  When streaming ends while tools are still running, any message that
- *  contains pending / executing tool_use blocks stays in the Live zone
- *  until every tool settles (done / error).  Once all tools are settled
- *  the entire conversation moves into <Static> and the terminal output
- *  is frozen — scrollback, text selection, and Cmd+F all work normally
- *  on the history. */
-function getLiveStart(messages: Message[], isStreaming: boolean): number {
-  if (isStreaming) {
-    // Streaming: keep only the last message (streaming assistant) live
-    return Math.max(0, messages.length - 1);
-  }
-  // Not streaming: find the first message that still has active tools.
-  // It and everything after it stays live until all tools settle.
-  for (let i = 0; i < messages.length; i++) {
-    if (hasActiveTools(messages[i]!)) {
-      return i;
-    }
-  }
-  // All tools settled — everything goes to Static.
-  return messages.length;
-}
-
-type StaticItem = { _type: 'header' } | { _type: 'message'; msg: Message };
-
-/**
- * App shell with zone-separated rendering:
- *
- *  Static zone  (<Static>)       — HeaderLogo + all past turns
- *  Live zone                     — only the currently-streaming message
- *
- * During streaming, only 1 message is in the Live zone. This means Ink
- * rewrites at most a few terminal rows on each text delta, eliminating
- * flickering and preserving terminal-native text selection on everything
- * above the current line.
- *
- * Static is re-mounted (via dynamic key) on Ctrl+D / Ctrl+E toggles
- * so expandable blocks (Update/Write diffs, thinking) reflect the new
- * expand/collapse state. Only the current round has collapsed content,
- * so older messages render identically after remount.
- */
 export function App({ config, engine, store, sessionManager, initialMessages, showSessionPicker }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
@@ -128,37 +69,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   const { rows: termRows, columns: termCols } = useTerminalSize();
   const rows = termRows ?? process.stdout.rows ?? 24;
   const columns = termCols ?? process.stdout.columns ?? 80;
-
-  const controlsRef = useRef<any>(null);
-  const [controlsHeight, setControlsHeight] = useState(0);
-  const lastMeasureKeyRef = useRef('');
-
-  useLayoutEffect(() => {
-    if (!controlsRef.current || rows <= 0) return;
-
-    const measureKey = [
-      rows, columns,
-      state.taskPanelDismissed ? 1 : 0,
-      state.todoPanelDismissed ? 1 : 0,
-      state.teamPanelDismissed ? 1 : 0,
-      state.teamPicker ? 1 : 0,
-      state.inputText.includes('\n') ? 1 : 0,
-      state.pastePreviewVisible ? 1 : 0,
-      Object.keys(state.pasteBlocks ?? {}).length,
-    ].join(':');
-
-    if (measureKey === lastMeasureKeyRef.current) return;
-    lastMeasureKeyRef.current = measureKey;
-
-    const measured = measureElement(controlsRef.current);
-    setControlsHeight(prev => (prev === measured.height ? prev : measured.height));
-  }, [rows, columns, state.taskPanelDismissed, state.todoPanelDismissed, state.teamPanelDismissed, state.teamPicker, state.inputText, state.pastePreviewVisible, state.pasteBlocks]);
-
-  const outerPadding = 2; // padding={1} top + bottom
-  const freezeHeight = state.isFrozen ? 1 : 0;
-  const liveMaxHeight = controlsHeight > 0
-    ? Math.max(1, rows - outerPadding - freezeHeight - controlsHeight)
-    : undefined;
 
   // Sync ChatState → AppState.ui so components reading via useAppState see the latest
   useEffect(() => {
@@ -528,7 +438,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     if (state.error) return 'idle';
     if (latestThinking && latestThinking.duration == null) return 'thinking';
     const lastMsg = state.messages[state.messages.length - 1];
-    if (lastMsg && hasActiveTools(lastMsg)) return 'executing';
+    const hasActive =
+      lastMsg?.blocks.some(
+        (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
+      ) ?? false;
+    if (hasActive) return 'executing';
     for (const agent of Object.values(agentsRef.current)) {
       if (agent.status === 'running') return 'executing';
     }
@@ -555,61 +469,66 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     return () => clearInterval(id);
   }, [currentPhase]);
 
-  // During streaming, keep only the LAST message live.
-  // Everything else goes to <Static> and is never redrawn —
-  // except on Ctrl+D / Ctrl+E, where the Static key bumps to remount
-  // and re-render with the toggled expand/collapse state.
-  const liveStart = getLiveStart(displayMessages, state.isStreaming);
-
-  const staticItems = useMemo<StaticItem[]>(() => {
-    const historical = displayMessages.slice(0, liveStart);
-    return [
-      { _type: 'header' as const },
-      ...historical.map((msg): StaticItem => ({ _type: 'message' as const, msg })),
-    ];
-  }, [displayMessages, liveStart]);
-
-  // Bump on contentExpanded toggle so <Static> remounts with new state.
-  // Only the current round has expandable blocks (Update/Write diffs),
-  // so older messages render identically — no visual difference.
-
-  const live = displayMessages.slice(liveStart);
-
   // Count new messages arrived while frozen
   const frozenNewCount = state.isFrozen && state.isStreaming
     ? state.messages.length - frozenRef.current.length
     : 0;
 
+  // ── ScrollBox ref for virtual scrolling ─────────────────────────
+  const scrollRef = useRef<ScrollBoxHandle | null>(null);
+
+  // Track the last assistant message ID during streaming for
+  // LRU-cached markdown rendering.
+  const streamingMsgIdRef = useRef<number | null>(null);
+  if (state.isStreaming) {
+    const lastMsg = state.messages[state.messages.length - 1];
+    streamingMsgIdRef.current = lastMsg?.role === 'assistant' ? lastMsg.id : null;
+  } else {
+    streamingMsgIdRef.current = null;
+  }
+
+  // ── Message renderer for VirtualMessageList ─────────────────────
+  const renderMessage = useCallback(
+    (msg: Message, _idx: number) => (
+      <MessageBubble
+        key={msg.id}
+        message={msg}
+        contentExpanded={state.contentExpanded}
+        theme={config.theme}
+        hideThinking
+        streaming={state.isStreaming && msg.id === streamingMsgIdRef.current}
+      />
+    ),
+    [state.contentExpanded, config.theme, state.isStreaming],
+  );
+
   return (
     <Box flexDirection="column" height="100%" padding={1}>
-      {/* ── Static zone: re-renders on Ctrl+D / Ctrl+E ────────────── */}
-      {staticItems.map((item) => {
-        if (item._type === 'header') return <HeaderLogo key="header" />;
-        return <MessageBubble key={item.msg.id} message={item.msg} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking />;
-      })}
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <HeaderLogo key="header" />
 
-      {/* ── Freeze indicator (pre-allocated to avoid layout shift) ── */}
-      {state.isFrozen && (
-        <Box flexShrink={0} height={1} flexDirection="row">
-          <Box width={2} flexShrink={0} />
-          <Box flexGrow={1}>
-            <Text color="ansi:yellow" dimColor>
-              ⏸ Paused — {frozenNewCount > 0 ? `${frozenNewCount} new message(s) — ` : ''}PageDown / End to follow
-            </Text>
-          </Box>
-        </Box>
-      )}
-      {!state.isFrozen && <Box flexShrink={0} height={0} />}
-
-      {/* ── Live zone: max-height capped to prevent pushing controls ── */}
-      <Box
-        flexDirection="column"
+      {/* ── Scrollable message area with virtual scrolling ─────── */}
+      <ScrollBox
+        ref={scrollRef}
         flexGrow={1}
         flexShrink={1}
-        maxHeight={liveMaxHeight}
+        stickyScroll
         paddingX={1}
       >
-        {/* Sub-agent indicator header */}
+        {/* ── Freeze indicator ───────────────────────────────── */}
+        {state.isFrozen && (
+          <Box flexShrink={0} height={1} flexDirection="row">
+            <Box width={2} flexShrink={0} />
+            <Box flexGrow={1}>
+              <Text color="ansi:yellow" dimColor>
+                ⏸ Paused — {frozenNewCount > 0 ? `${frozenNewCount} new message(s) — ` : ''}PageDown / End to follow
+              </Text>
+            </Box>
+          </Box>
+        )}
+        {!state.isFrozen && <Box flexShrink={0} height={0} />}
+
+        {/* ── Sub-agent indicator header ──────────────────────── */}
         {state.subAgentView && (
           <Box flexShrink={0} marginBottom={1} flexDirection="row">
             <Box width={2} flexShrink={0} />
@@ -620,6 +539,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           </Box>
         )}
 
+        {/* ── Empty state ─────────────────────────────────────── */}
         {displayMessages.length === 0 && !state.isStreaming && (
           <Box marginY={1} flexDirection="row">
             <Box width={2} flexShrink={0} />
@@ -633,13 +553,18 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           </Box>
         )}
 
+        {/* ── Virtual-scrolled message list ───────────────────── */}
+        {displayMessages.length > 0 && (
+          <VirtualMessageList
+            messages={displayMessages}
+            scrollRef={scrollRef}
+            columns={columns}
+            renderMessage={renderMessage}
+          />
+        )}
+
+        {/* ── Activity & thinking (during streaming/execution) ── */}
         <OffscreenFreeze frozen={state.isFrozen}>
-
-          {live.map((message) => (
-            <MessageBubble key={message.id} message={message} contentExpanded={state.contentExpanded} theme={config.theme} hideThinking maxLines={liveMaxHeight} />
-          ))}
-
-          {/* Activity line — shows for all active phases (Thinking/Executing/Streaming) */}
           {currentPhase !== 'idle' && !state.isFrozen && (
             <ActivityLine
               phase={currentPhase}
@@ -647,8 +572,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
               turnOutputTokens={state.turnOutputTokens}
             />
           )}
-
-          {/* Thinking content (collapsible) — stays visible after thinking completes */}
           {latestThinking && !state.isFrozen && (
             <ThinkingBlockRenderer
               content={latestThinking.block.content}
@@ -657,9 +580,9 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
               thinkingTokens={latestThinking.tokens}
             />
           )}
-
         </OffscreenFreeze>
 
+        {/* ── Approval / Question / Picker modals ─────────────── */}
         {state.approvalReq && (
           <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
             <ApprovalPrompt
@@ -733,9 +656,9 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
             />
           </Box>
         )}
-      </Box>
+      </ScrollBox>
 
-      <Box ref={controlsRef} flexDirection="column" flexShrink={0}>
+      <Box flexDirection="column" flexShrink={0}>
         <TaskPanel
           dismissed={state.taskPanelDismissed}
           onDismissReset={handleTaskDismissReset}

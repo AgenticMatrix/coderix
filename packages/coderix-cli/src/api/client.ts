@@ -38,7 +38,7 @@ export function toAnthropicMessages(
 
   for (const m of messages) {
     if (m.role === 'system') {
-      const text = m.content || blocksToText(m.blocks);
+      const text = blocksToText(m.blocks) || m.content;
       if (text.trim()) systemParts.push(text);
       continue;
     }
@@ -47,8 +47,9 @@ export function toAnthropicMessages(
 
     // If the message has no blocks, treat content as plain text
     if (!m.blocks || m.blocks.length === 0) {
-      if (m.content.trim()) {
-        anthropicMessages.push({ role, content: m.content });
+      const text = blocksToText(m.blocks) || m.content;
+      if (text.trim()) {
+        anthropicMessages.push({ role, content: text });
       }
       continue;
     }
@@ -106,10 +107,10 @@ function toAnthropicMessagesLegacy(
   messages: Message[],
 ): Anthropic.MessageParam[] {
   return messages
-    .filter((m) => m.role !== 'system' && m.content.trim().length > 0)
+    .filter((m) => m.role !== 'system' && (blocksToText(m.blocks) || m.content).trim().length > 0)
     .map((m) => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: blocksToText(m.blocks) || m.content,
     }));
 }
 
@@ -144,7 +145,7 @@ export function streamChatBlocks(
   const { messages: anthropicMessages, system } = toAnthropicMessages(messages);
   const legacySystem = messages
     .filter((m) => m.role === 'system')
-    .map((m) => m.content)
+    .map((m) => blocksToText(m.blocks) || m.content)
     .join('\n\n');
   const systemPrompt = (options?.systemPrompt ?? system) || legacySystem || undefined;
 
