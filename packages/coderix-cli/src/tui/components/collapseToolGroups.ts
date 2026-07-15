@@ -97,21 +97,25 @@ function getReadHint(block: ToolUseBlock): string {
 }
 
 /**
- * Groups consecutive search/read tool_use blocks within a single message.
- * Non-matching blocks break the group and pass through unchanged.
+ * Groups search/read tool_use blocks within a single message.
+ * Tools output in parallel (no substantive text between them) are collected
+ * into separate search and read/list groups, even when interleaved.
+ * Substantive text or non-collapsible tools flush both groups.
  */
 export function collapseToolGroups(
   blocks: Array<{ type: string; toolName?: string;[key: string]: unknown }>,
 ): Array<{ type: string;[key: string]: unknown } | CollapsedGroup> {
   const result: Array<{ type: string;[key: string]: unknown } | CollapsedGroup> = [];
-  let group: ToolUseBlock[] = [];
+  let searchTools: ToolUseBlock[] = [];
+  let readTools: ToolUseBlock[] = [];
+  /** Track which group appeared first for output ordering. */
+  let firstGroup: 'search' | 'read' | null = null;
 
-  function flushGroup() {
-    if (group.length === 0) return;
-    if (group.length === 1) {
-      result.push(group[0] as unknown as { type: string;[key: string]: unknown });
-      group = [];
-      return;
+  function buildGroup(tools: ToolUseBlock[], groupType: 'search' | 'read'): CollapsedGroup | null {
+    if (tools.length === 0) return null;
+    if (tools.length === 1) {
+      result.push(tools[0] as unknown as { type: string;[key: string]: unknown });
+      return null;
     }
 
     let searchCount = 0;
@@ -121,7 +125,7 @@ export function collapseToolGroups(
     let readHint = '';
     let isActive = false;
 
-    for (const block of group) {
+    for (const block of tools) {
       if (block.toolName === 'grep' || block.toolName === 'glob') {
         searchCount++;
         const hint = getSearchHint(block);
@@ -149,59 +153,65 @@ export function collapseToolGroups(
       }
     }
 
-    // Determine group type: if there are search tools, it's search; otherwise read
-    const groupType: 'search' | 'read' = searchCount > 0 ? 'search' : 'read';
     const latestHint = groupType === 'search'
       ? searchHints.join(', ')
       : readHint;
 
-    result.push({
-      type: groupType === 'search' ? 'search' : 'read',
-      blocks: group,
+    return {
+      type: groupType,
+      blocks: tools,
       searchCount,
       readCount,
       listCount,
       latestHint,
       isActive,
-    } as unknown as { type: string;[key: string]: unknown });
+    } as unknown as CollapsedGroup;
+  }
 
-    group = [];
+  function flushAll() {
+    // Output in first-occurrence order
+    const searchFirst = firstGroup === 'search';
+    const groups: Array<{ tools: ToolUseBlock[]; type: 'search' | 'read' }> = searchFirst
+      ? [{ tools: searchTools, type: 'search' as const }, { tools: readTools, type: 'read' as const }]
+      : [{ tools: readTools, type: 'read' as const }, { tools: searchTools, type: 'search' as const }];
+
+    for (const { tools, type } of groups) {
+      const cg = buildGroup(tools, type);
+      if (cg) result.push(cg as unknown as { type: string;[key: string]: unknown });
+    }
+
+    searchTools = [];
+    readTools = [];
+    firstGroup = null;
   }
 
   for (const block of blocks) {
     if (block.type !== 'tool_use') {
-      flushGroup();
+      // Whitespace-only text/thinking is transparent — don't break the batch
+      if (block.type === 'text' || block.type === 'thinking') {
+        const content = (block as { content?: string }).content ?? '';
+        if (content.trim() === '') continue;
+      }
+      flushAll();
       result.push(block);
       continue;
     }
 
     const tu = block as unknown as ToolUseBlock;
-    const readResult = isReadBlock(tu);
 
     if (isSearchBlock(tu)) {
-      // Search block: starts or continues a search group
-      // But if current group has read blocks, flush first
-      if (group.length > 0) {
-        const firstRead = isReadBlock(group[0]);
-        if (firstRead.isRead && !isSearchBlock(group[0])) {
-          flushGroup();
-        }
-      }
-      group.push(tu);
-    } else if (readResult.isRead || readResult.isList) {
-      // Read/list block: starts or continues a read group
-      if (group.length > 0 && isSearchBlock(group[0])) {
-        // Current group is search, read blocks can't join
-        flushGroup();
-      }
-      group.push(tu);
+      if (firstGroup === null) firstGroup = 'search';
+      searchTools.push(tu);
+    } else if (isReadBlock(tu).isRead || isReadBlock(tu).isList) {
+      if (firstGroup === null) firstGroup = 'read';
+      readTools.push(tu);
     } else {
-      // Non-collapsible tool: flush group and pass through
-      flushGroup();
+      // Non-collapsible tool: flush both groups and pass through
+      flushAll();
       result.push(block);
     }
   }
 
-  flushGroup();
+  flushAll();
   return result;
 }
