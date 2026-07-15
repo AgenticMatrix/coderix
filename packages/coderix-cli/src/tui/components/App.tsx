@@ -630,16 +630,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           </Box>
         )}
 
-        <TaskPanel
-          dismissed={state.taskPanelDismissed}
-          onDismissReset={handleTaskDismissReset}
-        />
-
-        <TodoPanel
-          dismissed={state.todoPanelDismissed}
-          onDismissReset={handleTodoDismissReset}
-        />
-
         {state.approvalReq && (
           <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
             <ApprovalPrompt
@@ -668,6 +658,16 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
             />
           )}
         </OffscreenFreeze>
+
+        <TaskPanel
+          dismissed={state.taskPanelDismissed}
+          onDismissReset={handleTaskDismissReset}
+        />
+
+        <TodoPanel
+          dismissed={state.todoPanelDismissed}
+          onDismissReset={handleTodoDismissReset}
+        />
 
         {/* ── Picker modals ─────────────── */}
         {state.agentPicker && (
