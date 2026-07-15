@@ -96,15 +96,43 @@ export function useInputHandler({
   slashRef.current = onSlashCommand;
   const inputRef = useRef(inputText);
   inputRef.current = inputText;
+  const exitPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const DOUBLE_PRESS_MS = 500;
 
   useInput(
     (input, key) => {
-      // ── Ctrl+C: smart 3-tier exit ──────────────────────────
-      if ((key.ctrl && (input === 'c' || input === '\x03')) || input === '\x03') {
-        // Tier 1: busy (main agent streaming/thinking) → interrupt it
+      const isCtrlC = (key.ctrl && (input === 'c' || input === '\x03')) || input === '\x03';
+
+      // Clear double-press exit hint on any non-Ctrl+C input
+      if (!isCtrlC && exitPressTimerRef.current) {
+        clearTimeout(exitPressTimerRef.current);
+        exitPressTimerRef.current = null;
+        dispatch({ type: 'HIDE_EXIT_HINT' });
+      }
+
+      // Ctrl+C: smart 4-tier handler
+      if (isCtrlC) {
+        // Tier 1: busy (main agent streaming/thinking) → interrupt it.
+        // If no tools have been executed yet, undo the turn and restore
+        // the user's input so they can edit and re-submit.
         if (statusPhase === 'busy') {
           onInterrupt();
-          dispatch({ type: 'INTERRUPT' });
+          // Check if any tool_use blocks exist after the last user message
+          let hasTools = false;
+          let lastUserIdx = -1;
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i]!.role === 'user') { lastUserIdx = i; break; }
+          }
+          if (lastUserIdx >= 0) {
+            for (let i = lastUserIdx + 1; i < messages.length; i++) {
+              const m = messages[i]!;
+              if (m.role === 'assistant' && m.blocks.some(b => b.type === 'tool_use')) {
+                hasTools = true;
+                break;
+              }
+            }
+          }
+          dispatch({ type: hasTools ? 'INTERRUPT' : 'INTERRUPT_AND_UNDO' });
           return;
         }
         // Tier 2: wait (sub-agents / background tools) → kill them all
@@ -113,14 +141,32 @@ export function useInputHandler({
           dispatch({ type: 'INTERRUPT' });
           return;
         }
-        // Tier 3: idle, input has text → clear it
+        // Tier 3: idle, input has text → clear it (and reset double-press)
         if (inputRef.current.length > 0) {
+          if (exitPressTimerRef.current) {
+            clearTimeout(exitPressTimerRef.current);
+            exitPressTimerRef.current = null;
+            dispatch({ type: 'HIDE_EXIT_HINT' });
+          }
           dispatch({ type: 'SET_INPUT', text: '' });
           dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
           return;
         }
-        // Tier 4: idle, input empty → exit
-        onExit();
+        // Tier 4: idle, input empty → double-press to exit
+        if (exitPressTimerRef.current) {
+          // Second press within window → exit
+          clearTimeout(exitPressTimerRef.current);
+          exitPressTimerRef.current = null;
+          dispatch({ type: 'HIDE_EXIT_HINT' });
+          onExit();
+        } else {
+          // First press → show hint, start timer
+          dispatch({ type: 'SHOW_EXIT_HINT' });
+          exitPressTimerRef.current = setTimeout(() => {
+            exitPressTimerRef.current = null;
+            dispatch({ type: 'HIDE_EXIT_HINT' });
+          }, DOUBLE_PRESS_MS);
+        }
         return;
       }
       // Always allow Escape and Ctrl+T (for navigating sub-agent views)
@@ -194,7 +240,7 @@ export function useInputHandler({
       // When an approval overlay is active, suppress normal input.
       if (blocked) return;
 
-      // ── Display freeze (scroll-away) controls ─────────────────
+      // Display freeze (scroll-away) controls ─────────────────
       // PageUp  → freeze display (enter review mode)
       // PageDown / End → unfreeze (resume following)
       // These work even when not streaming, to be safe.

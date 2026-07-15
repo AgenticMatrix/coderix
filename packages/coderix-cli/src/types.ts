@@ -184,6 +184,12 @@ export interface TokenUsage {
 export interface ChatState extends CoreState {
   messages: Message[];
   isStreaming: boolean;
+  /** Tracks main agent streaming separately (not affected by sub-agent streams). */
+  mainStreaming: boolean;
+  /** When true, the last turn was undone — suppress subsequent SET_ERROR. */
+  turnUndone: boolean;
+  /** When true, show "Press Ctrl+C again to exit" hint. */
+  exitHint: boolean;
   error: string | null;
   inputText: string;
   cursorPosition: number;
@@ -280,6 +286,9 @@ export type ChatAction =
   // Lifecycle
   | { type: 'FINISH_ASSISTANT_RESPONSE'; id: number }
   | { type: 'INTERRUPT' }
+  | { type: 'INTERRUPT_AND_UNDO' }
+  | { type: 'SHOW_EXIT_HINT' }
+  | { type: 'HIDE_EXIT_HINT' }
   | { type: 'UPDATE_BLOCK_STATE'; toolId: string; state: ToolUseState }
   | { type: 'SET_TOOL_USE_RESULT'; toolId: string; duration?: number; result: ToolUseBlock['result'] }
   | { type: 'TOGGLE_THINKING'; id: number }

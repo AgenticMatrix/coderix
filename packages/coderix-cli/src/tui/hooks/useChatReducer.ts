@@ -169,6 +169,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         // Propagate isStreaming so that FINISH_ASSISTANT_RESPONSE / INTERRUPT
         // dispatched while viewing a sub-agent still unlock the main input
         isStreaming: result.isStreaming,
+        // Track main agent streaming separately from sub-agent streaming
+        mainStreaming: result.isStreaming,
       };
     }
 
@@ -510,6 +512,42 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'INTERRUPT':
       return { ...state, isStreaming: false };
 
+    case 'SHOW_EXIT_HINT':
+      return { ...state, exitHint: true };
+
+    case 'HIDE_EXIT_HINT':
+      return { ...state, exitHint: false };
+
+    case 'INTERRUPT_AND_UNDO': {
+      // Find the last user message — this is the one that started the
+      // turn we want to undo. Remove it and everything after it, then
+      // restore the user's input text so they can edit and resubmit.
+      const msgs = state.messages;
+      let lastUserIdx = -1;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i]!.role === 'user') {
+          lastUserIdx = i;
+          break;
+        }
+      }
+      if (lastUserIdx === -1) {
+        return { ...state, isStreaming: false, turnUndone: true };
+      }
+      const undoneMsg = msgs[lastUserIdx]!;
+      // Extract text from the undone user message's blocks
+      const textBlocks = undoneMsg.blocks.filter((b): b is TextBlock => b.type === 'text');
+      const restoredText = textBlocks.map((b) => b.content).join('\n');
+      return {
+        ...state,
+        isStreaming: false,
+        turnUndone: true,
+        error: null,
+        messages: msgs.slice(0, lastUserIdx),
+        inputText: restoredText,
+        cursorPosition: restoredText.length,
+      };
+    }
+
     case 'TOGGLE_THINKING':
       return {
         ...state,
@@ -686,6 +724,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'SET_ERROR':
+      // Suppress errors from the aborted stream when the turn was undone
+      if (state.turnUndone) return { ...state, turnUndone: false };
       return { ...state, error: action.error, isStreaming: false };
 
     case 'CLEAR_ERROR':
@@ -841,6 +881,9 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     },
     messages: [],
     isStreaming: false,
+    mainStreaming: false,
+    turnUndone: false,
+    exitHint: false,
     model,
     error: null,
     inputText: '',

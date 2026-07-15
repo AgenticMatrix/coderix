@@ -240,8 +240,10 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // idle: nothing active
   const statusPhase = useMemo<'busy' | 'wait' | 'idle'>(() => {
     if (state.error) return 'idle';
-    // Busy: ONLY when main agent API is actively streaming (never during sub-agent view)
-    if (!state.subAgentView && state.isStreaming) return 'busy';
+    // Busy: ONLY when main agent API is actively streaming.
+    // Use mainStreaming when in sub-agent view (isStreaming conflates both agents).
+    const mainActive = state.subAgentView ? state.mainStreaming : state.isStreaming;
+    if (mainActive) return 'busy';
     // Wait: check MAIN agent's messages for pending tools
     // Use savedMainMessages when in sub-agent view since state.messages is the sub-agent's
     const mainMessages = state.subAgentView
@@ -258,7 +260,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       if (agent.status === 'running') return 'wait';
     }
     return 'idle';
-  }, [state.error, state.isStreaming, state.subAgentView, state.messages, state.savedMainMessages, agentTick]);
+  }, [state.error, state.isStreaming, state.mainStreaming, state.subAgentView, state.messages, state.savedMainMessages, agentTick]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -723,6 +725,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
             currency={config.currency}
             maxContext={config.maxContext}
             compactThreshold={config.compactThreshold}
+            exitHint={state.exitHint}
             processMemory={processMemory}
             processCount={totalProcs}
           />

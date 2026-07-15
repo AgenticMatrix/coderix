@@ -26,6 +26,8 @@ interface StatusBarProps {
   maxContext?: number;
   /** Auto-compact threshold ratio (0–1). Shows "X% until compact" warning. */
   compactThreshold?: number;
+  /** When true, show "Press Ctrl+C again to exit" double-press hint. */
+  exitHint?: boolean;
   /** Total RSS memory of the process tree in bytes. */
   processMemory: number;
   /** Number of processes in the tree. */
@@ -105,7 +107,7 @@ function ContextBar({ used, max }: { used: number; max: number }) {
  * Procs = number of processes in the tree.
  * Timers update every second in real-time.
  */
-export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, processMemory, processCount }: StatusBarProps) {
+export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, exitHint, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
@@ -222,7 +224,9 @@ export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inp
 
       <Sep />
 
-      {statusPhase === 'idle' ? (
+      {exitHint ? (
+        <Text color="ansi:yellow">Press Ctrl+C again to exit</Text>
+      ) : statusPhase === 'idle' ? (
         <Text dimColor>Ctrl+C to exit</Text>
       ) : (
         <Text dimColor>Ctrl+C to interrupt</Text>
