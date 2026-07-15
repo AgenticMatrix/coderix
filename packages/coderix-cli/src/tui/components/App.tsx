@@ -485,19 +485,40 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // Turn elapsed timer — resets when phase becomes idle
   const turnStartRef = useRef<number>(Date.now());
   const [turnElapsed, setTurnElapsed] = useState(0);
+  const turnElapsedRef = useRef(0);
+  const [completedTurn, setCompletedTurn] = useState<{
+    elapsed: number;
+    tokens: number;
+    thinkingDuration?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (currentPhase === 'idle') {
+      // Capture final stats before resetting, to show a gray "Done" line
+      if (turnElapsedRef.current > 0) {
+        setCompletedTurn({
+          elapsed: turnElapsedRef.current,
+          tokens: state.turnOutputTokens,
+          thinkingDuration: latestThinking?.duration,
+        });
+      }
       setTurnElapsed(0);
+      turnElapsedRef.current = 0;
       return;
     }
+    setCompletedTurn(null);
     turnStartRef.current = Date.now();
     setTurnElapsed(0);
+    turnElapsedRef.current = 0;
   }, [currentPhase === 'idle']);
 
   useEffect(() => {
     if (currentPhase === 'idle') return;
-    const id = setInterval(() => setTurnElapsed(Date.now() - turnStartRef.current), 100);
+    const id = setInterval(() => {
+      const elapsed = Date.now() - turnStartRef.current;
+      turnElapsedRef.current = elapsed;
+      setTurnElapsed(elapsed);
+    }, 100);
     return () => clearInterval(id);
   }, [currentPhase]);
 
@@ -597,11 +618,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
         {/* ── Activity & thinking (during streaming/execution) ── */}
         <OffscreenFreeze frozen={state.isFrozen}>
-          {currentPhase !== 'idle' && !state.isFrozen && (
+          {!state.isFrozen && (
             <ActivityLine
               phase={currentPhase}
               turnElapsed={turnElapsed}
               turnOutputTokens={state.turnOutputTokens}
+              completed={completedTurn}
             />
           )}
           {latestThinking && !state.isFrozen && (
