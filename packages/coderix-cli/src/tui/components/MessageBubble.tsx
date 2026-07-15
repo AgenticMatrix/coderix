@@ -346,9 +346,15 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
   // Rendered inline (no "You:" prefix, no AI: header) for
   // tool_result blocks that follow tool_use in the agent loop.
   if (isToolResultOnly) {
+    const filteredBlocks = message.blocks.filter(block => {
+      const name = (block as ToolResultBlock).toolName;
+      if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet') return false;
+      return true;
+    });
+    if (filteredBlocks.length === 0) return null;
     return (
       <Box flexDirection="column" marginBottom={1}>
-        {message.blocks.map((block, idx) => (
+        {filteredBlocks.map((block, idx) => (
           <Box key={idx} flexDirection="row">
             <Box width={2} flexShrink={0} />
             <Box flexGrow={1}>
