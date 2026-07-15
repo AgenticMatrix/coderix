@@ -17,12 +17,14 @@ function getCycleGroup(inputName: string, allCmds: string[]): string[] {
 export interface InputHandlerDeps {
   inputText: string;
   cursorPosition: number;
-  isStreaming: boolean;
+  statusPhase: 'busy' | 'wait' | 'idle';
   messages: Message[];
   dispatch: React.Dispatch<ChatAction>;
   onSend: (text: string) => void;
-  /** Interrupt the running main agent. */
+  /** Interrupt the running main agent (streaming/thinking). */
   onInterrupt: () => void;
+  /** Kill all sub-agents and background tools. */
+  onKillAll: () => void;
   /** Exit the process. */
   onExit: () => void;
   /** When true, input is suppressed (e.g. during approval prompt). */
@@ -70,11 +72,12 @@ export interface InputHandlerDeps {
 export function useInputHandler({
   inputText,
   cursorPosition: _cp,
-  isStreaming,
+  statusPhase,
   messages,
   dispatch,
   onSend,
   onInterrupt,
+  onKillAll,
   onExit,
   onSlashCommand,
   blocked,
@@ -98,19 +101,25 @@ export function useInputHandler({
     (input, key) => {
       // ── Ctrl+C: smart 3-tier exit ──────────────────────────
       if ((key.ctrl && (input === 'c' || input === '\x03')) || input === '\x03') {
-        // Tier 1: main agent running → interrupt it
-        if (isStreaming) {
+        // Tier 1: busy (main agent streaming/thinking) → interrupt it
+        if (statusPhase === 'busy') {
           onInterrupt();
           dispatch({ type: 'INTERRUPT' });
           return;
         }
-        // Tier 2: input has text → clear it
+        // Tier 2: wait (sub-agents / background tools) → kill them all
+        if (statusPhase === 'wait') {
+          onKillAll();
+          dispatch({ type: 'INTERRUPT' });
+          return;
+        }
+        // Tier 3: idle, input has text → clear it
         if (inputRef.current.length > 0) {
           dispatch({ type: 'SET_INPUT', text: '' });
           dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
           return;
         }
-        // Tier 3: agent not running, input empty → exit
+        // Tier 4: idle, input empty → exit
         onExit();
         return;
       }
@@ -396,8 +405,8 @@ export function useInputHandler({
       // Ignore non-printable characters
       if (!input || input.length === 0) return;
 
-      // Prevent typing while streaming
-      if (isStreaming) return;
+      // Prevent typing while main agent is busy
+      if (statusPhase === 'busy') return;
 
       // Multi-line input → paste block, or toggle preview if blocks exist
       if (input.includes('\n') || input.includes('\r')) {

@@ -234,14 +234,44 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     dispatch({ type: 'LOAD_HISTORY', history: loadHistory() });
   }, [dispatch]);
 
+  // ── Status bar phase ──────────────────────────────────────────
+  // busy: main agent is active (streaming / thinking / sync tool execution)
+  // wait: sub-agents or background tools are running
+  // idle: nothing active
+  const statusPhase = useMemo<'busy' | 'wait' | 'idle'>(() => {
+    if (state.error) return 'idle';
+    // Busy: ONLY when main agent API is actively streaming (never during sub-agent view)
+    if (!state.subAgentView && state.isStreaming) return 'busy';
+    // Wait: check MAIN agent's messages for pending tools
+    // Use savedMainMessages when in sub-agent view since state.messages is the sub-agent's
+    const mainMessages = state.subAgentView
+      ? (state.savedMainMessages ?? [])
+      : state.messages;
+    const lastMsg = mainMessages[mainMessages.length - 1];
+    const hasActiveTools =
+      lastMsg?.blocks.some(
+        (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
+      ) ?? false;
+    if (hasActiveTools) return 'wait';
+    // Wait: sub-agents running
+    for (const agent of Object.values(agentsRef.current)) {
+      if (agent.status === 'running') return 'wait';
+    }
+    return 'idle';
+  }, [state.error, state.isStreaming, state.subAgentView, state.messages, state.savedMainMessages, agentTick]);
+
   useInputHandler({
     inputText: state.inputText,
     cursorPosition: state.cursorPosition,
-    isStreaming: state.isStreaming,
+    statusPhase,
     messages: state.messages,
     dispatch,
     onSend: runAgentTurn,
     onInterrupt: () => engine.interrupt(),
+    onKillAll: () => {
+      engine.interrupt();
+      getSubAgentRegistry()?.abortAll();
+    },
     onExit: () => process.exit(0),
     blocked: state.approvalReq !== null || state.questionReq !== null || state.agentPicker || state.sessionPicker,
     teamPicker: state.teamPicker,
@@ -449,32 +479,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     if (state.isStreaming) return 'streaming';
     return 'idle';
   }, [state.error, latestThinking, state.messages, state.isStreaming, agentTick]);
-
-  // ── Status bar phase ──────────────────────────────────────────
-  // busy: main agent is active (streaming / thinking / sync tool execution)
-  // wait: sub-agents or background tools are running
-  // idle: nothing active
-  const statusPhase = useMemo<'busy' | 'wait' | 'idle'>(() => {
-    if (state.error) return 'idle';
-    // Busy: ONLY when main agent API is actively streaming (never during sub-agent view)
-    if (!state.subAgentView && state.isStreaming) return 'busy';
-    // Wait: check MAIN agent's messages for pending tools
-    // Use savedMainMessages when in sub-agent view since state.messages is the sub-agent's
-    const mainMessages = state.subAgentView
-      ? (state.savedMainMessages ?? [])
-      : state.messages;
-    const lastMsg = mainMessages[mainMessages.length - 1];
-    const hasActiveTools =
-      lastMsg?.blocks.some(
-        (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
-      ) ?? false;
-    if (hasActiveTools) return 'wait';
-    // Wait: sub-agents running
-    for (const agent of Object.values(agentsRef.current)) {
-      if (agent.status === 'running') return 'wait';
-    }
-    return 'idle';
-  }, [state.error, state.isStreaming, state.subAgentView, state.messages, state.savedMainMessages, agentTick]);
 
   // Turn elapsed timer — resets when phase becomes idle
   const turnStartRef = useRef<number>(Date.now());

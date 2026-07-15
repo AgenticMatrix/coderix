@@ -222,7 +222,11 @@ export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inp
 
       <Sep />
 
-      <Text dimColor>Ctrl+C to exit</Text>
+      {statusPhase === 'idle' ? (
+        <Text dimColor>Ctrl+C to exit</Text>
+      ) : (
+        <Text dimColor>Ctrl+C to interrupt</Text>
+      )}
     </Box>
   );
 }
