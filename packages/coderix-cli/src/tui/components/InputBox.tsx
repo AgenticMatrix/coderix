@@ -89,9 +89,7 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
               <Text color={PROMPT_COLOR} bold>{'❯'}</Text>
             </Box>
             <Box flexGrow={1}>
-              {!isStreaming ? (
-                <Text backgroundColor={CURSOR_COLOR}> </Text>
-              ) : null}
+              <Text backgroundColor={CURSOR_COLOR}> </Text>
             </Box>
           </Box>
         ) : (
@@ -108,11 +106,11 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
                 {i === cursorLine ? (
                   <Text>
                     {line.slice(0, cursorCol)}
-                    {!isStreaming && line[cursorCol] ? (
+                    {line[cursorCol] ? (
                       <Text backgroundColor={CURSOR_COLOR} color={CURSOR_TEXT_COLOR}>{line[cursorCol]}</Text>
-                    ) : !isStreaming ? (
+                    ) : (
                       <Text backgroundColor={CURSOR_COLOR}> </Text>
-                    ) : null}
+                    )}
                     {line.slice(cursorCol + (line[cursorCol] ? 1 : 0))}
                   </Text>
                 ) : (

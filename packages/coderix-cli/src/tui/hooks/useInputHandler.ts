@@ -451,9 +451,6 @@ export function useInputHandler({
       // Ignore non-printable characters
       if (!input || input.length === 0) return;
 
-      // Prevent typing while main agent is busy
-      if (statusPhase === 'busy') return;
-
       // Multi-line input → paste block, or toggle preview if blocks exist
       if (input.includes('\n') || input.includes('\r')) {
         if (Object.keys(pasteBlocks).length > 0) {
