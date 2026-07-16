@@ -461,14 +461,16 @@ async function main(): Promise<void> {
     sm.getActive().id,
   ));
 
-  // Wire SubAgentRegistry → EventBus → AppState (Phase 4)
-  subAgentRegistry.setEmitter((req) => {
-    eventBus.toolRequests.next(req);
-  });
-
   // Wire EventBus → AppState sync for background tasks and agents
   const { createCoreEventBridge } = await import('../state/core-event-bridge.js');
   const bridge = createCoreEventBridge(eventBus, appStore);
+
+  // Wire SubAgentRegistry → EventBus → AppState (Phase 4)
+  // Must be after createCoreEventBridge so the bridge is subscribed
+  // before setEmitter re-emits agent_register for restored agents.
+  subAgentRegistry.setEmitter((req) => {
+    eventBus.toolRequests.next(req);
+  });
 
   // ── Persistence bridge (Phase 3) ──────────────────────────────────
   const { attachPersistence } = await import('../state/persistence-bridge.js');
