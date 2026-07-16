@@ -154,7 +154,7 @@ export function ThinkingBlockRenderer({ content, thinkingExpanded, thinkingDurat
   return (
     <Box flexDirection="row" marginBottom={1}>
       <Box flexDirection="column" flexGrow={1}>
-        <Box paddingLeft={0} flexDirection="column">
+        <Box paddingLeft={2} flexDirection="column">
           {logicalLines.map((line, i) => (
             <Text key={i} dimColor color="ansi:blackBright">{line || ' '}</Text>
           ))}
