@@ -113,6 +113,16 @@ export class SessionManager {
       .then(() => appendEntry(jsonlPath, titleEntry))
       .catch(() => {});
 
+    if (options.parentSessionId) {
+      const parentEntry: SessionEntry = {
+        type: 'parent-session',
+        parentSessionId: options.parentSessionId,
+      } as SessionEntry;
+      mkdir(dir, { recursive: true })
+        .then(() => appendEntry(jsonlPath, parentEntry))
+        .catch(() => {});
+    }
+
     (session as any)._entryCount = 1;
 
     return session;
@@ -526,7 +536,13 @@ export class SessionManager {
       if (!existsSync(jsonlPath)) continue;
 
       // Fast path: read tail metadata from JSONL
-      const { lastTitle, entryCount } = readTailMetadata(jsonlPath);
+      const { lastTitle, lastUserPreview, entryCount, hasParent } = readTailMetadata(jsonlPath);
+
+      // Skip sub-agent / workflow sessions (child sessions)
+      if (hasParent) continue;
+
+      // Skip empty sessions (title entry only, no messages)
+      if (entryCount <= 1) continue;
 
       // Approximate turnCount from entry count (transcript entries / 2)
       const approxTurns = Math.floor(entryCount / 2);
@@ -542,7 +558,8 @@ export class SessionManager {
         totalCost: 0,
         createdAt: mtime,
         updatedAt: mtime,
-        model: 'unknown',
+        model: lastUserPreview ?? 'unknown',
+        lastUserPreview: lastUserPreview ?? undefined,
       });
     }
 

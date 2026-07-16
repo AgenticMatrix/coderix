@@ -180,7 +180,18 @@ async function runPrintMode(queryText: string): Promise<void> {
 
 // ── Session table (for --resume without TTY) ────────────────────────
 
-function printSessionTable(sessions: Array<{ id: string; title: string; turnCount: number; model: string; updatedAt: Date }>): void {
+function formatRelativeTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ${mins % 60}m ago`;
+  return `${days}d ago`;
+}
+
+function printSessionTable(sessions: Array<{ id: string; title: string; turnCount: number; model: string; updatedAt: Date; lastUserPreview?: string }>): void {
   if (sessions.length === 0) {
     console.log('No previous sessions found.');
     return;
@@ -188,12 +199,15 @@ function printSessionTable(sessions: Array<{ id: string; title: string; turnCoun
   console.log('Recent sessions:\n');
   for (let i = 0; i < Math.min(sessions.length, 20); i++) {
     const s = sessions[i]!;
-    const updated = s.updatedAt.toISOString().split('T')[0];
     const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
-    const title = isAuto ? '--' : s.title.length > 48 ? s.title.slice(0, 48) + '...' : s.title;
+    const title = isAuto
+      ? (s.lastUserPreview ?? '--')
+      : (s.title.length > 48 ? s.title.slice(0, 48) + '...' : s.title);
     const empty = s.turnCount === 0 ? ' (empty)' : '';
+    const turns = s.turnCount > 0 ? `${s.turnCount} turns` : '';
+    const time = formatRelativeTime(s.updatedAt);
     console.log(
-      `  ${String(i + 1).padEnd(3)} ${s.id.slice(0, 8).padEnd(9)} ${String(s.turnCount).padStart(4)}t  ${s.model.padEnd(18)} ${updated}  ${title}${empty}`,
+      `  ${String(i + 1).padEnd(3)} ${s.id.slice(0, 8).padEnd(9)} ${turns.padEnd(10)} ${time.padEnd(14)} ${title}${empty}`,
     );
   }
   console.log('\n  --resume <id>  resume a session');

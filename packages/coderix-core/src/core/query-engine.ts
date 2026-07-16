@@ -682,6 +682,7 @@ export class QueryEngine {
     subSessionManager.create({
       title: `Sub-agent: ${agentType} (resumed)`,
       cwd: process.cwd(),
+      parentSessionId: this.config.sessionManager.getActive()?.id,
     });
 
     const subCheckpointManager = new CheckpointManager();

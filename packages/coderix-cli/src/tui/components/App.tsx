@@ -317,6 +317,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           turnCount: s.turnCount,
           model: s.model,
           updatedAt: s.updatedAt,
+          lastUserPreview: s.lastUserPreview,
         })),
       resumeSession: (id: string) => {
         // __last__: find most recent non-empty session, skipping current
@@ -732,6 +733,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
                 turnCount: s.turnCount,
                 model: s.model,
                 updatedAt: s.updatedAt,
+                lastUserPreview: s.lastUserPreview,
               }))}
               onSelect={(sessionId) => {
                 dispatch({ type: 'HIDE_SESSION_PICKER' });

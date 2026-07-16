@@ -7,6 +7,7 @@ interface SessionSummary {
   turnCount: number;
   model: string;
   updatedAt: Date;
+  lastUserPreview?: string;
 }
 
 interface SessionPickerProps {
@@ -15,12 +16,36 @@ interface SessionPickerProps {
   onCancel: () => void;
 }
 
+function formatRelativeTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ${mins % 60}m ago`;
+  return `${days}d ago`;
+}
+
+function sessionLabel(s: SessionSummary): string {
+  const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
+  if (!isAuto && s.title.length > 0) {
+    return s.title.length > 56 ? s.title.slice(0, 56) + '...' : s.title;
+  }
+  // Auto-generated title — use first user message as preview
+  if (s.lastUserPreview) return s.lastUserPreview;
+  return '--';
+}
+
 export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerProps) {
   const [sel, setSel] = useState(0);
   const [filter, setFilter] = useState('');
 
   const filtered = filter
-    ? sessions.filter((s) => s.title.toLowerCase().includes(filter.toLowerCase()))
+    ? sessions.filter((s) => {
+        const label = sessionLabel(s).toLowerCase();
+        return label.includes(filter.toLowerCase());
+      })
     : sessions;
 
   useInput((input, key) => {
@@ -53,7 +78,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
       return;
     }
 
-    // Typing: filter sessions by title
+    // Typing: filter sessions by label
     if (input.length === 1) {
       setFilter((prev) => prev + input);
       setSel(0);
@@ -86,11 +111,9 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
       <Text>{' '}</Text>
 
       {filtered.slice(0, 20).map((s, i) => {
-        const updated = s.updatedAt instanceof Date
-          ? s.updatedAt.toISOString().split('T')[0]
-          : s.updatedAt;
-        const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
-        const title = isAuto ? '--' : s.title.length > 48 ? s.title.slice(0, 48) + '...' : s.title;
+        const time = formatRelativeTime(s.updatedAt instanceof Date ? s.updatedAt : new Date(s.updatedAt));
+        const label = sessionLabel(s);
+        const turns = s.turnCount > 0 ? `${s.turnCount} turns` : 'new';
         const isSelected = sel === i;
 
         return (
@@ -102,7 +125,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
               inverse={isSelected}
             >
               {isSelected ? '> ' : '  '}
-              {i + 1}. {String(s.turnCount).padStart(4)}t  {s.model.padEnd(18)}  {updated}  {title}
+              {String(i + 1).padEnd(3)} {s.id.slice(0, 8)}  {turns.padEnd(10)} {time.padEnd(14)} {label}
             </Text>
           </Text>
         );

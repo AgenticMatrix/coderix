@@ -13,7 +13,7 @@
  *       agent-<id>.jsonl       # Per-sub-agent sidechain transcript
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
 import { appendFile, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -231,30 +231,57 @@ export function entriesToMessages(entries: SessionEntry[]): Message[] {
  */
 export function readTailMetadata(filePath: string): {
   lastTitle: string | null;
+  lastUserPreview: string | null;
   entryCount: number;
+  hasParent: boolean;
 } {
-  const result = { lastTitle: null as string | null, entryCount: 0 };
+  const result = {
+    lastTitle: null as string | null,
+    lastUserPreview: null as string | null,
+    entryCount: 0,
+    hasParent: false,
+  };
 
   if (!existsSync(filePath)) return result;
 
   try {
-    const stat = statSync(filePath);
-    const TAIL_SIZE = 64 * 1024;
-    const start = Math.max(0, stat.size - TAIL_SIZE);
     const buf = readFileSync(filePath, { encoding: 'utf-8' });
-    // Count total lines for entryCount
     const lines = buf.split('\n').filter((l) => l.trim());
     result.entryCount = lines.length;
 
-    // Scan from end for last title entry
+    // Scan from end for last title and last user entry
+    let foundTitle = false;
+    let foundUser = false;
     for (let i = lines.length - 1; i >= 0; i--) {
+      if (foundTitle && foundUser && result.hasParent) break;
       const line = lines[i]!.trim();
       if (!line) continue;
       try {
-        const entry = JSON.parse(line) as SessionEntry;
-        if (entry.type === 'title' && result.lastTitle === null) {
-          result.lastTitle = (entry as { title: string }).title;
-          break;
+        const entry = JSON.parse(line);
+        if (!result.hasParent && entry.type === 'parent-session') {
+          result.hasParent = true;
+        }
+        if (!foundTitle && entry.type === 'title') {
+          result.lastTitle = entry.title;
+          foundTitle = true;
+        }
+        if (!foundUser && entry.type === 'user' && entry.message) {
+          const content = entry.message.content;
+          let text: string;
+          if (typeof content === 'string') {
+            text = content;
+          } else if (Array.isArray(content)) {
+            text = content
+              .filter((b: any) => b.type === 'text')
+              .map((b: any) => b.text ?? '')
+              .join(' ');
+          } else {
+            text = '';
+          }
+          if (text) {
+            result.lastUserPreview = text.length > 60 ? text.slice(0, 60) + '...' : text;
+          }
+          foundUser = true;
         }
       } catch { /* skip corrupted */ }
     }

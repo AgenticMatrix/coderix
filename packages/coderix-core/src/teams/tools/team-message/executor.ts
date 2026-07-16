@@ -244,6 +244,7 @@ async function handleSubAgentResume(
   const subSession = subSessionManager.create({
     title: `Sub-agent: ${agentType} (resumed)`,
     cwd: process.cwd(),
+    parentSessionId: agentSpawn.sessionManager.getActive()?.id,
   });
 
   const subCheckpointManager = new CheckpointManager();

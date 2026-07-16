@@ -260,6 +260,7 @@ async function runAgentLoop(params: RunAgentLoopParams): Promise<{
     title: `Workflow: ${agentType}`,
     cwd: effectiveCwd,
     model: effectiveModel,
+    parentSessionId: agentSpawn.sessionManager.getActive()?.id,
   });
 
   const subCheckpointManager = new CheckpointManager();

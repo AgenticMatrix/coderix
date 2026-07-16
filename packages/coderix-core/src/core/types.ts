@@ -461,6 +461,8 @@ export interface SessionSummary {
   createdAt: Date;
   updatedAt: Date;
   model: string;
+  /** First 60 chars of the latest user message for preview. */
+  lastUserPreview?: string;
 }
 
 export interface Session {
@@ -535,13 +537,19 @@ export interface SummaryEntry {
   content: string;
 }
 
+export interface ParentSessionEntry {
+  type: 'parent-session';
+  parentSessionId: string;
+}
+
 export type SessionEntry =
   | UserEntry
   | AssistantEntry
   | SystemEntry
   | TitleEntry
   | AgentMetadataEntry
-  | SummaryEntry;
+  | SummaryEntry
+  | ParentSessionEntry;
 
 /** Transcript message entries only — those that form the parentUuid chain. */
 export type TranscriptEntry = UserEntry | AssistantEntry | SystemEntry;
