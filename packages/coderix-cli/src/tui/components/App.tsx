@@ -618,7 +618,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
               <Text dimColor>
                 {state.subAgentView
                   ? 'Send a message to continue the conversation with this agent.'
-                  : 'Welcome to Coder Chat TUI! Type a message and press Enter to start.'}
+                  : 'Welcome to CodeRix Chat TUI! Type a message and press Enter to start.'}
               </Text>
             </Box>
           </Box>

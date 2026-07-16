@@ -35,11 +35,11 @@ export function HeaderLogo() {
 
   const rightPanel: { text: string; render: (pad: number) => React.ReactNode }[] = [
     {
-      text: 'CodeRix v0.1.0',
+      text: 'CodeRix v0.4.1',
       render: (pad) => (
         <Text>
           <Kw>CodeRix</Kw>
-          <Text color="ansi:white"> v0.1.0{' '.repeat(pad)}</Text>
+          <Text color="ansi:white"> v0.4.1{' '.repeat(pad)}</Text>
         </Text>
       ),
     },

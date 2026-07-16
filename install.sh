@@ -35,7 +35,7 @@ done
 
 echo -e "${CYAN}"
 echo "╔══════════════════════════════════════════════════╗"
-echo "║    Coderix — CLI + Desktop Installer          ║"
+echo "║    Coderix — CLI + Desktop Installer             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo ""
@@ -408,7 +408,7 @@ echo -e "  ${YELLOW}npx tsx ${CODERIX_DIR}/skills/web-bridge/web-bridge-cli.ts -
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  Coderix installation complete!               ║${NC}"
+echo -e "${GREEN}║  Coderix installation complete!                  ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${CYAN}Quick Start:${NC}"
