@@ -493,44 +493,52 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     return 'idle';
   }, [state.error, latestThinking, state.messages, state.isStreaming, agentTick]);
 
-  // Turn elapsed timer — resets when phase becomes idle
+  // Turn elapsed timer — starts on new user message, runs continuously until next user message
+  const userMsgCount = useMemo(
+    () => state.messages.filter((m) => m.role === 'user').length,
+    [state.messages],
+  );
+  const prevUserMsgCountRef = useRef(userMsgCount);
   const turnStartRef = useRef<number>(Date.now());
   const [turnElapsed, setTurnElapsed] = useState(0);
   const turnElapsedRef = useRef(0);
   const [completedTurn, setCompletedTurn] = useState<{
     elapsed: number;
     tokens: number;
-    thinkingDuration?: number;
   } | null>(null);
 
+  // Reset timer only when a new user message arrives (new turn)
+  if (userMsgCount !== prevUserMsgCountRef.current) {
+    prevUserMsgCountRef.current = userMsgCount;
+    turnStartRef.current = Date.now();
+    turnElapsedRef.current = 0;
+    setTurnElapsed(0);
+    setCompletedTurn(null);
+  }
+
+  // Show "Done" line when idle, clear it when activity resumes
   useEffect(() => {
     if (currentPhase === 'idle') {
-      // Capture final stats before resetting, to show a gray "Done" line
       if (turnElapsedRef.current > 0) {
         setCompletedTurn({
           elapsed: turnElapsedRef.current,
           tokens: state.turnOutputTokens,
         });
       }
-      setTurnElapsed(0);
-      turnElapsedRef.current = 0;
-      return;
+    } else {
+      setCompletedTurn(null);
     }
-    setCompletedTurn(null);
-    turnStartRef.current = Date.now();
-    setTurnElapsed(0);
-    turnElapsedRef.current = 0;
-  }, [currentPhase === 'idle']);
+  }, [currentPhase === 'idle', state.turnOutputTokens]);
 
+  // Elapsed timer runs continuously from turn start
   useEffect(() => {
-    if (currentPhase === 'idle') return;
     const id = setInterval(() => {
       const elapsed = Date.now() - turnStartRef.current;
       turnElapsedRef.current = elapsed;
       setTurnElapsed(elapsed);
     }, 100);
     return () => clearInterval(id);
-  }, [currentPhase]);
+  }, []);
 
   // Count new messages arrived while frozen
   const frozenNewCount = state.isFrozen && state.isStreaming
