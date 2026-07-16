@@ -87,7 +87,7 @@ export interface ActivityLineProps {
  *   ✽ Thinking… (20s · ↓ 743 tokens)
  *   ✽ Executing… (53s · ↓ 898 tokens)
  *   ✽ Streaming… (25s · ↑ 1.2k tokens)
- *   ● Done… (↓ 2.2k tokens, taken 2m 10s from last input)   ← gray, stays after completion
+ *   ● Done… (↓ 2.2k tokens, taken 2m 10s since last input)   ← gray, stays after completion
  */
 export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed }: ActivityLineProps) {
   if (phase === 'idle') {
@@ -101,7 +101,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed }
         </Box>
         <Box flexDirection="column" flexGrow={1}>
           <Text dimColor>
-            Done… (↓ {tokenStr} tokens, taken {timeStr} from last input)
+            Done… (↓ {tokenStr} tokens, taken {timeStr} since last input)
           </Text>
         </Box>
       </Box>
