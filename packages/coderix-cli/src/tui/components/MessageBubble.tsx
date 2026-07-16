@@ -378,7 +378,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
                 if (block.type === 'thinking' && hideThinking) return false;
                 if (block.type === 'tool_use' || block.type === 'tool_result') {
                   const name = (block as ToolUseBlock | ToolResultBlock).toolName;
-                  if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet' || name === 'Sleep') return false;
+                  if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet') return false;
                 }
                 return true;
               });
