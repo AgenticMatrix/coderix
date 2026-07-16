@@ -10,7 +10,7 @@
  */
 
 const http = require('http');
-const { WebSocketServer } = require('ws');
+const { Server: WebSocketServer } = require('ws');
 const { existsSync, readFileSync, writeFileSync, mkdirSync } = require('fs');
 const { join, dirname } = require('path');
 const { homedir } = require('os');
