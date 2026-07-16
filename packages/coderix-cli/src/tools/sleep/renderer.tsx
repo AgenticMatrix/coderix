@@ -79,7 +79,7 @@ export function SleepRenderer(props: ToolUseRendererProps) {
               <Text dimColor> · {paramSummary}</Text>
             ) : null}
             {isActive ? (
-              <Text dimColor color="ansi:yellow"> running {elapsedSecs}s</Text>
+              <Text dimColor color="ansi:yellow"> · running {elapsedSecs}s</Text>
             ) : null}
             {isDone && props.duration !== undefined ? (
               <Text dimColor> · ⏱ {(props.duration / 1000).toFixed(1)}</Text>
