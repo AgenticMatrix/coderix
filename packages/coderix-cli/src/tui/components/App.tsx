@@ -27,6 +27,7 @@ import { useChatReducer, convertTranscriptToMessages } from '../hooks/useChatRed
 import { useAgentBridge } from '../hooks/useAgentBridge.js';;
 import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
 import { useInputHandler } from '../hooks/useInputHandler.js';;
+import { useTeamContextPoller } from '../hooks/useTeamContextPoller.js';;
 import { useTokenStats } from '../hooks/useTokenStats.js';;
 import { useProcessStats } from '../hooks/useProcessStats.js';
 import { createSlashHandler } from '../../commands/index.js';
@@ -108,6 +109,27 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   useEffect(() => {
     engine.setBriefMode(state.briefMode);
   }, [state.briefMode, engine]);
+
+  // ── Team context initialization ──────────────────────────────
+  // Detects team mode from env vars (CODERIX_TEAM_NAME, CODERIX_AGENT_NAME)
+  // and initializes teamContext in AppState. Runs once on mount.
+  const teamInitRun = useRef(false);
+  useEffect(() => {
+    if (teamInitRun.current) return;
+    teamInitRun.current = true;
+
+    const teamName = process.env.CODERIX_TEAM_NAME;
+    const agentName = process.env.CODERIX_AGENT_NAME;
+    if (!teamName || !agentName) return;
+
+    import('@coderix/core').then(({ computeInitialTeamContext }) => {
+      computeInitialTeamContext().then((ctx) => {
+        if (ctx) {
+          setAppState({ teamContext: ctx } as Partial<AppState>);
+        }
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [setAppState]);
 
   // ── Agent state via manual subscription (avoids full App re-render) ──
   // useAppState(s => s.agents) would cause the entire App to re-render on
@@ -195,6 +217,48 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
   const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef });
   const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
+
+  // ── Direct team message: @agent-name message ─────────────────
+  // Intercepts messages starting with @agent-name and routes them
+  // to the team mailbox instead of the main agent loop.
+  const handleSend = useCallback(async (text: string) => {
+    const teamCtx = store.getState().teamContext;
+    const dmMatch = text.match(/^@(\S+)\s+(.+)$/s);
+    if (dmMatch && teamCtx) {
+      const [, agentName, message] = dmMatch;
+      const { writeToMailbox } = await import('@coderix/core');
+      try {
+        await writeToMailbox(agentName!, {
+          from: teamCtx.selfAgentName || 'lead',
+          text: message!,
+          timestamp: new Date().toISOString(),
+        }, teamCtx.teamName);
+        dispatch({
+          type: 'ADD_USER_MESSAGE',
+          message: {
+            id: Date.now(),
+            role: 'user',
+            content: `@${agentName} ${message}`,
+            blocks: [{ type: 'text' as const, content: `@${agentName} ${message}` }],
+            timestamp: Date.now(),
+          },
+        });
+      } catch {
+        dispatch({
+          type: 'ADD_USER_MESSAGE',
+          message: {
+            id: Date.now(),
+            role: 'system',
+            content: `Failed to send message to '${agentName}'. Is the agent running?`,
+            blocks: [{ type: 'text' as const, content: `Failed to send message to '${agentName}'. Is the agent running?` }],
+            timestamp: Date.now(),
+          },
+        });
+      }
+      return;
+    }
+    await runAgentTurn(text);
+  }, [runAgentTurn, store, dispatch]);
 
   // Load sub-agent transcript when entering immersive mode.
   // Polls every 400ms while the agent is running, progressively loading
@@ -285,7 +349,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     statusPhase,
     messages: state.messages,
     dispatch,
-    onSend: runAgentTurn,
+    onSend: handleSend,
     onInterrupt: () => engine.interrupt(),
     onKillAll: () => {
       engine.interrupt();
@@ -305,7 +369,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     onSubAgentSend: sendToSubAgent,
     onSlashCommand: createSlashHandler({
       dispatch,
-      send: runAgentTurn,
+      send: handleSend,
       model: config.model,
       isStreaming: state.isStreaming,
       inputText: state.inputText,
@@ -454,6 +518,15 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
   // OS-level process tree stats (main + sub-agents + tool subprocesses)
   const { memory: processMemory, osProcessCount } = useProcessStats();
+
+  // ── Team context poller ──────────────────────────────────────
+  // Polls leader's mailbox for worker messages when teamContext is active.
+  const teamContext = useAppState(s => s.teamContext);
+  useTeamContextPoller({
+    teamContext,
+    dispatch,
+    setAppState,
+  });
 
   // Count running sub-agents (in-process, not visible to ps)
   const runningAgentCount = useMemo(() => {
@@ -716,7 +789,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
                 };
                 const prompt = prompts[target];
                 if (prompt) {
-                  runAgentTurn(prompt);
+                  handleSend(prompt);
                 }
               }}
               onCancel={() => dispatch({ type: 'HIDE_MEMORY_PICKER' })}
@@ -786,6 +859,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           focused={state.teamPicker}
           onFocusRequest={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
           viewedAgentId={state.subAgentView?.agentId ?? null}
+          teamContext={teamContext}
           onSelect={(agentId) => {
             if (agentId === '__main__') {
               dispatch({ type: 'HIDE_TEAM_PICKER' });

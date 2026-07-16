@@ -6,7 +6,7 @@
  * Coderix (35+ tools).
  */
 
-import type { CoreState } from '@coderix/core';
+import type { CoreState, TeamContextState } from '@coderix/core';
 
 // ── ContentBlock types ──────────────────────────────────────────────
 
@@ -271,6 +271,8 @@ export interface ChatState extends CoreState {
   turnStartedAt: number;
   /** Number of messages queued while tools are running. */
   queuedCount: number;
+  /** Team context — set when running in team/worker mode. */
+  teamContext?: TeamContextState;
 }
 
 // ── Chat actions ────────────────────────────────────────────────────

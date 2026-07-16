@@ -93,6 +93,30 @@ export { loadTeamConfig, listTeams, resetAllTeams } from './teams/team-store.js'
 export { execute as executeSendMessage } from './teams/tools/team-message/executor.js';
 export type { TeamConfig, TeamMember } from './teams/types.js';
 
+// ── Swarm / Team worker infrastructure ─────────────────────────────
+export {
+  writeToMailbox,
+  readUnreadMessages,
+  markMessagesAsRead,
+  clearMailbox,
+  deleteTeamMailboxes,
+  createIdleNotification,
+  isIdleNotification,
+  isPermissionRequest,
+  isPermissionResponse,
+  isShutdownRequest,
+  isShutdownApproved,
+  isShutdownRejected,
+  isStructuredProtocolMessage,
+  getLastPeerDmSummary,
+} from './utils/swarm/teammateMailbox.js';
+export type { TeammateMessage, IdleNotificationMessage } from './utils/swarm/teammateMailbox.js';
+export { computeInitialTeamContext, initializeTeammateContextFromSession } from './utils/swarm/reconnection.js';
+export type { TeamContextState } from './utils/swarm/reconnection.js';
+export { getTeammateStatuses } from './utils/swarm/teamDiscovery.js';
+export type { TeammateStatus, TeamSummary } from './utils/swarm/teamDiscovery.js';
+export { isAgentSwarmsEnabled } from './utils/swarm/agentSwarmsEnabled.js';
+
 // ── Tasks ──────────────────────────────────────────────────────────
 export type { TrackedTask } from './tasks/task-tracker.js';
 export { getTask } from './tasks/store.js';

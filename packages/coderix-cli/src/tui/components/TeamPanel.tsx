@@ -5,6 +5,8 @@ import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamConfig, TeamMember } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 
+import type { TeamContextState } from '@coderix/core';
+
 function formatDuration(ms: number): string {
   const secs = ms / 1000;
   if (secs < 60) return `${secs.toFixed(1)}s`;
@@ -38,6 +40,8 @@ interface TeamPanelProps {
   onFocusRequest: () => void;
   onSelect: (agentId: string) => void;
   viewedAgentId?: string | null;
+  /** Active team context — enables team-specific display. */
+  teamContext?: TeamContextState;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -71,7 +75,7 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
  * Read-only display — press Ctrl+J to open the TeamAgentPicker
  * for selecting a member to view their transcript.
  */
-export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect, viewedAgentId }: TeamPanelProps) {
+export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect, viewedAgentId, teamContext }: TeamPanelProps) {
   const [configs, setConfigs] = useState<TeamConfig[]>([]);
   const [cursorIndex, setCursorIndex] = useState(0);
   const prevActiveCount = useRef(0);
@@ -260,13 +264,20 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
       <Box>
         <Text bold>Agents </Text>
-        {visible.length === 1 ? (
+        {teamContext ? (
+          <Text color="ansi:cyan">[{teamContext.teamName}] </Text>
+        ) : visible.length === 1 ? (
           <Text dimColor>{visible[0].name} </Text>
         ) : (
           <Text dimColor>({visible.length} groups) </Text>
         )}
         <Text dimColor>({parts.join(', ')})</Text>
       </Box>
+      {teamContext && (
+        <Box>
+          <Text dimColor>  Leader: {teamContext.isLeader ? 'you' : 'coordinator'} · {Object.keys(teamContext.teammates).length} worker(s)</Text>
+        </Box>
+      )}
 
       {displayList.slice(0, 9).map((m, i) => {
         // "main" entry for returning to the main agent
