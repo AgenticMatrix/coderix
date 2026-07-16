@@ -574,7 +574,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   );
 
   return (
-    <Box flexDirection="column" height="100%" padding={1}>
+    <Box flexDirection="column" height="100%" paddingTop={1} paddingX={1}>
       {/* ── Header ─────────────────────────────────────────────── */}
       <HeaderLogo key="header" />
 
@@ -754,8 +754,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         />
         <Divider padding={2} />
 
-        <Box marginTop={1}>
-          <StatusBar
+        <StatusBar
             model={state.model}
             statusPhase={statusPhase}
             isFrozen={state.isFrozen}
@@ -772,7 +771,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
             processMemory={processMemory}
             processCount={totalProcs}
           />
-        </Box>
 
         <TeamPanel
           dismissed={state.teamPanelDismissed}
