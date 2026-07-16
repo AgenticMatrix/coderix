@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { Box, Text, ScrollBox } from '@coderix/ink';
+import { Box, Text, ScrollBox, Divider } from '@coderix/ink';
 import type { ScrollBoxHandle } from '@coderix/ink';
 import { useTerminalSize } from '@coderix/ink';
 
@@ -743,6 +743,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
       <Box flexDirection="column" flexShrink={0}>
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
+        <Divider />
         <InputBox
           inputText={state.inputText}
           cursorPosition={state.cursorPosition}
@@ -751,6 +752,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           pastePreviewVisible={state.pastePreviewVisible}
           theme={config.theme}
         />
+        <Divider />
 
         <Box marginTop={1}>
           <StatusBar

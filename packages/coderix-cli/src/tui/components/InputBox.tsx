@@ -79,8 +79,6 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
       <Box
         paddingX={1}
         paddingY={0}
-        borderStyle="single"
-        borderColor="ansi:blackBright"
         flexDirection="column"
       >
         {lines.length === 0 ? (
