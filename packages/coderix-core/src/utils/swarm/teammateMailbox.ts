@@ -1039,3 +1039,52 @@ export function getLastPeerDmSummary(
   }
   return undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Permission response polling (worker-side)
+// ---------------------------------------------------------------------------
+
+/**
+ * Poll the worker's mailbox for a permission response from the leader.
+ * Returns the response when it arrives, or rejects if aborted.
+ */
+export async function waitForPermissionResponse(
+  agentName: string,
+  requestId: string,
+  teamName: string,
+  abortController: AbortController,
+  pollIntervalMs = 500,
+): Promise<{ approved: boolean; feedback?: string }> {
+  const POLL_INTERVAL = pollIntervalMs;
+  const MAX_WAIT_MS = 5 * 60 * 1000; // 5 minute timeout
+  const startTime = Date.now();
+
+  while (!abortController.signal.aborted) {
+    if (Date.now() - startTime > MAX_WAIT_MS) {
+      throw new Error('Permission request timed out waiting for leader response');
+    }
+
+    const unread = await readUnreadMessages(agentName, teamName);
+    for (const msg of unread) {
+      const response = isPermissionResponse(msg.text);
+      if (response && response.request_id === requestId) {
+        await markMessagesAsRead(agentName, teamName);
+        return {
+          approved: response.subtype === 'success',
+          feedback: response.subtype === 'error' ? response.error : undefined,
+        };
+      }
+    }
+
+    await new Promise<void>(resolve => {
+      const timeout = setTimeout(resolve, POLL_INTERVAL);
+      const onAbort = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      abortController.signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  throw new Error('Aborted while waiting for permission response');
+}

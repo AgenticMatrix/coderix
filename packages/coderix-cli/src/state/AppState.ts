@@ -26,6 +26,21 @@ export interface PendingQuestion {
 }
 
 /**
+ * Pending team permission approval — a worker agent is requesting
+ * permission to run a tool. Routes through the leader's mailbox.
+ */
+export interface TeamApprovalRequest {
+  requestId: string;
+  workerName: string;
+  workerId: string;
+  teamName: string;
+  toolName: string;
+  toolUseId: string;
+  description: string;
+  command?: string;
+}
+
+/**
  * Unified application state — the single source of truth for the TUI session.
  *
  * ChatState fields are flattened directly into AppState (no `ui` wrapper).
@@ -45,6 +60,9 @@ export interface AppState extends ChatState {
   /** Pending user question (ask-user-question tool). */
   pendingQuestion: PendingQuestion | null;
 
+  /** Pending team permission approval from a worker agent. */
+  teamApprovalReq: TeamApprovalRequest | null;
+
   /** Background tasks keyed by task ID (dual-write from task-tracker). */
   backgroundTasks: Record<string, TrackedTask>;
 
@@ -59,6 +77,7 @@ export function getDefaultAppState(config: AppConfig, initialChat: ChatState, se
     sessionId,
     pendingApproval: null,
     pendingQuestion: null,
+    teamApprovalReq: null,
     backgroundTasks: {},
     agents: {},
   };

@@ -77,25 +77,22 @@ export function useTeamContextPoller({
             continue;
           }
 
-          // Permission request from a worker
+          // Permission request from a worker — show approval prompt
           const permReq = isPermissionRequest(text);
           if (permReq) {
-            // Show as a system message in chat so the user can respond
-            dispatch({
-              type: 'ADD_USER_MESSAGE',
-              message: {
-                id: Date.now(),
-                role: 'system',
-                content: `[Team] ${permReq.agentName} requests permission: ${permReq.toolName} — "${permReq.description}"`,
-                blocks: [
-                  {
-                    type: 'text',
-                    content: `[Team] ${permReq.agentName} requests permission to run \`${permReq.toolName}\`: ${permReq.description}`,
-                  },
-                ],
-                timestamp: Date.now(),
+            setAppState({
+              teamApprovalReq: {
+                requestId: permReq.request_id,
+                workerName: msg.from,
+                workerId: permReq.agent_id,
+                teamName: ctx.teamName,
+                toolName: permReq.tool_name,
+                toolUseId: permReq.tool_use_id,
+                description: permReq.description,
+                command: JSON.stringify(permReq.input, null, 2),
               },
-            } as any);
+            } as Partial<AppState>);
+            dispatch({ type: 'SHOW_APPROVAL', req: { toolName: permReq.tool_name, command: JSON.stringify(permReq.input), description: `[${msg.from}] ${permReq.description}`, toolUseId: permReq.tool_use_id } });
             continue;
           }
 

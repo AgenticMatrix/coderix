@@ -109,6 +109,7 @@ export {
   isShutdownRejected,
   isStructuredProtocolMessage,
   getLastPeerDmSummary,
+  waitForPermissionResponse,
 } from './utils/swarm/teammateMailbox.js';
 export type { TeammateMessage, IdleNotificationMessage } from './utils/swarm/teammateMailbox.js';
 export { computeInitialTeamContext, initializeTeammateContextFromSession } from './utils/swarm/reconnection.js';
@@ -116,6 +117,10 @@ export type { TeamContextState } from './utils/swarm/reconnection.js';
 export { getTeammateStatuses } from './utils/swarm/teamDiscovery.js';
 export type { TeammateStatus, TeamSummary } from './utils/swarm/teamDiscovery.js';
 export { isAgentSwarmsEnabled } from './utils/swarm/agentSwarmsEnabled.js';
+export {
+  sendPermissionResponseViaMailbox,
+  sendPermissionRequestViaMailbox,
+} from './utils/swarm/permissionSync.js';
 
 // ── Tasks ──────────────────────────────────────────────────────────
 export type { TrackedTask } from './tasks/task-tracker.js';

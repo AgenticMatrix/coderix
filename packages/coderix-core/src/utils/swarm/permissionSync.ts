@@ -15,6 +15,7 @@
  */
 
 import { mkdir, writeFile, readFile, unlink, readdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod/v4';
 
@@ -71,7 +72,7 @@ export interface PermissionResolution {
 // Path helpers
 // ---------------------------------------------------------------------------
 
-const TEAMS_DIR = join(require('node:os').homedir(), '.coderix', 'teams');
+const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
 const sanitizeName = (name: string) =>
   name.replace(/[^a-zA-Z0-9_-]/g, '-');
 

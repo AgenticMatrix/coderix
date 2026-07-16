@@ -488,8 +488,31 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   });
 
   const pendingApproval = useAppState(s => s.pendingApproval);
+  const teamApprovalReq = useAppState(s => s.teamApprovalReq);
 
-  const handleApprovalChoice = (choice: string) => {
+  const handleApprovalChoice = async (choice: string) => {
+    // ── Team permission approval (worker → leader mailbox) ──
+    if (teamApprovalReq) {
+      const { sendPermissionResponseViaMailbox } = await import('@coderix/core');
+      const approved = choice !== 'deny';
+      try {
+        await sendPermissionResponseViaMailbox(
+          teamApprovalReq.workerName,
+          teamApprovalReq.requestId,
+          {
+            decision: approved ? 'approved' : 'rejected',
+            resolvedBy: 'leader',
+            feedback: approved ? undefined : 'Denied by leader',
+          },
+          teamApprovalReq.teamName,
+        );
+      } catch { /* non-fatal */ }
+      setAppState({ teamApprovalReq: null } as Partial<AppState>);
+      dispatch({ type: 'HIDE_APPROVAL' });
+      return;
+    }
+
+    // ── Regular permission approval (deferred promise) ──
     const pending = pendingApproval;
     if (!pending) return;
 
