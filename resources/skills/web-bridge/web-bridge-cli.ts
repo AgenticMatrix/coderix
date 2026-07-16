@@ -4,16 +4,25 @@
  *
  * Usage:
  *   npx tsx web-bridge-cli.ts --action navigate   --url https://example.com
- *   npx tsx web-bridge-cli.ts --action screenshot  --full-page
+ *   npx tsx web-bridge-cli.ts --action snapshot
+ *   npx tsx web-bridge-cli.ts --action screenshot  [--full-page] [--selector "..."]
  *   npx tsx web-bridge-cli.ts --action click       --selector "#btn"
- *   npx tsx web-bridge-cli.ts --action type        --text "hello" --selector input
+ *   npx tsx web-bridge-cli.ts --action mouse_click --selector "#btn"
+ *   npx tsx web-bridge-cli.ts --action fill        --selector input --value "text"
+ *   npx tsx web-bridge-cli.ts --action type        --text "hello" [--selector input]
+ *   npx tsx web-bridge-cli.ts --action send_keys   --keys "Enter"
  *   npx tsx web-bridge-cli.ts --action scroll      --amount 500
  *   npx tsx web-bridge-cli.ts --action extract     [--selector ...]
  *   npx tsx web-bridge-cli.ts --action evaluate    --script "document.title"
+ *   npx tsx web-bridge-cli.ts --action upload      --selector "input[type=file]" --files a.txt,b.txt
+ *   npx tsx web-bridge-cli.ts --action save_as_pdf [--paper-format a4]
  *   npx tsx web-bridge-cli.ts --action get-tabs
  *   npx tsx web-bridge-cli.ts --action new-tab     [--url ...]
  *   npx tsx web-bridge-cli.ts --action close-tab   --tab-id <id>
  *   npx tsx web-bridge-cli.ts --action switch-tab  --tab-id <id>
+ *   npx tsx web-bridge-cli.ts --action find_tab    --url https://example.com
+ *   npx tsx web-bridge-cli.ts --action network     --cmd start|stop|list|detail
+ *   npx tsx web-bridge-cli.ts --action cdp         --method Page.navigate --params '{"url":"..."}'
  *   npx tsx web-bridge-cli.ts --action start-browser
  *   npx tsx web-bridge-cli.ts --action connect
  *   npx tsx web-bridge-cli.ts --action status
@@ -274,14 +283,14 @@ async function main() {
         // Format and print result
         if (action === 'extract' && typeof r === 'object' && (r as any).content) {
           console.log((r as any).content);
+        } else if ((action === 'screenshot' || action === 'save_as_pdf') && typeof r === 'object' && (r as any).path) {
+          console.log(JSON.stringify(r));
         } else if (action === 'screenshot' && typeof r === 'object' && (r as any).data) {
-          console.log('SCREENSHOT_DATA_START');
-          console.log((r as any).data);
-          console.log('SCREENSHOT_DATA_END');
-          const tempPath = '/tmp/web-bridge-screenshot.png';
+          // Legacy: handle base64 data (still used by extension path)
+          const outPath = `/tmp/web-bridge-screenshot-${Date.now()}.png`;
           const { writeFileSync } = require('node:fs');
-          writeFileSync(tempPath, Buffer.from((r as any).data, 'base64'));
-          console.log(`Screenshot saved to ${tempPath}`);
+          writeFileSync(outPath, Buffer.from((r as any).data, 'base64'));
+          console.log(`Screenshot saved to ${outPath}`);
         } else if (Array.isArray(r)) {
           for (const item of r) console.log(JSON.stringify(item));
         } else {
