@@ -173,7 +173,7 @@ export function HeaderLogo() {
   const totalLines = Math.max(logoLines.length, rightPanel.length);
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={1} paddingX={2}>
       <Text color="ansi:blackBright">{topBorder}</Text>
       {Array.from({ length: totalLines }, (_, i) => renderLine(i))}
       <Text color="ansi:blackBright">{botBorder}</Text>
