@@ -81,11 +81,11 @@ export function SleepRenderer(props: ToolUseRendererProps) {
             {isActive ? (
               <Text dimColor color="ansi:yellow"> running {elapsedSecs}s</Text>
             ) : null}
+            {isDone && props.duration !== undefined ? (
+              <Text dimColor> · ⏱ {(props.duration / 1000).toFixed(1)}</Text>
+            ) : null}
           </Text>
         </Box>
-        {isDone && props.duration !== undefined ? (
-          <Text dimColor>⏱ {(props.duration / 1000).toFixed(1)}</Text>
-        ) : null}
       </Box>
 
       {/* Body — aligned under S in Sleep (icon width = 2) */}
