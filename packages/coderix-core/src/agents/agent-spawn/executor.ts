@@ -45,22 +45,43 @@ function shortId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+const TURN_2K = 2000;
+const TURN_4K = 4000;
+const TURN_16K = 16000;
+const OVERALL_MAX = 32000;
+
 function compressTranscript(messages: Message[]): string {
-  const parts: string[] = [];
+  // Step 1: extract text from each assistant message (last 60)
+  const turns: string[] = [];
   for (const msg of messages.slice(-60)) {
     if (msg.role !== 'assistant') continue;
     const blocks = Array.isArray(msg.content) ? msg.content : [];
+    const texts: string[] = [];
     for (const block of blocks) {
       if (block.type === 'text') {
         const text = (block as { text?: string }).text ?? '';
-        if (text) parts.push(text.slice(0, 8000));
+        if (text) texts.push(text);
       }
     }
+    if (texts.length > 0) turns.push(texts.join('\n'));
   }
-  const body = parts.join('\n\n');
-  if (!body) return '(sub-agent produced no text output)';
-  if (body.length <= 16384) return body;
-  return body.slice(0, 16381) + '...';
+
+  if (turns.length === 0) return '(sub-agent produced no text output)';
+
+  // Step 2: per-turn truncation by distance from end
+  const truncated = turns.map((turn, i) => {
+    const distFromEnd = turns.length - 1 - i;
+    let maxLen: number;
+    if (distFromEnd === 0)        maxLen = TURN_16K; // 最后一轮
+    else if (distFromEnd <= 5)    maxLen = TURN_4K;  // 倒数前五轮 (2~6)
+    else                          maxLen = TURN_2K;  // 第 7 轮及更早
+    return turn.length <= maxLen ? turn : turn.slice(0, maxLen);
+  });
+
+  // Step 3: overall — keep last 32K
+  const body = truncated.join('\n\n');
+  if (body.length <= OVERALL_MAX) return body;
+  return body.slice(body.length - OVERALL_MAX);
 }
 
 interface ToolCallSummary {
