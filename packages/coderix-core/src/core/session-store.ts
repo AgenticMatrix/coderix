@@ -225,6 +225,17 @@ export function entriesToMessages(entries: SessionEntry[]): Message[] {
   return chain.map((e) => e.message);
 }
 
+function extractUserText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return (content as Array<{ type?: string; text?: string }>)
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join(' ');
+  }
+  return '';
+}
+
 /**
  * Read the last ~64KB of a JSONL file to extract metadata (title, etc.).
  * Used for fast session listing without parsing the entire file.
@@ -249,7 +260,7 @@ export function readTailMetadata(filePath: string): {
     const lines = buf.split('\n').filter((l) => l.trim());
     result.entryCount = lines.length;
 
-    // Scan from end for last title and last user entry
+    // Scan for title entry from end (last-wins), and first user entry from start
     let foundTitle = false;
     let foundUser = false;
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -265,25 +276,33 @@ export function readTailMetadata(filePath: string): {
           result.lastTitle = entry.title;
           foundTitle = true;
         }
+        // Check user entries from end too (fast path for recent sessions)
         if (!foundUser && entry.type === 'user' && entry.message) {
-          const content = entry.message.content;
-          let text: string;
-          if (typeof content === 'string') {
-            text = content;
-          } else if (Array.isArray(content)) {
-            text = content
-              .filter((b: any) => b.type === 'text')
-              .map((b: any) => b.text ?? '')
-              .join(' ');
-          } else {
-            text = '';
-          }
+          const text = extractUserText(entry.message.content);
           if (text) {
             result.lastUserPreview = text.length > 60 ? text.slice(0, 60) + '...' : text;
+            foundUser = true;
           }
-          foundUser = true;
         }
       } catch { /* skip corrupted */ }
+    }
+
+    // Fallback: scan from start for first user message if not found from end
+    if (!foundUser) {
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!.trim();
+        if (!line) continue;
+        try {
+          const entry = JSON.parse(line);
+          if (entry.type === 'user' && entry.message) {
+            const text = extractUserText(entry.message.content);
+            if (text) {
+              result.lastUserPreview = text.length > 60 ? text.slice(0, 60) + '...' : text;
+              break;
+            }
+          }
+        } catch { /* skip corrupted */ }
+      }
     }
   } catch {
     // File missing or unreadable
