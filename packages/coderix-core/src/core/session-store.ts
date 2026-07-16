@@ -148,11 +148,26 @@ export async function rewriteEntries(
   filePath: string,
   entries: SessionEntry[],
 ): Promise<void> {
-  const tmpPath = filePath + '.tmp';
   const lines = entries.map((e) => JSON.stringify(e)).join('\n') + '\n';
   await mkdir(dirname(filePath), { recursive: true, mode: 0o700 });
+
+  const tmpPath = filePath + '.tmp';
   await writeFile(tmpPath, lines, { mode: 0o600 });
-  await rename(tmpPath, filePath);
+
+  try {
+    await rename(tmpPath, filePath);
+  } catch (err: unknown) {
+    // On macOS APFS, rename can fail with ENOENT if the tmp file
+    // is cleaned up between writeFile and rename. Fall back to
+    // writing directly — we already have the data in memory.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      await writeFile(filePath, lines, { mode: 0o600 });
+      try { await unlink(tmpPath); } catch { /* best-effort cleanup */ }
+    } else {
+      throw err;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

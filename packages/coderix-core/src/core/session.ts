@@ -12,9 +12,8 @@
  *       agent-<id>.jsonl       # Per-sub-agent sidechain transcript
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { IS_WINDOWS } from '../utils/platform.js';
@@ -38,8 +37,6 @@ import {
   rewriteEntries,
   entriesToMessages,
   readTailMetadata,
-  needsMigration,
-  migrateLegacySession,
 } from './session-store.js';
 
 // ---------------------------------------------------------------------------
@@ -525,37 +522,8 @@ export class SessionManager {
       const dir = getSessionDir(id);
       const jsonlPath = sessionJsonlPath(dir);
 
-      // Handle legacy sessions
-      if (needsMigration(dir)) {
-        try {
-          migrateLegacySession(dir);
-        } catch {
-          // Skip if migration fails, try legacy load
-        }
-      }
-
-      if (!existsSync(jsonlPath)) {
-        // Fallback: try loading from legacy session.json
-        const session = this.loadSession(id);
-        if (!session) continue;
-
-        if (filter?.status && session.status !== filter.status) continue;
-        if (filter?.model && session.model !== filter.model) continue;
-        if (filter?.provider && session.provider !== filter.provider) continue;
-        if (filter?.since && new Date(session.createdAt) < filter.since) continue;
-
-        summaries.push({
-          id: session.id,
-          title: session.title,
-          status: session.status,
-          turnCount: session.turnCount,
-          totalCost: session.totalCost,
-          createdAt: session.createdAt,
-          updatedAt: session.updatedAt,
-          model: session.model,
-        });
-        continue;
-      }
+      // Skip directories without session.jsonl (legacy or empty)
+      if (!existsSync(jsonlPath)) continue;
 
       // Fast path: read tail metadata from JSONL
       const { lastTitle, entryCount } = readTailMetadata(jsonlPath);
@@ -564,7 +532,7 @@ export class SessionManager {
       const approxTurns = Math.floor(entryCount / 2);
 
       const title = lastTitle ?? `Session ${id.slice(0, 8)}`;
-      const isAuto = /^Session [0-9a-f]{8}$/.test(title);
+      const mtime = statSync(jsonlPath).mtime;
 
       summaries.push({
         id,
@@ -572,13 +540,10 @@ export class SessionManager {
         status: 'active' as const,
         turnCount: approxTurns,
         totalCost: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: mtime,
+        updatedAt: mtime,
         model: 'unknown',
       });
-
-      // Silence unused variable warning
-      void isAuto;
     }
 
     // Sort by most recently updated (session IDs are random, use dir mtime)
@@ -633,29 +598,15 @@ export class SessionManager {
   // -----------------------------------------------------------------------
 
   /**
-   * Load a session from disk. Tries JSONL first, falls back to legacy
-   * session.json with automatic migration.
+   * Load a session from JSONL format.
    */
   private loadSession(id: string): Session | undefined {
     const dir = getSessionDir(id);
     const jsonlPath = sessionJsonlPath(dir);
 
-    // Auto-migrate legacy sessions
-    if (needsMigration(dir)) {
-      try {
-        migrateLegacySession(dir);
-      } catch {
-        // Migration failed, try fallback
-      }
-    }
+    if (!existsSync(jsonlPath)) return undefined;
 
-    // Try JSONL format first
-    if (existsSync(jsonlPath)) {
-      return this.loadFromJsonl(id, dir, jsonlPath);
-    }
-
-    // Fallback: legacy session.json (should have been migrated, but handle edge case)
-    return this.loadFromLegacy(id, dir);
+    return this.loadFromJsonl(id, dir, jsonlPath);
   }
 
   /**
@@ -734,29 +685,6 @@ export class SessionManager {
       (session as any)._entryCount = allEntries.length;
 
       return session;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Load session from legacy session.json format.
-   * This is a fallback — normally migration handles this.
-   */
-  private loadFromLegacy(id: string, dir: string): Session | undefined {
-    const legacyPath = join(dir, 'session.json');
-    if (!existsSync(legacyPath)) return undefined;
-
-    try {
-      const raw = readFileSync(legacyPath, 'utf-8');
-      const data = JSON.parse(raw);
-
-      return {
-        ...data,
-        createdAt: new Date(data.createdAt),
-        updatedAt: new Date(data.updatedAt),
-        completedAt: data.completedAt ? new Date(data.completedAt) : undefined,
-      };
     } catch {
       return undefined;
     }
