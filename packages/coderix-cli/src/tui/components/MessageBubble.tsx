@@ -13,6 +13,7 @@ import { TodoUpdateBlockRenderer } from './blocks/TodoUpdateBlockRenderer.js';
 import { TurnBoundaryRenderer } from './blocks/TurnBoundaryRenderer.js';
 import { SubagentBlockRenderer } from './blocks/SubagentBlockRenderer.js';
 import { CompactionBoundaryRenderer } from './blocks/CompactionBoundaryRenderer.js';
+import { SubagentBoundaryRenderer } from './blocks/SubagentBoundaryRenderer.js';
 import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
 import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
@@ -333,6 +334,23 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
           <Box flexGrow={1}>
             <CompletionBoundaryRenderer
               stopReason={cp.stopReason}
+            />
+          </Box>
+        </Box>
+      );
+    }
+
+    // ── Sub-agent boundary ───────────────────────────────────
+    if (block.type === 'subagent_boundary') {
+      const sb = block as import('../../types.js').SubagentBoundaryBlock;
+      return (
+        <Box key={idx} flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <SubagentBoundaryRenderer
+              agentType={sb.agentType}
+              agentId={sb.agentId}
+              boundary={sb.boundary}
             />
           </Box>
         </Box>

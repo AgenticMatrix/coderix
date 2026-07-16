@@ -1,14 +1,19 @@
 /**
- * SessionManager — Session lifecycle management
+ * SessionManager — Session lifecycle management with JSONL persistence.
  *
  * Manages session creation, resume, fork, rewind, and persistence.
- * Sessions are stored as JSON files in ~/.coderix/sessions/.
+ * Sessions are stored as JSONL files in ~/.coderix/sessions/<uuid>/.
  *
- * Session management for persisting agent conversation state.
+ * Storage layout (v2):
+ *   ~/.coderix/sessions/<uuid>/
+ *     session.jsonl            # Append-only transcript entries
+ *     session.json.bak         # Legacy backup (after migration)
+ *     subagents/
+ *       agent-<id>.jsonl       # Per-sub-agent sidechain transcript
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, rmSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -18,15 +23,24 @@ import type {
   SessionFilter,
   SessionSummary,
   TokenUsageSummary,
+  Message,
+  SessionEntry,
 } from './types.js';
-import type { Message } from './types.js';
+import { isTranscriptEntry } from './types.js';
 import { tokenCountWithEstimation } from './token-budget.js';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const SESSIONS_DIR = join(homedir(), '.coderix', 'sessions');
+import {
+  SESSIONS_DIR,
+  sessionDir as getSessionDir,
+  sessionJsonlPath,
+  appendEntry,
+  appendEntrySync,
+  readEntriesSync,
+  rewriteEntries,
+  entriesToMessages,
+  readTailMetadata,
+  needsMigration,
+  migrateLegacySession,
+} from './session-store.js';
 
 // ---------------------------------------------------------------------------
 // SessionManager
@@ -57,9 +71,10 @@ export class SessionManager {
   }): Session {
     const id = randomUUID();
     const now = new Date();
+    const title = options.title ?? `Session ${id.slice(0, 8)}`;
     const session: Session = {
       id,
-      title: options.title ?? `Session ${id.slice(0, 8)}`,
+      title,
       status: 'active',
       messages: [],
       turnCount: 0,
@@ -87,8 +102,21 @@ export class SessionManager {
 
     this.sessions.set(id, session);
     this.activeSession = session;
-    // Don't save empty sessions — wait until first message is added
-    (session as any)._saved = false;
+
+    // Write the title entry to bootstrap the session.jsonl file
+    const dir = getSessionDir(id);
+    const jsonlPath = sessionJsonlPath(dir);
+    const titleEntry: SessionEntry = {
+      type: 'title',
+      title,
+    } as SessionEntry;
+
+    // Fire-and-forget — file will be created on first write
+    mkdir(dir, { recursive: true })
+      .then(() => appendEntry(jsonlPath, titleEntry))
+      .catch(() => {});
+
+    (session as any)._entryCount = 1;
 
     return session;
   }
@@ -107,11 +135,9 @@ export class SessionManager {
    * Get a session by ID.
    */
   get(id: string): Session | undefined {
-    // Check cache first
     const cached = this.sessions.get(id);
     if (cached) return cached;
 
-    // Try loading from disk
     return this.loadSession(id);
   }
 
@@ -129,7 +155,9 @@ export class SessionManager {
 
     this.sessions.set(sessionId, session);
     this.activeSession = session;
-    this.saveSession(session);
+
+    // Re-append title to JSONL so it's in the tail for listing
+    this.appendMetadata(session);
 
     return session;
   }
@@ -166,7 +194,6 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // Calculate which messages to keep
     let turnCount = 0;
     const keptMessages: Message[] = [];
 
@@ -182,23 +209,20 @@ export class SessionManager {
     session.turnCount = toTurn;
     session.updatedAt = new Date();
 
-    this.saveSession(session);
+    // Rebuild JSONL atomically
+    this.rebuildJsonlFromSession(session);
+
     return session;
   }
 
   /**
    * Trim session messages to stay within a token budget.
-   *
-   * Drops oldest messages until the total estimated token count is
-   * below `maxTokens`.  Keeps at least `minKeep` most recent messages.
-   * Returns the number of messages dropped.
    */
   trimMessages(maxTokens: number, minKeep = 10): number {
     const session = this.getActive();
     const totalTokens = tokenCountWithEstimation(session.messages);
     if (totalTokens <= maxTokens) return 0;
 
-    // Scan from the front to find the keep-start index
     const maxDrop = session.messages.length - minKeep;
     let keepStart = 0;
     for (let i = 0; i < maxDrop; i++) {
@@ -218,22 +242,37 @@ export class SessionManager {
 
   /**
    * Replace the active session's messages with a compacted set.
-   *
-   * Called after context compaction to release pre-compaction messages
-   * for GC, preventing unbounded memory growth from old tool results.
    */
   replaceMessages(messages: Message[]): void {
     const session = this.getActive();
     session.messages = [...messages];
     session.updatedAt = new Date();
-    this.saveSession(session);
+    // Rebuild JSONL from compacted messages
+    this.rebuildJsonlFromSession(session);
   }
 
   /**
    * Add a message to the active session.
+   * Appends to JSONL file AND updates in-memory messages array.
    */
   addMessage(message: Message): void {
     const session = this.getActive();
+
+    // Track the last transcript entry's uuid for parentUuid chaining
+    const prevUuid = (session as any)._lastEntryUuid as string | null ?? null;
+    const uuid = randomUUID();
+
+    const entry: SessionEntry = {
+      type: message.role as 'user' | 'assistant' | 'system',
+      uuid,
+      parentUuid: prevUuid,
+      timestamp: Date.now(),
+      message,
+    } as SessionEntry;
+
+    (session as any)._lastEntryUuid = uuid;
+
+    // Update in-memory state
     session.messages.push(message);
     session.updatedAt = new Date();
 
@@ -241,19 +280,27 @@ export class SessionManager {
       session.turnCount++;
     }
 
-    // Save on first message (lazy-init).
-    // After that, throttle saves: small sessions every 5 messages,
-    // large sessions (>200 messages) only every 20 to avoid
-    // JSON.stringify spikes during long conversations.
-    const saved = (session as any)._saved;
-    if (!saved) {
-      (session as any)._saved = true;
-      this.saveSession(session);
-      return;
-    }
+    // Append to JSONL asynchronously (fire-and-forget with throttling)
+    const dir = getSessionDir(session.id);
+    const jsonlPath = sessionJsonlPath(dir);
+
+    const entryCount = ((session as any)._entryCount as number) ?? 0;
+    (session as any)._entryCount = entryCount + 1;
+
+    // Throttle: small sessions flush every 5 messages,
+    // large sessions (>200) every 20 messages
     const skip = session.messages.length > 200 ? 20 : 5;
     if (session.messages.length % skip === 0) {
-      this.saveSession(session);
+      // Flush with pending write tracking
+      const writePromise = appendEntry(jsonlPath, entry)
+        .catch(() => {})
+        .finally(() => {
+          this.pendingWrites.delete(writePromise);
+        });
+      this.pendingWrites.add(writePromise);
+    } else {
+      // Fire-and-forget
+      appendEntry(jsonlPath, entry).catch(() => {});
     }
   }
 
@@ -264,11 +311,14 @@ export class SessionManager {
     const session = this.getActive();
     if (usage.inputTokens) session.tokenUsage.inputTokens += usage.inputTokens;
     if (usage.outputTokens) session.tokenUsage.outputTokens += usage.outputTokens;
-    if (usage.cacheCreationInputTokens) session.tokenUsage.cacheCreationInputTokens = (session.tokenUsage.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
-    if (usage.cacheReadInputTokens) session.tokenUsage.cacheReadInputTokens = (session.tokenUsage.cacheReadInputTokens ?? 0) + usage.cacheReadInputTokens;
+    if (usage.cacheCreationInputTokens)
+      session.tokenUsage.cacheCreationInputTokens =
+        (session.tokenUsage.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
+    if (usage.cacheReadInputTokens)
+      session.tokenUsage.cacheReadInputTokens =
+        (session.tokenUsage.cacheReadInputTokens ?? 0) + usage.cacheReadInputTokens;
     session.tokenUsage.totalTokens =
-      session.tokenUsage.inputTokens +
-      session.tokenUsage.outputTokens;
+      session.tokenUsage.inputTokens + session.tokenUsage.outputTokens;
   }
 
   /**
@@ -301,8 +351,15 @@ export class SessionManager {
 
   /**
    * Track a spawned sub-agent in the active session's metadata.
+   * Also writes an agent-metadata entry to the JSONL stream.
    */
-  trackSubAgent(agentId: string): void {
+  trackSubAgent(
+    agentId: string,
+    agentType?: string,
+    prompt?: string,
+    description?: string,
+    toolUseId?: string,
+  ): void {
     const session = this.getActive();
     if (!session.metadata.subAgentIds) {
       session.metadata.subAgentIds = [];
@@ -310,6 +367,21 @@ export class SessionManager {
     if (!session.metadata.subAgentIds.includes(agentId)) {
       session.metadata.subAgentIds.push(agentId);
     }
+
+    // Write agent-metadata entry to JSONL
+    const entry: SessionEntry = {
+      type: 'agent-metadata',
+      agentId,
+      agentType: agentType ?? 'unknown',
+      prompt: prompt ?? '',
+      description,
+      toolUseId,
+      timestamp: Date.now(),
+    } as SessionEntry;
+
+    const dir = getSessionDir(session.id);
+    const jsonlPath = sessionJsonlPath(dir);
+    appendEntry(jsonlPath, entry).catch(() => {});
   }
 
   /**
@@ -320,7 +392,7 @@ export class SessionManager {
     session.status = 'completed';
     session.completedAt = new Date();
     session.updatedAt = new Date();
-    this.saveSession(session);
+    this.appendMetadata(session);
     this.activeSession = null;
   }
 
@@ -331,7 +403,7 @@ export class SessionManager {
     const session = this.getActive();
     session.status = 'paused';
     session.updatedAt = new Date();
-    this.saveSession(session);
+    this.appendMetadata(session);
     this.activeSession = null;
   }
 
@@ -342,37 +414,69 @@ export class SessionManager {
     const session = this.getActive();
     session.status = 'error';
     session.updatedAt = new Date();
-    this.saveSession(session);
+    this.appendMetadata(session);
   }
 
   /**
-   * Save the session to disk asynchronously.
-   *
-   * Writes are fire-and-forget but tracked in `pendingWrites`.
-   * On SIGINT/SIGTERM, `flushAndExit()` drains all pending writes
-   * before the process exits.
+   * Save the session metadata to JSONL.
+   * Appends title entry (last-wins), does NOT rewrite messages.
    */
   saveSession(session: Session): void {
-    this.registerExitHandler();
+    this.appendMetadata(session);
+  }
 
-    const dir = join(SESSIONS_DIR, session.id);
-    const path = join(dir, 'session.json');
+  /**
+   * Re-append title and other metadata entries to the end of the JSONL
+   * so they're visible in the tail read for session listing.
+   */
+  private appendMetadata(session: Session): void {
+    const dir = getSessionDir(session.id);
+    const jsonlPath = sessionJsonlPath(dir);
 
-    const writePromise = mkdir(dir, { recursive: true })
-      .then(() => writeFile(path, JSON.stringify(session, null, 2), 'utf-8'))
-      .catch(() => {})
-      .finally(() => {
-        this.pendingWrites.delete(writePromise);
-      });
+    const titleEntry: SessionEntry = {
+      type: 'title',
+      title: session.title,
+    } as SessionEntry;
 
-    this.pendingWrites.add(writePromise);
+    appendEntry(jsonlPath, titleEntry).catch(() => {});
+  }
+
+  /**
+   * Rebuild the entire JSONL file from the in-memory messages array.
+   * Used after rewind or replaceMessages to keep the file consistent
+   * with the compacted/truncated message set.
+   */
+  private rebuildJsonlFromSession(session: Session): void {
+    const dir = getSessionDir(session.id);
+    const jsonlPath = sessionJsonlPath(dir);
+
+    const entries: SessionEntry[] = [];
+    let prevUuid: string | null = null;
+
+    for (const msg of session.messages) {
+      const uuid = randomUUID();
+      entries.push({
+        type: msg.role as 'user' | 'assistant' | 'system',
+        uuid,
+        parentUuid: prevUuid,
+        timestamp: Date.now(),
+        message: msg,
+      } as SessionEntry);
+      prevUuid = uuid;
+    }
+
+    (session as any)._lastEntryUuid = prevUuid;
+
+    entries.push({
+      type: 'title',
+      title: session.title,
+    } as SessionEntry);
+
+    rewriteEntries(jsonlPath, entries).catch(() => {});
   }
 
   /**
    * Flush all pending writes and exit the process.
-   *
-   * Called from SIGINT/SIGTERM handlers. After awaiting all writes,
-   * calls process.exit() to terminate cleanly.
    */
   async flushAndExit(code = 0): Promise<void> {
     if (this.pendingWrites.size > 0) {
@@ -383,14 +487,12 @@ export class SessionManager {
 
   /**
    * Register SIGINT/SIGTERM handlers to flush writes before exit.
-   * Idempotent — subsequent calls are no-ops.
    */
   private registerExitHandler(): void {
     if (this.exitHandlerRegistered) return;
     this.exitHandlerRegistered = true;
 
     if (IS_WINDOWS) {
-      // Windows: use 'beforeExit' for graceful shutdown (signals not available)
       process.on('beforeExit', () => {
         this.flushAndExit(0);
       });
@@ -405,6 +507,7 @@ export class SessionManager {
 
   /**
    * List sessions matching a filter.
+   * Uses fast tail reads of JSONL files instead of parsing full files.
    */
   list(filter?: SessionFilter): SessionSummary[] {
     const summaries: SessionSummary[] = [];
@@ -419,29 +522,67 @@ export class SessionManager {
     }
 
     for (const id of entries) {
-      const session = this.loadSession(id);
-      if (!session) continue;
+      const dir = getSessionDir(id);
+      const jsonlPath = sessionJsonlPath(dir);
 
-      // Apply filters
-      if (filter?.status && session.status !== filter.status) continue;
-      if (filter?.model && session.model !== filter.model) continue;
-      if (filter?.provider && session.provider !== filter.provider) continue;
-      if (filter?.since && new Date(session.createdAt) < filter.since) continue;
+      // Handle legacy sessions
+      if (needsMigration(dir)) {
+        try {
+          migrateLegacySession(dir);
+        } catch {
+          // Skip if migration fails, try legacy load
+        }
+      }
+
+      if (!existsSync(jsonlPath)) {
+        // Fallback: try loading from legacy session.json
+        const session = this.loadSession(id);
+        if (!session) continue;
+
+        if (filter?.status && session.status !== filter.status) continue;
+        if (filter?.model && session.model !== filter.model) continue;
+        if (filter?.provider && session.provider !== filter.provider) continue;
+        if (filter?.since && new Date(session.createdAt) < filter.since) continue;
+
+        summaries.push({
+          id: session.id,
+          title: session.title,
+          status: session.status,
+          turnCount: session.turnCount,
+          totalCost: session.totalCost,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          model: session.model,
+        });
+        continue;
+      }
+
+      // Fast path: read tail metadata from JSONL
+      const { lastTitle, entryCount } = readTailMetadata(jsonlPath);
+
+      // Approximate turnCount from entry count (transcript entries / 2)
+      const approxTurns = Math.floor(entryCount / 2);
+
+      const title = lastTitle ?? `Session ${id.slice(0, 8)}`;
+      const isAuto = /^Session [0-9a-f]{8}$/.test(title);
 
       summaries.push({
-        id: session.id,
-        title: session.title,
-        status: session.status,
-        turnCount: session.turnCount,
-        totalCost: session.totalCost,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        model: session.model,
+        id,
+        title,
+        status: 'active' as const,
+        turnCount: approxTurns,
+        totalCost: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        model: 'unknown',
       });
+
+      // Silence unused variable warning
+      void isAuto;
     }
 
-    // Sort by most recently updated
-    summaries.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    // Sort by most recently updated (session IDs are random, use dir mtime)
+    summaries.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
     if (filter?.limit) {
       return summaries.slice(filter.offset ?? 0, (filter.offset ?? 0) + filter.limit);
@@ -451,9 +592,6 @@ export class SessionManager {
 
   /**
    * Continue the most recently updated session.
-   *
-   * Finds the latest session by updatedAt and resumes it.
-   * Throws if no sessions exist on disk.
    */
   continueLatest(): Session {
     const sessions = this.list({ limit: 1 });
@@ -464,33 +602,22 @@ export class SessionManager {
   }
 
   /**
-   * List all sessions (convenience wrapper around list()).
-   *
-   * @param limit — Maximum number of sessions to return (default: 50)
-   * @returns SessionSummary[] sorted by most recently updated
+   * List all sessions (convenience wrapper).
    */
   listSessions(limit?: number): SessionSummary[] {
     return this.list({ limit: limit ?? 50 });
   }
 
   /**
-   * Delete a session.
+   * Delete a session and all its files.
    */
   delete(sessionId: string): boolean {
-    const dir = join(SESSIONS_DIR, sessionId);
-    const sessionPath = join(dir, 'session.json');
+    const dir = getSessionDir(sessionId);
 
-    if (!existsSync(sessionPath)) return false;
+    if (!existsSync(dir)) return false;
 
     try {
-      // Delete session files recursively
-      const files = readdirSync(dir);
-      for (const file of files) {
-        unlinkSync(join(dir, file));
-      }
-      // Remove the directory (may have subdirs like tasks/)
-      try { unlinkSync(dir); } catch { /* not empty, leave subdirs */ }
-
+      rmSync(dir, { recursive: true, force: true });
       this.sessions.delete(sessionId);
       if (this.activeSession?.id === sessionId) {
         this.activeSession = null;
@@ -505,15 +632,125 @@ export class SessionManager {
   // Private helpers
   // -----------------------------------------------------------------------
 
+  /**
+   * Load a session from disk. Tries JSONL first, falls back to legacy
+   * session.json with automatic migration.
+   */
   private loadSession(id: string): Session | undefined {
-    const path = join(SESSIONS_DIR, id, 'session.json');
-    if (!existsSync(path)) return undefined;
+    const dir = getSessionDir(id);
+    const jsonlPath = sessionJsonlPath(dir);
+
+    // Auto-migrate legacy sessions
+    if (needsMigration(dir)) {
+      try {
+        migrateLegacySession(dir);
+      } catch {
+        // Migration failed, try fallback
+      }
+    }
+
+    // Try JSONL format first
+    if (existsSync(jsonlPath)) {
+      return this.loadFromJsonl(id, dir, jsonlPath);
+    }
+
+    // Fallback: legacy session.json (should have been migrated, but handle edge case)
+    return this.loadFromLegacy(id, dir);
+  }
+
+  /**
+   * Load session from JSONL format.
+   */
+  private loadFromJsonl(
+    id: string,
+    dir: string,
+    jsonlPath: string,
+  ): Session | undefined {
+    try {
+      const allEntries = readEntriesSync(jsonlPath);
+
+      if (allEntries.length === 0) return undefined;
+
+      // Extract messages from transcript entries
+      const messages = entriesToMessages(allEntries);
+
+      // Extract metadata from non-transcript entries (last-wins)
+      let title: string | null = null;
+      const subAgentIds: string[] = [];
+      const filesModified: string[] = [];
+      const toolsUsed: string[] = [];
+
+      for (const entry of allEntries) {
+        if (entry.type === 'title') {
+          title = (entry as { title: string }).title;
+        } else if (entry.type === 'agent-metadata') {
+          const am = entry as { agentId: string };
+          if (!subAgentIds.includes(am.agentId)) {
+            subAgentIds.push(am.agentId);
+          }
+        }
+      }
+
+      const now = new Date();
+
+      // Track the last entry's uuid for parentUuid chaining
+      let lastUuid: string | null = null;
+      for (let i = allEntries.length - 1; i >= 0; i--) {
+        const e = allEntries[i]!;
+        if (isTranscriptEntry(e)) {
+          lastUuid = e.uuid;
+          break;
+        }
+      }
+
+      const session: Session = {
+        id,
+        title: title ?? `Session ${id.slice(0, 8)}`,
+        status: 'active',
+        messages,
+        turnCount: messages.filter((m) => m.role === 'assistant').length,
+        totalCost: 0,
+        createdAt: now,
+        updatedAt: now,
+        cwd: process.cwd(),
+        model: 'unknown',
+        provider: 'anthropic',
+        tokenUsage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          totalTokens: 0,
+        },
+        metadata: {
+          filesModified,
+          toolsUsed,
+          tags: [],
+          subAgentIds: subAgentIds.length > 0 ? subAgentIds : undefined,
+        },
+      };
+
+      (session as any)._lastEntryUuid = lastUuid;
+      (session as any)._entryCount = allEntries.length;
+
+      return session;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Load session from legacy session.json format.
+   * This is a fallback — normally migration handles this.
+   */
+  private loadFromLegacy(id: string, dir: string): Session | undefined {
+    const legacyPath = join(dir, 'session.json');
+    if (!existsSync(legacyPath)) return undefined;
 
     try {
-      const raw = readFileSync(path, 'utf-8');
+      const raw = readFileSync(legacyPath, 'utf-8');
       const data = JSON.parse(raw);
 
-      // Convert date strings back to Date objects
       return {
         ...data,
         createdAt: new Date(data.createdAt),

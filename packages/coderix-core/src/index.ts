@@ -15,6 +15,22 @@ export { PermissionEngine } from './core/permission.js';
 export { SystemPromptAssembler } from './core/system-prompt.js';
 export type { SystemPrompt } from './core/system-prompt.js';
 export { SessionManager } from './core/session.js';
+export {
+  sessionDir,
+  sessionJsonlPath,
+  subAgentJsonlPath,
+  appendEntry,
+  appendEntrySync,
+  readEntries,
+  readEntriesSync,
+  rewriteEntries,
+  entriesToMessages,
+  readTailMetadata,
+  createEntryBatcher,
+  migrateLegacySession,
+  needsMigration,
+} from './core/session-store.js';
+export type { EntryBatcher } from './core/session-store.js';
 export { CheckpointManager } from './core/checkpoint.js';
 export { SubAgentRegistry } from './core/subagent-registry.js';
 export type { SubAgentRecord } from './core/subagent-registry.js';
@@ -40,13 +56,17 @@ export type {
   AgentSpawnContext, ToolContext, ToolDefinition, ToolExecutionResult,
   Session, SessionSummary, SessionFilter, SessionStatus, SessionMetadata,
   TokenUsageSummary, SettingSource, AgentToolFilter,
+  SessionEntry, TranscriptEntry, JsonlEntryBase, JsonlEntryType,
+  UserEntry, AssistantEntry, SystemEntry,
+  TitleEntry, AgentMetadataEntry, SummaryEntry,
+  isTranscriptEntry,
 } from './core/types.js';
 export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types.js';
 
 // ── Agents ─────────────────────────────────────────────────────────
 export { buildAgentRegistry } from './agents/registry.js';
 export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';
-export { readAgentMetadata, getAgentTranscript, saveAgentTranscript, writeAgentMetadata } from './agents/agent-persistence.js';
+export { readAgentMetadata, getAgentTranscript, getAgentTranscriptSync, saveAgentTranscript, writeAgentMetadata } from './agents/agent-persistence.js';
 export type { AgentMetadata } from './agents/agent-persistence.js';
 
 // ── Skills ─────────────────────────────────────────────────────────

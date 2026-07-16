@@ -112,6 +112,13 @@ export interface CompletionBoundary {
   stopReason: string;
 }
 
+export interface SubagentBoundaryBlock {
+  type: 'subagent_boundary';
+  agentId: string;
+  agentType: string;
+  boundary: 'start' | 'end';
+}
+
 /**
  * All ContentBlock variants.  Each block drives its own renderer.
  * New block types can be added without changing existing renderers.
@@ -126,7 +133,8 @@ export type ContentBlock =
   | SubagentBlock
   | CompactionBoundary
   | SpeculationBlock
-  | CompletionBoundary;
+  | CompletionBoundary
+  | SubagentBoundaryBlock;
 
 // ── Message ─────────────────────────────────────────────────────────
 

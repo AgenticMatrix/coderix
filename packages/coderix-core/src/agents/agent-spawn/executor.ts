@@ -35,6 +35,7 @@ import {
   getAgentTranscript,
   saveAgentTranscript,
 } from '../agent-persistence.js';
+import { sessionDir as getSessionDir } from '../../core/session-store.js';
 
 const DEFAULT_MAX_TURNS = 200;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -526,6 +527,8 @@ async function executeStandardSubagent(
   let worktreeHeadCommit: string | undefined;
   let worktreeHookBased: boolean | undefined;
   const effectiveCwd = options.cwd ?? process.cwd();
+  const parentSessionId = agentSpawn.sessionManager.getActive()?.id;
+  const parentSessionDir = parentSessionId ? getSessionDir(parentSessionId) : undefined;
 
   const effectiveIsolation = isolation ?? agentDef.isolation;
   if (effectiveIsolation === 'worktree') {
@@ -648,8 +651,8 @@ async function executeStandardSubagent(
         writeAgentMetadata(agentId, {
           agentType, worktreePath, description: prompt, displayDescription: description,
           model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-        }).catch(() => {});
-        saveAgentTranscript(agentId, result.transcript).catch(() => {});
+        }, parentSessionDir).catch(() => {});
+        saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
 
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
@@ -716,8 +719,8 @@ async function executeStandardSubagent(
   writeAgentMetadata(agentId, {
     agentType, worktreePath, description: prompt, displayDescription: description,
     model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-  }).catch(() => {});
-  saveAgentTranscript(agentId, result.transcript).catch(() => {});
+  }, parentSessionDir).catch(() => {});
+  saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
 
   if (result.error) {
     return {
@@ -835,6 +838,8 @@ async function executeFork(
   const effectiveMaxTurns = 200;  // Fork agents get generous turn budget
   const effectiveContextBudget = DEFAULT_CONTEXT_BUDGET;
   const cwd = worktreePath ?? process.cwd();
+  const forkSessionId = agentSpawn.sessionManager.getActive()?.id;
+  const forkSessionDir = forkSessionId ? getSessionDir(forkSessionId) : undefined;
 
   // Build cache-identical fork messages for prompt cache sharing
   const initialMessages: Message[] = buildForkedMessages(prompt, parentMessages);
@@ -917,8 +922,8 @@ async function executeFork(
         writeAgentMetadata(agentId, {
           agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
           model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-        }).catch(() => {});
-        saveAgentTranscript(agentId, result.transcript).catch(() => {});
+        }, forkSessionDir).catch(() => {});
+        saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
 
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
@@ -980,8 +985,8 @@ async function executeFork(
   writeAgentMetadata(agentId, {
     agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
     model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-  }).catch(() => {});
-  saveAgentTranscript(agentId, result.transcript).catch(() => {});
+  }, forkSessionDir).catch(() => {});
+  saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
 
   if (result.error) {
     return {
@@ -1022,13 +1027,16 @@ async function executeResume(
   agentSpawn: AgentSpawnContext,
   options: { cwd?: string; sessionId?: string },
 ): Promise<ToolResult> {
+  const resumeSessionId = agentSpawn.sessionManager.getActive()?.id;
+  const resumeSessionDir = resumeSessionId ? getSessionDir(resumeSessionId) : undefined;
+
   // ── Look up agent in registry ────────────────────────────────────────
   let agent = agentSpawn.subAgentRegistry.get(agentId);
 
   // ── Fallback: try loading from disk (cross-session resume) ──────────
   if (!agent) {
-    const meta = await readAgentMetadata(agentId);
-    const transcript = await getAgentTranscript(agentId);
+    const meta = await readAgentMetadata(agentId, resumeSessionDir);
+    const transcript = await getAgentTranscript(agentId, resumeSessionDir);
 
     if (!meta || !transcript) {
       return {
@@ -1180,11 +1188,11 @@ async function executeResume(
   });
 
   // Persist updated transcript to disk
-  saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
+  saveAgentTranscript(agentId, cumulativeTranscript, resumeSessionDir).catch(() => {});
   writeAgentMetadata(agentId, {
     agentType, worktreePath: undefined, description: agent.prompt, displayDescription: agent.description,
     createdAt: agent.createdAt, finishedAt: Date.now(),
-  }).catch(() => {});
+  }, resumeSessionDir).catch(() => {});
 
   if (result.error) {
     return {

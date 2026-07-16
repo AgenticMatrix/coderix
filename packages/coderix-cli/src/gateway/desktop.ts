@@ -444,20 +444,18 @@ export async function startDesktopGateway(
                   if (!session) return;
                   currentSessionId = id;
                   const msgs = session.messages
-                    .map((m: any) => {
-                      let text = '';
-                      if (typeof m.content === 'string') text = m.content;
-                      else if (Array.isArray(m.content))
-                        text = m.content
-                          .filter((b: any) => b.type === 'text')
-                          .map((b: any) => b.text ?? '')
-                          .join('\n');
-                      return { role: m.role, text };
-                    })
-                    .filter((m: any) => m.text.length > 0);
+                    .map((m: any) => ({
+                      role: m.role,
+                      content: m.content,
+                    }))
+                    .filter((m: any) => {
+                      if (typeof m.content === 'string') return m.content.length > 0;
+                      if (Array.isArray(m.content)) return m.content.length > 0;
+                      return false;
+                    });
                   msgs.push({
                     role: 'system',
-                    text: `Resumed session: ${session.title}`,
+                    content: `Resumed session: ${session.title}`,
                   });
                   ws.send(
                     makeEvent({
@@ -655,17 +653,15 @@ export async function startDesktopGateway(
           if (s) {
             currentSessionId = id;
             const messages = s.messages
-              .map((m: any) => {
-                let text = '';
-                if (typeof m.content === 'string') text = m.content;
-                else if (Array.isArray(m.content))
-                  text = m.content
-                    .filter((b: any) => b.type === 'text')
-                    .map((b: any) => b.text ?? '')
-                    .join('\n');
-                return { role: m.role, text };
-              })
-              .filter((m: any) => m.text.length > 0);
+              .map((m: any) => ({
+                role: m.role,
+                content: m.content,
+              }))
+              .filter((m: any) => {
+                if (typeof m.content === 'string') return m.content.length > 0;
+                if (Array.isArray(m.content)) return m.content.length > 0;
+                return false;
+              });
             ws.send(
               makeResponse(req.id, {
                 sessionId: id,

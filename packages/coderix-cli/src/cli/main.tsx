@@ -202,16 +202,24 @@ function printSessionTable(sessions: Array<{ id: string; title: string; turnCoun
 
 // ── Sub-agent restore ────────────────────────────────────────────────
 
+interface RestoredAgent {
+  agentId: string;
+  agentType: string;
+  messages: any[];
+}
+
 async function restoreSubAgents(
   subAgentIds: string[],
   subAgentRegistry: any,
-): Promise<void> {
+  sessionDir?: string,
+): Promise<RestoredAgent[]> {
   const { readAgentMetadata, getAgentTranscript } = await import('@coderix/core');
+  const restored: RestoredAgent[] = [];
   for (const agentId of subAgentIds) {
     try {
-      const meta = await readAgentMetadata(agentId);
+      const meta = await readAgentMetadata(agentId, sessionDir);
       if (!meta) continue;
-      const transcript = await getAgentTranscript(agentId);
+      const transcript = await getAgentTranscript(agentId, sessionDir);
       subAgentRegistry.register({
         id: agentId,
         name: `${meta.agentType}-${agentId.slice(0, 8)}`,
@@ -228,10 +236,18 @@ async function restoreSubAgents(
         notified: true,
         transcript: transcript ?? [],
       });
+      if (transcript && transcript.length > 0) {
+        restored.push({
+          agentId,
+          agentType: meta.agentType,
+          messages: transcript,
+        });
+      }
     } catch {
       // Agent data missing or corrupted — skip
     }
   }
+  return restored;
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -378,7 +394,52 @@ async function main(): Promise<void> {
   // Restore sub-agents from disk for resumed sessions
   const activeSession = sm.getActive();
   if (activeSession?.metadata.subAgentIds?.length) {
-    await restoreSubAgents(activeSession.metadata.subAgentIds, subAgentRegistry);
+    const { sessionDir: getSessionDir } = await import('@coderix/core');
+    const sDir = getSessionDir(activeSession.id);
+    const restoredAgents = await restoreSubAgents(activeSession.metadata.subAgentIds, subAgentRegistry, sDir);
+
+    // Inject sub-agent transcripts into the main conversation view
+    if (restoredAgents.length > 0 && initialMessages) {
+      const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
+      const enriched: any[] = [];
+      for (const msg of initialMessages) {
+        enriched.push(msg);
+      }
+      for (const agent of restoredAgents) {
+        // Start boundary marker
+        enriched.push({
+          id: Date.now() + Math.random(),
+          role: 'system' as const,
+          content: `--- Sub-agent: ${agent.agentType} (${agent.agentId.slice(0, 8)}) ---`,
+          blocks: [{
+            type: 'subagent_boundary',
+            agentId: agent.agentId,
+            agentType: agent.agentType,
+            boundary: 'start',
+          }],
+          timestamp: Date.now(),
+        });
+        // Agent messages
+        const converted = convert(agent.messages);
+        for (const am of converted) {
+          enriched.push(am);
+        }
+        // End boundary marker
+        enriched.push({
+          id: Date.now() + Math.random(),
+          role: 'system' as const,
+          content: `--- End sub-agent: ${agent.agentType} ---`,
+          blocks: [{
+            type: 'subagent_boundary',
+            agentId: agent.agentId,
+            agentType: agent.agentType,
+            boundary: 'end',
+          }],
+          timestamp: Date.now(),
+        });
+      }
+      initialMessages = enriched;
+    }
   }
 
   const settings = loadSettings();

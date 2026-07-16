@@ -481,3 +481,71 @@ export interface Session {
   tokenUsage: TokenUsageSummary;
   metadata: SessionMetadata;
 }
+
+// ── JSONL Entry types (append-only session storage) ────────────────────
+
+export type JsonlEntryType =
+  | 'user'
+  | 'assistant'
+  | 'system'
+  | 'title'
+  | 'agent-metadata'
+  | 'summary';
+
+export interface JsonlEntryBase {
+  type: JsonlEntryType;
+  uuid: string;
+  parentUuid: string | null;
+  timestamp: number;
+}
+
+export interface UserEntry extends JsonlEntryBase {
+  type: 'user';
+  message: Message;
+}
+
+export interface AssistantEntry extends JsonlEntryBase {
+  type: 'assistant';
+  message: Message;
+}
+
+export interface SystemEntry extends JsonlEntryBase {
+  type: 'system';
+  message: Message;
+}
+
+export interface TitleEntry {
+  type: 'title';
+  title: string;
+}
+
+export interface AgentMetadataEntry {
+  type: 'agent-metadata';
+  agentId: string;
+  agentType: string;
+  prompt: string;
+  timestamp: number;
+  description?: string;
+  toolUseId?: string;
+  model?: string;
+}
+
+export interface SummaryEntry {
+  type: 'summary';
+  content: string;
+}
+
+export type SessionEntry =
+  | UserEntry
+  | AssistantEntry
+  | SystemEntry
+  | TitleEntry
+  | AgentMetadataEntry
+  | SummaryEntry;
+
+/** Transcript message entries only — those that form the parentUuid chain. */
+export type TranscriptEntry = UserEntry | AssistantEntry | SystemEntry;
+
+export function isTranscriptEntry(entry: SessionEntry): entry is TranscriptEntry {
+  return entry.type === 'user' || entry.type === 'assistant' || entry.type === 'system';
+}
