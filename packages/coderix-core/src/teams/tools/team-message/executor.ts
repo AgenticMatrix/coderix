@@ -98,13 +98,72 @@ function trimTranscriptForResume(messages: Message[]): Message[] {
 async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolResult> {
   const teamName = input.team_name as string;
   const to = input.to as string;
-  const text = input.text as string;
+  const text = input.text as string | undefined;
   const from = (input.from as string) || 'coordinator';
+  const messageType = input.message_type as string | undefined;
 
   const config = await loadTeamConfig(teamName);
   if (!config) {
     return {
       content: `Team '${teamName}' not found. Use TeamCreate to create it first.`,
+      isError: true,
+    };
+  }
+
+  // --- Structured message support ---
+
+  // Shutdown request
+  if (messageType === 'shutdown_request') {
+    const { sendShutdownRequestToMailbox } = await import(
+      '../../../utils/swarm/teammateMailbox.js'
+    );
+    const reason = (input.reason as string) || undefined;
+    const result = await sendShutdownRequestToMailbox(to, teamName, reason);
+    return {
+      content: `Shutdown request sent to '${to}' in team '${teamName}' (requestId: ${result.requestId}).`,
+      isError: false,
+      metadata: { teamName, to, messageType, requestId: result.requestId },
+    };
+  }
+
+  // Shutdown response (approve/reject)
+  if (messageType === 'shutdown_response') {
+    const approve = input.approve as boolean;
+    const reason = input.reason as string | undefined;
+    const { createShutdownApprovedMessage, createShutdownRejectedMessage, writeToMailbox } =
+      await import('../../../utils/swarm/teammateMailbox.js');
+
+    const msg = approve
+      ? createShutdownApprovedMessage({
+          requestId: (input.request_id as string) || 'unknown',
+          from: from,
+        })
+      : createShutdownRejectedMessage({
+          requestId: (input.request_id as string) || 'unknown',
+          from: from,
+          reason: reason || 'Rejected by user',
+        });
+
+    await writeToMailbox(to, {
+      from,
+      text: JSON.stringify(msg),
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      content: approve
+        ? `Shutdown approved for '${to}' in team '${teamName}'.`
+        : `Shutdown rejected for '${to}' in team '${teamName}'. Reason: ${reason || 'unspecified'}`,
+      isError: false,
+      metadata: { teamName, to, messageType, approved: approve },
+    };
+  }
+
+  // --- Plain text messaging ---
+
+  if (!text) {
+    return {
+      content: 'Message text is required for plain text messages. Use message_type for structured messages.',
       isError: true,
     };
   }

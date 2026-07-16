@@ -12,7 +12,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { TeammateExecutor, TeammateSpawnConfig, TeammateSpawnResult, BackendType, BackendInfo } from './types.js';
-import { sendToMailbox, deleteMailbox } from '../teammateMailbox.js';
+import { writeToMailbox, clearMailbox } from '../teammateMailbox.js';
 import { addMemberToTeam, updateMemberInTeam } from '../teamHelpers.js';
 import type { AgentSpawnContext } from '../../../core/types.js';
 
@@ -80,13 +80,12 @@ export class InProcessBackend implements TeammateExecutor {
     });
 
     // Send initial task to teammate's mailbox
-    sendToMailbox(config.teamName, config.agentName, {
+    await writeToMailbox(config.agentName, {
       from: 'lead',
-      to: config.agentName,
       text: config.prompt,
-      type: 'task_assignment',
+      timestamp: new Date().toISOString(),
       summary: config.prompt.slice(0, 80),
-    });
+    }, config.teamName);
 
     // If we have agentSpawn, register in the registry for TUI visibility
     if (this.agentSpawn) {
@@ -117,12 +116,12 @@ export class InProcessBackend implements TeammateExecutor {
     const teammate = this.activeTeammates.get(agentId);
     if (!teammate) return;
 
-    sendToMailbox(teammate.ctx.teamName, teammate.ctx.agentName, {
+    await writeToMailbox(teammate.ctx.agentName, {
       from: 'lead',
-      to: teammate.ctx.agentName,
       text: message,
+      timestamp: new Date().toISOString(),
       summary: message.slice(0, 80),
-    });
+    }, teammate.ctx.teamName);
   }
 
   async terminate(agentId: string): Promise<void> {
@@ -130,12 +129,11 @@ export class InProcessBackend implements TeammateExecutor {
     if (!teammate) return;
 
     // Send shutdown request via mailbox
-    sendToMailbox(teammate.ctx.teamName, teammate.ctx.agentName, {
+    await writeToMailbox(teammate.ctx.agentName, {
       from: 'lead',
-      to: teammate.ctx.agentName,
       text: JSON.stringify({ type: 'shutdown_request' }),
-      type: 'shutdown_request',
-    });
+      timestamp: new Date().toISOString(),
+    }, teammate.ctx.teamName);
   }
 
   async kill(agentId: string): Promise<void> {
@@ -147,7 +145,7 @@ export class InProcessBackend implements TeammateExecutor {
 
     // Clean up mailbox
     try {
-      deleteMailbox(teammate.ctx.teamName, teammate.ctx.agentName);
+      await clearMailbox(teammate.ctx.agentName, teammate.ctx.teamName);
     } catch {
       // Non-fatal
     }

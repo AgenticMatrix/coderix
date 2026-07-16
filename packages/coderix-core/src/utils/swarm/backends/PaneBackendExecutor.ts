@@ -11,7 +11,7 @@
 import type { PaneBackend, PaneCreateResult } from './types.js';
 import type { TeammateExecutor, TeammateSpawnConfig, TeammateSpawnResult, BackendType, BackendInfo } from './types.js';
 import { addMemberToTeam, updateMemberInTeam, type SwarmTeamMember } from '../teamHelpers.js';
-import { sendToMailbox, deleteMailbox } from '../teammateMailbox.js';
+import { writeToMailbox, clearMailbox } from '../teammateMailbox.js';
 import { getBinaryPath, buildForwardEnv, buildTeammateCliArgs } from '../spawnUtils.js';
 import { PANE_INIT_DELAY } from '../constants.js';
 
@@ -20,6 +20,8 @@ interface PaneTeammate {
   paneId: string;
   windowTarget: string;
   insideCurrentSession: boolean;
+  agentName: string;
+  teamName: string;
 }
 
 export class PaneBackendExecutor implements TeammateExecutor {
@@ -50,6 +52,8 @@ export class PaneBackendExecutor implements TeammateExecutor {
       paneId: result.paneId,
       windowTarget: result.windowTarget,
       insideCurrentSession: result.insideCurrentSession,
+      agentName: config.agentName,
+      teamName: config.teamName,
     });
 
     // 2. Build the spawn command
@@ -99,13 +103,12 @@ export class PaneBackendExecutor implements TeammateExecutor {
     await addMemberToTeam(config.teamName, member);
 
     // 5. Send initial prompt to teammate's mailbox
-    sendToMailbox(config.teamName, config.agentName, {
+    await writeToMailbox(config.agentName, {
       from: 'lead',
-      to: config.agentName,
       text: config.prompt,
-      type: 'task_assignment',
+      timestamp: new Date().toISOString(),
       summary: config.prompt.slice(0, 80),
-    });
+    }, config.teamName);
 
     // 6. Register cleanup on process exit
     this.registerCleanup(config.agentId);
@@ -122,29 +125,22 @@ export class PaneBackendExecutor implements TeammateExecutor {
     const tm8 = this.spawnedTeammates.get(agentId);
     if (!tm8) return;
 
-    // For pane backends, write to mailbox (same as in-process)
-    // The teammate's inbox poller will pick it up
-    // We also need the team name — stored in team file
-    sendToMailbox('', '', {
+    await writeToMailbox(tm8.agentName, {
       from: 'lead',
-      to: '',
       text: message,
-    });
-    // Note: team name resolution happens through the team file
+      timestamp: new Date().toISOString(),
+    }, tm8.teamName);
   }
 
   async terminate(agentId: string): Promise<void> {
-    // Send shutdown request via mailbox
     const tm8 = this.spawnedTeammates.get(agentId);
     if (!tm8) return;
 
-    // Write shutdown protocol message
-    sendToMailbox('', '', {
+    await writeToMailbox(tm8.agentName, {
       from: 'lead',
-      to: '',
       text: JSON.stringify({ type: 'shutdown_request' }),
-      type: 'shutdown_request',
-    });
+      timestamp: new Date().toISOString(),
+    }, tm8.teamName);
   }
 
   async kill(agentId: string): Promise<void> {

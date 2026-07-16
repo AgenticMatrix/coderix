@@ -25,3 +25,20 @@ export const MAX_MAILBOX_MESSAGES = 500;
 
 /** Teammate spawn — delay after pane creation for shell init (ms). */
 export const PANE_INIT_DELAY = 200;
+
+/** tmux command name. */
+export const TMUX_COMMAND = 'tmux';
+
+/** Environment variable for overriding the teammate spawn command. */
+export const TEAMMATE_COMMAND_ENV_VAR = 'CODERIX_TEAMMATE_COMMAND';
+
+/** Environment variable for teammate display color. */
+export const TEAMMATE_COLOR_ENV_VAR = 'CODERIX_AGENT_COLOR';
+
+/** Environment variable to force plan mode on teammates. */
+export const PLAN_MODE_REQUIRED_ENV_VAR = 'CODERIX_PLAN_MODE_REQUIRED';
+
+/** Generate a PID-isolated swarm socket name to prevent tmux conflicts. */
+export function getSwarmSocketName(): string {
+  return `coderix-swarm-socket-${process.pid}`;
+}

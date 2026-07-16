@@ -7,9 +7,9 @@ export const schema: ToolSchema = {
   input_schema: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'Team name to delete' },
+      team_name: { type: 'string', description: 'Team name to delete' },
     },
-    required: ['name'],
+    required: ['team_name'],
   },
   _meta: { riskLevel: 'destructive' },
 };
