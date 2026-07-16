@@ -163,13 +163,13 @@ export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inp
       {error ? (
         <Text color="ansi:red">⚠ {error}</Text>
       ) : isFrozen ? (
-        <Text color="ansi:yellow">⏸ Paused</Text>
+        <Text color="ansi:yellow">⏸ paused</Text>
       ) : statusPhase === 'busy' ? (
-        <Text color="ansi:red">◉ Busy</Text>
+        <Text color="ansi:red">◉ busy</Text>
       ) : statusPhase === 'wait' ? (
-        <Text color="ansi:yellow">◎ Wait</Text>
+        <Text color="ansi:yellow">◎ wait</Text>
       ) : (
-        <Text color="ansi:green">○ Idle</Text>
+        <Text color="ansi:green">○ idle</Text>
       )}
 
       <Sep />
@@ -204,32 +204,32 @@ export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inp
       <Sep />
 
       <Text>
-        <Text dimColor>Model: </Text>
+        <Text dimColor>model: </Text>
         <Text color="ansi:magenta" bold>{model}</Text>
       </Text>
 
       <Sep />
 
       <Text>
-        <Text dimColor>Mem </Text>
+        <Text dimColor>mem </Text>
         <Text color="ansi:cyan">{formatMemory(processMemory)}</Text>
       </Text>
 
       <Sep />
 
       <Text>
-        <Text dimColor>Procs </Text>
+        <Text dimColor>procs </Text>
         <Text color="ansi:cyan">{processCount}</Text>
       </Text>
 
       <Sep />
 
       {exitHint ? (
-        <Text color="ansi:yellow">Press Ctrl+C again to exit</Text>
+        <Text color="ansi:yellow">Press ctrl+C again to exit</Text>
       ) : statusPhase === 'idle' ? (
-        <Text dimColor>Ctrl+C to exit</Text>
+        <Text dimColor>ctrl+C to exit</Text>
       ) : (
-        <Text dimColor>Ctrl+C to interrupt</Text>
+        <Text dimColor>ctrl+C to interrupt</Text>
       )}
     </Box>
   );
