@@ -197,7 +197,7 @@ export function useAgentLoop({ config, getMessagesSnapshot, dispatch }: AgentLoo
                    tr.toolName !== 'glob' && tr.toolName !== 'grep' &&
                    tr.toolName !== 'WebSearch' && tr.toolName !== 'WebFetch' &&
                    tr.toolName !== 'write' && tr.toolName !== 'update' &&
-                   tr.toolName !== 'SendMessage',
+                   tr.toolName !== 'SendMessage' && tr.toolName !== 'Skill',
           );
           if (tuiBlocks.length > 0) {
             dispatch({
