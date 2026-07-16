@@ -152,7 +152,7 @@ export class SystemPromptAssembler {
    * Priority 5 — Static behavioral rules applied to all non-worker agents.
    */
   private buildSystemRules(role: string): PromptPart | null {
-    if (role === 'worker') return null;
+    if (role === 'worker' || role === 'coordinator') return null;
 
     const rules = [
       '# System',
@@ -234,7 +234,7 @@ export class SystemPromptAssembler {
    * Priority 10 — Tool usage instructions.
    */
   private buildToolUsage(role: string): PromptPart | null {
-    if (role === 'worker') return null;
+    if (role === 'worker' || role === 'coordinator') return null;
 
     const tools = [
       '# Using your tools',
@@ -289,7 +289,7 @@ export class SystemPromptAssembler {
    * Priority 12 — Agent delegation strategy.
    */
   private buildAgentGuidance(role: string): PromptPart | null {
-    if (role === 'worker') return null;
+    if (role === 'worker' || role === 'coordinator') return null;
 
     const content = [
       '# Agent delegation strategy',
@@ -319,6 +319,7 @@ export class SystemPromptAssembler {
    * Priority 15 — Communication style guidance.
    */
   private buildCommunication(role: string): PromptPart | null {
+    if (role === 'coordinator') return null;
     if (role === 'worker') {
       // Workers get a terse version
       const content = [
@@ -511,7 +512,7 @@ export class SystemPromptAssembler {
    * The full skill body is loaded when the agent invokes the Skill tool.
    */
   private buildSkills(role: string): PromptPart | null {
-    if (role === 'worker') return null;
+    if (role === 'worker' || role === 'coordinator') return null;
 
     const registry = getSkillRegistry();
     if (registry.count === 0) {
@@ -753,17 +754,22 @@ export class SystemPromptAssembler {
       '',
       '## Tool Usage',
       '',
+      'You have access to these tools only:',
+      '',
       '- Agent: Spawn workers (explore, plan, general-purpose). Provide team_name + name',
       '  to spawn as a swarm teammate in a visual pane.',
       '- SendMessage: Continue an existing worker with follow-up instructions. The worker',
       '  retains its full previous context. Use this for corrections, follow-up questions,',
       '  or extending completed work.',
-      '- TeamCreate / TeamDelete: Manage persistent teams for recurring collaboration patterns.',
-      '- TaskCreate / TaskList / TaskGet / TaskUpdate: Track your own progress.',
+      '- TaskGet: Check the status and results of a worker by its task ID.',
       '- TaskStop: Cancel a misbehaving worker. Stopped workers can still be continued',
       '  via SendMessage with corrected instructions.',
+      '- TeamCreate / TeamDelete: Manage persistent teams for recurring collaboration patterns.',
       '- Sleep: Wait for background workers when you have nothing else to process. Do NOT',
       '  use Sleep just to delay — only when workers are running and you need to wait.',
+      '',
+      'You do NOT have Read, Write, Edit, Bash, Glob, Grep, or other filesystem tools.',
+      'Delegate all file operations and code changes to workers.',
       '',
       '### Continue vs. Spawn Fresh',
       '',

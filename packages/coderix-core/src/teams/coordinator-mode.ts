@@ -1,7 +1,7 @@
 /**
  * Coordinator mode — activation and system context.
  *
- * When coordinator_mode is enabled (via settings or CODER_COORDINATOR env var),
+ * When coordinator_mode is enabled (via settings or CODERIX_COORDINATOR env var),
  * the agent uses the 'coordinator' system prompt role, which includes delegation
  * instructions and the agent registry.
  */
@@ -16,8 +16,8 @@ import type { TeamConfig } from './types.js';
 // ---------------------------------------------------------------------------
 
 export function isCoordinatorModeEnabled(settings?: CoderSettings): boolean {
-  if (process.env.CODER_COORDINATOR === 'true') return true;
-  if (process.env.CODER_COORDINATOR === '1') return true;
+  if (process.env.CODERIX_COORDINATOR === 'true') return true;
+  if (process.env.CODERIX_COORDINATOR === '1') return true;
   if (settings?.coordinator_mode === true) return true;
   return false;
 }
