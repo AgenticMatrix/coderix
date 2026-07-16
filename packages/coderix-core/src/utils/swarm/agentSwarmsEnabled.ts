@@ -1,7 +1,9 @@
 /**
  * Centralized runtime feature gate for agent teams / teammate features.
  *
- * Enabled by default. Can be disabled via:
+ * Enabled by default. Can be explicitly enabled via:
+ *   CODERIX_EXPERIMENTAL_AGENT_TEAMS=1
+ * Can be disabled via:
  *   CODERIX_EXPERIMENTAL_AGENT_TEAMS_DISABLED=1
  */
 

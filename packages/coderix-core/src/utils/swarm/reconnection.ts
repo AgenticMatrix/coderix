@@ -20,6 +20,7 @@ export interface TeamContextState {
     name: string;
     agentType?: string;
     color?: string;
+    status?: 'running' | 'idle' | 'done' | 'stopped' | 'error';
     tmuxSessionName?: string;
     tmuxPaneId?: string;
     cwd?: string;
@@ -41,7 +42,7 @@ export async function computeInitialTeamContext(): Promise<TeamContextState | un
   if (!teamFile) return undefined;
 
   const teamFilePath = join(teamDir(teamName), 'config.json');
-  const filed = teamFile as Record<string, unknown>;
+  const filed = teamFile as unknown as Record<string, unknown>;
   const isLeader = !agentId;
 
   return {
@@ -66,7 +67,7 @@ export async function initializeTeammateContextFromSession(
   const teamFile = await loadTeamFile(teamName);
   if (!teamFile) return undefined;
 
-  const filed = teamFile as Record<string, unknown>;
+  const filed = teamFile as unknown as Record<string, unknown>;
   const members = filed.members as Array<{ name: string; agentId: string }> | undefined;
   const member = members?.find(m => m.name === agentName);
   const agentId = member?.agentId;

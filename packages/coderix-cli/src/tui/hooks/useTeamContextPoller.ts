@@ -18,7 +18,8 @@ import {
   isPermissionRequest,
   isShutdownRequest,
 } from '@coderix/core';
-import type { TeamContextState, ChatAction } from '../../types.js';
+import type { TeamContextState } from '@coderix/core';
+import type { ChatAction } from '../../types.js';
 import type { AppState } from '../../state/AppState.js';
 
 const POLL_INTERVAL_MS = 500;
@@ -49,12 +50,12 @@ export function useTeamContextPoller({
     async function poll() {
       if (!active) return;
       const ctx = teamContextRef.current;
-      if (!ctx.isLeader) return;
+      if (!ctx?.isLeader) return;
 
       try {
         // The leader's agent name is their selfAgentName (or 'lead')
-        const leaderName = ctx.selfAgentName || 'lead';
-        const unread = await readUnreadMessages(leaderName, ctx.teamName);
+        const leaderName = ctx!.selfAgentName || 'lead';
+        const unread = await readUnreadMessages(leaderName, ctx!.teamName);
 
         if (unread.length === 0) return;
 
@@ -64,10 +65,11 @@ export function useTeamContextPoller({
           // Idle notification from a worker
           const idleNotif = isIdleNotification(text);
           if (idleNotif) {
-            const teammates = { ...ctx.teammates };
-            if (teammates[idleNotif.agentId]) {
-              teammates[idleNotif.agentId] = {
-                ...teammates[idleNotif.agentId]!,
+            const workerName = idleNotif.from;
+            const teammates = { ...ctx!.teammates };
+            if (teammates[workerName]) {
+              teammates[workerName] = {
+                ...teammates[workerName]!,
                 status: 'idle',
               };
               setAppState({
@@ -85,7 +87,7 @@ export function useTeamContextPoller({
                 requestId: permReq.request_id,
                 workerName: msg.from,
                 workerId: permReq.agent_id,
-                teamName: ctx.teamName,
+                teamName: ctx!.teamName,
                 toolName: permReq.tool_name,
                 toolUseId: permReq.tool_use_id,
                 description: permReq.description,
@@ -99,10 +101,11 @@ export function useTeamContextPoller({
           // Shutdown request — auto-approve for now
           const shutdownReq = isShutdownRequest(text);
           if (shutdownReq) {
-            const teammates = { ...ctx.teammates };
-            if (teammates[shutdownReq.agentId]) {
-              teammates[shutdownReq.agentId] = {
-                ...teammates[shutdownReq.agentId]!,
+            const workerName = shutdownReq.from;
+            const teammates = { ...ctx!.teammates };
+            if (teammates[workerName]) {
+              teammates[workerName] = {
+                ...teammates[workerName]!,
                 status: 'stopped',
               };
               setAppState({
@@ -128,7 +131,7 @@ export function useTeamContextPoller({
         }
 
         // Mark all as read
-        await markMessagesAsRead(leaderName, ctx.teamName);
+        await markMessagesAsRead(leaderName, ctx!.teamName);
       } catch {
         // Silently ignore poll errors (team may have been deleted)
       }

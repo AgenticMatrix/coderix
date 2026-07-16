@@ -34,17 +34,17 @@ export async function initializeTeammateHooks(
   const teamFile = await loadTeamFile(teamName);
   if (!teamFile) return;
 
-  const leadAgentId = (teamFile as Record<string, unknown>).leadAgentId as string | undefined;
+  const leadAgentId = (teamFile as unknown as Record<string, unknown>).leadAgentId as string | undefined;
   if (!leadAgentId) return;
 
   // Apply team-wide allowed paths
-  const teamAllowedPaths = (teamFile as Record<string, unknown>).teamAllowedPaths as
+  const teamAllowedPaths = (teamFile as unknown as Record<string, unknown>).teamAllowedPaths as
     | Array<{ path: string; toolName: string }>
     | undefined;
   // Path permissions applied by the CLI layer
 
   // Find leader name from members
-  const members = (teamFile as Record<string, unknown>).members as
+  const members = (teamFile as unknown as Record<string, unknown>).members as
     | Array<{ agentId: string; name: string }>
     | undefined;
   const leadMember = members?.find(m => m.agentId === leadAgentId);
