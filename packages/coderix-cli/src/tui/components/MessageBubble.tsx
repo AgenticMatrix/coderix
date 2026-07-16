@@ -348,7 +348,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
   if (isToolResultOnly) {
     const filteredBlocks = message.blocks.filter(block => {
       const name = (block as ToolResultBlock).toolName;
-      if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet') return false;
+      if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet' || name === 'Sleep') return false;
       return true;
     });
     if (filteredBlocks.length === 0) return null;
@@ -378,7 +378,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
                 if (block.type === 'thinking' && hideThinking) return false;
                 if (block.type === 'tool_use' || block.type === 'tool_result') {
                   const name = (block as ToolUseBlock | ToolResultBlock).toolName;
-                  if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet') return false;
+                  if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet' || name === 'Sleep') return false;
                 }
                 return true;
               });

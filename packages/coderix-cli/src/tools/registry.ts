@@ -37,6 +37,7 @@ import { ExitPlanModeResultRenderer } from './exit-plan-mode/result-renderer.js'
 import { NotebookEditRenderer } from './notebook-edit/renderer.js';
 import { AgentRenderer } from './agent/renderer.js';
 import { SendMessageRenderer } from './send-message/renderer.js';
+import { SleepRenderer, SleepResultRenderer } from './sleep/renderer.js';
 
 // ── Tool-result renderers ───────────────────────────────────────────────
 import { BashResultRenderer } from './bash/result-renderer.js';
@@ -94,6 +95,7 @@ useRendererByName.set('ExitPlanMode', ExitPlanModeRenderer);
 useRendererByName.set('NotebookEdit', NotebookEditRenderer);
 useRendererByName.set('Agent', AgentRenderer);
 useRendererByName.set('SendMessage', SendMessageRenderer);
+useRendererByName.set('Sleep', SleepRenderer);
 
 resultRendererByName.set('bash', BashResultRenderer);
 resultRendererByName.set('glob', GlobResultRenderer);
@@ -112,6 +114,7 @@ resultRendererByName.set('write', WriteResultRenderer);
 resultRendererByName.set('EnterPlanMode', EnterPlanModeResultRenderer);
 resultRendererByName.set('ExitPlanMode', ExitPlanModeResultRenderer);
 resultRendererByName.set('AskUserQuestion', AskUserQuestionResultRenderer);
+resultRendererByName.set('Sleep', SleepResultRenderer);
 
 // Generic fallback for known (executor-less) tool names
 for (const name of KNOWN_TOOL_NAMES) {

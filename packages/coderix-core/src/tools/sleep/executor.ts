@@ -2,7 +2,7 @@ import type { ToolExecutor } from '../types.js';
 
 export const execute: ToolExecutor = async (input, opts) => {
   const duration = Math.max(1, Math.min((input.duration as number) || 5, 300));
-  const reason = (input.reason as string) || 'waiting for background tasks';
+  const reason = (input.reason as string) || '';
   const ms = duration * 1000;
   const start = Date.now();
 
@@ -27,11 +27,17 @@ export const execute: ToolExecutor = async (input, opts) => {
   }
 
   const actualDuration = (Date.now() - start) / 1000;
+  const wokeEarly = actualDuration < duration * 0.9;
+
+  const reasonSuffix = reason ? ` ${reason}` : '';
+  const content = wokeEarly
+    ? `Slept for ${actualDuration.toFixed(1)}s. Reason: sub agent 已完成${reasonSuffix}`
+    : `Slept for ${actualDuration.toFixed(1)}s. Reason: ${duration}s 到时 sub agent 未完成${reasonSuffix}`;
 
   return {
-    content: `Slept for ${actualDuration.toFixed(1)}s. Reason: ${reason}${actualDuration < duration * 0.9 ? ' (woke early)' : ''}`,
+    content,
     isError: false,
     duration: Date.now() - start,
-    metadata: { reason, requestedDuration: duration, actualDuration },
+    metadata: { reason, requestedDuration: duration, actualDuration, wokeEarly },
   };
 };

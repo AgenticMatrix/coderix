@@ -13,7 +13,7 @@ export const schema: ToolSchema = {
       },
       reason: {
         type: 'string',
-        description: 'Optional reason for sleeping (e.g. "waiting for explore agent to finish")',
+        description: 'What the sub-agent is working on, e.g. "对 claude-code 项目的调研". Used to construct the status message shown to the user.',
       },
     },
     required: ['duration'],
