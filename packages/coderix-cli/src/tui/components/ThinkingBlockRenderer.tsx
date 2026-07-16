@@ -79,7 +79,7 @@ export interface ActivityLineProps {
   /** Cumulative output tokens this turn (main + sub-agents via EventBus). */
   turnOutputTokens: number;
   /** When set and phase is idle, shows a gray "Done" line to prevent UI jump. */
-  completed?: { elapsed: number; tokens: number; thinkingDuration?: number } | null;
+  completed?: { elapsed: number; tokens: number } | null;
 }
 
 /**
@@ -87,16 +87,13 @@ export interface ActivityLineProps {
  *   ✽ Thinking… (20s · ↓ 743 tokens)
  *   ✽ Executing… (53s · ↓ 898 tokens)
  *   ✽ Streaming… (25s · ↑ 1.2k tokens)
- *   ● Done… (↓ 2.2k tokens, thought for 10s)   ← gray, stays after completion
+ *   ● Done… (↓ 2.2k tokens, taken 2m 10s from last input)   ← gray, stays after completion
  */
 export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed }: ActivityLineProps) {
   if (phase === 'idle') {
     if (!completed) return null;
     const timeStr = formatTime(completed.elapsed);
     const tokenStr = formatTokens(completed.tokens);
-    const thoughtPart = completed.thinkingDuration
-      ? `, thought for ${formatTime(completed.thinkingDuration * 1000)}`
-      : '';
     return (
       <Box flexDirection="row" marginBottom={1}>
         <Box width={2} flexShrink={0}>
@@ -104,7 +101,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed }
         </Box>
         <Box flexDirection="column" flexGrow={1}>
           <Text dimColor>
-            Done… (↓ {tokenStr} tokens{thoughtPart})
+            Done… (↓ {tokenStr} tokens, taken {timeStr} from last input)
           </Text>
         </Box>
       </Box>

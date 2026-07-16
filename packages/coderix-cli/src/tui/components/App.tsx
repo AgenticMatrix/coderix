@@ -510,7 +510,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         setCompletedTurn({
           elapsed: turnElapsedRef.current,
           tokens: state.turnOutputTokens,
-          thinkingDuration: latestThinking?.duration,
         });
       }
       setTurnElapsed(0);
