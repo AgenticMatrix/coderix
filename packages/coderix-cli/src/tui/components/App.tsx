@@ -743,7 +743,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
       <Box flexDirection="column" flexShrink={0}>
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
-        <Divider />
+        <Divider padding={2} />
         <InputBox
           inputText={state.inputText}
           cursorPosition={state.cursorPosition}
@@ -752,7 +752,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           pastePreviewVisible={state.pastePreviewVisible}
           theme={config.theme}
         />
-        <Divider />
+        <Divider padding={2} />
 
         <Box marginTop={1}>
           <StatusBar
