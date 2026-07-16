@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text } from '@coderix/ink';
 import { getSubAgentRegistry } from '@coderix/core';
-import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
 const AGENT_TYPE_LABEL: Record<string, string> = {
@@ -83,7 +82,20 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const isExecuting = props.state === 'executing' && !hasResult;
   const isPending = props.state === 'pending' && !hasResult;
   const isError = props.state === 'error';
-  const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
+
+  // Derive elapsed time from the agent's createdAt registry timestamp
+  // instead of a local counter, so the timer survives component remount
+  // during sub-agent / main-agent view transitions.
+  const createdAtRef = useRef<number>(0);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(id);
+  }, []);
+  const elapsedSecs = createdAtRef.current > 0
+    ? ((now - createdAtRef.current) / 1000).toFixed(1)
+    : '0.0';
+  const blinkOn = Math.floor(now / 500) % 2 === 0;
 
   const isResume = !!(props.input.resume) && !!(props.input.agent_id);
   const label = isResume ? 'Resume' : (agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'Fork');
@@ -126,6 +138,10 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
           // Agent no longer in registry or completed — stop background polling
           if (isBackground) setBgRunning(false);
           return;
+        }
+
+        if (agent.createdAt) {
+          createdAtRef.current = agent.createdAt;
         }
 
         let changed = false;

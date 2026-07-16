@@ -247,6 +247,14 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     dispatch({ type: 'LOAD_HISTORY', history: loadHistory() });
   }, [dispatch]);
 
+  // ── Main agent messages (even when viewing a sub-agent) ──────
+  // Used by both statusPhase and the turn elapsed timer so they always
+  // operate on the main agent's messages, not the sub-agent's transcript.
+  const mainMessages = useMemo(
+    () => state.subAgentView ? (state.savedMainMessages ?? []) : state.messages,
+    [state.subAgentView, state.messages, state.savedMainMessages],
+  );
+
   // ── Status bar phase ──────────────────────────────────────────
   // busy: main agent is active (streaming / thinking / sync tool execution)
   // wait: sub-agents or background tools are running
@@ -258,10 +266,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     const mainActive = state.subAgentView ? state.mainStreaming : state.isStreaming;
     if (mainActive) return 'busy';
     // Wait: check MAIN agent's messages for pending tools
-    // Use savedMainMessages when in sub-agent view since state.messages is the sub-agent's
-    const mainMessages = state.subAgentView
-      ? (state.savedMainMessages ?? [])
-      : state.messages;
     const lastMsg = mainMessages[mainMessages.length - 1];
     const hasActiveTools =
       lastMsg?.blocks.some(
@@ -273,7 +277,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       if (agent.status === 'running') return 'wait';
     }
     return 'idle';
-  }, [state.error, state.isStreaming, state.mainStreaming, state.subAgentView, state.messages, state.savedMainMessages, agentTick]);
+  }, [state.error, state.isStreaming, state.mainStreaming, mainMessages, agentTick]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -494,9 +498,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   }, [state.error, latestThinking, state.messages, state.isStreaming, agentTick]);
 
   // Turn elapsed timer — starts on new user message, runs continuously until next user message
+  // Uses mainMessages (not state.messages) so the timer doesn't reset when
+  // switching between main agent and sub-agent views.
   const userMsgCount = useMemo(
-    () => state.messages.filter((m) => m.role === 'user').length,
-    [state.messages],
+    () => mainMessages.filter((m) => m.role === 'user').length,
+    [mainMessages],
   );
   const prevUserMsgCountRef = useRef(userMsgCount);
   const turnStartRef = useRef<number>(Date.now());

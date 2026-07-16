@@ -161,6 +161,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // The wrapped action is applied to savedMainMessages instead of messages,
     // letting the main agent work in the background without contaminating the view.
     case 'ROUTE_TO_SAVED_MAIN': {
+      // Guard: if the sub-agent view was already closed (via CLOSE_SUBAGENT_VIEW
+      // in a prior dispatch within the same batch, or from a stale subAgentViewRef),
+      // do nothing — savedMainMessages is null and operating on it would corrupt state.
+      if (!state.subAgentView) return state;
       const altState = { ...state, messages: state.savedMainMessages ?? [] };
       const result = chatReducer(altState, action.action);
       return {
@@ -634,7 +638,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'CLOSE_SUBAGENT_VIEW': {
-      const currentAgentId = state.subAgentView?.agentId;
+      // Guard: if no sub-agent view is active, this is a redundant close
+      // (e.g. double-Esc, or TeamPanel __main__ selection without a view).
+      // Saving an empty savedMainMessages would destroy the main messages.
+      if (!state.subAgentView) return state;
+      const currentAgentId = state.subAgentView.agentId;
       const updatedCache = currentAgentId
         ? { ...state.subAgentMessageCache, [currentAgentId]: state.messages }
         : state.subAgentMessageCache;
@@ -648,15 +656,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'LOAD_SUBAGENT_TRANSCRIPT':
+    case 'LOAD_SUBAGENT_TRANSCRIPT': {
+      const updatedCache = {
+        ...state.subAgentMessageCache,
+        [action.agentId]: action.messages,
+      };
+      // Only update displayed messages when still viewing this sub-agent.
+      // Otherwise a polling interval tick that fires after CLOSE_SUBAGENT_VIEW
+      // but before effect cleanup would overwrite the restored main messages.
+      if (state.subAgentView?.agentId !== action.agentId) {
+        return { ...state, subAgentMessageCache: updatedCache };
+      }
       return {
         ...state,
         messages: action.messages,
-        subAgentMessageCache: {
-          ...state.subAgentMessageCache,
-          [action.agentId]: action.messages,
-        },
+        subAgentMessageCache: updatedCache,
       };
+    }
 
     case 'SHOW_AGENT_PICKER':
       return { ...state, agentPicker: true };
