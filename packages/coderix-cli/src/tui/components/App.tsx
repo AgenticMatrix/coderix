@@ -574,7 +574,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   );
 
   return (
-    <Box flexDirection="column" height="100%" paddingTop={1} paddingX={1}>
+    <Box flexDirection="column" height="100%" paddingTop={1}>
       {/* ── Header ─────────────────────────────────────────────── */}
       <HeaderLogo key="header" />
 
