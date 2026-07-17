@@ -7,7 +7,7 @@ const teamCreatePlugin: ToolPlugin = {
   schema,
   executor: execute,
   paramSummary: (input) => {
-    const name = input.name as string;
+    const name = input.team_name as string;
     return name ? `Team: ${name}` : undefined;
   },
 };

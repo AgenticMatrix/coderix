@@ -38,6 +38,10 @@ import { NotebookEditRenderer } from './notebook-edit/renderer.js';
 import { AgentRenderer } from './agent/renderer.js';
 import { SendMessageRenderer } from './send-message/renderer.js';
 import { SleepRenderer, SleepResultRenderer } from './sleep/renderer.js';
+import { TeamCreateResultRenderer } from './team-create/result-renderer.js';
+import { TeamDeleteResultRenderer } from './team-delete/result-renderer.js';
+import { TeamCreateRenderer } from './team-create/renderer.js';
+import { TeamDeleteRenderer } from './team-delete/renderer.js';
 
 // ── Tool-result renderers ───────────────────────────────────────────────
 import { BashResultRenderer } from './bash/result-renderer.js';
@@ -96,6 +100,8 @@ useRendererByName.set('NotebookEdit', NotebookEditRenderer);
 useRendererByName.set('Agent', AgentRenderer);
 useRendererByName.set('SendMessage', SendMessageRenderer);
 useRendererByName.set('Sleep', SleepRenderer);
+useRendererByName.set('TeamCreate', TeamCreateRenderer);
+useRendererByName.set('TeamDelete', TeamDeleteRenderer);
 
 resultRendererByName.set('bash', BashResultRenderer);
 resultRendererByName.set('glob', GlobResultRenderer);
@@ -115,6 +121,8 @@ resultRendererByName.set('EnterPlanMode', EnterPlanModeResultRenderer);
 resultRendererByName.set('ExitPlanMode', ExitPlanModeResultRenderer);
 resultRendererByName.set('AskUserQuestion', AskUserQuestionResultRenderer);
 resultRendererByName.set('Sleep', SleepResultRenderer);
+resultRendererByName.set('TeamCreate', TeamCreateResultRenderer);
+resultRendererByName.set('TeamDelete', TeamDeleteResultRenderer);
 
 // Generic fallback for known (executor-less) tool names
 for (const name of KNOWN_TOOL_NAMES) {

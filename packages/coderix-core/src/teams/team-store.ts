@@ -19,7 +19,11 @@ import type { TeamConfig, TeamMember } from './types.js';
 const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
 
 function sanitize(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'unnamed';
+  return name
+    .replace(/[\/\\\0\n\r\t:*?"<>|]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .trim() || 'unnamed';
 }
 
 export function teamDir(teamName: string): string {

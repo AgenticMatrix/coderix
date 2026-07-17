@@ -66,7 +66,7 @@ export function SleepRenderer(props: ToolUseRendererProps) {
   const statusColor = isActive ? 'ansi:yellow' : 'ansi:green';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={0}>
       {/* Title bar */}
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>
