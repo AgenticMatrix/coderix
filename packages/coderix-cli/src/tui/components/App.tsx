@@ -9,7 +9,7 @@ import { PermissionMode, getSubAgentRegistry } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
-import { ThinkingBlockRenderer, ActivityLine, type ActivityPhase } from './ThinkingBlockRenderer.js';
+import { ActivityLine, type ActivityPhase } from './ThinkingBlockRenderer.js';
 import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
@@ -582,6 +582,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   if (!state.isFrozen) frozenRef.current = state.messages;
   const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
 
+  // Cache the last visible ActivityLine element. When the phase transitions
+  // to idle but completedTurn hasn't been set yet (one-frame race), showing
+  // the cached snapshot prevents the status line from disappearing and
+  // causing a layout jump.
+  const activitySnapshotRef = useRef<React.ReactNode>(null);
+
   // ── Turn-level phase detection ────────────────────────────────
   // thinking: latest thinking block is still in progress (no duration)
   // executing: last message has active tools or running sub-agents
@@ -770,23 +776,28 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         )}
 
         {/* ── Activity & thinking (during streaming/execution) ── */}
+        {/* Sticky: cache the last visible ActivityLine so it never
+            disappears mid-turn. When the phase transitions to idle
+            but completedTurn hasn't been set yet (one-frame race),
+            showing the cached snapshot prevents a layout jump. */}
         <OffscreenFreeze frozen={state.isFrozen}>
-          {latestThinking && !state.isFrozen && (
-            <ThinkingBlockRenderer
-              content={latestThinking.block.content}
-              thinkingExpanded={latestThinking.block.expanded}
-              thinkingDuration={latestThinking.duration}
-              thinkingTokens={latestThinking.tokens}
-            />
-          )}
-          {!state.isFrozen && (
-            <ActivityLine
-              phase={currentPhase}
-              turnElapsed={turnElapsed}
-              turnOutputTokens={state.turnOutputTokens}
-              completed={completedTurn}
-            />
-          )}
+          {!state.isFrozen && (() => {
+            const activityElement = (currentPhase !== 'idle' || completedTurn != null) ? (
+              <>
+                <Box height={1} flexShrink={0} />
+                <ActivityLine
+                  phase={currentPhase}
+                  turnElapsed={turnElapsed}
+                  turnOutputTokens={state.turnOutputTokens}
+                  completed={completedTurn}
+                />
+              </>
+            ) : null;
+            if (activityElement !== null) {
+              activitySnapshotRef.current = activityElement;
+            }
+            return activitySnapshotRef.current;
+          })()}
         </OffscreenFreeze>
 
         <TaskPanel
