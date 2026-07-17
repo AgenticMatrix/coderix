@@ -68,7 +68,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
             ) : null}
           </Text>
           {isExecuting ? (
-            <Text dimColor color="ansi:yellow"> writing {elapsedSecs}s</Text>
+            <Text dimColor color="ansi:yellow">  ⎿ writing {elapsedSecs}s</Text>
           ) : null}
           {isDone && stats ? (
             <Box paddingLeft={2}>
