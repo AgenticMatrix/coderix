@@ -81,6 +81,51 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   const isError = props.state === 'error';
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
+  const isActive = isExecuting || isPending;
+
+  // ── Live sub-agent polling (hooks must be before any conditional return) ──
+  const liveCallsRef = useRef<ToolCallSummary[]>([]);
+  const liveCountsRef = useRef<{ turnCount: number; toolCount: number }>({ turnCount: 0, toolCount: 0 });
+  const [liveTick, setLiveTick] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    function poll() {
+      try {
+        const registry = getSubAgentRegistry();
+        if (!registry) return;
+
+        const running = registry.list().filter(a => a.status === 'running');
+        if (running.length === 0) return;
+
+        const matching = running
+          .filter(a => agentId ? a.id === agentId : false)
+          .sort((a, b) => b.createdAt - a.createdAt);
+
+        const agent = matching[0];
+        if (!agent) return;
+
+        let changed = false;
+        if (agent.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
+          liveCallsRef.current = [...agent.liveToolCalls];
+          changed = true;
+        }
+        if (agent.turnCount !== liveCountsRef.current.turnCount || agent.toolCount !== liveCountsRef.current.toolCount) {
+          liveCountsRef.current = { turnCount: agent.turnCount, toolCount: agent.toolCount };
+          changed = true;
+        }
+        if (changed) setLiveTick(t => t + 1);
+      } catch {
+        // Ignore poll errors
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, POLL_MS);
+    return () => clearInterval(interval);
+  }, [isActive, agentId]);
+
   // ── Team messaging mode ───────────────────────────────────────────────
   if (isTeamMode && !isResumeMode) {
     const recipient = to === '*' ? 'broadcast' : (to || '?');
@@ -125,49 +170,6 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   const doneToolCalls: ToolCallSummary[] = (props.result?.metadata?.toolCalls as ToolCallSummary[]) ?? [];
   const doneTurnCount = props.result?.metadata?.turnCount as number | undefined;
   const doneToolCount = props.result?.metadata?.toolCount as number | undefined;
-
-  const liveCallsRef = useRef<ToolCallSummary[]>([]);
-  const liveCountsRef = useRef<{ turnCount: number; toolCount: number }>({ turnCount: 0, toolCount: 0 });
-  const [liveTick, setLiveTick] = useState(0);
-  const isActive = isExecuting || isPending;
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    function poll() {
-      try {
-        const registry = getSubAgentRegistry();
-        if (!registry) return;
-
-        const running = registry.list().filter(a => a.status === 'running');
-        if (running.length === 0) return;
-
-        const matching = running
-          .filter(a => agentId ? a.id === agentId : false)
-          .sort((a, b) => b.createdAt - a.createdAt);
-
-        const agent = matching[0];
-        if (!agent) return;
-
-        let changed = false;
-        if (agent.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
-          liveCallsRef.current = [...agent.liveToolCalls];
-          changed = true;
-        }
-        if (agent.turnCount !== liveCountsRef.current.turnCount || agent.toolCount !== liveCountsRef.current.toolCount) {
-          liveCountsRef.current = { turnCount: agent.turnCount, toolCount: agent.toolCount };
-          changed = true;
-        }
-        if (changed) setLiveTick(t => t + 1);
-      } catch {
-        // Ignore poll errors
-      }
-    }
-
-    poll();
-    const interval = setInterval(poll, POLL_MS);
-    return () => clearInterval(interval);
-  }, [isActive, agentId]);
 
   if (isDone && doneToolCalls.length > liveCallsRef.current.length) {
     liveCallsRef.current = doneToolCalls;
