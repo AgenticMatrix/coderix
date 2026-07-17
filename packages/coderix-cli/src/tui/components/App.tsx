@@ -23,6 +23,7 @@ import { MemoryPicker } from './MemoryPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { CommandHint } from './CommandHint.js';
 import { VirtualMessageList } from './VirtualMessageList.js';
+import { ErrorBoundary } from './ErrorBoundary.js';
 import { useChatReducer, convertTranscriptToMessages } from '../hooks/useChatReducer.js';;
 import { useAgentBridge } from '../hooks/useAgentBridge.js';;
 import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
@@ -490,21 +491,29 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   const pendingApproval = useAppState(s => s.pendingApproval);
   const teamApprovalReq = useAppState(s => s.teamApprovalReq);
 
-  const handleApprovalChoice = async (choice: string) => {
+  // Stable refs for the approval callback to avoid stale closures
+  // when handleApprovalChoice is called from ApprovalPrompt's useInput.
+  const pendingApprovalRef = useRef(pendingApproval);
+  pendingApprovalRef.current = pendingApproval;
+  const teamApprovalReqRef = useRef(teamApprovalReq);
+  teamApprovalReqRef.current = teamApprovalReq;
+
+  const handleApprovalChoice = useCallback(async (choice: string) => {
     // ── Team permission approval (worker → leader mailbox) ──
-    if (teamApprovalReq) {
+    const teamReq = teamApprovalReqRef.current;
+    if (teamReq) {
       const { sendPermissionResponseViaMailbox } = await import('@coderix/core');
       const approved = choice !== 'deny';
       try {
         await sendPermissionResponseViaMailbox(
-          teamApprovalReq.workerName,
-          teamApprovalReq.requestId,
+          teamReq.workerName,
+          teamReq.requestId,
           {
             decision: approved ? 'approved' : 'rejected',
             resolvedBy: 'leader',
             feedback: approved ? undefined : 'Denied by leader',
           },
-          teamApprovalReq.teamName,
+          teamReq.teamName,
         );
       } catch { /* non-fatal */ }
       setAppState({ teamApprovalReq: null } as Partial<AppState>);
@@ -513,7 +522,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     }
 
     // ── Regular permission approval (deferred promise) ──
-    const pending = pendingApproval;
+    const pending = pendingApprovalRef.current;
     if (!pending) return;
 
     if (choice === 'deny') {
@@ -527,15 +536,17 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         dispatch({ type: 'SET_MODE', mode: 'auto' });
       }
     }
-  };
+  }, [setAppState, dispatch, engine]);
 
   const pendingQuestion = useAppState(s => s.pendingQuestion);
+  const pendingQuestionRef = useRef(pendingQuestion);
+  pendingQuestionRef.current = pendingQuestion;
 
-  const handleQuestionAnswer = (answers: Record<string, string | string[]>) => {
-    const pending = pendingQuestion;
+  const handleQuestionAnswer = useCallback((answers: Record<string, string | string[]>) => {
+    const pending = pendingQuestionRef.current;
     if (!pending) return;
     pending.deferred.resolve(answers);
-  };
+  }, []);
 
   const stats = useTokenStats(state.messages, state.tokenUsage, state.accumulatedCost);
 
@@ -729,12 +740,14 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
         {/* ── Virtual-scrolled message list ───────────────────── */}
         {displayMessages.length > 0 && (
-          <VirtualMessageList
-            messages={displayMessages}
-            scrollRef={scrollRef}
-            columns={columns}
-            renderMessage={renderMessage}
-          />
+          <ErrorBoundary name="VirtualMessageList">
+            <VirtualMessageList
+              messages={displayMessages}
+              scrollRef={scrollRef}
+              columns={columns}
+              renderMessage={renderMessage}
+            />
+          </ErrorBoundary>
         )}
 
         {/* ── Ask / Task panels (above activity line) ──────── */}

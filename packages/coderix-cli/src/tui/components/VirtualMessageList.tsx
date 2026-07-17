@@ -4,6 +4,7 @@ import type { DOMElement } from '@coderix/ink';
 import type { ScrollBoxHandle } from '@coderix/ink';
 import { useVirtualScroll } from '@coderix/ink';
 import type { Message } from '../../types.js';
+import { ErrorBoundary } from './ErrorBoundary.js';
 
 const MAX_MOUNTED = 200;
 const OVERSCAN = 40;
@@ -86,9 +87,11 @@ export function VirtualMessageList({
         const idx = start + i;
         const key = keys[idx]!;
         return (
-          <Box key={key} ref={measureRef(key)} flexDirection="column">
-            {renderMessage(msg, idx)}
-          </Box>
+          <ErrorBoundary key={key} name={`Msg-${msg.role}-${key}`}>
+            <Box ref={measureRef(key)} flexDirection="column">
+              {renderMessage(msg, idx)}
+            </Box>
+          </ErrorBoundary>
         );
       })}
       {bottomSpacer > 0 && <Box height={bottomSpacer} flexShrink={0} />}

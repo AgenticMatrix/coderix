@@ -1,11 +1,11 @@
 import type { RefObject } from 'react';
 import {
   useCallback,
-  useDeferredValue,
   useLayoutEffect,
   useMemo,
   useRef,
-  useSyncExternalStore,
+  useState,
+  useEffect,
 } from 'react';
 import type { DOMElement } from '../core/dom.js';
 import type { ScrollBoxHandle } from '../components/ScrollBox.js';
@@ -22,17 +22,9 @@ const DEFAULT_OVERSCAN = 40;
 /** Items rendered before the ScrollBox has laid out (viewportHeight = 0). */
 const COLD_START_ITEMS = 30;
 
-/**
- * Quantize scrollTop to this many rows. Without quantization every wheel
- * tick triggers a React commit + Yoga layout + Ink diff — wasted CPU.
- * Visual scroll stays smooth because ScrollBox forces re-render on every
- * scrollBy regardless of what React sees.
- */
-const SCROLL_BIN = 20;
-
 /** Worst-case height for unmeasured items during coverage extension. Using 1
  *  guarantees the mounted range physically covers the viewport regardless of
- *  how small items actually are — over-mounts when items are tall, which is
+ *  how small items actually are - over-mounts when items are tall, which is
  *  fine (overscan absorbs the extra). */
 const MIN_HEIGHT = 1;
 
@@ -42,8 +34,6 @@ const MAX_MOUNTED_DEFAULT = 200;
 /** Max NEW items to mount in a single commit during fast scroll. Prevents
  *  multi-hundred-millisecond sync render blocks when the user jumps far. */
 const SLIDE_CAP = 25;
-
-const NOOP_UNSUB = () => {};
 
 // ── Hook ──────────────────────────────────────────────────────────────
 
@@ -169,22 +159,21 @@ export function useVirtualScroll(
   const isFrozen = freezeCount.current > 0;
   const frozenRange = isFrozen ? prevRange.current : null;
 
-  // ── Scroll subscription (quantized for performance) ──────────────
+  // ── Scroll subscription (state-driven, avoids useSyncExternalStore) ─
+  // useSyncExternalStore can trigger renderWithHooksAgain in React 19's
+  // custom reconciler when getSnapshot detects store changes during render.
+  // The Rerender dispatcher (HooksDispatcherOnRerenderInDEV) may not properly
+  // advance the hook chain, causing "Rendered fewer hooks than expected".
+  // useState + useEffect avoids this path entirely while keeping the same
+  // hook count (2 hooks replace useCallback(subscribe) + useSyncExternalStore).
 
-  const subscribe = useCallback(
-    (cb: () => void) => scrollRef.current?.subscribe(cb) ?? NOOP_UNSUB,
-    [scrollRef],
-  );
+  const [, setScrollTick] = useState(0);
 
-  useSyncExternalStore(subscribe, () => {
+  useEffect(() => {
     const s = scrollRef.current;
-    if (!s) return NaN;
-    const raw = s.getScrollTop() + s.getPendingDelta();
-    const bin = Math.floor(raw / SCROLL_BIN);
-    // Fold sticky state into sign bit so the bin changes on sticky→free
-    // transitions even when scrollTop hasn't moved yet.
-    return s.isSticky() ? ~bin : bin;
-  });
+    if (!s) return;
+    return s.subscribe(() => setScrollTick((t) => t + 1));
+  }, [scrollRef]);
 
   const scrollTop = scrollRef.current?.getScrollTop() ?? -1;
   const pendingDelta = scrollRef.current?.getPendingDelta() ?? 0;
@@ -331,23 +320,11 @@ export function useVirtualScroll(
     prevRange.current = [start, end];
   }
 
-  // ── Deferred range (time-sliced mount of fresh items) ────────────
+  // ── Effective range (use raw start/end — useDeferredValue is incompatible
+  //    with the ink reconciler's synchronous render pipeline) ────────────
 
-  const dStart = useDeferredValue(start);
-  const dEnd = useDeferredValue(end);
-  let effStart = start < dStart ? dStart : start;
-  let effEnd = end > dEnd ? dEnd : end;
-
-  // Don't defer when range is inverted or at sticky bottom (need tail NOW).
-  if (effStart > effEnd || isSticky) {
-    effStart = start;
-    effEnd = end;
-  }
-  // Scrolling down: mount the new tail immediately so the user doesn't
-  // hit the clamp boundary before React catches up.
-  if (pendingDelta > 0) {
-    effEnd = end;
-  }
+  let effStart = start;
+  let effEnd = end;
 
   // ── Final O(viewport) enforcement ────────────────────────────────
 
