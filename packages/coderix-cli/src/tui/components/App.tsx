@@ -783,14 +783,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         <OffscreenFreeze frozen={state.isFrozen}>
           {!state.isFrozen && (() => {
             const activityElement = (currentPhase !== 'idle' || completedTurn != null) ? (
-              <Box marginTop={1} flexShrink={0}>
-                <ActivityLine
-                  phase={currentPhase}
-                  turnElapsed={turnElapsed}
-                  turnOutputTokens={state.turnOutputTokens}
-                  completed={completedTurn}
-                />
-              </Box>
+              <ActivityLine
+                phase={currentPhase}
+                turnElapsed={turnElapsed}
+                turnOutputTokens={state.turnOutputTokens}
+                completed={completedTurn}
+              />
             ) : null;
             if (activityElement !== null) {
               activitySnapshotRef.current = activityElement;
