@@ -338,8 +338,8 @@ export class QueryEngine {
 
     // Drain team messages for coordinator (inject unread messages as context)
     if (this.config.teamName && this.config.settings) {
-      const coordinatorName = 'coordinator';
-      const teamMsgs = await drainUnreadMessages(this.config.teamName, coordinatorName);
+      const leaderName = 'leader';
+      const teamMsgs = await drainUnreadMessages(this.config.teamName, leaderName);
       if (teamMsgs.length > 0) {
         const msgsText = teamMsgs.map(m =>
           `[${m.from} → ${m.to}]: ${m.text}`

@@ -230,7 +230,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       const { writeToMailbox } = await import('@coderix/core');
       try {
         await writeToMailbox(agentName!, {
-          from: teamCtx.selfAgentName || 'lead',
+          from: teamCtx.selfAgentName || 'leader',
           text: message!,
           timestamp: new Date().toISOString(),
         }, teamCtx.teamName);

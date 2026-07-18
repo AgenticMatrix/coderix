@@ -104,7 +104,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
 
     // 5. Send initial prompt to teammate's mailbox
     await writeToMailbox(config.agentName, {
-      from: 'lead',
+      from: 'leader',
       text: config.prompt,
       timestamp: new Date().toISOString(),
       summary: config.prompt.slice(0, 80),
@@ -126,7 +126,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
     if (!tm8) return;
 
     await writeToMailbox(tm8.agentName, {
-      from: 'lead',
+      from: 'leader',
       text: message,
       timestamp: new Date().toISOString(),
     }, tm8.teamName);
@@ -137,7 +137,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
     if (!tm8) return;
 
     await writeToMailbox(tm8.agentName, {
-      from: 'lead',
+      from: 'leader',
       text: JSON.stringify({ type: 'shutdown_request' }),
       timestamp: new Date().toISOString(),
     }, tm8.teamName);

@@ -44,18 +44,21 @@ async function buildTeamContextBlock(config: TeamConfig): Promise<string> {
     `# Active Team: ${config.name}`,
     `Description: ${config.description}`,
     '',
-    'Members:',
+    'You are the team leader. Use Agent(name, team_name) to spawn workers,',
+    'SendMessage to communicate with them, and TaskGet/TaskList to monitor progress.',
+    '',
   ];
 
-  for (const m of config.members) {
-    const unread = await getUnreadCount(config.name, m.name).catch(() => 0);
-    const unreadNote = unread > 0 ? ` (${unread} unread)` : '';
-    lines.push(`- ${m.name} (${m.agentType}) [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
+  if (config.members.length > 0) {
+    lines.push('Workers:');
+    for (const m of config.members) {
+      const unread = await getUnreadCount(config.name, m.name).catch(() => 0);
+      const unreadNote = unread > 0 ? ` (${unread} unread)` : '';
+      lines.push(`- ${m.name} (${m.agentType}) [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
+    }
+  } else {
+    lines.push('No workers yet. Use Agent(name, team_name) to spawn one.');
   }
-
-  lines.push('');
-  lines.push('Use TaskGet/TaskList to check member status, SendMessage to communicate with members,');
-  lines.push('and Agent tool with team_name + name parameters to spawn new members.');
 
   return lines.join('\n');
 }

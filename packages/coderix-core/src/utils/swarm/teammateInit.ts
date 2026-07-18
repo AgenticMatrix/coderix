@@ -10,7 +10,7 @@ import {
   writeToMailbox,
 } from './teammateMailbox.js';
 import { getTeammateColor } from './teammate.js';
-import { loadTeamFile } from './teamHelpers.js';
+import { TEAM_LEAD_NAME } from './constants.js';
 
 /**
  * Initialize hooks for a teammate running in a swarm.
@@ -31,27 +31,8 @@ export async function initializeTeammateHooks(
 ): Promise<void> {
   const { teamName, agentId, agentName } = teamInfo;
 
-  const teamFile = await loadTeamFile(teamName);
-  if (!teamFile) return;
-
-  const leadAgentId = (teamFile as unknown as Record<string, unknown>).leadAgentId as string | undefined;
-  if (!leadAgentId) return;
-
-  // Apply team-wide allowed paths
-  const teamAllowedPaths = (teamFile as unknown as Record<string, unknown>).teamAllowedPaths as
-    | Array<{ path: string; toolName: string }>
-    | undefined;
-  // Path permissions applied by the CLI layer
-
-  // Find leader name from members
-  const members = (teamFile as unknown as Record<string, unknown>).members as
-    | Array<{ agentId: string; name: string }>
-    | undefined;
-  const leadMember = members?.find(m => m.agentId === leadAgentId);
-  const leadAgentName = leadMember?.name || 'lead';
-
-  // Don't register hook if this agent IS the leader
-  if (agentId === leadAgentId) return;
+  // The main agent is the team leader — don't register hooks for it
+  const leadAgentName = TEAM_LEAD_NAME;
 
   // Register Stop hook to notify leader on idle
   registerStopHook(async () => {

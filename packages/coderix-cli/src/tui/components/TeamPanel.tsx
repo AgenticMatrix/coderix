@@ -275,7 +275,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       </Box>
       {teamContext && (
         <Box>
-          <Text dimColor>  Leader: {teamContext.isLeader ? 'you' : 'coordinator'} · {Object.keys(teamContext.teammates).length} worker(s)</Text>
+          <Text dimColor>  Leader: {teamContext.isLeader ? 'you' : 'leader'} · {Object.keys(teamContext.teammates).length} worker(s)</Text>
         </Box>
       )}
 

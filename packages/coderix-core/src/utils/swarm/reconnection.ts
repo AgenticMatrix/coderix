@@ -48,7 +48,7 @@ export async function computeInitialTeamContext(): Promise<TeamContextState | un
   return {
     teamName,
     teamFilePath,
-    leadAgentId: filed.leadAgentId as string,
+    leadAgentId: (filed.leadSessionId as string) || '',
     selfAgentId: agentId,
     selfAgentName: agentName,
     isLeader,
@@ -76,7 +76,7 @@ export async function initializeTeammateContextFromSession(
   return {
     teamName,
     teamFilePath,
-    leadAgentId: filed.leadAgentId as string,
+    leadAgentId: (filed.leadSessionId as string) || '',
     selfAgentId: agentId,
     selfAgentName: agentName,
     isLeader: false,

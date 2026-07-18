@@ -201,7 +201,7 @@ export async function runInProcessTeammate(
 
   const startTime = Date.now();
   const allMessages: Array<{ type: string; content: unknown }> = [];
-  let currentPrompt = formatAsTeammateMessage('team-lead', prompt);
+  let currentPrompt = formatAsTeammateMessage(TEAM_LEAD_NAME, prompt);
   let shouldExit = false;
 
   // Build system prompt

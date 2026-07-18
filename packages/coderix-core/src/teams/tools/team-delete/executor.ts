@@ -3,7 +3,6 @@ import { loadTeamConfig } from '../../team-store.js';
 import { deleteTeam } from '../../team-store.js';
 import { deleteTeamMailboxes, sendShutdownRequestToMailbox } from '../../../utils/swarm/teammateMailbox.js';
 import { clearTeammateColors } from '../../../utils/swarm/teammateLayoutManager.js';
-import { TEAM_LEAD_NAME } from '../../../utils/swarm/constants.js';
 
 export const execute: ToolExecutor = async (input, _options) => {
   const teamName = (input.team_name as string) || (input.name as string);
@@ -20,10 +19,8 @@ export const execute: ToolExecutor = async (input, _options) => {
     };
   }
 
-  // Collect active (non-lead) members to request shutdown
-  const activeMembers = config.members.filter(
-    m => m.status === 'running' && m.name !== TEAM_LEAD_NAME && m.name !== 'lead',
-  );
+  // Collect active members to request shutdown
+  const activeMembers = config.members.filter(m => m.status === 'running');
 
   const shutdownResults: string[] = [];
 

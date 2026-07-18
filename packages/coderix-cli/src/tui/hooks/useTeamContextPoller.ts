@@ -53,8 +53,8 @@ export function useTeamContextPoller({
       if (!ctx?.isLeader) return;
 
       try {
-        // The leader's agent name is their selfAgentName (or 'lead')
-        const leaderName = ctx!.selfAgentName || 'lead';
+        // The leader's agent name is their selfAgentName (or 'leader')
+        const leaderName = ctx!.selfAgentName || 'leader';
         const unread = await readUnreadMessages(leaderName, ctx!.teamName);
 
         if (unread.length === 0) return;

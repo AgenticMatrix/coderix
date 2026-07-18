@@ -99,7 +99,7 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
   const teamName = input.team_name as string;
   const to = input.to as string;
   const text = input.text as string | undefined;
-  const from = (input.from as string) || 'coordinator';
+  const from = (input.from as string) || 'leader';
   const messageType = input.message_type as string | undefined;
 
   const config = await loadTeamConfig(teamName);

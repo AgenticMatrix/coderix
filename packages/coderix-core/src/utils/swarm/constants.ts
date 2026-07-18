@@ -14,8 +14,8 @@ export const HIDDEN_SESSION_NAME = 'coderix-hidden';
 /** Socket name suffix for tmux socket isolation (prevents polluting user's tmux). */
 export const SWARM_SOCKET_NAME = 'coderix-swarm-socket';
 
-/** Reserved name for the team leader / coordinator. */
-export const TEAM_LEAD_NAME = 'lead';
+/** Reserved name for the team leader. */
+export const TEAM_LEAD_NAME = 'leader';
 
 /** Default polling interval for inbox messages (ms). */
 export const INBOX_POLL_INTERVAL = 500;

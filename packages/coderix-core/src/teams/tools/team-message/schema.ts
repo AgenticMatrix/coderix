@@ -14,7 +14,7 @@ export const schema: ToolSchema = {
       team_name: { type: 'string', description: 'Team name (for team messaging mode)' },
       to: { type: 'string', description: 'Recipient name, or "*" to broadcast to all members' },
       text: { type: 'string', description: 'Message content (for plain text messaging)' },
-      from: { type: 'string', description: 'Sender name (defaults to "coordinator")' },
+      from: { type: 'string', description: 'Sender name (defaults to "leader")' },
       message_type: {
         type: 'string',
         description: 'Type of structured message: "shutdown_request" or "shutdown_response"',

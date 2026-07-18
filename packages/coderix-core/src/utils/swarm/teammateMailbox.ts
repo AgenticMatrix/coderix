@@ -835,7 +835,7 @@ export async function sendShutdownRequestToMailbox(
   reason?: string,
 ): Promise<{ requestId: string; target: string }> {
   const resolvedTeamName = teamName || resolveTeamName();
-  const senderName = process.env.CODERIX_AGENT_NAME || 'lead';
+  const senderName = process.env.CODERIX_AGENT_NAME || 'leader';
   const requestId = `shutdown-${targetName}-${Date.now()}`;
 
   const shutdownMessage = createShutdownRequestMessage({
@@ -999,7 +999,7 @@ export function getLastPeerDmSummary(
   messages: Array<{ type: string; message?: { content: unknown } }>,
 ): string | undefined {
   const SEND_MESSAGE_TOOL_NAME = 'SendMessage';
-  const TEAM_LEAD_NAME = 'lead';
+  const TEAM_LEAD_NAME = 'leader';
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
