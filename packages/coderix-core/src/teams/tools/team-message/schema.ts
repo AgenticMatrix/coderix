@@ -12,7 +12,7 @@ export const schema: ToolSchema = {
     type: 'object',
     properties: {
       team_name: { type: 'string', description: 'Team name (for team messaging mode)' },
-      to: { type: 'string', description: 'Recipient name, or "*" to broadcast to all members' },
+      to: { type: 'string', description: 'Recipient agentId, "leader" for the team leader, or "*" to broadcast to all workers' },
       text: { type: 'string', description: 'Message content (for plain text messaging)' },
       from: { type: 'string', description: 'Sender name (defaults to "leader")' },
       message_type: {

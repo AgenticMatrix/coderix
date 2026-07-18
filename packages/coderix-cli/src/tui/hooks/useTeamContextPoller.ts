@@ -53,8 +53,8 @@ export function useTeamContextPoller({
       if (!ctx?.isLeader) return;
 
       try {
-        // The leader's agent name is their selfAgentName (or 'leader')
-        const leaderName = ctx!.selfAgentName || 'leader';
+        // The leader's mailbox is always at "leader"
+        const leaderName = 'leader';
         const unread = await readUnreadMessages(leaderName, ctx!.teamName);
 
         if (unread.length === 0) return;

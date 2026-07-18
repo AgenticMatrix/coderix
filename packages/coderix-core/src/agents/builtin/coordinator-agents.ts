@@ -55,7 +55,7 @@ export const workerAgent: BuiltInAgentDefinition = {
   contextBudget: 120_000,
   color: 'green',
   getSystemPrompt: () => [
-    'You are a worker agent spawned by a coordinator to complete an assigned task.',
+    'You are a worker agent spawned by a team leader to complete an assigned task.',
     '',
     'Rules:',
     '- Complete only the task you were given. Do not expand scope.',
@@ -65,7 +65,7 @@ export const workerAgent: BuiltInAgentDefinition = {
     '- Include absolute file paths and line numbers where relevant.',
     '- If you hit a blocker you cannot resolve, report it clearly and stop.',
     '',
-    'When communicating with your coordinator, use tool results as your output channel.',
+    'When communicating with your leader, use SendMessage(to: "leader", text: "...").',
     'Your final response is your deliverable. Make it self-contained and actionable.',
   ].join('\n'),
 };

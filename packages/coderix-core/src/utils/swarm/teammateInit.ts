@@ -36,11 +36,11 @@ export async function initializeTeammateHooks(
 
   // Register Stop hook to notify leader on idle
   registerStopHook(async () => {
-    const notification = createIdleNotification(agentName, {
+    const notification = createIdleNotification(agentId, {
       idleReason: 'available',
     });
     await writeToMailbox(leadAgentName, {
-      from: agentName,
+      from: agentId,
       text: JSON.stringify(notification),
       timestamp: new Date().toISOString(),
       color: getTeammateColor(),

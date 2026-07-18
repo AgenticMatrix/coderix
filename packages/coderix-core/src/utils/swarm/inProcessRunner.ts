@@ -19,9 +19,10 @@ import {
   writeToMailbox,
   markMessagesAsRead,
 } from './teammateMailbox.js';
-import { TEAMMATE_SYSTEM_PROMPT_ADDENDUM } from './teammatePromptAddendum.js';
+import { buildTeammatePromptAddendum } from './teammatePromptAddendum.js';
 import type { TeammateIdentity } from './spawnInProcess.js';
 import { TEAM_LEAD_NAME } from './constants.js';
+import { loadTeamConfig } from '../../teams/team-store.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,7 +94,7 @@ async function waitForNextPromptOrShutdown(
   abortController: AbortController,
 ): Promise<WaitResult> {
   while (!abortController.signal.aborted) {
-    const unread = await readUnreadMessages(identity.agentName, identity.teamName);
+    const unread = await readUnreadMessages(identity.agentId, identity.teamName);
 
     if (unread.length > 0) {
       // Walk from newest to find first non-protocol message or shutdown
@@ -105,7 +106,7 @@ async function waitForNextPromptOrShutdown(
         const shutdownRequest = isShutdownRequest(text);
         if (shutdownRequest) {
           // Mark it read
-          await markMessagesAsRead(identity.agentName, identity.teamName);
+          await markMessagesAsRead(identity.agentId, identity.teamName);
           return {
             type: 'shutdown_request',
             from: shutdownRequest.from,
@@ -122,7 +123,7 @@ async function waitForNextPromptOrShutdown(
         } catch { /* plain text — deliver it */ }
 
         // Found a regular message — mark all read and deliver
-        await markMessagesAsRead(identity.agentName, identity.teamName);
+        await markMessagesAsRead(identity.agentId, identity.teamName);
         return {
           type: 'new_message',
           from: msg.from,
@@ -155,11 +156,11 @@ async function sendIdleNotification(
   identity: TeammateIdentity,
   reason: 'available' | 'interrupted' | 'failed' = 'available',
 ): Promise<void> {
-  const notification = createIdleNotification(identity.agentName, {
+  const notification = createIdleNotification(identity.agentId, {
     idleReason: reason,
   });
   await writeToMailbox(TEAM_LEAD_NAME, {
-    from: identity.agentName,
+    from: identity.agentId,
     text: JSON.stringify(notification),
     timestamp: new Date().toISOString(),
     color: identity.color,
@@ -209,7 +210,32 @@ export async function runInProcessTeammate(
   if (systemPromptMode === 'replace' && systemPrompt) {
     teammateSystemPrompt = systemPrompt;
   } else {
-    const parts = [...(defaultSystemPromptParts || []), TEAMMATE_SYSTEM_PROMPT_ADDENDUM];
+    // Build dynamic team communication context
+    let addendum = '';
+    try {
+      const teamConfig = await loadTeamConfig(identity.teamName);
+      if (teamConfig) {
+        addendum = buildTeammatePromptAddendum({
+          myAgentId: identity.agentId,
+          myName: identity.agentName,
+          teamName: identity.teamName,
+          members: teamConfig.members.map(m => ({
+            agentId: m.agentId,
+            name: m.name,
+            agentType: m.agentType,
+          })),
+        });
+      }
+    } catch {
+      // Fallback: basic addendum if team config is unavailable
+      addendum = buildTeammatePromptAddendum({
+        myAgentId: identity.agentId,
+        myName: identity.agentName,
+        teamName: identity.teamName,
+        members: [],
+      });
+    }
+    const parts = [...(defaultSystemPromptParts || []), addendum];
     if (systemPromptMode === 'append' && systemPrompt) {
       parts.push(systemPrompt);
     }

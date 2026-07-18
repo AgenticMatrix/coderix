@@ -20,6 +20,7 @@ interface PaneTeammate {
   paneId: string;
   windowTarget: string;
   insideCurrentSession: boolean;
+  agentId: string;
   agentName: string;
   teamName: string;
 }
@@ -52,6 +53,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
       paneId: result.paneId,
       windowTarget: result.windowTarget,
       insideCurrentSession: result.insideCurrentSession,
+      agentId: config.agentId,
       agentName: config.agentName,
       teamName: config.teamName,
     });
@@ -103,7 +105,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
     await addMemberToTeam(config.teamName, member);
 
     // 5. Send initial prompt to teammate's mailbox
-    await writeToMailbox(config.agentName, {
+    await writeToMailbox(config.agentId, {
       from: 'leader',
       text: config.prompt,
       timestamp: new Date().toISOString(),
@@ -125,7 +127,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
     const tm8 = this.spawnedTeammates.get(agentId);
     if (!tm8) return;
 
-    await writeToMailbox(tm8.agentName, {
+    await writeToMailbox(tm8.agentId, {
       from: 'leader',
       text: message,
       timestamp: new Date().toISOString(),
@@ -136,7 +138,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
     const tm8 = this.spawnedTeammates.get(agentId);
     if (!tm8) return;
 
-    await writeToMailbox(tm8.agentName, {
+    await writeToMailbox(tm8.agentId, {
       from: 'leader',
       text: JSON.stringify({ type: 'shutdown_request' }),
       timestamp: new Date().toISOString(),

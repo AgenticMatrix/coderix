@@ -1,17 +1,34 @@
 /**
- * Teammate system prompt addendum — appended to the default system prompt
+ * Teammate system prompt addendum — builds team communication context
  * for agents running as teammates in a team.
+ *
+ * Unlike the static constant it replaced, this function generates a
+ * dynamic prompt that includes the worker's own identity, the leader's
+ * address, and a list of peer workers with their agentIds.
  */
 
-export const TEAMMATE_SYSTEM_PROMPT_ADDENDUM = `
-# Agent Teammate Communication
+export function buildTeammatePromptAddendum(opts: {
+  myAgentId: string;
+  myName: string;
+  teamName: string;
+  members: Array<{ agentId: string; name: string; agentType: string }>;
+}): string {
+  const peerList = opts.members
+    .filter(m => m.agentId !== opts.myAgentId)
+    .map(m => `  - ${m.name} (\`${m.agentId}\`) [${m.agentType}]`)
+    .join('\n');
 
-IMPORTANT: You are running as an agent in a team. To communicate with anyone on your team:
-- Use the SendMessage tool with \`to: "<name>"\` to send messages to specific teammates
-- Use the SendMessage tool with \`to: "*"\` sparingly for team-wide broadcasts
+  return `
+# Team Communication
 
-Just writing a response in text is not visible to others on your team — you MUST use the SendMessage tool.
+You are "${opts.myName}" (\`${opts.myAgentId}\`) in team "${opts.teamName}".
+The team leader is at "leader" — use SendMessage(to: "leader", text: "...") to report.
 
-The user interacts primarily with the team lead. Your work is coordinated through
-the task system and teammate messaging.
+Peer workers:
+${peerList || '  (none)'}
+
+- SendMessage(to: "<agentId>") to message a specific teammate
+- SendMessage(to: "*") to broadcast to all workers
+- Just writing text in your response is NOT visible to others — you MUST use SendMessage
 `;
+}

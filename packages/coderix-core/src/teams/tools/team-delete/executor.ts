@@ -25,18 +25,18 @@ export const execute: ToolExecutor = async (input, _options) => {
   const shutdownResults: string[] = [];
 
   if (activeMembers.length > 0) {
-    const names = activeMembers.map(m => m.name).join(', ');
-    shutdownResults.push(`Requesting shutdown for ${activeMembers.length} active member(s): ${names}`);
+    const ids = activeMembers.map(m => `${m.name} (${m.agentId})`).join(', ');
+    shutdownResults.push(`Requesting shutdown for ${activeMembers.length} active worker(s): ${ids}`);
 
     // Send shutdown request to each active member's mailbox
     for (const member of activeMembers) {
       try {
         const result = await sendShutdownRequestToMailbox(
-          member.name,
+          member.agentId,
           teamName,
           'Team is being deleted',
         );
-        shutdownResults.push(`  - Shutdown request sent to '${result.target}' (${result.requestId})`);
+        shutdownResults.push(`  - Shutdown request sent to '${member.name}' (${result.requestId})`);
       } catch (err) {
         shutdownResults.push(`  - Failed to send shutdown to '${member.name}': ${err instanceof Error ? err.message : String(err)}`);
       }

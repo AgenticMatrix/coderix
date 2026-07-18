@@ -11,6 +11,7 @@ import { CheckpointManager } from '../../core/checkpoint.js';
 import { filterToolsForAgent, filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../tool-filtering.js';
 import { query } from '../../core/query.js';
 import teamMessagePlugin from '../../teams/tools/team-message/index.js';
+import { loadTeamConfig } from '../../teams/team-store.js';
 import {
   runWithAgentContext,
   createSubagentContext,
@@ -521,7 +522,7 @@ async function executeStandardSubagent(
       },
       async (toolInput: Record<string, unknown>, ctx: ToolContext) => {
         const result = await teamMessagePlugin.executor(
-          { ...toolInput, from: memberName },
+          { ...toolInput, from: agentId },
           {
             cwd: ctx.cwd ?? process.cwd(),
             allowMutation: true,
@@ -538,6 +539,31 @@ async function executeStandardSubagent(
         };
       },
     );
+
+    // Inject team context into worker's system prompt
+    try {
+      const teamConfig = await loadTeamConfig(teamName);
+      if (teamConfig) {
+        const peerMembers = teamConfig.members.filter(m => m.agentId !== agentId);
+        const peerList = peerMembers.length > 0
+          ? peerMembers.map(m => `  - ${m.name} (\`${m.agentId}\`) [${m.agentType}]`).join('\n')
+          : '  (none)';
+        const teamCtx = [
+          '',
+          '# Team Communication',
+          `You are "${memberName}" (\`${agentId}\`) in team "${teamName}".`,
+          `The team leader is at "leader" — use SendMessage(to: "leader", text: "...") to report.`,
+          '',
+          `Peer workers:\n${peerList}`,
+          '- SendMessage(to: "<agentId>") to message a specific teammate',
+          '- SendMessage(to: "*") to broadcast to all workers',
+          '- Just writing text is NOT visible to others — you MUST use SendMessage',
+        ].join('\n');
+        enrichedPrompt = enrichedPrompt + teamCtx;
+      }
+    } catch {
+      // Non-fatal: team context injection is best-effort
+    }
   }
 
   const effectiveModel = modelOverride ?? agentDef.model;

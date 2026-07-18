@@ -44,17 +44,18 @@ async function buildTeamContextBlock(config: TeamConfig): Promise<string> {
     `# Active Team: ${config.name}`,
     `Description: ${config.description}`,
     '',
-    'You are the team leader. Use Agent(name, team_name) to spawn workers,',
-    'SendMessage to communicate with them, and TaskGet/TaskList to monitor progress.',
+    'You are the team leader. Use Agent(name, team_name) to spawn workers.',
+    'Address workers by their agentId with SendMessage(to: "<agentId>", text: "...").',
+    'Use SendMessage(to: "*") to broadcast to all workers.',
     '',
   ];
 
   if (config.members.length > 0) {
-    lines.push('Workers:');
+    lines.push('Workers (address by agentId):');
     for (const m of config.members) {
-      const unread = await getUnreadCount(config.name, m.name).catch(() => 0);
+      const unread = await getUnreadCount(config.name, m.agentId).catch(() => 0);
       const unreadNote = unread > 0 ? ` (${unread} unread)` : '';
-      lines.push(`- ${m.name} (${m.agentType}) [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
+      lines.push(`- ${m.name} \`${m.agentId}\` [${m.agentType}] [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
     }
   } else {
     lines.push('No workers yet. Use Agent(name, team_name) to spawn one.');

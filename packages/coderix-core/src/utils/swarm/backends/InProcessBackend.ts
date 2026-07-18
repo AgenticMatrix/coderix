@@ -80,7 +80,7 @@ export class InProcessBackend implements TeammateExecutor {
     });
 
     // Send initial task to teammate's mailbox
-    await writeToMailbox(config.agentName, {
+    await writeToMailbox(config.agentId, {
       from: 'leader',
       text: config.prompt,
       timestamp: new Date().toISOString(),
@@ -116,7 +116,7 @@ export class InProcessBackend implements TeammateExecutor {
     const teammate = this.activeTeammates.get(agentId);
     if (!teammate) return;
 
-    await writeToMailbox(teammate.ctx.agentName, {
+    await writeToMailbox(teammate.ctx.agentId, {
       from: 'leader',
       text: message,
       timestamp: new Date().toISOString(),
@@ -129,7 +129,7 @@ export class InProcessBackend implements TeammateExecutor {
     if (!teammate) return;
 
     // Send shutdown request via mailbox
-    await writeToMailbox(teammate.ctx.agentName, {
+    await writeToMailbox(teammate.ctx.agentId, {
       from: 'leader',
       text: JSON.stringify({ type: 'shutdown_request' }),
       timestamp: new Date().toISOString(),
@@ -145,7 +145,7 @@ export class InProcessBackend implements TeammateExecutor {
 
     // Clean up mailbox
     try {
-      await clearMailbox(teammate.ctx.agentName, teammate.ctx.teamName);
+      await clearMailbox(teammate.ctx.agentId, teammate.ctx.teamName);
     } catch {
       // Non-fatal
     }

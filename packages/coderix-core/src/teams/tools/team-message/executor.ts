@@ -172,32 +172,32 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
     let sent = 0;
     for (const member of config.members) {
       try {
-        await sendMessage(teamName, from, member.name, text);
+        await sendMessage(teamName, from, member.agentId, text);
         sent++;
       } catch {
         // Skip unreachable members
       }
     }
     return {
-      content: `Broadcast message sent to ${sent}/${config.members.length} member(s) in '${teamName}'.`,
+      content: `Broadcast message sent to ${sent}/${config.members.length} worker(s) in '${teamName}'.`,
       isError: false,
       metadata: { teamName, broadcast: true, recipientCount: sent },
     };
   }
 
-  const recipient = config.members.find(m => m.name === to);
+  const recipient = config.members.find(m => m.agentId === to);
   if (!recipient) {
-    const available = config.members.map(m => m.name).join(', ');
+    const available = config.members.map(m => `${m.name} (${m.agentId})`).join(', ');
     return {
-      content: `Member '${to}' not found in team '${teamName}'. Available: ${available}`,
+      content: `Worker '${to}' not found in team '${teamName}'. Available: ${available}`,
       isError: true,
     };
   }
 
-  await sendMessage(teamName, from, to, text);
+  await sendMessage(teamName, from, recipient.agentId, text);
 
   return {
-    content: `Message sent to ${to} in team '${teamName}'.`,
+    content: `Message sent to ${recipient.name} (${to}) in team '${teamName}'.`,
     isError: false,
     metadata: { teamName, to },
   };

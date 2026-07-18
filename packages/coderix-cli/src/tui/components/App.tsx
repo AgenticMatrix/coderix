@@ -226,11 +226,15 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     const teamCtx = store.getState().teamContext;
     const dmMatch = text.match(/^@(\S+)\s+(.+)$/s);
     if (dmMatch && teamCtx) {
-      const [, agentName, message] = dmMatch;
+      const [, targetName, message] = dmMatch;
+      // Look up agentId by name from the teammates map
+      const targetId = Object.keys(teamCtx.teammates).find(
+        id => teamCtx.teammates[id]?.name === targetName,
+      ) || targetName; // fallback: use the name as-is
       const { writeToMailbox } = await import('@coderix/core');
       try {
-        await writeToMailbox(agentName!, {
-          from: teamCtx.selfAgentName || 'leader',
+        await writeToMailbox(targetId!, {
+          from: 'leader',
           text: message!,
           timestamp: new Date().toISOString(),
         }, teamCtx.teamName);
@@ -239,8 +243,8 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           message: {
             id: Date.now(),
             role: 'user',
-            content: `@${agentName} ${message}`,
-            blocks: [{ type: 'text' as const, content: `@${agentName} ${message}` }],
+            content: `@${targetName} ${message}`,
+            blocks: [{ type: 'text' as const, content: `@${targetName} ${message}` }],
             timestamp: Date.now(),
           },
         });
@@ -250,8 +254,8 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           message: {
             id: Date.now(),
             role: 'system',
-            content: `Failed to send message to '${agentName}'. Is the agent running?`,
-            blocks: [{ type: 'text' as const, content: `Failed to send message to '${agentName}'. Is the agent running?` }],
+            content: `Failed to send message to '${targetName}'. Is the agent running?`,
+            blocks: [{ type: 'text' as const, content: `Failed to send message to '${targetName}'. Is the agent running?` }],
             timestamp: Date.now(),
           },
         });
