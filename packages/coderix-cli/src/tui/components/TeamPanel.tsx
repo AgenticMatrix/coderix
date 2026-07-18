@@ -46,12 +46,6 @@ interface TeamPanelProps {
 
 const POLL_INTERVAL_MS = 2000;
 
-function memberLabel(m: TeamMember): string {
-  if (m.task) return m.task.slice(0, 50);
-  const isAutoName = m.name.startsWith(`${m.agentType}-`) || m.name.startsWith('fork-');
-  return isAutoName ? 'temporary agent' : m.name;
-}
-
 function agentToMember(agent: SubAgentRecord): TeamMember {
   const statusMap: Record<string, TeamMember['status']> = {
     running: 'running',
@@ -115,7 +109,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               if (focusedRef.current) return true;
               if (m.status === 'done' || m.status === 'error' || m.status === 'stopped') return false;
               return registry ? registry.get(m.agentId) !== undefined : false;
-            });
+            }).map(m => ({ ...m, teamName: cfg.name }));
             for (const m of cfg.members) {
               if (m.agentId && !m.agentId.startsWith('pending-')) {
                 teamAgentIds.add(m.agentId);
@@ -266,13 +260,6 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
       <Box>
         <Text bold>Agents </Text>
-        {teamContext ? (
-          <Text color="ansi:cyan">[{teamContext.teamName}] </Text>
-        ) : visible.length === 1 ? (
-          <Text dimColor>{visible[0].name} </Text>
-        ) : (
-          <Text dimColor>({visible.length} groups) </Text>
-        )}
         <Text dimColor>({parts.join(', ')})</Text>
       </Box>
       {teamContext && (
@@ -305,7 +292,9 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const isViewed = viewedAgentId === m.agentId;
         const icon = isViewed ? '●' : '○';
         const iconColor = isViewed ? 'ansi:green' : 'ansi:blackBright';
-        const label = memberLabel(m);
+        const isAutoName = m.name.startsWith(`${m.agentType}-`) || m.name.startsWith('fork-');
+        const teamOrSolo = m.teamName || 'solo';
+        const middleLabel = isAutoName ? (m.task || m.name.slice(0, 50)) : m.name;
         const statusText = statusLabel(m, now);
         const statusColor = m.status === 'running' ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
 
@@ -319,7 +308,9 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               <Text color={iconColor}>{icon} </Text>
               <Text bold={isCursor}>{m.agentType}</Text>
               <Text dimColor> · </Text>
-              <Text dimColor={m.status === 'done'}>{label}</Text>
+              <Text dimColor={m.status === 'done'}>{teamOrSolo}</Text>
+              <Text dimColor> · </Text>
+              <Text dimColor={m.status === 'done'}>{middleLabel}</Text>
               <Text dimColor> · </Text>
               <Text color={statusColor} dimColor={m.status === 'done'}>{statusText}</Text>
             </Text>

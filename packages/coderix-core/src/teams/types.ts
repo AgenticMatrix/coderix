@@ -26,6 +26,8 @@ export interface TeamMember {
   status: 'pending' | 'running' | 'done' | 'error' | 'stopped';
   /** Brief description of assigned task. */
   task?: string;
+  /** Team name this member belongs to (undefined for solo agents). */
+  teamName?: string;
   /** Unix timestamp (ms) when the member joined the team. */
   joinedAt: number;
   /** Unix timestamp (ms) when the member finished (done/error/stopped). */
