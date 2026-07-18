@@ -42,6 +42,8 @@ function coreBlockToTui(block: Record<string, unknown>): ContentBlock {
             ? (block.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
             : ''),
         isError: (block.is_error as boolean) ?? false,
+        duration: (block as Record<string, unknown>).duration as number | undefined,
+        metadata: (block as Record<string, unknown>).metadata as Record<string, unknown> | undefined,
       };
     default:
       return { type: 'text', content: '' };
@@ -103,7 +105,9 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
             b.result = {
               content: block.content,
               isError: block.isError,
+              metadata: (block as { metadata?: Record<string, unknown> }).metadata,
             };
+            b.duration = (block as { duration?: number }).duration;
             // Populate toolName for Pass 3 filtering
             (block as { toolName?: string }).toolName = b.toolName;
             break;
@@ -122,11 +126,27 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
     'Agent', 'SendMessage',
   ]);
 
+  // Build a tool_use_id → toolName map from all assistant messages
+  // as a fallback when Pass 2 didn't set toolName on a tool_result.
+  const toolUseNameMap = new Map<string, string>();
+  for (const msg of messages) {
+    if (msg.role !== 'assistant') continue;
+    for (const b of msg.blocks) {
+      if (b.type === 'tool_use' && b.toolId) {
+        toolUseNameMap.set(b.toolId, b.toolName);
+      }
+    }
+  }
+
   return messages.filter((msg) => {
     if (msg.role !== 'user') return true;
     // Remove inline-rendered tool_result blocks
     const filtered = msg.blocks.filter(
-      (b) => b.type !== 'tool_result' || !inlineTools.has((b as { toolName?: string }).toolName ?? ''),
+      (b) => b.type !== 'tool_result' || !inlineTools.has(
+        ((b as { toolName?: string }).toolName) ||
+        toolUseNameMap.get((b as { toolId?: string }).toolId ?? '') ||
+        '',
+      ),
     );
     // Drop the message entirely if nothing remains
     return filtered.length > 0;
