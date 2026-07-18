@@ -129,8 +129,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   // ── Team messaging mode ───────────────────────────────────────────────
   if (isTeamMode && !isResumeMode) {
     const recipient = to === '*' ? 'broadcast' : (to || '?');
-    const preview = text ? (text.length > 80 ? text.slice(0, 77) + '...' : text) : '';
-    const headerText = preview ? `→ ${recipient}: ${preview}` : `→ ${recipient}`;
+    const headerText = `→ ${recipient}:`;
 
     if (isError) {
       return (
@@ -141,6 +140,16 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
             <Text dimColor> {headerText}</Text>
             <Text color="ansi:red"> failed</Text>
           </Text>
+          {text ? (
+            <Box marginLeft={2}>
+              {text.split('\n').map((line, i) => (
+                <Text key={i}>
+                  <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
+                  <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
+                </Text>
+              ))}
+            </Box>
+          ) : null}
         </Box>
       );
     }
@@ -160,6 +169,16 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           ) : null}
           {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
         </Text>
+        {text ? (
+          <Box marginLeft={2}>
+            {text.split('\n').map((line, i) => (
+              <Text key={i}>
+                <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
+                <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
+              </Text>
+            ))}
+          </Box>
+        ) : null}
       </Box>
     );
   }
