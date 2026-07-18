@@ -100,11 +100,15 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
             {props.contentExpanded
               ? renderContentLines(text)
               : (
-                <Text>
-                  <Text dimColor>└ </Text>
-                  <Text dimColor>{description || text.slice(0, 80)}</Text>
-                  <Text dimColor> ...Ctrl+D to detail</Text>
-                </Text>
+                <Box flexDirection="column">
+                  <Text>
+                    <Text dimColor>└ </Text>
+                    <Text dimColor>{description || text.slice(0, 80)}</Text>
+                  </Text>
+                  <Text>
+                    <Text dimColor>  ...Ctrl+D to detail</Text>
+                  </Text>
+                </Box>
               )}
           </Box>
         ) : description ? (
@@ -162,11 +166,15 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           {props.contentExpanded
             ? renderContentLines(message)
             : (
-              <Text>
-                <Text dimColor>└ </Text>
-                <Text dimColor>{description || message.slice(0, 80)}</Text>
-                <Text dimColor> ...Ctrl+D to detail</Text>
-              </Text>
+              <Box flexDirection="column">
+                <Text>
+                  <Text dimColor>└ </Text>
+                  <Text dimColor>{description || message.slice(0, 80)}</Text>
+                </Text>
+                <Text>
+                  <Text dimColor>  ...Ctrl+D to detail</Text>
+                </Text>
+              </Box>
             )}
         </Box>
       ) : description ? (
