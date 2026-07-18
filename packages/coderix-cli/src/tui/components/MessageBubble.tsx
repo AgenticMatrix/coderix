@@ -366,7 +366,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
   if (isToolResultOnly) {
     const filteredBlocks = message.blocks.filter(block => {
       const name = (block as ToolResultBlock).toolName;
-      if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet' || name === 'Sleep') return false;
+      if (name === 'TaskCreate' || name === 'TaskUpdate' || name === 'TaskList' || name === 'TaskGet' || name === 'Listen') return false;
       return true;
     });
     if (filteredBlocks.length === 0) return null;

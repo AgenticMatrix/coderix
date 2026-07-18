@@ -20,13 +20,12 @@ interface AgentSnapshot {
   latestTool: string | null;
 }
 
-export function SleepRenderer(props: ToolUseRendererProps) {
+export function ListenRenderer(props: ToolUseRendererProps) {
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
   const isPending = props.state === 'pending';
   const isActive = isExecuting || isPending;
   const resultContent = props.result?.content;
-  const paramSummary = props.paramSummary;
 
   const { elapsedSecs, blinkOn } = useToolTimer(isActive);
 
@@ -74,21 +73,13 @@ export function SleepRenderer(props: ToolUseRendererProps) {
         </Box>
         <Box flexDirection="row" flexGrow={1}>
           <Text>
-            <Text bold>Sleep</Text>
-            {paramSummary ? (
-              <Text dimColor> · {paramSummary}</Text>
-            ) : null}
-            {isActive ? (
-              <Text dimColor color="ansi:yellow"> · running {elapsedSecs}s</Text>
-            ) : null}
-            {isDone && props.duration !== undefined ? (
-              <Text dimColor> · ⏱ {(props.duration / 1000).toFixed(1)}</Text>
-            ) : null}
+            <Text bold>Listen</Text>
+            <Text dimColor> · ⏱ {isActive ? elapsedSecs : ((props.duration ?? 0) / 1000).toFixed(1)}/{(props.input.duration as number) ?? 0}</Text>
           </Text>
         </Box>
       </Box>
 
-      {/* Body — aligned under S in Sleep (icon width = 2) */}
+      {/* Body — aligned under L in Listen (icon width = 2) */}
       {isActive && agents.length > 0 ? (
         <Box flexDirection="row">
           <Box width={2} flexShrink={0} />
@@ -122,6 +113,6 @@ export function SleepRenderer(props: ToolUseRendererProps) {
  * Result renderer that suppresses the default content display,
  * since the tool-use renderer already shows the result.
  */
-export function SleepResultRenderer(_props: ToolResultRendererProps) {
+export function ListenResultRenderer(_props: ToolResultRendererProps) {
   return null;
 }

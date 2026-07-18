@@ -29,7 +29,7 @@ export const coordinatorAgent: BuiltInAgentDefinition = {
     'TaskCreate',
     'TaskUpdate',
     'TaskList',
-    'Sleep',
+    'Listen',
   ],
   disallowedTools: [],
   model: 'sonnet',

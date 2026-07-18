@@ -2,8 +2,8 @@ import type { ToolPlugin } from '../types.js';
 import { schema } from './schema.js';
 import { execute } from './executor.js';
 
-const sleepPlugin: ToolPlugin = {
-  name: 'Sleep',
+const listenPlugin: ToolPlugin = {
+  name: 'Listen',
   schema,
   executor: execute,
   paramSummary: (input) => {
@@ -12,4 +12,4 @@ const sleepPlugin: ToolPlugin = {
   },
 };
 
-export default sleepPlugin;
+export default listenPlugin;

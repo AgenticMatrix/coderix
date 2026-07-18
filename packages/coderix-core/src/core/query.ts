@@ -1224,7 +1224,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
     // If this is the coordinator and background sub-agents are still
     // running, end turn to prevent polling with TaskGet.
-    // Exception: if a notification was just drained (e.g. after Sleep woke
+    // Exception: if a notification was just drained (e.g. after Listen woke
     // early), continue the turn so the model can process the results.
     if (agentRole === 'coordinator' && config.subAgentRegistry) {
       const running = config.subAgentRegistry.list().filter(a => a.status === 'running');

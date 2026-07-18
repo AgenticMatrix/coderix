@@ -176,11 +176,11 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
       return `TeamDelete ${name}`;
     },
   },
-  Sleep: {
+  Listen: {
     icon: <Clock size={13} />,
     label: (input) => {
       const d = input.duration as string ?? '';
-      return `Sleep ${d}`;
+      return `Listen ${d}`;
     },
   },
   EnterWorktree: {

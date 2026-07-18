@@ -90,7 +90,7 @@ export const COORDINATOR_ALLOWED_TOOLS: ReadonlySet<string> = new Set([
   'SendMessage',
   'TaskStop',
   'TaskGet',
-  'Sleep',
+  'Listen',
   'TeamCreate',
   'TeamDelete',
 ]);

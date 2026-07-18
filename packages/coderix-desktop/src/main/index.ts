@@ -44,8 +44,8 @@ import { schema as todoWriteSchema } from '../../../../packages/coderix-core/src
 import { execute as todoWriteExec } from '../../../../packages/coderix-core/src/tools/todo-write/executor.js';
 import { schema as notebookEditSchema } from '../../../../packages/coderix-core/src/tools/notebook-edit/schema.js';
 import { execute as notebookEditExec } from '../../../../packages/coderix-core/src/tools/notebook-edit/executor.js';
-import { schema as sleepSchema } from '../../../../packages/coderix-core/src/tools/sleep/schema.js';
-import { execute as sleepExec } from '../../../../packages/coderix-core/src/tools/sleep/executor.js';
+import { schema as listenSchema } from '../../../../packages/coderix-core/src/tools/listen/schema.js';
+import { execute as listenExec } from '../../../../packages/coderix-core/src/tools/listen/executor.js';
 import { schema as askUserSchema } from '../../../../packages/coderix-core/src/tools/ask-user-question/schema.js';
 import { execute as askUserExec } from '../../../../packages/coderix-core/src/tools/ask-user-question/executor.js';
 import { schema as enterPlanSchema } from '../../../../packages/coderix-core/src/tools/enter-plan-mode/schema.js';
@@ -203,7 +203,7 @@ async function initQueryEngine(): Promise<void> {
     { schema: webSearchSchema, executor: webSearchExec },
     { schema: todoWriteSchema, executor: todoWriteExec },
     { schema: notebookEditSchema, executor: notebookEditExec },
-    { schema: sleepSchema, executor: sleepExec },
+    { schema: listenSchema, executor: listenExec },
     { schema: askUserSchema, executor: askUserExec },
     { schema: enterPlanSchema, executor: enterPlanExec },
     { schema: exitPlanSchema, executor: exitPlanExec },

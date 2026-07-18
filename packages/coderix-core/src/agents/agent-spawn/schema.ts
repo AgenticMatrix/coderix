@@ -21,7 +21,7 @@ Usage notes:
 - Always include a short description (3-5 words) summarizing what the agent will do.
 - Launch multiple independent agents in parallel by sending a single message with multiple Agent tool calls — this maximizes throughput.
 - When the agent finishes, it returns one message back to you. The result is not visible to the user — relay a concise summary to the user.
-- You can run agents in the background using the background parameter. You will be notified on completion — do NOT sleep, poll, or proactively check on their progress.
+- You can run agents in the background using the background parameter. You will be notified on completion — use Listen instead of polling or proactively checking progress.
 - Use foreground (the default) when you need the agent's results before you can proceed. Use background when you have genuinely independent work to do in parallel.
 - To continue a previously spawned agent, use agent_id + resume: true. This restores the agent's full transcript and is preferred over spawning a new one for follow-up work.
 - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.).

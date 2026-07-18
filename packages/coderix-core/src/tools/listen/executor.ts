@@ -6,7 +6,7 @@ export const execute: ToolExecutor = async (input, opts) => {
   const ms = duration * 1000;
   const start = Date.now();
 
-  // Fragment sleep — check every 500ms whether notifications arrived or
+  // Fragment listen — check every 500ms whether notifications arrived or
   // all agents finished, so we can wake early and let the main agent
   // process results in the same turn.
   const CHECK_INTERVAL = 500;
@@ -31,8 +31,8 @@ export const execute: ToolExecutor = async (input, opts) => {
 
   const reasonSuffix = reason ? ` ${reason}` : '';
   const content = wokeEarly
-    ? `Slept for ${actualDuration.toFixed(1)}s. Reason: sub agent 已完成${reasonSuffix}`
-    : `Slept for ${actualDuration.toFixed(1)}s. Reason: ${duration}s 到时 sub agent 未完成${reasonSuffix}`;
+    ? `Listened for ${actualDuration.toFixed(1)}s. Sub-agent completed${reasonSuffix}`
+    : `Listened for ${actualDuration.toFixed(1)}s. Timed out after ${duration}s, sub-agent still running${reasonSuffix}`;
 
   return {
     content,

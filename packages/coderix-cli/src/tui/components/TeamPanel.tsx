@@ -15,11 +15,14 @@ function formatDuration(ms: number): string {
   return `${mins}m ${remain}s`;
 }
 
-function statusLabel(m: TeamMember, now: number): string {
+function statusLabel(m: TeamMember, now: number, stats?: LiveAgentStats): string {
   const elapsed = m.finishedAt ? m.finishedAt - m.joinedAt : now - m.joinedAt;
   switch (m.status) {
-    case 'running':
+    case 'running': {
+      const hasLiveCalls = stats && stats.lastCall !== null;
+      if (!hasLiveCalls) return 'idle';
       return `running ${formatDuration(elapsed)}`;
+    }
     case 'pending':
       return 'pending';
     case 'done':
@@ -323,10 +326,10 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const isAutoName = m.name.startsWith(`${m.agentType}-`) || m.name.startsWith('fork-');
         const teamOrSolo = m.teamName || 'solo';
         const middleLabel = isAutoName ? (m.task || m.name.slice(0, 50)) : m.name;
-        const statusText = statusLabel(m, now);
-        const statusColor = m.status === 'running' ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
-
         const stats = m.status === 'running' ? liveStats.get(m.agentId) : undefined;
+        const statusText = statusLabel(m, now, stats);
+        const isIdle = stats && stats.lastCall === null;
+        const statusColor = m.status === 'running' && !isIdle ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
         const statsSuffix = stats && (stats.turnCount > 0 || stats.toolCount > 0)
           ? ` · ${stats.toolCount} tools, ${stats.turnCount} turns${stats.lastCall ? ` · ${stats.lastCall}` : ''}`
           : '';

@@ -69,9 +69,11 @@ export function SubAgentPicker({ onSelect, onCancel }: SubAgentPickerProps) {
 
       {agents.map((a, i) => {
         const icon = AGENT_ICONS[a.agentType] ?? '🤖';
+        const hasLiveCalls = (a.liveToolCalls?.length ?? 0) > 0;
+        const isIdle = !a.finishedAt && !hasLiveCalls;
         const elapsed = a.finishedAt
           ? `${((a.finishedAt - a.createdAt) / 1000).toFixed(1)}s`
-          : 'running';
+          : isIdle ? 'idle' : 'running';
         const isSelected = sel === i;
 
         return (

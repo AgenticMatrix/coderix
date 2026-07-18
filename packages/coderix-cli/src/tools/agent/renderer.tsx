@@ -98,6 +98,10 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const blinkOn = Math.floor(now / 500) % 2 === 0;
 
   const isResume = !!(props.input.resume) && !!(props.input.agent_id);
+  const teamName = props.input.team_name as string | undefined;
+  const workerName = props.input.name as string | undefined;
+  const isTeamWorkerSpawn = !!(teamName && workerName);
+  const workerAgentId = props.result?.metadata?.agentId as string | undefined;
   const label = isResume ? 'Resume' : (agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'Fork');
   const shortDesc = description || (prompt ? (prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt) : '');
   const headerText = shortDesc ? `${label} (${shortDesc})` : label;
@@ -184,6 +188,30 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
           <Text bold>{headerText}</Text>
           <Text color="ansi:red"> failed</Text>
         </Text>
+      </Box>
+    );
+  }
+
+  // ── Team worker spawn: compact display ──────────────────────────────
+  if (isTeamWorkerSpawn) {
+    const spawnDone = isDone && !isError;
+    const spawnIndicator = spawnDone ? '●' : (blinkOn ? '●' : '○');
+    const spawnColor = spawnDone ? 'ansi:green' : 'ansi:yellow';
+
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <Text>
+          <Text color={spawnColor}>{spawnIndicator} </Text>
+          <Text bold>{headerText}</Text>
+          {!spawnDone ? (
+            <Text dimColor color="ansi:yellow"> spawning {elapsedSecs}s</Text>
+          ) : null}
+        </Text>
+        {spawnDone && workerAgentId ? (
+          <Box flexDirection="row" marginLeft={2}>
+            <Text dimColor>⎿ worker({workerAgentId}) created</Text>
+          </Box>
+        ) : null}
       </Box>
     );
   }
