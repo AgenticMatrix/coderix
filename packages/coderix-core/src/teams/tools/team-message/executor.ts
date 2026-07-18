@@ -8,7 +8,7 @@ import { SessionManager } from '../../../core/session.js';
 import { CheckpointManager } from '../../../core/checkpoint.js';
 import { filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../../../agents/tool-filtering.js';
 import { query } from '../../../core/query.js';
-import { loadTeamConfig } from '../../team-store.js';
+import { loadTeamConfig, listTeams } from '../../team-store.js';
 import { sendMessage } from '../../team-mailbox.js';
 import {
   readAgentMetadata,
@@ -168,6 +168,9 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
     };
   }
 
+  // Resolve sender name
+  const fromName = from === 'leader' ? 'leader' : (config.members.find(m => m.agentId === from)?.name ?? from);
+
   if (to === '*') {
     let sent = 0;
     for (const member of config.members) {
@@ -181,7 +184,7 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
     return {
       content: `Broadcast message sent to ${sent}/${config.members.length} worker(s) in '${teamName}'.`,
       isError: false,
-      metadata: { teamName, broadcast: true, recipientCount: sent },
+      metadata: { teamName, broadcast: true, recipientCount: sent, fromName, toName: 'all' },
     };
   }
 
@@ -199,11 +202,24 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
   return {
     content: `Message sent to ${recipient.name} (${to}) in team '${teamName}'.`,
     isError: false,
-    metadata: { teamName, to },
+    metadata: { teamName, to, fromName, toName: recipient.name },
   };
 }
 
 // ── Sub-agent resume mode ────────────────────────────────────────────
+
+async function resolveAgentName(agentId: string): Promise<string | undefined> {
+  try {
+    const teams = await listTeams();
+    for (const t of teams) {
+      const cfg = await loadTeamConfig(t);
+      if (!cfg) continue;
+      const member = cfg.members.find(m => m.agentId === agentId);
+      if (member) return member.name;
+    }
+  } catch { /* best-effort */ }
+  return undefined;
+}
 
 async function handleSubAgentResume(
   input: Record<string, unknown>,
@@ -444,12 +460,15 @@ async function handleSubAgentResume(
       createdAt: agent.createdAt, finishedAt: Date.now(),
     }).catch(() => {});
 
+    const agentDisplayName = await resolveAgentName(agentId);
+
     return {
       content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${assistantTurnCount} LLM turns, +${toolCount} tools.\n\n${resultText}`,
       isError: false,
       duration: Date.now() - startTime,
       metadata: {
         agentId, agentType, resumed: true,
+        agentName: agentDisplayName,
         turnCount: assistantTurnCount, toolCount,
         totalTurns: agent.turnCount + assistantTurnCount,
         duration: Date.now() - startTime,
@@ -468,7 +487,7 @@ async function handleSubAgentResume(
       content: `Sub-agent ${agentId} (${agentType}) resume error after ${assistantTurnCount} turns: ${errorMsg}`,
       isError: true,
       duration: Date.now() - startTime,
-      metadata: { agentId, agentType, error: errorMsg },
+      metadata: { agentId, agentType, agentName: await resolveAgentName(agentId).catch(() => undefined), error: errorMsg },
     };
   }
 }

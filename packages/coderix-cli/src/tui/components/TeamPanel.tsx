@@ -47,7 +47,9 @@ interface TeamPanelProps {
 const POLL_INTERVAL_MS = 2000;
 
 function memberLabel(m: TeamMember): string {
-  return m.task ? m.task.slice(0, 50) : '';
+  if (m.task) return m.task.slice(0, 50);
+  const isAutoName = m.name.startsWith(`${m.agentType}-`) || m.name.startsWith('fork-');
+  return isAutoName ? 'temporary agent' : m.name;
 }
 
 function agentToMember(agent: SubAgentRecord): TeamMember {

@@ -128,8 +128,9 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
 
   // ── Team messaging mode ───────────────────────────────────────────────
   if (isTeamMode && !isResumeMode) {
-    const recipient = to === '*' ? 'broadcast' : (to || '?');
-    const headerText = `→ ${recipient}:`;
+    const metadata = props.result?.metadata as Record<string, unknown> | undefined;
+    const senderName = (metadata?.fromName as string) || 'leader';
+    const recipientName = (metadata?.toName as string) || (to === '*' ? 'all' : (to || '?'));
 
     if (isError) {
       return (
@@ -137,7 +138,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           <Text>
             <Text color="ansi:red">❌ </Text>
             <Text bold>SendMessage</Text>
-            <Text dimColor> {headerText}</Text>
+            <Text dimColor>({senderName} → {recipientName})</Text>
             <Text color="ansi:red"> failed</Text>
           </Text>
           {text ? (
@@ -163,11 +164,10 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
         <Text>
           <Text color={indicatorColor}>{indicator} </Text>
           <Text bold>SendMessage</Text>
-          <Text dimColor> {headerText}</Text>
+          <Text dimColor>({senderName} → {recipientName})</Text>
           {showTimer ? (
             <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
           ) : null}
-          {isDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
         </Text>
         {text ? (
           <Box marginLeft={2}>
@@ -184,7 +184,13 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   }
 
   // ── Sub-agent resume mode ─────────────────────────────────────────────
-  const headerText = `Resume ${agentId}${message ? ': ' + (message.length > 60 ? message.slice(0, 57) + '...' : message) : ''}`;
+  const metadata = props.result?.metadata as Record<string, unknown> | undefined;
+  const registry = getSubAgentRegistry();
+  const agentDisplayName = (metadata?.agentName as string)
+    || registry?.get(agentId!)?.name
+    || agentId
+    || '?';
+  const headerText = `(leader → ${agentDisplayName}) · resume`;
 
   const doneToolCalls: ToolCallSummary[] = (props.result?.metadata?.toolCalls as ToolCallSummary[]) ?? [];
   const doneTurnCount = props.result?.metadata?.turnCount as number | undefined;
@@ -210,6 +216,16 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           <Text dimColor> {headerText}</Text>
           <Text color="ansi:red"> failed</Text>
         </Text>
+        {message ? (
+          <Box marginLeft={2}>
+            {message.split('\n').map((line: string, i: number) => (
+              <Text key={i}>
+                <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
+                <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
+              </Text>
+            ))}
+          </Box>
+        ) : null}
       </Box>
     );
   }
@@ -231,8 +247,17 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
         {showTimer ? (
           <Text dimColor color="ansi:yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
-        {isDone ? <Text dimColor> {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>
+      {message ? (
+        <Box marginLeft={2}>
+          {message.split('\n').map((line: string, i: number) => (
+            <Text key={i}>
+              <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
+              <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
+            </Text>
+          ))}
+        </Box>
+      ) : null}
       {lastCall && (
         <Box flexDirection="column" marginLeft={2}>
           <Text>

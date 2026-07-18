@@ -66,6 +66,7 @@ export const workerAgent: BuiltInAgentDefinition = {
     '- If you hit a blocker you cannot resolve, report it clearly and stop.',
     '',
     'When communicating with your leader, use SendMessage(to: "leader", text: "...").',
+    'To message a peer worker, use their agentId (e.g. SendMessage(to: "swarm-xxx", text: "...")).',
     'Your final response is your deliverable. Make it self-contained and actionable.',
   ].join('\n'),
 };

@@ -12,7 +12,7 @@ export const schema: ToolSchema = {
     type: 'object',
     properties: {
       team_name: { type: 'string', description: 'Team name (for team messaging mode)' },
-      to: { type: 'string', description: 'Recipient agentId, "leader" for the team leader, or "*" to broadcast to all workers' },
+      to: { type: 'string', description: 'Recipient agentId (use the backtick-quoted ID like "swarm-abc123", NOT the worker name), "leader" for the team leader, or "*" to broadcast to all workers' },
       text: { type: 'string', description: 'Message content (for plain text messaging)' },
       from: { type: 'string', description: 'Sender name (defaults to "leader")' },
       message_type: {

@@ -45,13 +45,17 @@ async function buildTeamContextBlock(config: TeamConfig): Promise<string> {
     `Description: ${config.description}`,
     '',
     'You are the team leader. Use Agent(name, team_name) to spawn workers.',
-    'Address workers by their agentId with SendMessage(to: "<agentId>", text: "...").',
-    'Use SendMessage(to: "*") to broadcast to all workers.',
+    '',
+    'IMPORTANT — SendMessage addressing:',
+    '- Workers are addressed by agentId ONLY (the ID in backticks like `swarm-xxx`). Names will NOT work.',
+    '- SendMessage(to: "<agentId>", text: "...") — use the agentId from the worker list below',
+    '- SendMessage(to: "*") — broadcast to all workers',
+    '- SendMessage(to: "leader") — workers use this to reach you',
     '',
   ];
 
   if (config.members.length > 0) {
-    lines.push('Workers (address by agentId):');
+    lines.push('Workers (use the agentId to address them):');
     for (const m of config.members) {
       const unread = await getUnreadCount(config.name, m.agentId).catch(() => 0);
       const unreadNote = unread > 0 ? ` (${unread} unread)` : '';
