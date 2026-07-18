@@ -347,17 +347,23 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
           const assistantMsg = msg.message as unknown as Message;
           transcript.push(assistantMsg);
           const blocks = Array.isArray(assistantMsg.content) ? assistantMsg.content : [];
-          const newToolCount = blocks.filter((b: ContentBlock) => b.type === 'tool_use').length;
-          toolCount += newToolCount;
 
-          // Push live tool calls to registry for real-time TUI display
-          if (newToolCount > 0) {
-            for (const block of blocks) {
-              if (block.type === 'tool_use') {
-                const b = block as { name?: string; input?: Record<string, unknown> };
-                const inputStr = b.input ? JSON.stringify(b.input) : '';
-                accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: inputStr, state: 'executing' });
-              }
+          // New turn — clear live tool calls from previous turn so idle
+          // detection (empty liveToolCalls = idle) works between turns.
+          accumulatedLiveCalls.length = 0;
+
+          // Count tools, excluding Listen (passive wait, not real work).
+          const nonListenBlocks = blocks.filter(
+            (b: ContentBlock) => b.type === 'tool_use' && (b as { name?: string }).name !== 'Listen',
+          );
+          toolCount += nonListenBlocks.length;
+
+          // Push live tool calls to registry for real-time TUI display.
+          if (nonListenBlocks.length > 0) {
+            for (const block of nonListenBlocks) {
+              const b = block as { name?: string; input?: Record<string, unknown> };
+              const inputStr = b.input ? JSON.stringify(b.input) : '';
+              accumulatedLiveCalls.push({ name: b.name ?? 'unknown', input: inputStr, state: 'executing' });
             }
           }
 
