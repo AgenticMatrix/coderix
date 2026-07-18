@@ -14,6 +14,7 @@ export const schema: ToolSchema = {
       team_name: { type: 'string', description: 'Team name (for team messaging mode)' },
       to: { type: 'string', description: 'Recipient agentId (use the backtick-quoted ID like "swarm-abc123", NOT the worker name), "leader" for the team leader, or "*" to broadcast to all workers' },
       text: { type: 'string', description: 'Message content (for plain text messaging)' },
+      description: { type: 'string', description: 'Short summary of the message, 3-8 words' },
       from: { type: 'string', description: 'Sender name (defaults to "leader")' },
       message_type: {
         type: 'string',

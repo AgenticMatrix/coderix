@@ -105,6 +105,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   const teamName = props.input.team_name as string | undefined;
   const to = props.input.to as string | undefined;
   const text = props.input.text as string | undefined;
+  const description = props.input.description as string | undefined;
 
   const isResumeMode = !!(agentId && message);
   const isTeamMode = !!(teamName);
@@ -176,9 +177,9 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
             <Text dimColor>({senderName} → {recipientName})</Text>
             <Text color="ansi:red"> failed</Text>
           </Text>
-          {text ? (
+          {description ? (
             <Box marginLeft={2}>
-              {renderContentLines(text)}
+              {renderContentLines(description)}
             </Box>
           ) : null}
         </Box>
@@ -199,14 +200,9 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
             <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
           ) : null}
         </Text>
-        {text ? (
+        {description ? (
           <Box marginLeft={2}>
-            {text.split('\n').map((line, i) => (
-              <Text key={i}>
-                <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
-                <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
-              </Text>
-            ))}
+            {renderContentLines(description)}
           </Box>
         ) : null}
       </Box>
@@ -246,9 +242,9 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           <Text dimColor> {headerText}</Text>
           <Text color="ansi:red"> failed</Text>
         </Text>
-        {message ? (
+        {description ? (
           <Box marginLeft={2}>
-            {renderContentLines(message)}
+            {renderContentLines(description)}
           </Box>
         ) : null}
       </Box>
@@ -273,14 +269,9 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           <Text dimColor color="ansi:yellow"> {statusText} {elapsedSecs}s</Text>
         ) : null}
       </Text>
-      {message ? (
+      {description ? (
         <Box marginLeft={2}>
-          {message.split('\n').map((line: string, i: number) => (
-            <Text key={i}>
-              <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
-              <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
-            </Text>
-          ))}
+          {renderContentLines(description)}
         </Box>
       ) : null}
       {lastCall && (
