@@ -45,6 +45,13 @@ interface TeamPanelProps {
 }
 
 const POLL_INTERVAL_MS = 2000;
+const LIVE_POLL_MS = 500;
+
+interface LiveAgentStats {
+  turnCount: number;
+  toolCount: number;
+  lastCall: string | null;
+}
 
 function agentToMember(agent: SubAgentRecord): TeamMember {
   const statusMap: Record<string, TeamMember['status']> = {
@@ -88,6 +95,27 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [hasRunning]);
+
+  // Live agent stats (tool/turn counts, last tool call)
+  const [liveStats, setLiveStats] = useState<Map<string, LiveAgentStats>>(new Map());
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const registry = getSubAgentRegistry();
+      if (!registry) return;
+      const next = new Map<string, LiveAgentStats>();
+      for (const agent of registry.list()) {
+        const calls = agent.liveToolCalls ?? [];
+        const last = calls.length > 0 ? calls[calls.length - 1] : null;
+        next.set(agent.id, {
+          turnCount: agent.turnCount,
+          toolCount: agent.toolCount,
+          lastCall: last ? `${last.name}(${last.input.length > 50 ? last.input.slice(0, 47) + '...' : last.input})` : null,
+        });
+      }
+      setLiveStats(next);
+    }, LIVE_POLL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -298,6 +326,11 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const statusText = statusLabel(m, now);
         const statusColor = m.status === 'running' ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
 
+        const stats = m.status === 'running' ? liveStats.get(m.agentId) : undefined;
+        const statsSuffix = stats && (stats.turnCount > 0 || stats.toolCount > 0)
+          ? ` · ${stats.toolCount} tools, ${stats.turnCount} turns${stats.lastCall ? ` · ${stats.lastCall}` : ''}`
+          : '';
+
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
             <Text>
@@ -313,6 +346,9 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               <Text dimColor={m.status === 'done'}>{middleLabel}</Text>
               <Text dimColor> · </Text>
               <Text color={statusColor} dimColor={m.status === 'done'}>{statusText}</Text>
+              {statsSuffix ? (
+                <Text dimColor>{statsSuffix}</Text>
+              ) : null}
             </Text>
           </Box>
         );
