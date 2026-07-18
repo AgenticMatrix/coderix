@@ -537,7 +537,7 @@ async function executeStandardSubagent(
           content: result.content,
           isError: result.isError,
           duration: result.duration,
-          metadata: result.metadata,
+          metadata: { ...(result.metadata ?? {}), fromName: memberName },
         };
       },
     );

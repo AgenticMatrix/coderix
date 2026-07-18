@@ -64,6 +64,41 @@ interface ToolCallSummary {
 
 const POLL_MS = 250;
 
+const WRAP_WIDTH = 80;
+
+function wrapText(text: string, maxWidth: number): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    if (paragraph.length <= maxWidth) {
+      lines.push(paragraph);
+      continue;
+    }
+    let remaining = paragraph;
+    while (remaining.length > maxWidth) {
+      let breakAt = maxWidth;
+      const spaceIdx = remaining.lastIndexOf(' ', maxWidth);
+      if (spaceIdx > maxWidth / 2) {
+        breakAt = spaceIdx;
+      }
+      lines.push(remaining.slice(0, breakAt).trimEnd());
+      remaining = remaining.slice(breakAt).trimStart();
+    }
+    if (remaining.length > 0) {
+      lines.push(remaining);
+    }
+  }
+  return lines;
+}
+
+function renderContentLines(text: string): React.ReactNode {
+  return wrapText(text, WRAP_WIDTH).map((line, i) => (
+    <Text key={i}>
+      <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
+      <Text dimColor>{line}</Text>
+    </Text>
+  ));
+}
+
 export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNode {
   const agentId = props.input.agent_id as string | undefined;
   const message = props.input.message as string | undefined;
@@ -129,7 +164,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   // ── Team messaging mode ───────────────────────────────────────────────
   if (isTeamMode && !isResumeMode) {
     const metadata = props.result?.metadata as Record<string, unknown> | undefined;
-    const senderName = (metadata?.fromName as string) || 'leader';
+    const senderName = (metadata?.fromName as string) || (props.input.from as string) || 'leader';
     const recipientName = (metadata?.toName as string) || (to === '*' ? 'all' : (to || '?'));
 
     if (isError) {
@@ -143,12 +178,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
           </Text>
           {text ? (
             <Box marginLeft={2}>
-              {text.split('\n').map((line, i) => (
-                <Text key={i}>
-                  <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
-                  <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
-                </Text>
-              ))}
+              {renderContentLines(text)}
             </Box>
           ) : null}
         </Box>
@@ -218,12 +248,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
         </Text>
         {message ? (
           <Box marginLeft={2}>
-            {message.split('\n').map((line: string, i: number) => (
-              <Text key={i}>
-                <Text dimColor>{i === 0 ? '└ ' : '  '}</Text>
-                <Text dimColor>{line.length > 200 ? line.slice(0, 197) + '...' : line}</Text>
-              </Text>
-            ))}
+            {renderContentLines(message)}
           </Box>
         ) : null}
       </Box>

@@ -171,11 +171,11 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
     message.blocks.every((b) => b.type === 'tool_result');
 
   if (role === 'user' && !isToolResultOnly) {
-    const USER_FOLD = 10;
+    const USER_FOLD = 30;
     const contentLines = displayContent.split(/\r?\n|\r/);
     const tooLong = contentLines.length > USER_FOLD;
     const displayLines = tooLong
-      ? [...contentLines.slice(0, 6), `... [${contentLines.length - 6} more lines]`]
+      ? [...contentLines.slice(0, 30), `... [${contentLines.length - 30} more lines]`]
       : contentLines;
 
     return (
