@@ -511,6 +511,8 @@ async function executeStandardSubagent(
   // Team member: register SendMessage tool for inter-team communication
   const teamName = input.team_name as string | undefined;
   const memberName = input.member_name as string | undefined;
+  let teamNameForPrompt: string | undefined;
+  let memberNameForPrompt: string | undefined;
   if (teamName && memberName) {
     const teamMsgSchema = teamMessagePlugin.schema as unknown as { input_schema: Record<string, unknown>; description: string };
     subToolRegistry.register(
@@ -540,30 +542,9 @@ async function executeStandardSubagent(
       },
     );
 
-    // Inject team context into worker's system prompt
-    try {
-      const teamConfig = await loadTeamConfig(teamName);
-      if (teamConfig) {
-        const peerMembers = teamConfig.members.filter(m => m.agentId !== agentId);
-        const peerList = peerMembers.length > 0
-          ? peerMembers.map(m => `  - ${m.name} (\`${m.agentId}\`) [${m.agentType}]`).join('\n')
-          : '  (none)';
-        const teamCtx = [
-          '',
-          '# Team Communication',
-          `You are "${memberName}" (\`${agentId}\`) in team "${teamName}".`,
-          `The team leader is at "leader" — use SendMessage(to: "leader", text: "...") to report.`,
-          '',
-          `Peer workers:\n${peerList}`,
-          '- SendMessage(to: "<agentId>") to message a specific teammate',
-          '- SendMessage(to: "*") to broadcast to all workers',
-          '- Just writing text is NOT visible to others — you MUST use SendMessage',
-        ].join('\n');
-        enrichedPrompt = enrichedPrompt + teamCtx;
-      }
-    } catch {
-      // Non-fatal: team context injection is best-effort
-    }
+    // Store team info for later prompt injection
+    teamNameForPrompt = teamName;
+    memberNameForPrompt = memberName;
   }
 
   const effectiveModel = modelOverride ?? agentDef.model;
@@ -618,6 +599,33 @@ async function executeStandardSubagent(
     );
     if (memoryPrompt) {
       enrichedPrompt = memoryPrompt + '\n\n' + enrichedPrompt;
+    }
+  }
+
+  // Inject team context into worker's system prompt
+  if (teamNameForPrompt && memberNameForPrompt) {
+    try {
+      const teamConfig = await loadTeamConfig(teamNameForPrompt);
+      if (teamConfig) {
+        const peerMembers = teamConfig.members.filter(m => m.agentId !== agentId);
+        const peerList = peerMembers.length > 0
+          ? peerMembers.map(m => `  - ${m.name} (\`${m.agentId}\`) [${m.agentType}]`).join('\n')
+          : '  (none)';
+        const teamCtx = [
+          '',
+          '# Team Communication',
+          `You are "${memberNameForPrompt}" (\`${agentId}\`) in team "${teamNameForPrompt}".`,
+          `The team leader is at "leader" — use SendMessage(to: "leader", text: "...") to report.`,
+          '',
+          `Peer workers:\n${peerList}`,
+          '- SendMessage(to: "<agentId>") to message a specific teammate',
+          '- SendMessage(to: "*") to broadcast to all workers',
+          '- Just writing text is NOT visible to others — you MUST use SendMessage',
+        ].join('\n');
+        enrichedPrompt = enrichedPrompt + teamCtx;
+      }
+    } catch {
+      // Non-fatal: team context injection is best-effort
     }
   }
 
