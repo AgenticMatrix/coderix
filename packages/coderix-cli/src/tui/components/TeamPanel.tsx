@@ -56,6 +56,38 @@ interface LiveAgentStats {
   lastCall: string | null;
 }
 
+function formatToolCallDetail(name: string, input: string): string {
+  let inputObj: Record<string, unknown> | null = null;
+  try {
+    inputObj = JSON.parse(input);
+  } catch {
+    return input.length > 50 ? input.slice(0, 47) + '...' : input;
+  }
+
+  const keyParam = TOOL_KEY_PARAM[name];
+  if (keyParam) {
+    const val = inputObj?.[keyParam] as string | undefined;
+    if (val) return val.length > 90 ? val.slice(0, 87) + '...' : val;
+  }
+
+  const desc = inputObj?.description as string | undefined;
+  if (desc) return desc.length > 90 ? desc.slice(0, 87) + '...' : desc;
+
+  return input.length > 50 ? input.slice(0, 47) + '...' : input;
+}
+
+const TOOL_KEY_PARAM: Record<string, string> = {
+  bash: 'command',
+  read: 'file_path',
+  grep: 'pattern',
+  glob: 'pattern',
+  write: 'file_path',
+  update: 'file_path',
+  edit: 'file_path',
+  WebSearch: 'query',
+  WebFetch: 'url',
+};
+
 function agentToMember(agent: SubAgentRecord): TeamMember {
   const statusMap: Record<string, TeamMember['status']> = {
     running: 'running',
@@ -112,7 +144,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         next.set(agent.id, {
           turnCount: agent.turnCount,
           toolCount: agent.toolCount,
-          lastCall: last ? `${last.name}(${last.input.length > 50 ? last.input.slice(0, 47) + '...' : last.input})` : null,
+          lastCall: last ? `${last.name}(${formatToolCallDetail(last.name, last.input)})` : null,
         });
       }
       setLiveStats(next);
