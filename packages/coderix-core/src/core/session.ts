@@ -258,6 +258,9 @@ export class SessionManager {
     this.rebuildJsonlFromSession(session);
   }
 
+  // Hard cap on in-memory messages to prevent unbounded heap growth.
+  private static readonly MAX_MESSAGES = 600;
+
   /**
    * Add a message to the active session.
    * Appends to JSONL file AND updates in-memory messages array.
@@ -285,6 +288,20 @@ export class SessionManager {
 
     if (message.role === 'assistant') {
       session.turnCount++;
+    }
+
+    // Enforce hard cap: drop oldest non-system messages when over limit
+    if (session.messages.length > SessionManager.MAX_MESSAGES) {
+      const excess = session.messages.length - SessionManager.MAX_MESSAGES;
+      let dropped = 0;
+      session.messages = session.messages.filter((m) => {
+        if (dropped >= excess) return true;
+        if (m.role !== 'system') {
+          dropped++;
+          return false;
+        }
+        return true;
+      });
     }
 
     // Append to JSONL asynchronously (fire-and-forget with throttling)
