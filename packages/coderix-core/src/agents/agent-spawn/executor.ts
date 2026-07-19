@@ -704,11 +704,11 @@ async function executeStandardSubagent(
           messageCount: result.transcript.length,
           toolCount: result.toolCount,
           result: compressed,
-          transcript: result.transcript,
           error: result.error,
           outputPath,
           tokenUsage: result.tokenUsage,
           liveToolCalls: [],
+          transcript: undefined,
         });
 
         if (teamName && memberName) {
@@ -736,6 +736,7 @@ async function executeStandardSubagent(
           status: 'error', finishedAt: Date.now(),
           error: errorMsg,
           liveToolCalls: [],
+          transcript: undefined,
         });
         if (teamName && memberName) {
           updateMemberInTeam(teamName, agentId, {
@@ -787,8 +788,8 @@ async function executeStandardSubagent(
     messageCount: result.transcript.length,
     toolCount: result.toolCount,
     result: compressed,
-    transcript: result.transcript,
     error: result.error,
+    transcript: undefined,
   });
 
   // Persist to disk for cross-session resume
@@ -988,10 +989,10 @@ async function executeFork(
           messageCount: result.transcript.length,
           toolCount: result.toolCount,
           result: compressed,
-          transcript: result.transcript,
           error: result.error,
           outputPath,
           tokenUsage: result.tokenUsage,
+          transcript: undefined,
         });
 
         // Persist to disk for cross-session resume
@@ -1011,6 +1012,7 @@ async function executeFork(
         agentSpawn.subAgentRegistry.update(agentId, {
           status: 'error', finishedAt: Date.now(),
           error: err instanceof Error ? err.message : String(err),
+          transcript: undefined,
         });
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       });
@@ -1053,8 +1055,8 @@ async function executeFork(
     messageCount: result.transcript.length,
     toolCount: result.toolCount,
     result: compressed,
-    transcript: result.transcript,
     error: result.error,
+    transcript: undefined,
   });
 
   // Persist to disk for cross-session resume
@@ -1259,8 +1261,8 @@ async function executeResume(
     messageCount: cumulativeTranscript.length,
     toolCount: agent.toolCount + result.toolCount,
     result: compressed,
-    transcript: cumulativeTranscript,
     error: result.error,
+    transcript: undefined,
   });
 
   // Persist updated transcript to disk

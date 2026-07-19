@@ -5,7 +5,7 @@ import { useTerminalSize } from '@coderix/ink';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
-import { PermissionMode, getSubAgentRegistry } from '@coderix/core';
+import { PermissionMode, getSubAgentRegistry, getAgentTranscript } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -294,6 +294,23 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         lastCount = transcriptLen;
         const messages = convertTranscriptToMessages(agent.transcript!);
         dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
+      }
+
+      // If agent is done but transcript was cleared from memory,
+      // try loading from disk as a one-shot fallback
+      if (agent.status !== 'running' && lastCount === 0 && !agent.transcript) {
+        missingCount++;
+        getAgentTranscript(agentId, undefined).then((diskTranscript) => {
+          if (diskTranscript && diskTranscript.length > lastCount) {
+            lastCount = diskTranscript.length;
+            const messages = convertTranscriptToMessages(diskTranscript);
+            dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
+          }
+        }).catch(() => {});
+        if (missingCount > 5) {
+          clearInterval(interval!);
+        }
+        return;
       }
 
       // Stop polling once the agent is done and we've loaded all messages
