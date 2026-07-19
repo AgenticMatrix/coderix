@@ -1212,9 +1212,67 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         const attempts: ListenAttempt[] = [];
         let totalDuration = 0;
         let currentDuration = originalDuration;
+        const reasonSuffix = reason ? ` ${reason}` : '';
+
+        // Build incremental result content from current attempts list.
+        // Each call produces a snapshot covering all attempts so far, so
+        // the TUI can re-render the full list after every retry.
+        const buildIncrementalResult = (): ToolResultBlock => {
+          const attemptLines = attempts
+            .map((a) => {
+              const statusText = a.wokeEarly
+                ? `completed${reasonSuffix}`
+                : `timed out, ${a.runningSummary}`;
+              return `  Attempt ${a.attempt}: ${a.actualDuration.toFixed(1)}s (${statusText})`;
+            })
+            .join('\n');
+          const content =
+            `Listened for ${totalDuration.toFixed(1)}s total over ${attempts.length} attempts:\n${attemptLines}`;
+          return {
+            ...firstResult,
+            content,
+            duration: Math.round(totalDuration * 1000),
+            metadata: {
+              ...firstMeta,
+              attempts,
+              totalDuration,
+              retryCount: attempts.length - 1,
+            },
+          };
+        };
+
+        // Push an attempt snapshot to the TUI immediately so each row
+        // appears as soon as that attempt finishes, not at the very end.
+        async function* yieldAttemptSnapshot(willRetry: boolean): AsyncGenerator<QueryMessage> {
+          const snapshot = buildIncrementalResult();
+          yield {
+            type: 'system',
+            subtype: 'tool_completed',
+            data: {
+              toolUseId: listenBlock.id,
+              duration: snapshot.duration,
+              content: snapshot.content,
+              isError: false,
+              metadata: snapshot.metadata,
+            },
+          };
+          // If another retry is coming, flip state back to executing so
+          // the timer keeps running and the renderer stays in active mode.
+          if (willRetry) {
+            yield {
+              type: 'system',
+              subtype: 'progress',
+              data: {
+                toolName: 'Listen',
+                toolUseId: listenBlock.id,
+                status: 'running',
+                message: `Auto-retry ${attempts.length + 1}/${MAX_AUTO_LISTEN_RETRIES + 1}...`,
+              },
+            };
+          }
+        }
 
         for (let attemptNum = 1; attemptNum <= MAX_AUTO_LISTEN_RETRIES + 1; attemptNum++) {
-          // Check exit conditions before each retry (skip before first — it already ran)
           if (attemptNum > 1) {
             const registry = config.subAgentRegistry;
             const hasRunningSubAgents = registry
@@ -1234,18 +1292,6 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
             if (autoRetryNotifications.length > 0) break;
 
-            // Yield progress so the TUI shows ongoing activity
-            yield {
-              type: 'system',
-              subtype: 'progress',
-              data: {
-                toolName: 'Listen',
-                toolUseId: listenBlock.id,
-                status: 'running',
-                message: `Auto-retry ${attemptNum}/${MAX_AUTO_LISTEN_RETRIES + 1}...`,
-              },
-            };
-
             const syntheticBlock: ToolUseBlock = {
               type: 'tool_use',
               id: listenBlock.id,
@@ -1258,7 +1304,6 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             const retryActual = (retryMeta?.actualDuration as number) || currentDuration;
 
             totalDuration += retryActual;
-
             const runningSummary = getRunningSummary(config.subAgentRegistry);
             attempts.push({
               attempt: attemptNum,
@@ -1267,6 +1312,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               wokeEarly: retryWokeEarly,
               runningSummary,
             });
+
+            const willRetry = !retryWokeEarly && attemptNum <= MAX_AUTO_LISTEN_RETRIES;
+            yield* yieldAttemptSnapshot(willRetry);
 
             if (retryWokeEarly) break;
 
@@ -1283,35 +1331,16 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               wokeEarly: false,
               runningSummary,
             });
+
+            // Yield first-attempt snapshot so the TUI shows it immediately
+            const willRetry = attemptNum <= MAX_AUTO_LISTEN_RETRIES;
+            yield* yieldAttemptSnapshot(willRetry);
           }
         }
 
-        // Build aggregated result when multiple attempts occurred
+        // Final aggregated result for message injection
         if (attempts.length > 1) {
-          const reasonSuffix = reason ? ` ${reason}` : '';
-          const attemptLines = attempts
-            .map((a) => {
-              const statusText = a.wokeEarly
-                ? `completed${reasonSuffix}`
-                : `timed out, ${a.runningSummary}`;
-              return `  Attempt ${a.attempt}: ${a.actualDuration.toFixed(1)}s (${statusText})`;
-            })
-            .join('\n');
-
-          const content =
-            `Listened for ${totalDuration.toFixed(1)}s total over ${attempts.length} attempts:\n${attemptLines}`;
-
-          toolResults[0] = {
-            ...firstResult,
-            content,
-            duration: Math.round(totalDuration * 1000),
-            metadata: {
-              ...firstMeta,
-              attempts,
-              totalDuration,
-              retryCount: attempts.length - 1,
-            },
-          };
+          toolResults[0] = buildIncrementalResult();
         }
       }
     }

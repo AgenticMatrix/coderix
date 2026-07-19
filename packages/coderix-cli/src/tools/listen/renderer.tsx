@@ -74,6 +74,24 @@ export function ListenRenderer(props: ToolUseRendererProps) {
     : '●';
   const statusColor = isActive ? 'ansi:yellow' : 'ansi:green';
 
+  const hasAttempts = attempts && attempts.length > 0;
+  const reasonSuffix = reason ? ` ${reason}` : '';
+
+  // Title bar timer: during auto-retry show cumulative total / original;
+  // otherwise show elapsed vs requested (single attempt).
+  const titleTimer = (() => {
+    if (isActive && hasAttempts) {
+      const total = (props.result?.metadata?.totalDuration as number) ?? 0;
+      const elapsedNum = parseFloat(elapsedSecs) || 0;
+      return `${(total + elapsedNum).toFixed(1)}/${(props.input.duration as number) ?? 0} (${attempts!.length} attempts)`;
+    }
+    if (isActive) {
+      return `${elapsedSecs}/${(props.input.duration as number) ?? 0}`;
+    }
+    const dur = ((props.duration ?? 0) / 1000).toFixed(1);
+    return `${dur}/${(props.input.duration as number) ?? 0}${attempts && attempts.length > 1 ? ` (${attempts.length} attempts)` : ''}`;
+  })();
+
   return (
     <Box flexDirection="column" marginBottom={0}>
       {/* Title bar */}
@@ -84,13 +102,44 @@ export function ListenRenderer(props: ToolUseRendererProps) {
         <Box flexDirection="row" flexGrow={1}>
           <Text>
             <Text bold>Listen</Text>
-            <Text dimColor> · ⏱ {isActive ? elapsedSecs : ((props.duration ?? 0) / 1000).toFixed(1)}/{(props.input.duration as number) ?? 0}{attempts && attempts.length > 1 ? ` (${attempts.length} attempts)` : ''}</Text>
+            <Text dimColor> · ⏱ {titleTimer}</Text>
           </Text>
         </Box>
       </Box>
 
       {/* Body — aligned under L in Listen (icon width = 2) */}
-      {isActive && agents.length > 0 ? (
+      {hasAttempts ? (
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexDirection="column">
+            {attempts!.map((a, i) => {
+              const isLast = i === attempts!.length - 1;
+              const statusText = a.wokeEarly
+                ? `completed${reasonSuffix}`
+                : `timed out, ${a.runningSummary}`;
+              return (
+                <Text key={i} dimColor>
+                  {isLast ? '└' : '│'} Attempt {a.attempt}: {a.actualDuration.toFixed(1)}s ({statusText})
+                </Text>
+              );
+            })}
+            {/* While still listening (auto-retry in progress), show live agents */}
+            {isActive && agents.length > 0 ? (
+              agents.map((a, i) => (
+                <Box key={a.id} flexDirection="row">
+                  <Text dimColor>{i === agents.length - 1 ? '⎿' : '│'} </Text>
+                  <Text dimColor>{AGENT_TYPE_LABEL[a.agentType] || a.agentType}</Text>
+                  <Text dimColor> {a.id.slice(0, 12)}</Text>
+                  {a.latestTool ? (
+                    <Text dimColor> · {a.latestTool}</Text>
+                  ) : null}
+                  <Text dimColor> running</Text>
+                </Box>
+              ))
+            ) : null}
+          </Box>
+        </Box>
+      ) : isActive && agents.length > 0 ? (
         <Box flexDirection="row">
           <Box width={2} flexShrink={0} />
           <Box flexDirection="column">
@@ -105,24 +154,6 @@ export function ListenRenderer(props: ToolUseRendererProps) {
                 <Text dimColor> running</Text>
               </Box>
             ))}
-          </Box>
-        </Box>
-      ) : isDone && attempts && attempts.length > 1 ? (
-        <Box flexDirection="row">
-          <Box width={2} flexShrink={0} />
-          <Box flexDirection="column">
-            {attempts.map((a, i) => {
-              const isLast = i === attempts.length - 1;
-              const reasonSuffix = reason ? ` ${reason}` : '';
-              const statusText = a.wokeEarly
-                ? `completed${reasonSuffix}`
-                : `timed out, ${a.runningSummary}`;
-              return (
-                <Text key={i} dimColor>
-                  {isLast ? '└' : '│'} Attempt {a.attempt}: {a.actualDuration.toFixed(1)}s ({statusText})
-                </Text>
-              );
-            })}
           </Box>
         </Box>
       ) : isDone && resultContent ? (
