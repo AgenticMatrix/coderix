@@ -757,7 +757,7 @@ export class SystemPromptAssembler {
       'You have access to these tools only:',
       '',
       '- Agent: Spawn workers (explore, plan, general-purpose). Provide team_name + name',
-      '  to spawn as a swarm teammate in a visual pane.',
+      '  to spawn as a swarm teammate.',
       '- SendMessage: Continue an existing worker with follow-up instructions. The worker',
       '  retains its full previous context. Use this for corrections, follow-up questions,',
       '  or extending completed work.',

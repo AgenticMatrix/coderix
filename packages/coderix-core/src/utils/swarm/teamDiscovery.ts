@@ -16,11 +16,9 @@ export interface TeammateStatus {
   prompt?: string;
   status: 'running' | 'idle' | 'unknown';
   color?: string;
-  tmuxPaneId?: string;
   cwd?: string;
   worktreePath?: string;
   isHidden?: boolean;
-  backendType?: string;
   mode?: string;
 }
 
@@ -48,11 +46,9 @@ export async function getTeammateStatuses(teamName: string): Promise<TeammateSta
       model: m.model as string | undefined,
       status: m.isActive ? 'running' : (m.status as TeammateStatus['status']) || 'unknown',
       color: m.color as string | undefined,
-      tmuxPaneId: m.tmuxPaneId as string | undefined,
       cwd: m.cwd as string | undefined,
       worktreePath: m.worktreePath as string | undefined,
       isHidden: (m.isHidden as boolean) || false,
-      backendType: m.backendType as string | undefined,
       mode: m.mode as string | undefined,
     }));
   } catch {

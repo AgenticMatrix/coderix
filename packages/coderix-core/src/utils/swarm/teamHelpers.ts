@@ -3,9 +3,7 @@
  *
  * All swarm code reads/writes the same config.json that TeamCreate manages.
  * Delegates to team-store.ts for all file I/O so there is a single source of
- * truth. Extra swarm-specific fields (backendType, paneId, etc.) are carried
- * in the member objects and survive JSON round-trips because the TeamMember
- * interface is not strict — extra keys are preserved.
+ * truth.
  */
 
 import type { TeamConfig, TeamMember } from '../../teams/types.js';
@@ -22,8 +20,6 @@ import {
 
 export interface SwarmTeamMember extends TeamMember {
   prompt?: string;
-  backendType?: string;
-  paneId?: string;
   sessionId?: string;
   worktreePath?: string;
   finishedAt?: number;
@@ -47,10 +43,7 @@ export async function addMemberToTeam(
   teamName: string,
   member: SwarmTeamMember,
 ): Promise<SwarmTeamConfig> {
-  // SwarmTeamMember is a superset of TeamMember — extra fields survive
-  // JSON serialisation and won't break TeamCreate's reader.
   await storeAddMember(teamName, member as TeamMember);
-  // Re-read for the latest state (addTeamMember writes under a lock)
   const updated = await loadTeamConfig(teamName);
   if (!updated) throw new Error(`Team '${teamName}' disappeared after member add`);
   return updated;

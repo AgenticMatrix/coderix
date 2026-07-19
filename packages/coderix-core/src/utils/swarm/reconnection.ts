@@ -1,6 +1,6 @@
 /**
  * Swarm reconnection module — handles initialization of swarm context
- * for both fresh spawns (from CLI args) and resumed sessions (from stored metadata).
+ * for both fresh spawns and resumed sessions.
  */
 
 import { getDynamicTeamContext } from './teammate.js';
@@ -21,8 +21,6 @@ export interface TeamContextState {
     agentType?: string;
     color?: string;
     status?: 'running' | 'idle' | 'done' | 'stopped' | 'error';
-    tmuxSessionName?: string;
-    tmuxPaneId?: string;
     cwd?: string;
     worktreePath?: string;
     spawnedAt: number;

@@ -2,7 +2,6 @@ import type { ToolExecutor } from '../../../tools/types.js';
 import { loadTeamConfig } from '../../team-store.js';
 import { deleteTeam } from '../../team-store.js';
 import { deleteTeamMailboxes, sendShutdownRequestToMailbox } from '../../../utils/swarm/teammateMailbox.js';
-import { clearTeammateColors } from '../../../utils/swarm/teammateLayoutManager.js';
 
 export const execute: ToolExecutor = async (input, _options) => {
   const teamName = (input.team_name as string) || (input.name as string);
@@ -46,9 +45,6 @@ export const execute: ToolExecutor = async (input, _options) => {
   // Delete team directory (config + inboxes)
   await deleteTeamMailboxes(teamName);
   await deleteTeam(teamName);
-
-  // Clear color assignments
-  clearTeammateColors();
 
   const resultText = [
     `Team '${teamName}' deleted.`,

@@ -1,8 +1,5 @@
 /**
- * Spawn utilities — CLI argument and environment variable propagation.
- *
- * When spawning a teammate in a new tmux/iTerm2 pane, the new process
- * needs the same CLI flags and environment as the leader.
+ * Spawn utilities — environment variable propagation for teammates.
  */
 
 // ---------------------------------------------------------------------------
@@ -55,42 +52,4 @@ export function buildForwardEnv(extra: Record<string, string> = {}): Record<stri
   }
   Object.assign(result, extra);
   return result;
-}
-
-// ---------------------------------------------------------------------------
-// CLI arguments
-// ---------------------------------------------------------------------------
-
-/** CLI args to propagate to spawned teammates. */
-export function buildTeammateCliArgs(config: {
-  agentId: string;
-  agentName: string;
-  teamName: string;
-  agentColor?: string;
-  agentType?: string;
-  model?: string;
-  settings?: string;
-}): string[] {
-  const args: string[] = [
-    `--agent-id=${config.agentId}`,
-    `--agent-name=${config.agentName}`,
-    `--team-name=${config.teamName}`,
-  ];
-  if (config.agentColor) args.push(`--agent-color=${config.agentColor}`);
-  if (config.agentType) args.push(`--agent-type=${config.agentType}`);
-  if (config.model) args.push(`--model=${config.model}`);
-  if (config.settings) args.push(`--settings=${config.settings}`);
-  return args;
-}
-
-// ---------------------------------------------------------------------------
-// Binary path
-// ---------------------------------------------------------------------------
-
-/** Resolve the binary path for spawning teammates. */
-export function getBinaryPath(): string {
-  if (process.env.CODERIX_TEAMMATE_COMMAND) {
-    return process.env.CODERIX_TEAMMATE_COMMAND;
-  }
-  return process.execPath;
 }

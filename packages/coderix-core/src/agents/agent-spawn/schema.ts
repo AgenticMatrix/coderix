@@ -42,7 +42,7 @@ Never delegate understanding. Don't write "based on your findings, fix the bug" 
 Spawn paths:
 - Standard: provide agent_type to launch a pre-defined sub-agent.
 - Fork: omit agent_type to fork the parent with full context.
-- Swarm teammate: provide team_name + name for a process-level teammate (requires CODERIX_EXPERIMENTAL_AGENT_TEAMS).
+- Swarm teammate: provide team_name + name to add a team member (requires CODERIX_EXPERIMENTAL_AGENT_TEAMS).
 - Resume: provide agent_id + resume: true to continue a stopped or completed agent.
 
 Sub-agents cannot spawn further sub-agents.`,

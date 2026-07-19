@@ -769,8 +769,6 @@ export const ShutdownApprovedMessageSchema = z.object({
   requestId: z.string(),
   from: z.string(),
   timestamp: z.string(),
-  paneId: z.string().optional(),
-  backendType: z.string().optional(),
 });
 
 export type ShutdownApprovedMessage = z.infer<typeof ShutdownApprovedMessageSchema>;
@@ -802,16 +800,12 @@ export function createShutdownRequestMessage(params: {
 export function createShutdownApprovedMessage(params: {
   requestId: string;
   from: string;
-  paneId?: string;
-  backendType?: string;
 }): ShutdownApprovedMessage {
   return {
     type: 'shutdown_approved',
     requestId: params.requestId,
     from: params.from,
     timestamp: new Date().toISOString(),
-    paneId: params.paneId,
-    backendType: params.backendType,
   };
 }
 

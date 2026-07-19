@@ -1,10 +1,10 @@
 /**
- * Swarm teammate spawn — real backend dispatch (Phase 3).
+ * Swarm teammate spawn — in-process only.
  *
  * When team_name + name are both present on the Agent tool call,
- * the executor routes here. Selects a backend (tmux / iTerm2 / in-process),
- * spawns the teammate, registers it in the team file and SubAgentRegistry,
- * and returns a result to the caller.
+ * the executor routes here. Registers the teammate in the team file
+ * and SubAgentRegistry, then runs the agent loop as a background sub-agent.
+ * Communication between teammates uses the file-based mailbox system.
  */
 
 import { readdir } from 'node:fs/promises';
@@ -12,10 +12,8 @@ import { readdir } from 'node:fs/promises';
 import type { ToolResult } from '../../tools/types.js';
 import type { AgentDefinition, AgentSpawnContext } from '../../core/types.js';
 import { loadTeamConfig, teamDir, listTeams } from '../../teams/team-store.js';
-import { getTeammateExecutor } from '../../utils/swarm/backends/registry.js';
-import { buildTeammateCliArgs, buildForwardEnv } from '../../utils/swarm/spawnUtils.js';
 import { addMemberToTeam } from '../../utils/swarm/teamHelpers.js';
-import type { BackendType } from '../../utils/swarm/backends/types.js';
+import type { SwarmTeamMember } from '../../utils/swarm/teamHelpers.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,13 +31,6 @@ export interface TeammateSpawnInput {
   agentDef: AgentDefinition | null;
   cwd: string;
   sessionId?: string;
-}
-
-export interface TeammateSpawnResult {
-  agentId: string;
-  teamName: string;
-  agentName: string;
-  backend: BackendType;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,109 +120,76 @@ export async function spawnTeammate(
   const colorIndex = Math.floor(Math.random() * TEAMMATE_COLORS.length);
   const color = TEAMMATE_COLORS[colorIndex];
 
-  // ── Get executor ────────────────────────────────────────────────────
-  const executor = getTeammateExecutor(agentSpawn);
-  const backendType = executor.backend.type;
+  // ── Register in team file ───────────────────────────────────────────
+  const member: SwarmTeamMember = {
+    agentId,
+    name: agentName,
+    agentType: input.agentDef?.agentType ?? agentType,
+    model,
+    color,
+    status: 'running',
+    prompt,
+    joinedAt: Date.now(),
+  };
 
-  // ── Build spawn config ──────────────────────────────────────────────
-  const cliArgs = buildTeammateCliArgs({ agentId, agentName, teamName, agentColor: color, agentType, model });
-  const env = buildForwardEnv({
-    CODERIX_EXPERIMENTAL_AGENT_TEAMS: '1',
-    CODERIX_AGENT_ID: agentId,
-    CODERIX_AGENT_NAME: agentName,
-    CODERIX_TEAM_NAME: teamName,
-    CODERIX_AGENT_COLOR: color,
+  await addMemberToTeam(teamName, member);
+
+  // ── Register in SubAgentRegistry for TUI visibility ────────────────
+  const subAbortController = new AbortController();
+  agentSpawn.subAgentRegistry.register({
+    id: agentId,
+    name: `${agentName} (${teamName})`,
+    agentType: agentType as 'explore' | 'plan' | 'general-purpose',
+    status: 'running',
+    prompt,
+    createdAt: Date.now(),
+    turnCount: 0,
+    messageCount: 0,
+    toolCount: 0,
+    abortController: subAbortController,
+    notified: false,
   });
 
-  // ── Spawn via executor ──────────────────────────────────────────────
-  try {
-    const result = await executor.spawn({
-      agentId,
-      agentName,
-      teamName,
-      agentType: input.agentDef?.agentType ?? agentType,
+  // Fire-and-forget: run the agent as a background sub-agent.
+  const { execute: agentExecute } = await import('./executor.js');
+  const effectiveAgentType = input.agentDef?.agentType ?? agentType;
+
+  agentExecute(
+    {
+      agent_type: effectiveAgentType,
       prompt,
       model,
-      color,
+      background: true,
+      isolation: input.isolation,
+      team_name: teamName,
+      member_name: agentName,
+    },
+    {
       cwd: input.cwd,
-      cliArgs,
-      env,
+      sessionId: input.sessionId,
+      allowMutation: true,
+      maxOutput: 200_000,
+      bashTimeout: 120_000,
+      agentSpawn,
+      agentId,
+    },
+  ).catch((err) => {
+    agentSpawn.subAgentRegistry.update(agentId, {
+      status: 'error',
+      finishedAt: Date.now(),
+      error: err instanceof Error ? err.message : String(err),
     });
+    agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+  });
 
-    // Register in SubAgentRegistry for TUI visibility
-    const subAbortController = new AbortController();
-    agentSpawn.subAgentRegistry.register({
-      id: agentId,
-      name: `${agentName} (${teamName})`,
-      agentType: agentType as 'explore' | 'plan' | 'general-purpose',
-      status: 'running',
-      prompt,
-      createdAt: Date.now(),
-      turnCount: 0,
-      messageCount: 0,
-      toolCount: 0,
-      abortController: subAbortController,
-      notified: false,
-    });
-
-    // For in-process backend: actually run the agent loop. Pane backends
-    // (tmux/iTerm2) spawn a separate process that runs its own loop.
-    if (backendType === 'in-process') {
-      // Dynamic import to break circular dependency with executor.ts
-      const { execute: agentExecute } = await import('./executor.js');
-      const effectiveAgentType = input.agentDef?.agentType ?? agentType;
-
-      // Fire-and-forget: run the agent as a background sub-agent.
-      // Pass the swarm agentId so executeStandardSubagent reuses the same
-      // SubAgentRegistry entry instead of creating a new one.
-      agentExecute(
-        {
-          agent_type: effectiveAgentType,
-          prompt,
-          model,
-          background: true,
-          isolation: input.isolation,
-          team_name: teamName,
-          member_name: agentName,
-        },
-        {
-          cwd: input.cwd,
-          sessionId: input.sessionId,
-          allowMutation: true,
-          maxOutput: 200_000,
-          bashTimeout: 120_000,
-          agentSpawn,
-          agentId,
-        },
-      ).catch((err) => {
-        agentSpawn.subAgentRegistry.update(agentId, {
-          status: 'error',
-          finishedAt: Date.now(),
-          error: err instanceof Error ? err.message : String(err),
-        });
-        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
-      });
-    }
-
-    const paneNote = backendType !== 'in-process'
-      ? `\nThe teammate is running in a ${backendType} pane — switch to it to interact directly.`
-      : '\nThe teammate is running in-process. Use SendMessage from team_name + to to communicate.';
-
-    return {
-      content: `Teammate '${agentName}' (${agentId}) spawned in team '${teamName}' via ${backendType} backend.${paneNote}`,
-      isError: false,
-      metadata: {
-        agentId,
-        teamName,
-        agentName,
-        agentType,
-        backend: backendType,
-      },
-    };
-  } catch (err) {
-    return {
-      content: `Failed to spawn teammate '${agentName}': ${(err as Error).message}`,
-      isError: true,
-    };
-  }
+  return {
+    content: `Teammate '${agentName}' (${agentId}) spawned in team '${teamName}'. Use SendMessage to communicate with it.`,
+    isError: false,
+    metadata: {
+      agentId,
+      teamName,
+      agentName,
+      agentType,
+    },
+  };
 }
