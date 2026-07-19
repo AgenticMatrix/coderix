@@ -67,14 +67,26 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
         </Text>
         <Box paddingLeft={2} flexDirection="column">
           {lines.length === 0 ? (
-            <Text dimColor color={isTaskError ? 'ansi:red' : undefined}>
-              └ {statusLabel}{isTaskError ? ' (error)' : ' (no output)'}
-            </Text>
+            isTaskError ? (
+              <Text color="ansi:red">
+                └ {statusLabel} (error)
+              </Text>
+            ) : (
+              <Text dimColor>
+                └ {statusLabel} (no output)
+              </Text>
+            )
           ) : (
             <>
-              <Text dimColor>└ </Text>
-              <Text color={isTaskError ? 'ansi:red' : undefined}>{statusLabel}</Text>
-              <Text dimColor>: {displayLines[0]}</Text>
+              {isTaskError ? (
+                <Text color="ansi:red">
+                  └ {statusLabel}: {displayLines[0]}
+                </Text>
+              ) : (
+                <Text dimColor>
+                  └ {statusLabel}: {displayLines[0]}
+                </Text>
+              )}
               {displayLines.slice(1).map((line, i) => (
                 <Text key={i} dimColor>  {line}</Text>
               ))}
