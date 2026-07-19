@@ -20,12 +20,22 @@ interface AgentSnapshot {
   latestTool: string | null;
 }
 
+interface ListenAttemptMeta {
+  attempt: number;
+  duration: number;
+  actualDuration: number;
+  wokeEarly: boolean;
+  runningSummary: string;
+}
+
 export function ListenRenderer(props: ToolUseRendererProps) {
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
   const isPending = props.state === 'pending';
   const isActive = isExecuting || isPending;
   const resultContent = props.result?.content;
+  const attempts = props.result?.metadata?.attempts as ListenAttemptMeta[] | undefined;
+  const reason = props.input.reason as string | undefined;
 
   const { elapsedSecs, blinkOn } = useToolTimer(isActive);
 
@@ -74,7 +84,7 @@ export function ListenRenderer(props: ToolUseRendererProps) {
         <Box flexDirection="row" flexGrow={1}>
           <Text>
             <Text bold>Listen</Text>
-            <Text dimColor> · ⏱ {isActive ? elapsedSecs : ((props.duration ?? 0) / 1000).toFixed(1)}/{(props.input.duration as number) ?? 0}</Text>
+            <Text dimColor> · ⏱ {isActive ? elapsedSecs : ((props.duration ?? 0) / 1000).toFixed(1)}/{(props.input.duration as number) ?? 0}{attempts && attempts.length > 1 ? ` (${attempts.length} attempts)` : ''}</Text>
           </Text>
         </Box>
       </Box>
@@ -95,6 +105,24 @@ export function ListenRenderer(props: ToolUseRendererProps) {
                 <Text dimColor> running</Text>
               </Box>
             ))}
+          </Box>
+        </Box>
+      ) : isDone && attempts && attempts.length > 1 ? (
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0} />
+          <Box flexDirection="column">
+            {attempts.map((a, i) => {
+              const isLast = i === attempts.length - 1;
+              const reasonSuffix = reason ? ` ${reason}` : '';
+              const statusText = a.wokeEarly
+                ? `completed${reasonSuffix}`
+                : `timed out, ${a.runningSummary}`;
+              return (
+                <Text key={i} dimColor>
+                  {isLast ? '└' : '│'} Attempt {a.attempt}: {a.actualDuration.toFixed(1)}s ({statusText})
+                </Text>
+              );
+            })}
           </Box>
         </Box>
       ) : isDone && resultContent ? (

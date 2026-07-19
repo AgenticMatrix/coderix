@@ -56,7 +56,7 @@ import { loadCodeAgentContext } from './context-loader.js';
 import { loadMemoryPrompt } from '../memory/prompt-builder.js';
 import { loadMemoryConfig } from '../memory/config.js';
 import { listTasks } from '../tasks/store.js';
-import { drainTaskNotifications } from '../tasks/task-tracker.js';
+import { drainTaskNotifications, listTasks as listTrackedTasks } from '../tasks/task-tracker.js';
 import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
 import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
 import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
@@ -234,6 +234,20 @@ interface ExecuteSingleToolOpts {
   getCoreState?: () => CoreState;
   emitToolRequest?: (req: ToolRequestEvent) => void;
   readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
+}
+
+function getRunningSummary(subAgentRegistry?: SubAgentRegistry): string {
+  const runningAgents = subAgentRegistry
+    ? subAgentRegistry.list().filter(a => a.status === 'running').length
+    : 0;
+  const runningBash = listTrackedTasks().filter(
+    t => t.type === 'bash' && t.status === 'running',
+  ).length;
+
+  if (runningAgents > 0 && runningBash > 0) return 'sub-agent and bash still running';
+  if (runningAgents > 0) return 'sub-agent still running';
+  if (runningBash > 0) return 'bash still running';
+  return 'still running';
 }
 
 async function executeSingleTool(
@@ -1166,6 +1180,142 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       orderedBlocks.map((b) => b.name),
     );
 
+    // === Auto-retry Listen when timed out with background tasks still running ===
+    // Avoids wasted LLM round-trips where the model would just call Listen again.
+    const MAX_AUTO_LISTEN_RETRIES = 10;
+    const AUTO_LISTEN_DURATION_INCREMENT = 5;
+
+    interface ListenAttempt {
+      attempt: number;
+      duration: number;
+      actualDuration: number;
+      wokeEarly: boolean;
+      runningSummary: string;
+    }
+
+    const autoRetryNotifications: string[] = [];
+
+    if (
+      orderedBlocks.length === 1 &&
+      orderedBlocks[0].name === 'Listen' &&
+      toolResults.length === 1 &&
+      !toolResults[0].is_error
+    ) {
+      const listenBlock = orderedBlocks[0];
+      const firstResult = toolResults[0];
+      const firstMeta = firstResult.metadata as Record<string, unknown> | undefined;
+      const firstWokeEarly = firstMeta?.wokeEarly as boolean | undefined;
+      const originalDuration = (listenBlock.input.duration as number) || 30;
+      const reason = listenBlock.input.reason as string | undefined;
+
+      if (!firstWokeEarly) {
+        const attempts: ListenAttempt[] = [];
+        let totalDuration = 0;
+        let currentDuration = originalDuration;
+
+        for (let attemptNum = 1; attemptNum <= MAX_AUTO_LISTEN_RETRIES + 1; attemptNum++) {
+          // Check exit conditions before each retry (skip before first — it already ran)
+          if (attemptNum > 1) {
+            const registry = config.subAgentRegistry;
+            const hasRunningSubAgents = registry
+              ? registry.list().filter(a => a.status === 'running').length > 0
+              : false;
+            const hasRunningBash = listTrackedTasks().filter(
+              t => t.type === 'bash' && t.status === 'running',
+            ).length > 0;
+
+            if (!hasRunningSubAgents && !hasRunningBash) break;
+
+            // Drain notifications — buffer them for injection later
+            if (registry) {
+              autoRetryNotifications.push(...registry.drainNotifications());
+            }
+            autoRetryNotifications.push(...drainTaskNotifications());
+
+            if (autoRetryNotifications.length > 0) break;
+
+            // Yield progress so the TUI shows ongoing activity
+            yield {
+              type: 'system',
+              subtype: 'progress',
+              data: {
+                toolName: 'Listen',
+                toolUseId: listenBlock.id,
+                status: 'running',
+                message: `Auto-retry ${attemptNum}/${MAX_AUTO_LISTEN_RETRIES + 1}...`,
+              },
+            };
+
+            const syntheticBlock: ToolUseBlock = {
+              type: 'tool_use',
+              id: listenBlock.id,
+              name: 'Listen',
+              input: { duration: currentDuration, reason },
+            };
+            const retryResult = await executeSingleTool(syntheticBlock, execOpts);
+            const retryMeta = retryResult.metadata as Record<string, unknown> | undefined;
+            const retryWokeEarly = (retryMeta?.wokeEarly as boolean) || false;
+            const retryActual = (retryMeta?.actualDuration as number) || currentDuration;
+
+            totalDuration += retryActual;
+
+            const runningSummary = getRunningSummary(config.subAgentRegistry);
+            attempts.push({
+              attempt: attemptNum,
+              duration: currentDuration,
+              actualDuration: retryActual,
+              wokeEarly: retryWokeEarly,
+              runningSummary,
+            });
+
+            if (retryWokeEarly) break;
+
+            currentDuration += AUTO_LISTEN_DURATION_INCREMENT;
+          } else {
+            // First attempt — reuse the already-executed result
+            const firstActual = (firstMeta?.actualDuration as number) || originalDuration;
+            totalDuration += firstActual;
+            const runningSummary = getRunningSummary(config.subAgentRegistry);
+            attempts.push({
+              attempt: 1,
+              duration: originalDuration,
+              actualDuration: firstActual,
+              wokeEarly: false,
+              runningSummary,
+            });
+          }
+        }
+
+        // Build aggregated result when multiple attempts occurred
+        if (attempts.length > 1) {
+          const reasonSuffix = reason ? ` ${reason}` : '';
+          const attemptLines = attempts
+            .map((a) => {
+              const statusText = a.wokeEarly
+                ? `completed${reasonSuffix}`
+                : `timed out, ${a.runningSummary}`;
+              return `  Attempt ${a.attempt}: ${a.actualDuration.toFixed(1)}s (${statusText})`;
+            })
+            .join('\n');
+
+          const content =
+            `Listened for ${totalDuration.toFixed(1)}s total over ${attempts.length} attempts:\n${attemptLines}`;
+
+          toolResults[0] = {
+            ...firstResult,
+            content,
+            duration: Math.round(totalDuration * 1000),
+            metadata: {
+              ...firstMeta,
+              attempts,
+              totalDuration,
+              retryCount: attempts.length - 1,
+            },
+          };
+        }
+      }
+    }
+
     // === PostToolBatch hook (non-blockable) ===
     if (hookManager && toolResults.length > 0) {
       const batchResults = toolResults.map((tr, i) => {
@@ -1199,6 +1349,10 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       allNotifications.push(...config.subAgentRegistry.drainNotifications());
     }
     allNotifications.push(...drainTaskNotifications());
+    // Include notifications buffered during auto-retry
+    if (autoRetryNotifications.length > 0) {
+      allNotifications.push(...autoRetryNotifications);
+    }
     if (allNotifications.length > 0) {
       notificationJustDrained = true;
       const resultMsg = {
