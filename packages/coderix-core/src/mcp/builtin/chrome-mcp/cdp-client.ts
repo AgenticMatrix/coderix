@@ -105,6 +105,9 @@ export class CdpClient {
   private gifRecording = false;
   private gifFrames: string[] = []; // base64 frames
 
+  // Event listener cleanup registry
+  private listenerCleanups: Array<() => void> = [];
+
   constructor(config: CdpConfig = {}) {
     this.config = config;
     this.host = DEFAULT_HOST;
@@ -141,12 +144,25 @@ export class CdpClient {
 
   /** Disconnect and optionally kill the browser (only if we launched it). */
   async disconnect(): Promise<void> {
+    // Remove all CDP event listeners
+    for (const cleanup of this.listenerCleanups) {
+      try { cleanup(); } catch { /* ignore */ }
+    }
+    this.listenerCleanups = [];
+
     if (this.activeClient) {
       try { await this.activeClient.close(); } catch { /* ignore */ }
       this.activeClient = null;
     }
     this.activeTabId = null;
     this.connected = false;
+
+    // Clear all accumulated per-tab state
+    this.networkStores.clear();
+    this.networkActiveTabs.clear();
+    this.consoleStores.clear();
+    this.gifFrames = [];
+    this.gifRecording = false;
   }
 
   /** Shutdown: disconnect + kill browser if we spawned it. */
@@ -483,6 +499,10 @@ export class CdpClient {
           source: 'console',
         };
         store.push(msg);
+        // Cap at 10,000 entries to prevent unbounded memory growth
+        if (store.length > 10_000) {
+          store.splice(0, store.length - 10_000);
+        }
       });
       // Enable console if not already
       try { await client.Runtime.enable(); } catch { /* ignore */ }
@@ -892,6 +912,11 @@ export class CdpClient {
     const client = await this.getClient(tabId);
     const targetId = tabId ?? this.activeTabId!;
 
+    // Guard: don't re-register listeners if already active for this tab
+    if (this.networkActiveTabs.has(targetId)) {
+      return { started: true };
+    }
+
     if (!this.networkStores.has(targetId)) {
       this.networkStores.set(targetId, new Map());
     }
@@ -900,7 +925,7 @@ export class CdpClient {
     // Install event listeners
     await client.Network.enable();
 
-    client.on('Network.requestWillBeSent', (params: any) => {
+    const onRequestWillBeSent = (params: any) => {
       const store = this.networkStores.get(targetId);
       if (store) {
         store.set(params.requestId, {
@@ -910,33 +935,47 @@ export class CdpClient {
           timestamp: params.timestamp,
         });
       }
-    });
+    };
 
-    client.on('Network.responseReceived', (params: any) => {
+    const onResponseReceived = (params: any) => {
       const store = this.networkStores.get(targetId);
       const req = store?.get(params.requestId);
       if (req) {
         req.status = params.response.status;
         req.mimeType = params.response.mimeType;
       }
-    });
+    };
 
-    client.on('Network.loadingFinished', (params: any) => {
+    const onLoadingFinished = (params: any) => {
       const store = this.networkStores.get(targetId);
       const req = store?.get(params.requestId);
       if (req) {
         req.completed = true;
       }
+    };
+
+    client.on('Network.requestWillBeSent', onRequestWillBeSent);
+    client.on('Network.responseReceived', onResponseReceived);
+    client.on('Network.loadingFinished', onLoadingFinished);
+
+    // Register cleanup handlers
+    this.listenerCleanups.push(() => {
+      try { client.off('Network.requestWillBeSent', onRequestWillBeSent); } catch { /* */}
+      try { client.off('Network.responseReceived', onResponseReceived); } catch { /* */}
+      try { client.off('Network.loadingFinished', onLoadingFinished); } catch { /* */}
     });
 
     return { started: true };
   }
 
   async networkStop(tabId?: string): Promise<{ stopped: boolean }> {
-    const client = await this.getClient(tabId);
     const targetId = tabId ?? this.activeTabId!;
     this.networkActiveTabs.delete(targetId);
-    try { await client.Network.disable(); } catch { /* ignore */ }
+    this.networkStores.delete(targetId);
+    try {
+      const client = await this.getClient(tabId);
+      await client.Network.disable();
+    } catch { /* ignore */ }
     return { stopped: true };
   }
 

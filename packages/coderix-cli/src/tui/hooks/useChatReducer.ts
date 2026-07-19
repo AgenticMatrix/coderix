@@ -11,6 +11,26 @@ export function nextMessageId(): number {
   return messageIdCounter++;
 }
 
+// ── Memory caps ──────────────────────────────────────────────────────────
+
+/** Maximum messages to retain in TUI state. Oldest are dropped, but the first user message is preserved as an anchor. */
+const MAX_TUI_MESSAGES = 200;
+/** Maximum command history entries. */
+const MAX_HISTORY = 1000;
+/** Maximum cached sub-agent transcripts. */
+const MAX_CACHED_AGENTS = 10;
+
+function trimMessages(messages: Message[]): Message[] {
+  if (messages.length <= MAX_TUI_MESSAGES) return messages;
+  const excess = messages.length - MAX_TUI_MESSAGES;
+  let startIdx = excess;
+  const firstUserIdx = messages.findIndex(m => m.role === 'user');
+  if (firstUserIdx >= 0 && firstUserIdx < excess) {
+    startIdx = firstUserIdx;
+  }
+  return messages.slice(startIdx);
+}
+
 /**
  * Convert core ContentBlock to TUI ContentBlock.
  * Mirrors mapCoreBlockToTui from useAgentBridge.
@@ -210,7 +230,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'ADD_USER_MESSAGE':
       return {
         ...state,
-        messages: [...state.messages, action.message],
+        messages: trimMessages([...state.messages, action.message]),
         inputText: '',
         cursorPosition: 0,
         error: null,
@@ -232,7 +252,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
       return {
         ...state,
-        messages: [...state.messages, assistantMsg],
+        messages: trimMessages([...state.messages, assistantMsg]),
         isStreaming: true,
         currentTurnId: state.currentTurnId + 1,
       };
@@ -663,9 +683,22 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // Saving an empty savedMainMessages would destroy the main messages.
       if (!state.subAgentView) return state;
       const currentAgentId = state.subAgentView.agentId;
-      const updatedCache = currentAgentId
+      let updatedCache = currentAgentId
         ? { ...state.subAgentMessageCache, [currentAgentId]: state.messages }
         : state.subAgentMessageCache;
+
+      // Evict oldest entries if cache exceeds MAX_CACHED_AGENTS
+      const cacheKeys = Object.keys(updatedCache);
+      if (cacheKeys.length > MAX_CACHED_AGENTS) {
+        const keysToEvict = cacheKeys
+          .filter(k => k !== currentAgentId)
+          .slice(0, cacheKeys.length - MAX_CACHED_AGENTS);
+        for (const key of keysToEvict) {
+          delete updatedCache[key];
+        }
+        updatedCache = { ...updatedCache };
+      }
+
       return {
         ...state,
         subAgentView: null,
@@ -795,7 +828,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'LOAD_CHAT':
       return {
         ...state,
-        messages: action.messages,
+        messages: trimMessages(action.messages),
         turns: action.turns,
         isStreaming: action.isStreaming ?? false,
       };
@@ -820,7 +853,11 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       if (trimmed.length === 0) return state;
       const prev = state.history;
       if (prev.length > 0 && prev[prev.length - 1] === trimmed) return state;
-      return { ...state, history: [...prev, trimmed] };
+      const next = [...prev, trimmed];
+      return {
+        ...state,
+        history: next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next,
+      };
     }
 
     case 'SET_HISTORY_INDEX':

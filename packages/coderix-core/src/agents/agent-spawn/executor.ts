@@ -29,6 +29,7 @@ import {
 } from '../../utils/worktree.js';
 import { writeAgentOutput } from './output-writer.js';
 import { spawnTeammate } from './spawn-teammate.js';
+import { updateMemberInTeam } from '../../utils/swarm/teamHelpers.js';
 import {
   agentDir,
   writeAgentMetadata,
@@ -707,7 +708,14 @@ async function executeStandardSubagent(
           error: result.error,
           outputPath,
           tokenUsage: result.tokenUsage,
+          liveToolCalls: [],
         });
+
+        if (teamName && memberName) {
+          updateMemberInTeam(teamName, agentId, {
+            status, finishedAt: Date.now(),
+          }).catch(() => {});
+        }
 
         // Persist to disk for cross-session resume
         writeAgentMetadata(agentId, {
@@ -727,7 +735,13 @@ async function executeStandardSubagent(
         agentSpawn.subAgentRegistry.update(agentId, {
           status: 'error', finishedAt: Date.now(),
           error: errorMsg,
+          liveToolCalls: [],
         });
+        if (teamName && memberName) {
+          updateMemberInTeam(teamName, agentId, {
+            status: 'error', finishedAt: Date.now(),
+          }).catch(() => {});
+        }
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       });
     });

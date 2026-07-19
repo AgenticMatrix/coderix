@@ -654,15 +654,31 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     }
   }, [currentPhase === 'idle', state.turnOutputTokens]);
 
-  // Elapsed timer runs continuously from turn start
+  // Elapsed timer — stops completely when idle, ticks at 1s when active.
+  // Only calls setState when the displayed second changes to minimize re-renders.
+  const lastDisplayedSecond = useRef(-1);
+
   useEffect(() => {
+    if (currentPhase === 'idle') {
+      // Capture final elapsed for completedTurn, but don't keep ticking
+      turnElapsedRef.current = Date.now() - turnStartRef.current;
+      return;
+    }
+
+    lastDisplayedSecond.current = Math.floor(turnElapsedRef.current / 1000);
+
     const id = setInterval(() => {
       const elapsed = Date.now() - turnStartRef.current;
       turnElapsedRef.current = elapsed;
-      setTurnElapsed(elapsed);
-    }, 100);
+      const seconds = Math.floor(elapsed / 1000);
+      if (seconds !== lastDisplayedSecond.current) {
+        lastDisplayedSecond.current = seconds;
+        setTurnElapsed(elapsed);
+      }
+    }, 1000);
+
     return () => clearInterval(id);
-  }, []);
+  }, [currentPhase]);
 
   // Count new messages arrived while frozen
   const frozenNewCount = state.isFrozen && state.isStreaming
