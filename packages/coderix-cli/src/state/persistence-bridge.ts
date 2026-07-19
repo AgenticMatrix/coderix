@@ -25,14 +25,13 @@ export function hydrateStore(store: Store<AppState>): void {
  * Returns an unsubscribe function.
  */
 export function attachPersistence(store: Store<AppState>): () => void {
-  let lastHistoryLen = store.getState().history.length;
+  let lastHistory = store.getState().history;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const unsub = store.subscribe((state) => {
     // ── History persistence ────────────────────────────────
-    const len = state.history.length;
-    if (len !== lastHistoryLen) {
-      lastHistoryLen = len;
+    if (state.history !== lastHistory) {
+      lastHistory = state.history;
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
         saveHistory(state.history);
