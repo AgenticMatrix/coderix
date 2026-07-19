@@ -3,7 +3,7 @@ import type { ToolSchema } from '../types.js';
 export const schema: ToolSchema = {
   name: 'TaskOutput',
   description:
-    'Retrieves output from a running or completed background task (shell, agent, or remote session). Use block=true (default) to wait for completion, or block=false for a non-blocking status check.',
+    'Retrieves output from a completed background task (shell, agent, or remote session). Blocks until the task completes or times out (default: 15s). Pass the actual shell command as `command` for display.',
   input_schema: {
     type: 'object',
     properties: {
@@ -11,15 +11,14 @@ export const schema: ToolSchema = {
         type: 'string',
         description: 'The ID of the background task to get output from',
       },
-      block: {
-        type: 'boolean',
-        description: 'Whether to wait for the task to complete before returning (default: true)',
-        default: true,
+      command: {
+        type: 'string',
+        description: 'The actual shell command or agent prompt that was executed (not the human-readable description)',
       },
       timeout: {
         type: 'number',
-        description: 'Maximum time to wait in milliseconds when block=true (default: 30000, max: 600000)',
-        default: 30000,
+        description: 'Maximum time to wait in milliseconds (default: 15000, max: 600000)',
+        default: 15000,
       },
     },
     required: ['task_id'],

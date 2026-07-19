@@ -20,15 +20,20 @@ async function readOutputFile(path: string, maxLength: number): Promise<string> 
 
 export const execute: ToolExecutor = async (input, _opts) => {
   const taskId = input.task_id as string;
-  const block = (input.block as boolean) ?? true;
-  const timeout = Math.min((input.timeout as number) ?? 30000, 600000);
+  const timeout = Math.min((input.timeout as number) ?? 15000, 600000);
 
   if (!taskId) {
     return { content: 'Error: task_id is required', isError: true };
   }
 
-  // Check in-memory tracker first
-  const tracked = getTask(taskId);
+  // Resolve task ID — try exact match, then bash- prefix fallback
+  const resolveTask = (id: string) => {
+    let t = getTask(id);
+    if (!t) t = getTask(`bash-${id}`);
+    return t;
+  };
+
+  const tracked = resolveTask(taskId);
 
   // If task ID looks like a sub-agent ID, check SubAgentRegistry
   const registry = getSubAgentRegistry();
@@ -38,68 +43,17 @@ export const execute: ToolExecutor = async (input, _opts) => {
     return {
       content: `No task found with ID: ${taskId}. Background task IDs are shown in task tool results (e.g. "bash-12345" for bash, or agent IDs for spawned agents).`,
       isError: true,
-      metadata: { taskId, block },
+      metadata: { taskId },
     };
-  }
-
-  if (!block) {
-    // Non-blocking: return current status immediately
-    if (tracked) {
-      let outputText = '';
-      if (tracked.outputPath) {
-        outputText = await readOutputFile(tracked.outputPath, 50000);
-      }
-      return {
-        content: JSON.stringify({
-          task_id: tracked.id,
-          task_type: tracked.type,
-          status: tracked.status,
-          description: tracked.description,
-          result: tracked.result ?? null,
-          error: tracked.error ?? null,
-        }, null, 2),
-        isError: tracked.status === 'error',
-        metadata: {
-          taskId: tracked.id,
-          block,
-          description: tracked.description,
-          status: tracked.status,
-          taskType: tracked.type,
-          outputLines: outputText || undefined,
-        },
-      };
-    }
-
-    if (subAgent) {
-      return {
-        content: JSON.stringify({
-          task_id: subAgent.id,
-          task_type: 'agent',
-          status: subAgent.status,
-          description: subAgent.prompt.slice(0, 200),
-          turns: subAgent.turnCount,
-          tools: subAgent.toolCount,
-        }, null, 2),
-        isError: subAgent.status === 'error',
-        metadata: {
-          taskId: subAgent.id,
-          block,
-          description: subAgent.prompt.slice(0, 200),
-          status: subAgent.status,
-          taskType: 'agent',
-          turns: subAgent.turnCount,
-          tools: subAgent.toolCount,
-        },
-      };
-    }
   }
 
   // Blocking: wait for completion
   const deadline = Date.now() + timeout;
+  const resolvedId = tracked?.id ?? (subAgent?.id ?? taskId);
 
   while (Date.now() < deadline) {
-    const current = getTask(taskId);
-    const currentAgent = registry?.get(taskId);
+    const current = resolvedId ? getTask(resolvedId) : undefined;
+    const currentAgent = registry?.get(resolvedId);
 
     if (current && current.status !== 'running') {
       let output = '';
@@ -122,7 +76,6 @@ export const execute: ToolExecutor = async (input, _opts) => {
         isError: current.status === 'error',
         metadata: {
           taskId: current.id,
-          block,
           description: current.description,
           status: current.status,
           taskType: current.type,
@@ -147,7 +100,6 @@ export const execute: ToolExecutor = async (input, _opts) => {
         isError: currentAgent.status === 'error',
         metadata: {
           taskId: currentAgent.id,
-          block,
           description: currentAgent.prompt.slice(0, 200),
           status: currentAgent.status,
           taskType: 'agent',
@@ -161,8 +113,8 @@ export const execute: ToolExecutor = async (input, _opts) => {
   }
 
   // Timeout
-  const final = getTask(taskId);
-  const finalAgent = registry?.get(taskId);
+  const final = resolvedId ? getTask(resolvedId) : undefined;
+  const finalAgent = registry?.get(resolvedId);
 
   if (final) {
     return {
@@ -176,7 +128,6 @@ export const execute: ToolExecutor = async (input, _opts) => {
       isError: false,
       metadata: {
         taskId: final.id,
-        block,
         description: final.description,
         status: 'timeout',
         taskType: final.type,
@@ -195,7 +146,6 @@ export const execute: ToolExecutor = async (input, _opts) => {
       isError: false,
       metadata: {
         taskId: finalAgent.id,
-        block,
         description: finalAgent.prompt.slice(0, 200),
         status: 'timeout',
         taskType: 'agent',
@@ -203,5 +153,5 @@ export const execute: ToolExecutor = async (input, _opts) => {
     };
   }
 
-  return { content: 'Task timed out and is no longer available', isError: true, metadata: { taskId, block } };
+  return { content: 'Task timed out and is no longer available', isError: true, metadata: { taskId } };
 };

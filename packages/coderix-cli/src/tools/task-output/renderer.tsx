@@ -4,8 +4,6 @@ import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
 export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode {
-  const taskId = props.input.task_id as string | undefined;
-  const block = (props.input.block as boolean) ?? true;
   const isDone = props.state === 'done';
   const isExecuting = props.state === 'executing';
   const isPending = props.state === 'pending';
@@ -13,17 +11,17 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
   const meta = props.result?.metadata;
-  const description = meta?.description as string | undefined;
+  const displayId = (meta?.taskId as string) || (props.input.task_id as string);
+  const description =
+    (meta?.description as string) || (props.input.command as string);
   const outputLines = meta?.outputLines as string | undefined;
-  const status = meta?.status as string | undefined;
 
-  const mode = block ? 'blocking' : 'non-blocking';
   const summaryParts: string[] = [];
-  if (taskId) summaryParts.push(taskId);
-  summaryParts.push(mode);
+  if (displayId) summaryParts.push(displayId);
   if (description) {
-    const short = description.length > 50 ? description.slice(0, 47) + '...' : description;
-    summaryParts.push(short);
+    summaryParts.push(
+      description.length > 50 ? description.slice(0, 47) + '...' : description,
+    );
   }
   const summary = summaryParts.join(', ');
 
@@ -34,14 +32,20 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>TaskOutput</Text>
-          {taskId ? <Text dimColor> · {taskId}</Text> : null}
+          {displayId ? (
+            <>
+              <Text dimColor>(</Text>
+              <Text>{summary}</Text>
+              <Text dimColor>)</Text>
+            </>
+          ) : null}
           <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
     );
   }
 
-  // Done state — show inline result
+  // Done state
   if (isDone) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -52,23 +56,24 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
           <Text>{summary}</Text>
           <Text dimColor>)</Text>
         </Text>
+        <Box paddingLeft={2}>
+          <Text dimColor>└ completed</Text>
+        </Box>
         {outputLines ? (
-          <Box paddingLeft={3} flexDirection="column">
+          <Box paddingLeft={4} flexDirection="column">
             {outputLines.split('\n').map((line, i) => (
-              <Text key={i}>{line}</Text>
+              <Text key={i} dimColor>
+                ⎿ {line}
+              </Text>
             ))}
-          </Box>
-        ) : status ? (
-          <Box paddingLeft={3}>
-            <Text dimColor>{status}</Text>
           </Box>
         ) : null}
       </Box>
     );
   }
 
-  // Executing / pending state — show blinking indicator for blocking mode
-  const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
+  // Executing / Pending
+  const indicator = blinkOn ? '●' : '○';
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -78,9 +83,10 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
         <Text dimColor>(</Text>
         <Text>{summary}</Text>
         <Text dimColor>)</Text>
-        {(isExecuting || isPending) ? (
-          <Text dimColor color="ansi:yellow"> {isExecuting ? 'waiting' : 'pending'} {elapsedSecs}s</Text>
-        ) : null}
+        <Text dimColor color="ansi:yellow">
+          {' '}
+          {isExecuting ? 'waiting' : 'pending'} {elapsedSecs}s
+        </Text>
       </Text>
     </Box>
   );

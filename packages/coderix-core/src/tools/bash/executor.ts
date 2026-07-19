@@ -173,6 +173,7 @@ function runCommand(command: string, opts: {
   pid: number;
   child: ChildProcess;
   autoBackgrounded: boolean;
+  collector?: { stdout: string; stderr: string };
 }> {
   return new Promise((resolve) => {
     const child = spawn(command, {
@@ -182,8 +183,7 @@ function runCommand(command: string, opts: {
       env: { ...SPAWN_DEFAULTS.env },
     });
 
-    let stdout = '';
-    let stderr = '';
+    const output = { stdout: '', stderr: '' };
     let settled = false;
     let autoBackgrounded = false;
 
@@ -192,7 +192,7 @@ function runCommand(command: string, opts: {
       settled = true;
       clearTimeout(timer);
       clearTimeout(autoBgTimer);
-      resolve({ stdout, stderr, exitCode, signal, error, pid: child.pid ?? 0, child, autoBackgrounded });
+      resolve({ stdout: output.stdout, stderr: output.stderr, exitCode, signal, error, pid: child.pid ?? 0, child, autoBackgrounded, collector: output });
     };
 
     // Auto-background: detach listeners so the process keeps running,
@@ -203,11 +203,10 @@ function runCommand(command: string, opts: {
       autoBackgrounded = true;
       clearTimeout(timer);
       clearTimeout(autoBgTimer);
-      child.stdout?.removeAllListeners('data');
-      child.stderr?.removeAllListeners('data');
+      // Keep data listeners attached so output continues to accumulate
       child.removeAllListeners('close');
       child.removeAllListeners('error');
-      resolve({ stdout, stderr, exitCode: null, signal: null, error: null, pid: child.pid ?? 0, child, autoBackgrounded });
+      resolve({ stdout: output.stdout, stderr: output.stderr, exitCode: null, signal: null, error: null, pid: child.pid ?? 0, child, autoBackgrounded, collector: output });
     };
 
     // Auto-background after 15 seconds of running
@@ -218,15 +217,15 @@ function runCommand(command: string, opts: {
 
     child.stdout?.on('data', (chunk: Buffer) => {
       const str = chunk.toString();
-      if (stdout.length < opts.maxBuffer) {
-        stdout += str;
+      if (output.stdout.length < opts.maxBuffer) {
+        output.stdout += str;
       }
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
       const str = chunk.toString();
-      if (stderr.length < opts.maxBuffer) {
-        stderr += str;
+      if (output.stderr.length < opts.maxBuffer) {
+        output.stderr += str;
       }
     });
 
@@ -254,6 +253,8 @@ function runBackgroundCommand(command: string, opts: {
   error: Error | null;
   pid: number;
   child: ChildProcess;
+  /** Live collector — continues capturing output after the promise resolves. */
+  collector: { stdout: string; stderr: string };
 }> {
   return new Promise((resolve) => {
     const child = spawn(command, {
@@ -264,35 +265,33 @@ function runBackgroundCommand(command: string, opts: {
       detached: true,
     });
 
-    let stdout = '';
-    let stderr = '';
+    const collector = { stdout: '', stderr: '' };
     let settled = false;
 
     const capture = () => {
       if (settled) return;
       settled = true;
-      child.stdout?.removeAllListeners('data');
-      child.stderr?.removeAllListeners('data');
       child.removeAllListeners('close');
       child.removeAllListeners('error');
       resolve({
-        stdout,
-        stderr,
+        stdout: collector.stdout,
+        stderr: collector.stderr,
         exitCode: child.exitCode,
         error: null,
         pid: child.pid ?? 0,
         child,
+        collector,
       });
     };
 
-    // Capture output during the window
+    // Accumulate output indefinitely (listeners stay attached after capture)
     child.stdout?.on('data', (chunk: Buffer) => {
       const str = chunk.toString();
-      if (stdout.length < opts.maxBuffer) stdout += str;
+      if (collector.stdout.length < opts.maxBuffer) collector.stdout += str;
     });
     child.stderr?.on('data', (chunk: Buffer) => {
       const str = chunk.toString();
-      if (stderr.length < opts.maxBuffer) stderr += str;
+      if (collector.stderr.length < opts.maxBuffer) collector.stderr += str;
     });
 
     // If the process exits during the capture window, resolve immediately
@@ -303,12 +302,13 @@ function runBackgroundCommand(command: string, opts: {
         child.stdout?.removeAllListeners('data');
         child.stderr?.removeAllListeners('data');
         resolve({
-          stdout,
-          stderr,
+          stdout: collector.stdout,
+          stderr: collector.stderr,
           exitCode: code,
           error: null,
           pid: child.pid ?? 0,
           child,
+          collector,
         });
       }
     });
@@ -317,7 +317,7 @@ function runBackgroundCommand(command: string, opts: {
       clearTimeout(timer);
       if (!settled) {
         settled = true;
-        resolve({ stdout, stderr, exitCode: null, error: err, pid: 0, child });
+        resolve({ stdout: collector.stdout, stderr: collector.stderr, exitCode: null, error: err, pid: 0, child, collector });
       }
     });
 
@@ -435,14 +435,15 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       // Listen for process exit to update tracker
       result.child.on('close', (code: number | null) => {
         const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
-        const updatedTask: TrackedTask = {
+        const fullOutput = [result.collector.stdout, result.collector.stderr].filter(Boolean).join('\n');
+        updateTask(taskId, { status: newStatus, finishedAt: Date.now(), result: fullOutput });
+        emitTaskUpdate(opts.emitToolRequest, taskId, {
           ...trackedTask,
           status: newStatus,
           finishedAt: Date.now(),
-        };
-        updateTask(taskId, { status: newStatus, finishedAt: Date.now() });
-        emitTaskUpdate(opts.emitToolRequest, taskId, updatedTask);
-		notifyTaskCompletion(taskId);
+          result: fullOutput,
+        });
+        notifyTaskCompletion(taskId);
         result.child.unref();
       });
 
@@ -495,17 +496,17 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
 
       result.child.on('close', (code: number | null) => {
         const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
-        const updatedTask: TrackedTask = {
+        const fullOutput = [result.collector?.stdout ?? result.stdout, result.collector?.stderr ?? result.stderr].filter(Boolean).join('\n');
+        updateTask(taskId, { status: newStatus, finishedAt: Date.now(), result: fullOutput });
+        emitTaskUpdate(opts.emitToolRequest, taskId, {
           ...trackedTask,
           status: newStatus,
           finishedAt: Date.now(),
-        };
-        updateTask(taskId, { status: newStatus, finishedAt: Date.now() });
-        emitTaskUpdate(opts.emitToolRequest, taskId, updatedTask);
-		notifyTaskCompletion(taskId);
+          result: fullOutput,
+        });
+        notifyTaskCompletion(taskId);
         result.child.unref();
       });
-
       const statusLine = `Command auto-backgrounded after ${AUTO_BG_MS / 1000}s (pid ${result.pid}). Captured output:\n`;
       return {
         content: statusLine + (output || '(no output yet)'),
