@@ -437,7 +437,7 @@ export class QueryEngine {
     const queryConfig: QueryConfig = {
       sessionId: session.id,
       cwd: this.config.cwd,
-      messages: [...session.messages],
+      messages: session.messages,
       systemPrompt: this.systemPrompt!,
       toolRegistry: this.config.toolRegistry,
       permissionEngine: this.permissionEngine,

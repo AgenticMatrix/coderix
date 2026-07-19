@@ -319,6 +319,10 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
   const transcript: Message[] = [...initialMessages];
   const accumulatedLiveCalls: Array<{ name: string; input: string; state: string }> = [];
 
+  // Share transcript reference with registry so the TUI can poll it
+  // without us creating O(n^2) copies on every message.
+  agentSpawn.subAgentRegistry.update(agentId, { transcript });
+
   try {
     const generator = query({
       sessionId: subSessionManager.getActive()?.id ?? agentId,
@@ -368,10 +372,10 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
             }
           }
 
-          // Push transcript snapshot for real-time immersive sub-agent view
+          // Update counters + live tool calls only — transcript is a shared
+          // reference already registered above, no need to copy it.
           agentSpawn.subAgentRegistry.update(agentId, {
             liveToolCalls: [...accumulatedLiveCalls],
-            transcript: [...transcript],
             turnCount: assistantTurnCount,
             messageCount: transcript.length,
             toolCount,
@@ -381,7 +385,6 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
         case 'user':
           transcript.push(msg.message as unknown as Message);
           agentSpawn.subAgentRegistry.update(agentId, {
-            transcript: [...transcript],
             messageCount: transcript.length,
           });
           break;
@@ -415,6 +418,9 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
       totalCost: subSession.totalCost,
     } : undefined;
 
+    // Release sub-agent session messages to free memory promptly.
+    if (subSession) subSession.messages = [];
+
     return {
       agentId, agentType, assistantTurnCount, toolCount,
       transcript, startTime, tokenUsage: subTokenUsage,
@@ -428,6 +434,9 @@ async function runAgentLoop(params: RunAgentParams): Promise<{
       cacheReadInputTokens: subSession.tokenUsage.cacheReadInputTokens ?? 0,
       totalCost: subSession.totalCost,
     } : undefined;
+
+    // Release sub-agent session messages to free memory promptly.
+    if (subSession) subSession.messages = [];
 
     return {
       agentId, agentType, assistantTurnCount, toolCount,
