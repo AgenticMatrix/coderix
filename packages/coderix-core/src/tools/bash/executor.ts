@@ -447,7 +447,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         result.child.unref();
       });
 
-      const statusLine = `Command started in background (pid ${result.pid}). Captured output after ${BG_CAPTURE_MS}ms:\n`;
+      const statusLine = `Command started in background (task_id: ${taskId}, pid: ${result.pid}). Captured output after ${BG_CAPTURE_MS}ms:\n`;
       return {
         content: statusLine + (output || '(no output yet)'),
         isError: false,
@@ -507,7 +507,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         notifyTaskCompletion(taskId);
         result.child.unref();
       });
-      const statusLine = `Command auto-backgrounded after ${AUTO_BG_MS / 1000}s (pid ${result.pid}). Captured output:\n`;
+      const statusLine = `Command auto-backgrounded after ${AUTO_BG_MS / 1000}s (task_id: ${taskId}, pid: ${result.pid}). Captured output:\n`;
       return {
         content: statusLine + (output || '(no output yet)'),
         isError: false,
