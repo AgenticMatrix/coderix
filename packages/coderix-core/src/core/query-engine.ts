@@ -409,9 +409,9 @@ export class QueryEngine {
     });
 
     // Trim session.messages to prevent unbounded growth.
-    // The query loop compacts its local copy but session.messages is never
-    // trimmed otherwise.  Use 2x contextBudget as a generous ceiling.
-    const trimBudget = (this.config.contextBudget ?? 180_000) * 2;
+    // The query loop compacts its local copy independently, so the session
+    // only needs to retain enough messages to reconstruct context on resume.
+    const trimBudget = this.config.contextBudget ?? 180_000;
     this.config.sessionManager.trimMessages(trimBudget);
 
     // Resolve autoCompactEnabled: config key + env var override
