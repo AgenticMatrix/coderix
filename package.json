@@ -7,7 +7,7 @@
     "coderix": "./bin/coderix.js"
   },
   "scripts": {
-    "start": "tsx --tsconfig packages/coderix-cli/tsconfig.json packages/coderix-cli/src/cli/main.tsx",
+    "start": "NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json packages/coderix-cli/src/cli/main.tsx",
     "dev": "NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
     "dev:cli": "NODE_ENV=production CODERIX_EXPERIMENTAL_AGENT_TEAMS=1 tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
     "dev:vscode": "pnpm --filter @coderix/vscode dev",

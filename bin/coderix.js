@@ -32,7 +32,7 @@ const child = spawn(process.execPath, [
   ...process.argv.slice(2),
 ], {
   stdio: 'inherit',
-  env: process.env,
+  env: { ...process.env, NODE_ENV: 'production' },
 });
 
 child.on('exit', (code) => {
