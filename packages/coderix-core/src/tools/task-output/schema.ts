@@ -17,7 +17,7 @@ export const schema: ToolSchema = {
       },
       timeout: {
         type: 'number',
-        description: 'Maximum time to wait in milliseconds (default: 15000, max: 600000)',
+        description: 'Maximum time to wait in milliseconds (default: 15000, max: 60000)',
         default: 15000,
       },
     },

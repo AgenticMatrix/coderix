@@ -20,7 +20,7 @@ async function readOutputFile(path: string, maxLength: number): Promise<string> 
 
 export const execute: ToolExecutor = async (input, _opts) => {
   const taskId = input.task_id as string;
-  const timeout = Math.min((input.timeout as number) ?? 15000, 600000);
+  const timeout = Math.min((input.timeout as number) ?? 15000, 60000);
 
   if (!taskId) {
     return { content: 'Error: task_id is required', isError: true };
