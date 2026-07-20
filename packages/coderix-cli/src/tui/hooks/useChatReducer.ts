@@ -240,6 +240,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         turnEstimatedTokens: 0,
         turnStartedAt: Date.now(),
         isFrozen: false,
+        interrupted: false,
       };
 
     case 'START_ASSISTANT_RESPONSE': {
@@ -563,7 +564,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'INTERRUPT': {
       // Mark all pending/executing tool blocks as done so the UI
       // transitions out of 'wait' status phase immediately.
-      const msgs = state.messages.map((m) => {
+      // Also finalize any in-progress thinking block so the ActivityLine
+      // shows "Interrupted" instead of a spinning "Thinking…".
+      let nextState = { ...state, isStreaming: false, interrupted: true };
+      if (state.thinkingStartedAt != null) {
+        const lastMsg = state.messages[state.messages.length - 1];
+        if (lastMsg?.role === 'assistant') {
+          const thinkingBlock = lastMsg.blocks.find(
+            (b): b is ThinkingBlock => b.type === 'thinking',
+          );
+          const duration = Date.now() - state.thinkingStartedAt;
+          const tokens = thinkingBlock
+            ? Math.max(1, Math.round(thinkingBlock.content.length / 4))
+            : 0;
+          nextState = {
+            ...nextState,
+            thinkingStartedAt: undefined,
+            messages: nextState.messages.map((m) =>
+              m.id === lastMsg.id
+                ? { ...m, thinkingDuration: duration, thinkingTokens: tokens }
+                : m,
+            ),
+          };
+        }
+      }
+      const msgs = nextState.messages.map((m) => {
         if (m.role !== 'assistant') return m;
         let changed = false;
         const blocks = m.blocks.map((b) => {
@@ -575,7 +600,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         });
         return changed ? { ...m, blocks } : m;
       });
-      return { ...state, isStreaming: false, messages: msgs };
+      return { ...nextState, messages: msgs };
     }
 
     case 'SHOW_EXIT_HINT':
@@ -597,7 +622,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
       if (lastUserIdx === -1) {
-        return { ...state, isStreaming: false, turnUndone: true };
+        return { ...state, isStreaming: false, interrupted: true, turnUndone: true };
       }
       const undoneMsg = msgs[lastUserIdx]!;
       // Extract text from the undone user message's blocks
@@ -1024,6 +1049,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     turnEstimatedTokens: 0,
     turnStartedAt: 0,
     queuedCount: 0,
+    interrupted: false,
   };
 }
 

@@ -7,6 +7,8 @@ import type { Task } from '@coderix/core';
 interface TaskPanelProps {
   dismissed: boolean;
   onDismissReset?: () => void;
+  /** When true, the current turn was interrupted — stop spinner animation. */
+  interrupted?: boolean;
 }
 
 const POLL_INTERVAL_MS = 1000;
@@ -32,7 +34,7 @@ const STATUS_COLOR: Record<string, string> = {
  * as long as any task in the batch remains active.  Once every task is done
  * the whole batch disappears and won't reappear when new tasks are created.
  */
-export function TaskPanel({ dismissed, onDismissReset }: TaskPanelProps) {
+export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const prevActiveCount = useRef(0);
   const hiddenIds = useRef<Set<string>>(new Set());
@@ -88,12 +90,12 @@ export function TaskPanel({ dismissed, onDismissReset }: TaskPanelProps) {
   const [spinnerIndex, setSpinnerIndex] = useState(0);
   useEffect(() => {
     const hasInProgress = tasks.some(t => t.status === 'in_progress');
-    if (dismissed || !hasInProgress) return;
+    if (dismissed || !hasInProgress || interrupted) return;
     const id = setInterval(() => {
       setSpinnerIndex(i => (i + 1) % SPINNER_FRAMES.length);
     }, SPINNER_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [tasks, dismissed]);
+  }, [tasks, dismissed, interrupted]);
 
   if (dismissed) return null;
 

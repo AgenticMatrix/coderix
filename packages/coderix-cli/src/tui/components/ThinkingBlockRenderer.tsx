@@ -80,6 +80,8 @@ export interface ActivityLineProps {
   turnOutputTokens: number;
   /** When set and phase is idle, shows a gray "Done" line to prevent UI jump. */
   completed?: { elapsed: number; tokens: number } | null;
+  /** When true, the turn was interrupted via Ctrl+C. Shows "Interrupted" instead of "Done". */
+  interrupted?: boolean;
 }
 
 /**
@@ -87,10 +89,27 @@ export interface ActivityLineProps {
  *   ✽ Thinking… (20s · ↓ 743 tokens)
  *   ✽ Executing… (53s · ↓ 898 tokens)
  *   ✽ Streaming… (25s · ↑ 1.2k tokens)
+ *   ✦ Interrupted… (↓ 2.2k tokens, 2m 10s)   ← yellow, after Ctrl+C
  *   ● Done… (↓ 2.2k tokens, 2m 10s since last input)   ← gray, stays after completion
  */
-export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed }: ActivityLineProps) {
+export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, interrupted }: ActivityLineProps) {
   if (phase === 'idle') {
+    if (interrupted && completed) {
+      const timeStr = formatTime(completed.elapsed);
+      const tokenStr = formatTokens(completed.tokens);
+      return (
+        <Box flexDirection="row" marginBottom={1}>
+          <Box width={2} flexShrink={0}>
+            <Text color="#EAB308">✦</Text>
+          </Box>
+          <Box flexDirection="column" flexGrow={1}>
+            <Text color="#EAB308">
+              Interrupted… (↓ {tokenStr} tokens, {timeStr})
+            </Text>
+          </Box>
+        </Box>
+      );
+    }
     if (!completed) return null;
     const timeStr = formatTime(completed.elapsed);
     const tokenStr = formatTokens(completed.tokens);

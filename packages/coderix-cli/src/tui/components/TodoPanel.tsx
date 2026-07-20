@@ -20,6 +20,8 @@ interface TodoStore {
 interface TodoPanelProps {
   dismissed: boolean;
   onDismissReset?: () => void;
+  /** When true, the current turn was interrupted — stop animation. */
+  interrupted?: boolean;
 }
 
 const TODOS_BASE_DIR = join(homedir(), '.coderix', 'todos');
@@ -59,7 +61,7 @@ const STATUS_COLOR: Record<string, string> = {
 /**
  * Fixed Todo panel pinned above the input box for V1 todo-write todos.
  */
-export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
+export function TodoPanel({ dismissed, onDismissReset, interrupted }: TodoPanelProps) {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [frame, setFrame] = useState(0);
   const prevFingerprint = useState<string>('')[1];
@@ -67,7 +69,7 @@ export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
 
   // Animate hourglass when there are active todos
   useEffect(() => {
-    if (!hasActiveTodos) {
+    if (!hasActiveTodos || interrupted) {
       setFrame(0);
       return;
     }
@@ -75,7 +77,7 @@ export function TodoPanel({ dismissed, onDismissReset }: TodoPanelProps) {
       setFrame(f => (f + 1) % HOURGLASS_FRAMES.length);
     }, ANIMATION_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [hasActiveTodos]);
+  }, [hasActiveTodos, interrupted]);
 
   useEffect(() => {
     let active = true;

@@ -825,6 +825,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
                 turnElapsed={turnElapsed}
                 turnOutputTokens={state.turnOutputTokens}
                 completed={completedTurn}
+                interrupted={state.interrupted}
               />
             ) : null;
             if (activityElement !== null) {
@@ -837,11 +838,13 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         <TaskPanel
           dismissed={state.taskPanelDismissed}
           onDismissReset={handleTaskDismissReset}
+          interrupted={state.interrupted}
         />
 
         <TodoPanel
           dismissed={state.todoPanelDismissed}
           onDismissReset={handleTodoDismissReset}
+          interrupted={state.interrupted}
         />
 
         {/* ── Picker modals ─────────────── */}

@@ -271,6 +271,8 @@ export interface ChatState extends CoreState {
   turnStartedAt: number;
   /** Number of messages queued while tools are running. */
   queuedCount: number;
+  /** When true, the current turn was interrupted via Ctrl+C. */
+  interrupted: boolean;
   /** Team context — set when running in team/worker mode. */
   teamContext?: TeamContextState;
 }
