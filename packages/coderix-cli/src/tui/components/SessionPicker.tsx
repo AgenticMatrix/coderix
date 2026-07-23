@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from '@coderix/ink';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 interface SessionSummary {
   id: string;
@@ -48,8 +48,23 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
       })
     : sessions;
 
+  const pageSize = 20;
+  const startIndex = useMemo(() => {
+    if (filtered.length <= pageSize) return 0;
+    // Keep selection in view: clamp the window so sel is within [start, start + pageSize)
+    let start = Math.max(0, sel - Math.floor(pageSize / 2));
+    start = Math.min(start, filtered.length - pageSize);
+    return start;
+  }, [sel, filtered.length, pageSize]);
+  const visible = useMemo(() => filtered.slice(startIndex, startIndex + pageSize), [filtered, startIndex, pageSize]);
+
   useInput((input, key) => {
     if (key.escape) {
+      onCancel();
+      return;
+    }
+
+    if (key.ctrl && input === 'c') {
       onCancel();
       return;
     }
@@ -110,11 +125,12 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
 
       <Text>{' '}</Text>
 
-      {filtered.slice(0, 20).map((s, i) => {
+      {visible.map((s, i) => {
+        const actualIndex = startIndex + i;
         const time = formatRelativeTime(s.updatedAt instanceof Date ? s.updatedAt : new Date(s.updatedAt));
         const label = sessionLabel(s);
         const turns = s.turnCount > 0 ? `${s.turnCount} turns` : 'new';
-        const isSelected = sel === i;
+        const isSelected = sel === actualIndex;
 
         return (
           <Text key={s.id}>
@@ -125,7 +141,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
               inverse={isSelected}
             >
               {isSelected ? '> ' : '  '}
-              {String(i + 1).padEnd(3)} {s.id.slice(0, 8)}  {turns.padEnd(10)} {time.padEnd(14)} {label}
+              {String(actualIndex + 1).padEnd(3)} {s.id.slice(0, 8)}  {turns.padEnd(10)} {time.padEnd(14)} {label}
             </Text>
           </Text>
         );
@@ -133,7 +149,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
 
       <Text>{' '}</Text>
       <Text dimColor>
-        Up/Down select  ·  Type to filter  ·  Enter confirm  ·  1-9 quick pick  ·  Esc cancel
+        Up/Down select  ·  Type to filter  ·  Enter confirm  ·  1-9 quick pick  ·  Esc / Ctrl+C cancel
       </Text>
     </Box>
   );

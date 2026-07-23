@@ -553,16 +553,16 @@ export class SessionManager {
       if (!existsSync(jsonlPath)) continue;
 
       // Fast path: read tail metadata from JSONL
-      const { lastTitle, lastUserPreview, entryCount, hasParent } = readTailMetadata(jsonlPath);
+      const { lastTitle, lastUserPreview, hasParent, transcriptEntryCount } = readTailMetadata(jsonlPath);
 
       // Skip sub-agent / workflow sessions (child sessions)
       if (hasParent) continue;
 
-      // Skip empty sessions (title entry only, no messages)
-      if (entryCount <= 1) continue;
+      // Skip sessions with no transcript entries (no actual conversation)
+      if (transcriptEntryCount === 0) continue;
 
-      // Approximate turnCount from entry count (transcript entries / 2)
-      const approxTurns = Math.floor(entryCount / 2);
+      // Approximate turnCount from transcript entries (one turn = user + assistant)
+      const approxTurns = Math.floor(transcriptEntryCount / 2);
 
       const title = lastTitle ?? `Session ${id.slice(0, 8)}`;
       const mtime = statSync(jsonlPath).mtime;

@@ -245,12 +245,14 @@ export function readTailMetadata(filePath: string): {
   lastUserPreview: string | null;
   entryCount: number;
   hasParent: boolean;
+  transcriptEntryCount: number;
 } {
   const result = {
     lastTitle: null as string | null,
     lastUserPreview: null as string | null,
     entryCount: 0,
     hasParent: false,
+    transcriptEntryCount: 0,
   };
 
   if (!existsSync(filePath)) return result;
@@ -271,6 +273,12 @@ export function readTailMetadata(filePath: string): {
         const entry = JSON.parse(line);
         if (!result.hasParent && entry.type === 'parent-session') {
           result.hasParent = true;
+        }
+        if (!result.hasParent && entry.type === 'agent-metadata' && entry.agentId?.startsWith('sub-')) {
+          result.hasParent = true;
+        }
+        if (entry.type === 'user' || entry.type === 'assistant') {
+          result.transcriptEntryCount++;
         }
         if (!foundTitle && entry.type === 'title') {
           result.lastTitle = entry.title;
