@@ -179,4 +179,9 @@ export class SubAgentRegistry {
     this._pendingNotifications = [];
     return drained;
   }
+
+  /** Non-destructive check: are there pending notifications? */
+  hasPendingNotifications(): boolean {
+    return this._pendingNotifications.length > 0;
+  }
 }

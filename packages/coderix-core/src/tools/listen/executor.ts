@@ -1,5 +1,5 @@
 import type { ToolExecutor } from '../types.js';
-import { drainTaskNotifications, listTasks as listTrackedTasks } from '../../tasks/task-tracker.js';
+import { listTasks as listTrackedTasks, hasPendingTaskNotifications } from '../../tasks/task-tracker.js';
 
 export const execute: ToolExecutor = async (input, opts) => {
   const duration = Math.max(1, Math.min((input.duration as number) || 5, 300));
@@ -28,9 +28,11 @@ export const execute: ToolExecutor = async (input, opts) => {
     await new Promise(r => setTimeout(r, Math.min(CHECK_INTERVAL, ms - elapsed)));
     elapsed += CHECK_INTERVAL;
 
-    // Wake if a sub-agent or bash task notification arrived
-    if (registry && registry.drainNotifications().length > 0) break;
-    if (drainTaskNotifications().length > 0) break;
+    // Wake if a sub-agent or bash task notification arrived.
+    // Use non-destructive checks — the main agent loop drains
+    // notifications later to inject them into the conversation.
+    if (registry && registry.hasPendingNotifications()) break;
+    if (hasPendingTaskNotifications()) break;
 
     // Wake only if there were tracked tasks and all have finished.
     // Without the "had any" check, an empty registry (no background work)

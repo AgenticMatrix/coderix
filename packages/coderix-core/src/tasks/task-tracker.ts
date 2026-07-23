@@ -92,3 +92,8 @@ export function drainTaskNotifications(): string[] {
   const drained = _pendingNotifications.splice(0);
   return drained;
 }
+
+/** Non-destructive check: are there pending notifications? */
+export function hasPendingTaskNotifications(): boolean {
+  return _pendingNotifications.length > 0;
+}

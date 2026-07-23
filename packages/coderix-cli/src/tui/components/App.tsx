@@ -618,7 +618,10 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
   const currentPhase = useMemo<ActivityPhase>(() => {
     if (state.error) return 'idle';
-    if (latestThinking && latestThinking.duration == null) return 'thinking';
+    // Only treat an unfinished thinking block as active thinking when the
+    // stream is still in progress.  If isStreaming is false the block is
+    // stale and we fall through so the ActivityLine can show Done/Interrupted.
+    if (latestThinking && latestThinking.duration == null && state.isStreaming) return 'thinking';
     const lastMsg = state.messages[state.messages.length - 1];
     const hasActive =
       lastMsg?.blocks.some(
