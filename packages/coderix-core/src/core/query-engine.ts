@@ -178,6 +178,9 @@ export class QueryEngine {
       agentRegistry: this.config.agentRegistry,
     });
 
+    // Persist system prompt to session directory for debugging / auditing
+    this.config.sessionManager.writeSystemPrompt(this.systemPrompt.prompt);
+
     // Setup hook (non-blockable, fires on first init)
     if (this.config.hookManager) {
       const session = this.config.sessionManager.getActive();

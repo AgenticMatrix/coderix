@@ -40,6 +40,10 @@ export function sessionJsonlPath(sessionDir: string): string {
   return join(sessionDir, 'session.jsonl');
 }
 
+export function sessionSystemPromptPath(sessionDir: string): string {
+  return join(sessionDir, 'system_prompt.md');
+}
+
 export function legacySessionJsonPath(sessionDir: string): string {
   return join(sessionDir, 'session.json');
 }

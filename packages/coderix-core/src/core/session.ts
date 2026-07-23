@@ -12,7 +12,7 @@
  *       agent-<id>.jsonl       # Per-sub-agent sidechain transcript
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { IS_WINDOWS } from '../utils/platform.js';
@@ -30,6 +30,7 @@ import {
   SESSIONS_DIR,
   sessionDir as getSessionDir,
   sessionJsonlPath,
+  sessionSystemPromptPath,
   appendEntry,
   appendEntrySync,
   readEntriesSync,
@@ -601,6 +602,20 @@ export class SessionManager {
    */
   listSessions(limit?: number): SessionSummary[] {
     return this.list({ limit: limit ?? 50 });
+  }
+
+  /**
+   * Write the system prompt to the active session's directory as system_prompt.md.
+   * No-op if there is no active session.
+   */
+  writeSystemPrompt(text: string): void {
+    const session = this.activeSession;
+    if (!session) return;
+    const dir = getSessionDir(session.id);
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(sessionSystemPromptPath(dir), text, 'utf-8');
+    } catch { /* best-effort */ }
   }
 
   /**

@@ -18,6 +18,7 @@ export { SessionManager } from './core/session.js';
 export {
   sessionDir,
   sessionJsonlPath,
+  sessionSystemPromptPath,
   subAgentJsonlPath,
   appendEntry,
   appendEntrySync,
