@@ -44,6 +44,7 @@ import type { CoreState } from '../state/core-state.js';
 import {
   loadMemoryConfig,
 } from '../memory/config.js';
+import { truncateToTokenLimit, countTokens } from './token-counter.js';
 import type { MemoryConfig } from '../memory/types.js';
 import {
   executeExtractMemories,
@@ -935,24 +936,26 @@ const modelMaxContext = (m: string | ModelItem): number | undefined =>
  *  the model still sees all the context without O(N) duplication of giant
  *  outputs from prior turns. */
 function trimTranscriptForResume(messages: any[]): any[] {
-  const MAX_TOOL_OUTPUT = 4000;
+  const MAX_TOOL_OUTPUT_TOKENS = 2000;
   return messages.map((msg) => {
     if (msg.role !== 'user') return msg;
     const content = Array.isArray(msg.content) ? msg.content : [];
     const hasLargeOutput = content.some(
       (b: any) => b.type === 'tool_result' && typeof b.content === 'string'
-        && b.content.length > MAX_TOOL_OUTPUT,
+        && countTokens(b.content) > MAX_TOOL_OUTPUT_TOKENS,
     );
     if (!hasLargeOutput) return msg;
     return {
       ...msg,
       content: content.map((b: any) => {
         if (b.type !== 'tool_result' || typeof b.content !== 'string'
-            || b.content.length <= MAX_TOOL_OUTPUT) return b;
+            || countTokens(b.content) <= MAX_TOOL_OUTPUT_TOKENS) return b;
+        const trimmed = truncateToTokenLimit(b.content, MAX_TOOL_OUTPUT_TOKENS);
+        const originalTokens = countTokens(b.content);
         return {
           ...b,
-          content: b.content.slice(0, MAX_TOOL_OUTPUT)
-            + `\n... [trimmed ${b.content.length - MAX_TOOL_OUTPUT} chars]`,
+          content: trimmed
+            + `\n... [trimmed ${originalTokens - countTokens(trimmed)} tokens]`,
         };
       }),
     };

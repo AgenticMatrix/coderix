@@ -5,17 +5,12 @@
  * context window management. Used by both query.ts (inline compaction
  * checks) and compactor.ts (strategy selection).
  *
- * Estimation method:
- *   Character-based with per-field weighting:
- *   - Plain text: ~3.5 chars/token (baseline for English prose)
- *   - JSON/structured fields: ~2.5 chars/token (denser token packing)
- *   - Code blocks: ~2.0 chars/token (code is more token-dense)
- *
- * This is heuristic, not exact. For precise token counts, use the
- * provider's tokenizer (e.g., tiktoken for OpenAI-compatible APIs).
+ * Uses tiktoken (cl100k_base) for real token counting when available,
+ * falling back to character-based estimation otherwise.
  */
 
 import type { Message, ContentBlock, AssistantMessage } from './types.js';
+import { countTokens, countContentTokens } from './token-counter.js';
 
 // ---------------------------------------------------------------------------
 // TokenBudget type (canonical definition)
@@ -26,30 +21,11 @@ export interface TokenBudget {
   current: number;
   /** Maximum allowed tokens for the context window */
   max: number;
-  /** Ratio of current / max (0–1) */
+  /** Ratio of current / max (0-1) */
   ratio: number;
-  /** Percentage used (0–100), for display */
+  /** Percentage used (0-100), for display */
   percent: number;
 }
-
-// ---------------------------------------------------------------------------
-// Token estimation weights
-// ---------------------------------------------------------------------------
-
-/**
- * Estimated characters per token for different content types.
- * Based on empirical observation of Claude's tokenizer behavior.
- */
-const CHARS_PER_TOKEN = {
-  /** Plain English prose text */
-  text: 3.5,
-  /** JSON strings, structured tool input/output */
-  json: 2.5,
-  /** Code blocks (source files, diffs, shell output) */
-  code: 2.0,
-  /** Default fallback */
-  default: 3.0,
-} as const;
 
 // ---------------------------------------------------------------------------
 // Token estimation functions
@@ -57,38 +33,35 @@ const CHARS_PER_TOKEN = {
 
 /**
  * Estimate token count for a plain string.
+ * Uses tiktoken when available, falls back to ~3.5 chars/token.
  */
 export function estimateStringTokens(
   text: string,
-  contentType: 'text' | 'json' | 'code' = 'text',
+  _contentType: 'text' | 'json' | 'code' = 'text',
 ): number {
-  if (!text) return 0;
-  const divisor = CHARS_PER_TOKEN[contentType];
-  return Math.ceil(text.length / divisor);
+  return countTokens(text);
 }
 
 /**
  * Estimate token count for a ContentBlock.
  *
- * Weights per block type:
- *   - text: standard text rate
- *   - tool_use: json rate (structured input)
- *   - tool_result: code rate (tool output is often code/diff-like)
- *   - thinking: text rate
- *   - image: 85 tokens (rough estimate for small images)
+ * Uses tiktoken for text and tool_result blocks.
+ * Fallback weights when tiktoken is unavailable:
+ *   - text: 3.5 chars/token
+ *   - tool_use: 2.5 chars/token (structured input)
+ *   - tool_result: 2.0 chars/token (tool output is often code/diff-like)
+ *   - thinking: 3.5 chars/token
+ *   - image: 85 tokens (rough estimate)
  */
 export function estimateBlockTokens(block: ContentBlock): number {
   switch (block.type) {
     case 'text': {
       const text = block.text ?? '';
-      return estimateStringTokens(text, 'text');
+      return countTokens(text);
     }
 
     case 'tool_use': {
-      let total = 0;
-      // Tool name + id overhead: ~10 tokens
-      total += 10;
-      // Input is structured JSON
+      let total = 10; // Tool name + id overhead: ~10 tokens
       if (block.input) {
         total += estimateStringTokens(
           JSON.stringify(block.input),
@@ -104,23 +77,25 @@ export function estimateBlockTokens(block: ContentBlock): number {
         typeof block.content === 'string'
           ? block.content
           : block.content
-            ? JSON.stringify(block.content)
-            : '';
-      // Tool results are often code/diffs — use code rate
-      total += estimateStringTokens(content, 'code');
-      // Error flag overhead: ~5 tokens
+            ? block.content
+            : undefined;
+      if (content) {
+        if (typeof content === 'string') {
+          total += countTokens(content);
+        } else if (Array.isArray(content)) {
+          total += countContentTokens(content);
+        }
+      }
       if (block.is_error) total += 5;
       return total;
     }
 
     case 'thinking': {
       const thinking = block.thinking ?? '';
-      return estimateStringTokens(thinking, 'text');
+      return countTokens(thinking);
     }
 
     case 'image': {
-      // Image size varies, but 85 tokens is a reasonable default
-      // for a small screenshot. Large images can use 200+ tokens.
       return block.source?.data
         ? Math.ceil(String(block.source.data).length / 50)
         : 85;
@@ -136,7 +111,7 @@ export function estimateBlockTokens(block: ContentBlock): number {
  *
  * Accounts for:
  *   - Role tag overhead (~4 tokens per message for API metadata)
- *   - Content blocks (weighted by type)
+ *   - Content blocks (counted via tiktoken)
  *   - String content fallback
  */
 export function estimateMessageTokens(message: Message): number {
@@ -144,7 +119,7 @@ export function estimateMessageTokens(message: Message): number {
   let tokens = 4;
 
   if (typeof message.content === 'string') {
-    tokens += estimateStringTokens(message.content, 'text');
+    tokens += countTokens(message.content);
   } else if (Array.isArray(message.content)) {
     for (const block of message.content) {
       tokens += estimateBlockTokens(block);
@@ -244,7 +219,7 @@ export function needsCompaction(
  *   - cache_creation_input_tokens are written to cache (billed but not read)
  *
  * With prompt caching (DeepSeek, Anthropic), input_tokens may be small
- * while cache_read is large — the sum is the true context size.
+ * while cache_read is large -- the sum is the true context size.
  *
  * Returns undefined when no assistant message with usage data exists
  * (e.g., on the very first turn before any API call).
@@ -269,11 +244,11 @@ export function tokenCountFromLastAPIResponse(
 
 /**
  * Hybrid token counter: uses API-reported token counts when available,
- * falls back to character-based estimation.
+ * falls back to tiktoken-based estimation.
  *
  * Uses the full context size from the last API response (input + cache + output).
  * This is a snapshot from the start of the last API call plus the model's
- * output — it does not include tool results or other messages added since.
+ * output -- it does not include tool results or other messages added since.
  * For compaction decisions this is safely conservative: we'll trigger
  * compaction slightly earlier than strictly necessary.
  */

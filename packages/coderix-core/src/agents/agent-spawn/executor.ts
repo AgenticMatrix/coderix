@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { truncateToTokenLimit, truncateToTokenLimitFromEnd, countTokens } from '../../core/token-counter.js';
 import type { ToolExecutor, ToolResult } from '../../tools/types.js';
 import type { Message, ContentBlock, AgentSpawnContext, ToolContext } from '../../core/types.js';
 import type { SystemPrompt, SystemPromptAssembler } from '../../core/system-prompt.js';
@@ -47,10 +48,10 @@ function shortId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+const TURN_1K = 1000;
 const TURN_2K = 2000;
-const TURN_4K = 4000;
-const TURN_16K = 16000;
-const OVERALL_MAX = 32000;
+const TURN_8K = 8000;
+const OVERALL_MAX_TOKENS = 16000;
 
 function compressTranscript(messages: Message[]): string {
   // Step 1: extract text from each assistant message (last 60)
@@ -70,20 +71,21 @@ function compressTranscript(messages: Message[]): string {
 
   if (turns.length === 0) return '(sub-agent produced no text output)';
 
-  // Step 2: per-turn truncation by distance from end
+  // Step 2: per-turn truncation by distance from end (token-based)
   const truncated = turns.map((turn, i) => {
     const distFromEnd = turns.length - 1 - i;
-    let maxLen: number;
-    if (distFromEnd === 0)        maxLen = TURN_16K; // 最后一轮
-    else if (distFromEnd <= 5)    maxLen = TURN_4K;  // 倒数前五轮 (2~6)
-    else                          maxLen = TURN_2K;  // 第 7 轮及更早
-    return turn.length <= maxLen ? turn : turn.slice(0, maxLen);
+    let maxTokens: number;
+    if (distFromEnd === 0)        maxTokens = TURN_8K;  // last turn: 8K tokens
+    else if (distFromEnd <= 5)    maxTokens = TURN_2K;  // turns 2-6 from end: 2K tokens
+    else                          maxTokens = TURN_1K;  // turn 7+: 1K tokens
+    if (countTokens(turn) <= maxTokens) return turn;
+    return truncateToTokenLimit(turn, maxTokens);
   });
 
-  // Step 3: overall — keep last 32K
+  // Step 3: overall -- keep last 16K tokens
   const body = truncated.join('\n\n');
-  if (body.length <= OVERALL_MAX) return body;
-  return body.slice(body.length - OVERALL_MAX);
+  if (countTokens(body) <= OVERALL_MAX_TOKENS) return body;
+  return truncateToTokenLimitFromEnd(body, OVERALL_MAX_TOKENS);
 }
 
 interface ToolCallSummary {

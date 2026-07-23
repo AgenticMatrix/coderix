@@ -16,6 +16,7 @@ import {
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../../../agents/agent-persistence.js';
+import { truncateToTokenLimit, countTokens } from '../../../core/token-counter.js';
 
 const MAX_RESUME_TURNS = 200;
 const CONTEXT_BUDGET = 120_000;
@@ -29,14 +30,14 @@ function compressTranscript(messages: Message[]): string {
     for (const block of blocks) {
       if (block.type === 'text') {
         const text = (block as { text?: string }).text ?? '';
-        if (text) parts.push(text.slice(0, 8000));
+        if (text) parts.push(truncateToTokenLimit(text, 4000));
       }
     }
   }
   const body = parts.join('\n\n');
   if (!body) return '(sub-agent produced no text output)';
-  if (body.length <= 16384) return body;
-  return body.slice(0, 16381) + '...';
+  if (countTokens(body) <= 8000) return body;
+  return truncateToTokenLimit(body, 8000);
 }
 
 interface ToolCallSummary {

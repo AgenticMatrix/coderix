@@ -16,6 +16,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { estimateMessageTokens } from './token-budget.js';
+import { countTokens } from './token-counter.js';
 import type {
   Message,
   ContentBlock,
@@ -499,14 +500,13 @@ function estimateBlockTokensForResult(block: ContentBlock): number {
   }
 
   if (typeof block.content === 'string') {
-    // Use the code rate from token-budget for tool output
-    return Math.ceil(block.content.length / 2.0);
+    return countTokens(block.content);
   }
 
   // Array of text/image blocks
   return block.content.reduce((sum, item) => {
     if (item.type === 'text') {
-      return sum + Math.ceil((item.text ?? '').length / 2.0);
+      return sum + countTokens(item.text ?? '');
     }
     if (item.type === 'image') {
       return sum + IMAGE_TOKEN_ESTIMATE;

@@ -26,6 +26,7 @@ import { SessionManager } from '../../core/session.js';
 import { CheckpointManager } from '../../core/checkpoint.js';
 import { filterToolsForAgent } from '../tool-filtering.js';
 import { query } from '../../core/query.js';
+import { truncateToTokenLimit, countTokens } from '../../core/token-counter.js';
 import {
   createAgentWorktree,
   removeAgentWorktree,
@@ -187,14 +188,14 @@ function compressTranscript(messages: Message[]): string {
     for (const block of blocks) {
       if (block.type === 'text') {
         const text = (block as { text?: string }).text ?? '';
-        if (text) parts.push(text.slice(0, 8000));
+        if (text) parts.push(truncateToTokenLimit(text, 4000));
       }
     }
   }
   const body = parts.join('\n\n');
   if (!body) return '(sub-agent produced no text output)';
-  if (body.length <= 65536) return body;
-  return body.slice(0, 65533) + '...';
+  if (countTokens(body) <= 32000) return body;
+  return truncateToTokenLimit(body, 32000);
 }
 
 // ---------------------------------------------------------------------------
