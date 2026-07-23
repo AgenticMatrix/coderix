@@ -13,7 +13,6 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { IS_WINDOWS } from '../utils/platform.js';
@@ -100,30 +99,9 @@ export class SessionManager {
     this.sessions.set(id, session);
     this.activeSession = session;
 
-    // Write the title entry to bootstrap the session.jsonl file
-    const dir = getSessionDir(id);
-    const jsonlPath = sessionJsonlPath(dir);
-    const titleEntry: SessionEntry = {
-      type: 'title',
-      title,
-    } as SessionEntry;
-
-    // Fire-and-forget — file will be created on first write
-    mkdir(dir, { recursive: true })
-      .then(() => appendEntry(jsonlPath, titleEntry))
-      .catch(() => {});
-
-    if (options.parentSessionId) {
-      const parentEntry: SessionEntry = {
-        type: 'parent-session',
-        parentSessionId: options.parentSessionId,
-      } as SessionEntry;
-      mkdir(dir, { recursive: true })
-        .then(() => appendEntry(jsonlPath, parentEntry))
-        .catch(() => {});
-    }
-
-    (session as any)._entryCount = 1;
+    // Defer disk write until the first message is added.
+    // This prevents empty sessions from leaving directories on disk.
+    (session as any)._entryCount = 0;
 
     return session;
   }
@@ -308,8 +286,26 @@ export class SessionManager {
     const dir = getSessionDir(session.id);
     const jsonlPath = sessionJsonlPath(dir);
 
-    const entryCount = ((session as any)._entryCount as number) ?? 0;
-    (session as any)._entryCount = entryCount + 1;
+    // Bootstrap the session.jsonl on first message: write title + parent metadata
+    if (((session as any)._entryCount as number ?? 0) === 0) {
+      const titleEntry: SessionEntry = {
+        type: 'title',
+        title: session.title,
+      } as SessionEntry;
+      appendEntry(jsonlPath, titleEntry).catch(() => {});
+      (session as any)._entryCount = 1;
+
+      if (session.parentSessionId) {
+        const parentEntry: SessionEntry = {
+          type: 'parent-session',
+          parentSessionId: session.parentSessionId,
+        } as SessionEntry;
+        appendEntry(jsonlPath, parentEntry).catch(() => {});
+        (session as any)._entryCount = 2;
+      }
+    }
+
+    (session as any)._entryCount = ((session as any)._entryCount as number) + 1;
 
     // Throttle: small sessions flush every 5 messages,
     // large sessions (>200) every 20 messages
