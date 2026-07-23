@@ -145,7 +145,7 @@ export class SubAgentRegistry {
     }
 
     if (agent.result) {
-      lines.push(`  <result>${agent.result.slice(0, 2000)}</result>`);
+      lines.push(`  <result>${agent.result.slice(0, 32000)}</result>`);
     }
 
     if (agent.tokenUsage) {

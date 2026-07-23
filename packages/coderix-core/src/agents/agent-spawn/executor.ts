@@ -50,8 +50,8 @@ function shortId(): string {
 
 const TURN_1K = 1000;
 const TURN_2K = 2000;
-const TURN_8K = 8000;
-const OVERALL_MAX_TOKENS = 16000;
+const TURN_32K = 32000;
+const OVERALL_MAX_TOKENS = 32000;
 
 function compressTranscript(messages: Message[]): string {
   // Step 1: extract text from each assistant message (last 60)
@@ -75,7 +75,7 @@ function compressTranscript(messages: Message[]): string {
   const truncated = turns.map((turn, i) => {
     const distFromEnd = turns.length - 1 - i;
     let maxTokens: number;
-    if (distFromEnd === 0)        maxTokens = TURN_8K;  // last turn: 8K tokens
+    if (distFromEnd === 0)        maxTokens = TURN_32K; // last turn: 32K tokens
     else if (distFromEnd <= 5)    maxTokens = TURN_2K;  // turns 2-6 from end: 2K tokens
     else                          maxTokens = TURN_1K;  // turn 7+: 1K tokens
     if (countTokens(turn) <= maxTokens) return turn;
