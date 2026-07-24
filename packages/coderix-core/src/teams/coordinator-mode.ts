@@ -27,23 +27,16 @@ export function getAgentRole(settings?: CoderSettings): 'default' | 'coordinator
 }
 
 // ---------------------------------------------------------------------------
-// System context generation
+// Static team leader declaration (for system prompt — cache-friendly)
 // ---------------------------------------------------------------------------
 
-export async function getCoordinatorSystemContext(
-  sessionDir: string,
+export function getTeamLeaderStaticDeclaration(
   teamName: string,
-): Promise<string | null> {
-  const config = await loadTeamConfig(sessionDir, teamName);
-  if (!config) return null;
-
-  return buildTeamContextBlock(sessionDir, config);
-}
-
-async function buildTeamContextBlock(sessionDir: string, config: TeamConfig): Promise<string> {
-  const lines: string[] = [
-    `# Active Team: ${config.name}`,
-    `Description: ${config.description}`,
+  description: string,
+): string {
+  return [
+    `# Active Team: ${teamName}`,
+    `Description: ${description}`,
     '',
     'You are the team leader. Use Agent(name, team_name) to spawn workers.',
     '',
@@ -53,10 +46,24 @@ async function buildTeamContextBlock(sessionDir: string, config: TeamConfig): Pr
     '- SendMessage(to: "*") — broadcast to all workers',
     '- SendMessage(to: "leader") — workers use this to reach you',
     '',
-  ];
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic team status block (per-turn injection — always at conversation tail)
+// ---------------------------------------------------------------------------
+
+export async function getTeamStatusBlock(
+  sessionDir: string,
+  teamName: string,
+): Promise<string | null> {
+  const config = await loadTeamConfig(sessionDir, teamName);
+  if (!config) return null;
+
+  const lines: string[] = [];
 
   if (config.members.length > 0) {
-    lines.push('Workers (use the agentId to address them):');
+    lines.push('Current team workers:');
     for (const m of config.members) {
       const unread = await getUnreadCount(sessionDir, config.name, m.agentId).catch(() => 0);
       const unreadNote = unread > 0 ? ` (${unread} unread)` : '';

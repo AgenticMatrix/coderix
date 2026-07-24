@@ -27,7 +27,7 @@ import { CheckpointManager } from './checkpoint.js';
 import type { HookManager } from '../hooks/index.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
 import type { AgentRegistry } from './agent-registry.js';
-import { getAgentRole, getCoordinatorSystemContext } from '../teams/coordinator-mode.js';
+import { getAgentRole, getTeamLeaderStaticDeclaration, getTeamStatusBlock } from '../teams/coordinator-mode.js';
 import { drainUnreadMessages } from '../teams/team-mailbox.js';
 import { execute as executeSendMessage } from '../teams/tools/team-message/executor.js';
 import { filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../agents/tool-filtering.js';
@@ -159,15 +159,18 @@ export class QueryEngine {
     const assembler = this.config.systemPromptAssembler ?? new SystemPromptAssembler();
     const agentRole = getAgentRole(this.config.settings);
 
-    // If coordinator with team active, inject team context into append prompt
+    // If coordinator with team active, inject static team declaration into system prompt.
+    // Dynamic worker list is injected per-turn in submitMessage() to stay cache-friendly.
     let appendPrompt = this.config.appendSystemPrompt;
     if (agentRole === 'coordinator' && this.config.teamName) {
       const activeSessionId = this.config.sessionManager.getActive()?.id;
       if (activeSessionId) {
         const sd = getSessionDir(activeSessionId);
-        const teamCtx = await getCoordinatorSystemContext(sd, this.config.teamName);
-        if (teamCtx) {
-          appendPrompt = appendPrompt ? `${appendPrompt}\n\n${teamCtx}` : teamCtx;
+        const { loadTeamConfig } = await import('../teams/team-store.js');
+        const teamConfig = await loadTeamConfig(sd, this.config.teamName);
+        if (teamConfig) {
+          const staticDecl = getTeamLeaderStaticDeclaration(this.config.teamName, teamConfig.description);
+          appendPrompt = appendPrompt ? `${appendPrompt}\n\n${staticDecl}` : staticDecl;
         }
       }
     }
@@ -363,6 +366,16 @@ export class QueryEngine {
           this.config.sessionManager.addMessage({
             role: 'user',
             content: [contextBlock],
+          });
+        }
+
+        // Inject dynamic team status (worker list with statuses) at conversation tail.
+        // This stays cache-friendly because it's always the newest user message.
+        const statusBlock = await getTeamStatusBlock(sd, this.config.teamName);
+        if (statusBlock) {
+          this.config.sessionManager.addMessage({
+            role: 'user',
+            content: [{ type: 'text', text: '[Team status]\n' + statusBlock }],
           });
         }
       }

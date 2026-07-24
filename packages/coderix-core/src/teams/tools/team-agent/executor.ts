@@ -12,7 +12,6 @@ import teamMessagePlugin from '../team-message/index.js';
 import {
   runAgentLoop,
   compressTranscript,
-  enrichAgentPrompt,
   cleanupAgentWorktree,
   shortId,
   DEFAULT_MAX_TURNS,
@@ -205,13 +204,27 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   }
 
   // ── Build system prompt ─────────────────────────────────────────────
+  // Inherit the parent agent's FULL system prompt as the base, then layer on
+  // the agent type's custom instructions and the team member addendum.
+  // This gives team members the same tool knowledge and environment context
+  // as the leader, matching claude-code-best's approach.
   const userPrompt = agentDef.initialPrompt
     ? `${agentDef.initialPrompt}\n\n${prompt}`
     : prompt;
 
-  let enrichedPrompt = agentSpawn.systemPromptAssembler
-    ? await enrichAgentPrompt(agentDef.getSystemPrompt(), agentSpawn.systemPromptAssembler)
-    : agentDef.getSystemPrompt();
+  let enrichedPrompt: string;
+  if (agentSpawn.renderedSystemPrompt) {
+    enrichedPrompt = agentSpawn.renderedSystemPrompt.prompt;
+  } else {
+    // Fallback: reassemble from agent definition + system prompt assembler
+    enrichedPrompt = agentDef.getSystemPrompt();
+  }
+
+  // Layer agent type's custom system prompt (additional instructions)
+  const agentTypePrompt = agentDef.getSystemPrompt();
+  if (agentTypePrompt) {
+    enrichedPrompt = enrichedPrompt + '\n\n' + agentTypePrompt;
+  }
 
   // Inject memory if enabled
   if (isAgentMemoryEnabled() && agentDef.memory) {
@@ -225,7 +238,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     }
   }
 
-  // Inject team context
+  // Inject team member addendum (identity + communication rules)
   const peerMembers = config.members.filter(m => m.agentId !== agentId);
   const peerList = peerMembers.length > 0
     ? peerMembers.map(m => `  - ${m.name} (\`${m.agentId}\`) [${m.agentType}]`).join('\n')
@@ -238,8 +251,10 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     '',
     `Peer workers:\n${peerList}`,
     '- SendMessage(to: "<agentId>") to message a specific teammate',
-    '- SendMessage(to: "*") to broadcast to all workers',
+    '- SendMessage(to: "*") to broadcast to all workers (use sparingly)',
     '- Just writing text is NOT visible to others — you MUST use SendMessage',
+    '',
+    'Your work is coordinated through the task system and teammate messaging.',
   ].join('\n');
   enrichedPrompt = enrichedPrompt + teamCtx;
 
