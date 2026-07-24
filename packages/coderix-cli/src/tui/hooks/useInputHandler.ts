@@ -108,6 +108,8 @@ export function useInputHandler({
   exitRef.current = onExit;
   const exitPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const DOUBLE_PRESS_MS = 500;
+  const agentCountRef = useRef(agentCount);
+  agentCountRef.current = agentCount;
 
   useInput(
     (input, key) => {
@@ -405,8 +407,9 @@ export function useInputHandler({
 
       if (key.downArrow) {
         if (historyIndex === -1) {
-          // Show Team Picker only when there are agents to pick from
-          if (agentCount > 0) {
+          // Show Team Picker when there are agents in registry OR ref count > 0
+          const regCount = getSubAgentRegistry()?.list().length ?? 0;
+          if (agentCountRef.current > 0 || regCount > 0) {
             dispatch({ type: 'SHOW_TEAM_PICKER' });
           }
           return;

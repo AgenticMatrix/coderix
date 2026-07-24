@@ -23,7 +23,7 @@ import { buildTeammatePromptAddendum } from './teammatePromptAddendum.js';
 import type { TeammateIdentity } from './spawnInProcess.js';
 import { TEAM_LEAD_NAME } from './constants.js';
 import { loadTeamConfig } from '../../teams/team-store.js';
-import { sessionDir as getSessionDir } from '../../core/session-store.js';
+import { sessionDir } from '../../core/session-store.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,11 +91,12 @@ type WaitResult = {
  * Returns when a non-protocol message arrives, a shutdown is requested, or aborted.
  */
 async function waitForNextPromptOrShutdown(
+  sd: string,
   identity: TeammateIdentity,
   abortController: AbortController,
 ): Promise<WaitResult> {
   while (!abortController.signal.aborted) {
-    const unread = await readUnreadMessages(identity.agentId, identity.teamName);
+    const unread = await readUnreadMessages(sd, identity.agentId, identity.teamName);
 
     if (unread.length > 0) {
       // Walk from newest to find first non-protocol message or shutdown
@@ -107,7 +108,7 @@ async function waitForNextPromptOrShutdown(
         const shutdownRequest = isShutdownRequest(text);
         if (shutdownRequest) {
           // Mark it read
-          await markMessagesAsRead(identity.agentId, identity.teamName);
+          await markMessagesAsRead(sd, identity.agentId, identity.teamName);
           return {
             type: 'shutdown_request',
             from: shutdownRequest.from,
@@ -124,7 +125,7 @@ async function waitForNextPromptOrShutdown(
         } catch { /* plain text — deliver it */ }
 
         // Found a regular message — mark all read and deliver
-        await markMessagesAsRead(identity.agentId, identity.teamName);
+        await markMessagesAsRead(sd, identity.agentId, identity.teamName);
         return {
           type: 'new_message',
           from: msg.from,
@@ -154,13 +155,14 @@ async function waitForNextPromptOrShutdown(
 // ---------------------------------------------------------------------------
 
 async function sendIdleNotification(
+  sd: string,
   identity: TeammateIdentity,
   reason: 'available' | 'interrupted' | 'failed' = 'available',
 ): Promise<void> {
   const notification = createIdleNotification(identity.agentId, {
     idleReason: reason,
   });
-  await writeToMailbox(TEAM_LEAD_NAME, {
+  await writeToMailbox(sd, TEAM_LEAD_NAME, {
     from: identity.agentId,
     text: JSON.stringify(notification),
     timestamp: new Date().toISOString(),
@@ -206,6 +208,8 @@ export async function runInProcessTeammate(
   let currentPrompt = formatAsTeammateMessage(TEAM_LEAD_NAME, prompt);
   let shouldExit = false;
 
+  const sd = sessionDir(identity.parentSessionId);
+
   // Build system prompt
   let teammateSystemPrompt: string;
   if (systemPromptMode === 'replace' && systemPrompt) {
@@ -214,7 +218,6 @@ export async function runInProcessTeammate(
     // Build dynamic team communication context
     let addendum = '';
     try {
-      const sd = getSessionDir(identity.parentSessionId);
       const teamConfig = await loadTeamConfig(sd, identity.teamName);
       if (teamConfig) {
         addendum = buildTeammatePromptAddendum({
@@ -290,12 +293,14 @@ export async function runInProcessTeammate(
 
       // Send idle notification
       await sendIdleNotification(
+        sd,
         identity,
         turnWasAborted ? 'interrupted' : 'available',
       );
 
       // Wait for next prompt or shutdown
       const waitResult = await waitForNextPromptOrShutdown(
+        sd,
         identity,
         abortController,
       );
@@ -327,7 +332,7 @@ export async function runInProcessTeammate(
       error: abortController.signal.aborted ? 'Aborted' : undefined,
     };
   } catch (error) {
-    await sendIdleNotification(identity, 'failed');
+    await sendIdleNotification(sd, identity, 'failed');
     return {
       success: false,
       messages: allMessages,

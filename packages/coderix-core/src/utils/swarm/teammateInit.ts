@@ -19,6 +19,7 @@ import { TEAM_LEAD_NAME } from './constants.js';
  * when this teammate's session stops.
  */
 export async function initializeTeammateHooks(
+  sessionDir: string,
   teamInfo: {
     teamName: string;
     agentId: string;
@@ -39,7 +40,7 @@ export async function initializeTeammateHooks(
     const notification = createIdleNotification(agentId, {
       idleReason: 'available',
     });
-    await writeToMailbox(leadAgentName, {
+    await writeToMailbox(sessionDir, leadAgentName, {
       from: agentId,
       text: JSON.stringify(notification),
       timestamp: new Date().toISOString(),

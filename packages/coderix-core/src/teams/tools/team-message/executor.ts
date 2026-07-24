@@ -11,11 +11,11 @@ import { query } from '../../../core/query.js';
 import { loadTeamConfig, listTeams } from '../../team-store.js';
 import { sendMessage } from '../../team-mailbox.js';
 import {
-  readAgentMetadata,
-  getAgentTranscript,
+  findAgentOnDisk,
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../../../agents/agent-persistence.js';
+import type { DiskAgentInfo } from '../../../agents/agent-persistence.js';
 import { sessionDir as getSessionDir } from '../../../core/session-store.js';
 import { truncateToTokenLimit, countTokens } from '../../../core/token-counter.js';
 
@@ -123,7 +123,7 @@ async function handleTeamMessage(
       '../../../utils/swarm/teammateMailbox.js'
     );
     const reason = (input.reason as string) || undefined;
-    const result = await sendShutdownRequestToMailbox(to, teamName, reason);
+    const result = await sendShutdownRequestToMailbox(sessionDir, to, teamName, reason);
     return {
       content: `Shutdown request sent to '${to}' in team '${teamName}' (requestId: ${result.requestId}).`,
       isError: false,
@@ -149,7 +149,7 @@ async function handleTeamMessage(
           reason: reason || 'Rejected by user',
         });
 
-    await writeToMailbox(to, {
+    await writeToMailbox(sessionDir, to, {
       from,
       text: JSON.stringify(msg),
       timestamp: new Date().toISOString(),
@@ -247,6 +247,7 @@ async function handleSubAgentResume(
   const parentSessionId = agentSpawn.sessionManager.getActive()?.id;
   const parentSessionDir = parentSessionId ? getSessionDir(parentSessionId) : undefined;
   let agent = registry.get(agentId);
+  let diskInfo: DiskAgentInfo | null = null;
 
   // ── Disk fallback: try loading agent from disk (cross-session resume) ─
   if (!agent) {
@@ -256,10 +257,9 @@ async function handleSubAgentResume(
         isError: true,
       };
     }
-    const meta = await readAgentMetadata(agentId, parentSessionDir);
-    const diskTranscript = await getAgentTranscript(agentId, parentSessionDir);
+    diskInfo = await findAgentOnDisk(agentId, parentSessionDir);
 
-    if (!meta || !diskTranscript) {
+    if (!diskInfo) {
       return {
         content: [
           `Agent '${agentId}' not found in registry or on disk.`,
@@ -274,17 +274,17 @@ async function handleSubAgentResume(
     const diskAbortController = new AbortController();
     registry.register({
       id: agentId,
-      name: `${meta.agentType}-${agentId}`,
-      agentType: (meta.agentType as any) || 'general-purpose',
+      name: `${diskInfo.meta.agentType}-${agentId}`,
+      agentType: (diskInfo.meta.agentType as any) || 'general-purpose',
       status: 'stopped',
-      prompt: meta.description ?? '',
-      createdAt: meta.createdAt,
-      turnCount: diskTranscript.filter((m: Message) => m.role === 'assistant').length,
-      messageCount: diskTranscript.length,
+      prompt: diskInfo.meta.description ?? '',
+      createdAt: diskInfo.meta.createdAt,
+      turnCount: diskInfo.transcript.filter((m: Message) => m.role === 'assistant').length,
+      messageCount: diskInfo.transcript.length,
       toolCount: 0,
       abortController: diskAbortController,
       notified: true,
-      transcript: diskTranscript,
+      transcript: diskInfo.transcript,
     });
 
     agent = registry.get(agentId);
@@ -338,9 +338,12 @@ async function handleSubAgentResume(
 
   const subCheckpointManager = new CheckpointManager();
 
-  // Build system prompt with env enrichment when possible
+  // Build system prompt — use saved prompt from disk for team agents,
+  // otherwise assemble from agent definition + env info.
   let systemPromptText: string;
-  if (agentDef && agentSpawn.systemPromptAssembler) {
+  if (diskInfo?.systemPrompt) {
+    systemPromptText = diskInfo.systemPrompt;
+  } else if (agentDef && agentSpawn.systemPromptAssembler) {
     try {
       const workerPrompt = await agentSpawn.systemPromptAssembler.assemble({
         cwd: process.cwd(),
@@ -375,6 +378,12 @@ async function handleSubAgentResume(
     status: 'running',
     abortController: subAbortController,
   });
+
+  // Update team config status so TeamPanel shows the resumed agent
+  if (diskInfo?.teamName && parentSessionDir) {
+    const { updateMemberInTeam } = await import('../../../utils/swarm/teamHelpers.js');
+    updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, { status: 'running' }).catch(() => {});
+  }
 
   const startTime = Date.now();
   let assistantTurnCount = 0;
@@ -457,8 +466,9 @@ async function handleSubAgentResume(
       ? `(timed out after ${RESUMED_TIMEOUT_MS / 1000}s)`
       : compressTranscript(newTranscript);
 
+    const finalStatus = subAbortController.signal.aborted ? 'stopped' : 'done';
     registry.update(agentId, {
-      status: subAbortController.signal.aborted ? 'stopped' : 'done',
+      status: finalStatus,
       finishedAt: Date.now(),
       turnCount: agent.turnCount + assistantTurnCount,
       messageCount: cumulativeTranscript.length,
@@ -474,6 +484,13 @@ async function handleSubAgentResume(
         agentType, worktreePath: undefined, description: agent.prompt,
         createdAt: agent.createdAt, finishedAt: Date.now(),
       }, parentSessionDir).catch(() => {});
+      if (diskInfo?.teamName) {
+        const { updateMemberInTeam } = await import('../../../utils/swarm/teamHelpers.js');
+        updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, {
+          status: finalStatus,
+          finishedAt: Date.now(),
+        }).catch(() => {});
+      }
     }
 
     const agentDisplayName = await resolveAgentName(agentId, parentSessionDir);
@@ -499,6 +516,13 @@ async function handleSubAgentResume(
       turnCount: agent.turnCount + assistantTurnCount,
       error: errorMsg,
     });
+    if (diskInfo?.teamName && parentSessionDir) {
+      const { updateMemberInTeam } = await import('../../../utils/swarm/teamHelpers.js');
+      updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, {
+        status: 'error',
+        finishedAt: Date.now(),
+      }).catch(() => {});
+    }
     return {
       content: `Sub-agent ${agentId} (${agentType}) resume error after ${assistantTurnCount} turns: ${errorMsg}`,
       isError: true,

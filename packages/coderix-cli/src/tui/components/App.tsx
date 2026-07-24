@@ -64,15 +64,60 @@ function findLatestThinking(messages: Message[]): { block: ThinkingBlock; durati
   return null;
 }
 
+async function restoreSessionAgents(sessionManager: SessionManager): Promise<void> {
+  const active = sessionManager.getActive();
+  if (!active?.metadata.subAgentIds?.length) return;
+
+  const registry = getSubAgentRegistry();
+  if (!registry) return;
+
+  const sDir = sessionDir(active.id);
+  const { findAgentOnDisk } = await import('@coderix/core');
+
+  for (const agentId of active.metadata.subAgentIds) {
+    if (registry.get(agentId)) continue;
+
+    try {
+      const diskInfo = await findAgentOnDisk(agentId, sDir);
+      if (!diskInfo) continue;
+
+      const meta = diskInfo.meta;
+      const transcript = diskInfo.transcript;
+
+      registry.register({
+        id: agentId,
+        name: `${meta.agentType}-${agentId.slice(0, 8)}`,
+        agentType: meta.agentType as SubAgentRecord['agentType'],
+        status: 'done',
+        prompt: meta.description ?? '',
+        description: meta.displayDescription,
+        createdAt: meta.createdAt,
+        finishedAt: meta.finishedAt,
+        turnCount: transcript?.filter((m: any) => m.role === 'assistant').length ?? 0,
+        messageCount: transcript?.length ?? 0,
+        toolCount: 0,
+        abortController: new AbortController(),
+        notified: true,
+        transcript: transcript ?? [],
+      });
+    } catch {
+      // Agent data missing or corrupted — skip
+    }
+  }
+}
+
 export function App({ config, engine, store, sessionManager, initialMessages, showSessionPicker, onExit: onExitProp }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
 
-  const activeSessionDir = useMemo(() => {
+  const activeSessionDir = (() => {
     const activeId = sessionManager.getActive()?.id;
     return activeId ? sessionDir(activeId) : undefined;
-  }, [sessionManager]);
+  })();
+
+  const sessionDirRef = useRef(activeSessionDir);
+  sessionDirRef.current = activeSessionDir;
 
   // Clean exit: prefer parent-provided unmount (Ink restores terminal),
   // fall back to raw process.exit.
@@ -147,7 +192,20 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // ref. Token deltas dispatch UPDATE_TOKEN_USAGE without triggering React
   // re-renders. Only meaningful status transitions (start/stop) cause a
   // lightweight re-render via agentTick.
+  //
+  // Initialise from SubAgentRegistry on first render so restored agents
+  // (--resume) are visible immediately, even before the first store.subscribe
+  // callback fires.
   const agentsRef = useRef<Record<string, SubAgentRecord>>({});
+  if (Object.keys(agentsRef.current).length === 0) {
+    const registry = getSubAgentRegistry();
+    if (registry) {
+      const list = registry.list();
+      for (const agent of list) {
+        agentsRef.current[agent.id] = agent;
+      }
+    }
+  }
   const [agentTick, setAgentTick] = useState(0);
   const subAgentViewIdRef = useRef(state.subAgentView?.agentId ?? null);
   subAgentViewIdRef.current = state.subAgentView?.agentId ?? null;
@@ -238,7 +296,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       ) || targetName; // fallback: use the name as-is
       const { writeToMailbox } = await import('@coderix/core');
       try {
-        await writeToMailbox(targetId!, {
+        await writeToMailbox(sessionDirRef.current ?? '', targetId!, {
           from: 'leader',
           text: message!,
           timestamp: new Date().toISOString(),
@@ -414,7 +472,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           updatedAt: s.updatedAt,
           lastUserPreview: s.lastUserPreview,
         })),
-      resumeSession: (id: string) => {
+      resumeSession: async (id: string) => {
         // __last__: find most recent non-empty session, skipping current
         if (id === '__last__') {
           const list = sessionManager.list();
@@ -454,6 +512,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         let session;
         try {
           session = sessionManager.resume(id);
+          await restoreSessionAgents(sessionManager);
         } catch (e) {
           dispatch({
             type: 'ADD_USER_MESSAGE',
@@ -536,6 +595,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       const approved = choice !== 'deny';
       try {
         await sendPermissionResponseViaMailbox(
+          sessionDirRef.current ?? '',
           teamReq.workerName,
           teamReq.requestId,
           {
@@ -588,6 +648,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   const teamContext = useAppState(s => s.teamContext);
   useTeamContextPoller({
     teamContext,
+    sessionDir: activeSessionDir,
     dispatch,
     setAppState,
   });
@@ -904,9 +965,10 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
                 updatedAt: s.updatedAt,
                 lastUserPreview: s.lastUserPreview,
               }))}
-              onSelect={(sessionId) => {
+              onSelect={async (sessionId) => {
                 dispatch({ type: 'HIDE_SESSION_PICKER' });
                 const session = sessionManager.resume(sessionId);
+                await restoreSessionAgents(sessionManager);
                 if (session && session.messages.length > 0) {
                   const msgs = convertTranscriptToMessages(session.messages);
                   dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false });

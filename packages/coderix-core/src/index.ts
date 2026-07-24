@@ -87,8 +87,9 @@ export {
   teamAgentTranscriptPath,
   teamAgentMetaPath,
   teamAgentSystemPromptPath,
+  findAgentOnDisk,
 } from './agents/agent-persistence.js';
-export type { AgentMetadata, TeamAgentMetadata } from './agents/agent-persistence.js';
+export type { AgentMetadata, TeamAgentMetadata, DiskAgentInfo } from './agents/agent-persistence.js';
 
 // ── Skills ─────────────────────────────────────────────────────────
 export { getSkillRegistry } from './skills/index.js';

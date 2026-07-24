@@ -15,7 +15,6 @@
  */
 
 import { mkdir, writeFile, readFile, unlink, readdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod/v4';
 
@@ -72,28 +71,27 @@ export interface PermissionResolution {
 // Path helpers
 // ---------------------------------------------------------------------------
 
-const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
 const sanitizeName = (name: string) =>
   name.replace(/[^a-zA-Z0-9_-]/g, '-');
 
-export function getPermissionDir(teamName: string): string {
-  return join(TEAMS_DIR, sanitizeName(teamName), 'permissions');
+export function getPermissionDir(sessionDir: string, teamName: string): string {
+  return join(sessionDir, 'teams', sanitizeName(teamName), 'permissions');
 }
 
-function getPendingDir(teamName: string): string {
-  return join(getPermissionDir(teamName), 'pending');
+function getPendingDir(sessionDir: string, teamName: string): string {
+  return join(getPermissionDir(sessionDir, teamName), 'pending');
 }
 
-function getResolvedDir(teamName: string): string {
-  return join(getPermissionDir(teamName), 'resolved');
+function getResolvedDir(sessionDir: string, teamName: string): string {
+  return join(getPermissionDir(sessionDir, teamName), 'resolved');
 }
 
-function getPendingRequestPath(teamName: string, requestId: string): string {
-  return join(getPendingDir(teamName), `${requestId}.json`);
+function getPendingRequestPath(sessionDir: string, teamName: string, requestId: string): string {
+  return join(getPendingDir(sessionDir, teamName), `${requestId}.json`);
 }
 
-function getResolvedRequestPath(teamName: string, requestId: string): string {
-  return join(getResolvedDir(teamName), `${requestId}.json`);
+function getResolvedRequestPath(sessionDir: string, teamName: string, requestId: string): string {
+  return join(getResolvedDir(sessionDir, teamName), `${requestId}.json`);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,18 +161,20 @@ export function createPermissionRequest(params: {
 }
 
 export async function writePermissionRequest(
+  sessionDir: string,
   request: SwarmPermissionRequest,
 ): Promise<void> {
-  const pendingDir = getPendingDir(request.teamName);
+  const pendingDir = getPendingDir(sessionDir, request.teamName);
   await mkdir(pendingDir, { recursive: true });
-  const path = getPendingRequestPath(request.teamName, request.id);
+  const path = getPendingRequestPath(sessionDir, request.teamName, request.id);
   await writeFile(path, JSON.stringify(request, null, 2), 'utf-8');
 }
 
 export async function readPendingPermissions(
+  sessionDir: string,
   teamName: string,
 ): Promise<SwarmPermissionRequest[]> {
-  const pendingDir = getPendingDir(teamName);
+  const pendingDir = getPendingDir(sessionDir, teamName);
   try {
     const files = await readdir(pendingDir);
     const requests: SwarmPermissionRequest[] = [];
@@ -193,13 +193,14 @@ export async function readPendingPermissions(
 }
 
 export async function resolvePermission(
+  sessionDir: string,
   teamName: string,
   requestId: string,
   resolution: PermissionResolution,
 ): Promise<void> {
-  const pendingPath = getPendingRequestPath(teamName, requestId);
-  const resolvedDir = getResolvedDir(teamName);
-  const resolvedPath = getResolvedRequestPath(teamName, requestId);
+  const pendingPath = getPendingRequestPath(sessionDir, teamName, requestId);
+  const resolvedDir = getResolvedDir(sessionDir, teamName);
+  const resolvedPath = getResolvedRequestPath(sessionDir, teamName, requestId);
 
   await mkdir(resolvedDir, { recursive: true });
 
@@ -223,10 +224,11 @@ export async function resolvePermission(
 }
 
 export async function cleanupOldResolutions(
+  sessionDir: string,
   teamName: string,
   maxAgeMs = 60 * 60 * 1000,
 ): Promise<void> {
-  const resolvedDir = getResolvedDir(teamName);
+  const resolvedDir = getResolvedDir(sessionDir, teamName);
   try {
     const files = await readdir(resolvedDir);
     const cutoff = Date.now() - maxAgeMs;
@@ -246,6 +248,7 @@ export async function cleanupOldResolutions(
 // ---------------------------------------------------------------------------
 
 export async function sendPermissionRequestViaMailbox(
+  sessionDir: string,
   request: SwarmPermissionRequest,
 ): Promise<void> {
   const leaderName = getLeaderName();
@@ -261,7 +264,7 @@ export async function sendPermissionRequestViaMailbox(
       ruleContent?: string;
     }>,
   });
-  await writeToMailbox(leaderName, {
+  await writeToMailbox(sessionDir, leaderName, {
     from: request.workerName,
     text: JSON.stringify(message),
     timestamp: new Date().toISOString(),
@@ -270,6 +273,7 @@ export async function sendPermissionRequestViaMailbox(
 }
 
 export async function sendPermissionResponseViaMailbox(
+  sessionDir: string,
   workerName: string,
   requestId: string,
   resolution: PermissionResolution,
@@ -282,22 +286,25 @@ export async function sendPermissionResponseViaMailbox(
     updated_input: resolution.updatedInput,
     permission_updates: resolution.permissionUpdates,
   });
-  await writeToMailbox(workerName, {
+  await writeToMailbox(sessionDir, workerName, {
     from: getLeaderName(),
     text: JSON.stringify(message),
     timestamp: new Date().toISOString(),
   });
 }
 
-export async function sendSandboxPermissionRequestViaMailbox(params: {
-  requestId: string;
-  workerId: string;
-  workerName: string;
-  workerColor?: string;
-  host: string;
-}): Promise<void> {
+export async function sendSandboxPermissionRequestViaMailbox(
+  sessionDir: string,
+  params: {
+    requestId: string;
+    workerId: string;
+    workerName: string;
+    workerColor?: string;
+    host: string;
+  },
+): Promise<void> {
   const message = createSandboxPermissionRequestMessage(params);
-  await writeToMailbox(getLeaderName(), {
+  await writeToMailbox(sessionDir, getLeaderName(), {
     from: params.workerName,
     text: JSON.stringify(message),
     timestamp: new Date().toISOString(),
@@ -306,6 +313,7 @@ export async function sendSandboxPermissionRequestViaMailbox(params: {
 }
 
 export async function sendSandboxPermissionResponseViaMailbox(
+  sessionDir: string,
   workerName: string,
   params: {
     requestId: string;
@@ -314,7 +322,7 @@ export async function sendSandboxPermissionResponseViaMailbox(
   },
 ): Promise<void> {
   const message = createSandboxPermissionResponseMessage(params);
-  await writeToMailbox(workerName, {
+  await writeToMailbox(sessionDir, workerName, {
     from: getLeaderName(),
     text: JSON.stringify(message),
     timestamp: new Date().toISOString(),

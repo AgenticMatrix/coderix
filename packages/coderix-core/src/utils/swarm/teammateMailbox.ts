@@ -3,7 +3,7 @@
  * protocol support.
  *
  * Each teammate has an inbox file at:
- *   ~/.coderix/teams/{team_name}/inboxes/{agent_name}.json
+ *   <sessionDir>/teams/{team_name}/inboxes/{agent_name}.json
  *
  * Uses proper-lockfile for concurrent access safety and supports 10 structured
  * protocol message types for permission delegation, shutdown coordination, plan
@@ -15,13 +15,6 @@ import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promis
 import { join } from 'node:path';
 import { z } from 'zod/v4';
 import lockfile from 'proper-lockfile';
-import { homedir } from 'node:os';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
 
 /** XML tag name for teammate messages in attachments. */
 const TEAMMATE_MESSAGE_TAG = 'teammate-message';
@@ -68,11 +61,11 @@ export interface TeammateMessage {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function getInboxPath(agentName: string, teamName?: string): string {
+function getInboxPath(sessionDir: string, agentName: string, teamName?: string): string {
   const team = teamName || resolveTeamName();
   const safeTeam = sanitizePathComponent(team);
   const safeAgent = sanitizePathComponent(agentName);
-  return join(TEAMS_DIR, safeTeam, 'inboxes', `${safeAgent}.json`);
+  return join(sessionDir, 'teams', safeTeam, 'inboxes', `${safeAgent}.json`);
 }
 
 function isJsonLikeMessage(text: string): boolean {
@@ -149,10 +142,11 @@ async function readMailboxFile(inboxPath: string): Promise<string> {
 }
 
 async function readMailboxForMutation(
+  sessionDir: string,
   agentName: string,
   teamName?: string,
 ): Promise<TeammateMessage[]> {
-  const path = getInboxPath(agentName, teamName);
+  const path = getInboxPath(sessionDir, agentName, teamName);
   return parseMailboxMessages(await readMailboxFile(path));
 }
 
@@ -263,10 +257,10 @@ async function writeCompactedMailbox(
 // Lock helpers
 // ---------------------------------------------------------------------------
 
-async function ensureInboxDir(teamName?: string): Promise<void> {
+async function ensureInboxDir(sessionDir: string, teamName?: string): Promise<void> {
   const team = teamName || resolveTeamName();
   const safeTeam = sanitizePathComponent(team);
-  const inboxDir = join(TEAMS_DIR, safeTeam, 'inboxes');
+  const inboxDir = join(sessionDir, 'teams', safeTeam, 'inboxes');
   await mkdir(inboxDir, { recursive: true });
 }
 
@@ -284,10 +278,11 @@ async function ensureLockFile(lockPath: string): Promise<void> {
 
 /** Read all messages from a teammate's inbox. */
 export async function readMailbox(
+  sessionDir: string,
   agentName: string,
   teamName?: string,
 ): Promise<TeammateMessage[]> {
-  const path = getInboxPath(agentName, teamName);
+  const path = getInboxPath(sessionDir, agentName, teamName);
   try {
     return parseMailboxMessages(await readMailboxFile(path));
   } catch (error) {
@@ -299,10 +294,11 @@ export async function readMailbox(
 
 /** Read only unread messages from a teammate's inbox. */
 export async function readUnreadMessages(
+  sessionDir: string,
   agentName: string,
   teamName?: string,
 ): Promise<TeammateMessage[]> {
-  const messages = await readMailbox(agentName, teamName);
+  const messages = await readMailbox(sessionDir, agentName, teamName);
   return messages.filter(m => !m.read);
 }
 
@@ -311,13 +307,14 @@ export async function readUnreadMessages(
  * Uses file locking to prevent race conditions during concurrent access.
  */
 export async function writeToMailbox(
+  sessionDir: string,
   recipientName: string,
   message: Omit<TeammateMessage, 'read'>,
   teamName?: string,
 ): Promise<void> {
-  await ensureInboxDir(teamName);
+  await ensureInboxDir(sessionDir, teamName);
 
-  const inboxPath = getInboxPath(recipientName, teamName);
+  const inboxPath = getInboxPath(sessionDir, recipientName, teamName);
   const lockFilePath = `${inboxPath}.lock`;
 
   // Ensure the inbox file exists before locking
@@ -331,7 +328,7 @@ export async function writeToMailbox(
   await ensureLockFile(lockFilePath);
   const release = await lockfile.lock(lockFilePath, LOCK_OPTIONS);
   try {
-    const messages = await readMailboxForMutation(recipientName, teamName);
+    const messages = await readMailboxForMutation(sessionDir, recipientName, teamName);
     const newMessage = toMailboxMessage({ ...message, read: false });
     messages.push(newMessage);
     await writeCompactedMailbox(inboxPath, messages);
@@ -342,17 +339,18 @@ export async function writeToMailbox(
 
 /** Mark a specific message as read by index. Uses file locking. */
 export async function markMessageAsReadByIndex(
+  sessionDir: string,
   agentName: string,
   teamName: string | undefined,
   messageIndex: number,
 ): Promise<void> {
-  const inboxPath = getInboxPath(agentName, teamName);
+  const inboxPath = getInboxPath(sessionDir, agentName, teamName);
   const lockFilePath = `${inboxPath}.lock`;
 
   await ensureLockFile(lockFilePath);
   const release = await lockfile.lock(lockFilePath, LOCK_OPTIONS);
   try {
-    const messages = await readMailboxForMutation(agentName, teamName);
+    const messages = await readMailboxForMutation(sessionDir, agentName, teamName);
     if (messageIndex < 0 || messageIndex >= messages.length) return;
     const message = messages[messageIndex];
     if (!message || message.read) return;
@@ -371,17 +369,18 @@ export async function markMessageAsReadByIndex(
  * Returns true if a matching unread message was found and marked.
  */
 export async function markMessageAsReadByIdentity(
+  sessionDir: string,
   agentName: string,
   teamName: string | undefined,
   expectedMessage: TeammateMessage,
 ): Promise<boolean> {
-  const inboxPath = getInboxPath(agentName, teamName);
+  const inboxPath = getInboxPath(sessionDir, agentName, teamName);
   const lockFilePath = `${inboxPath}.lock`;
 
   await ensureLockFile(lockFilePath);
   const release = await lockfile.lock(lockFilePath, LOCK_OPTIONS);
   try {
-    const messages = await readMailboxForMutation(agentName, teamName);
+    const messages = await readMailboxForMutation(sessionDir, agentName, teamName);
     const messageIndex = messages.findIndex(
       m => !m.read && sameMailboxMessage(m, expectedMessage),
     );
@@ -400,16 +399,17 @@ export async function markMessageAsReadByIdentity(
 
 /** Mark all messages in a teammate's inbox as read. */
 export async function markMessagesAsRead(
+  sessionDir: string,
   agentName: string,
   teamName?: string,
 ): Promise<void> {
-  const inboxPath = getInboxPath(agentName, teamName);
+  const inboxPath = getInboxPath(sessionDir, agentName, teamName);
   const lockFilePath = `${inboxPath}.lock`;
 
   await ensureLockFile(lockFilePath);
   const release = await lockfile.lock(lockFilePath, LOCK_OPTIONS);
   try {
-    const messages = await readMailboxForMutation(agentName, teamName);
+    const messages = await readMailboxForMutation(sessionDir, agentName, teamName);
     if (messages.length === 0) return;
     for (const m of messages) m.read = true;
     await writeCompactedMailbox(inboxPath, messages);
@@ -426,17 +426,18 @@ export async function markMessagesAsRead(
  * Uses the same file-locking mechanism.
  */
 export async function markMessagesAsReadByPredicate(
+  sessionDir: string,
   agentName: string,
   predicate: (msg: TeammateMessage) => boolean,
   teamName?: string,
 ): Promise<void> {
-  const inboxPath = getInboxPath(agentName, teamName);
+  const inboxPath = getInboxPath(sessionDir, agentName, teamName);
   const lockFilePath = `${inboxPath}.lock`;
 
   await ensureLockFile(lockFilePath);
   const release = await lockfile.lock(lockFilePath, LOCK_OPTIONS);
   try {
-    const messages = await readMailboxForMutation(agentName, teamName);
+    const messages = await readMailboxForMutation(sessionDir, agentName, teamName);
     if (messages.length === 0) return;
     const updated = messages.map(m => (!m.read && predicate(m) ? { ...m, read: true } : m));
     await writeCompactedMailbox(inboxPath, updated);
@@ -450,10 +451,11 @@ export async function markMessagesAsReadByPredicate(
 
 /** Clear a teammate's inbox (truncate to empty). */
 export async function clearMailbox(
+  sessionDir: string,
   agentName: string,
   teamName?: string,
 ): Promise<void> {
-  const inboxPath = getInboxPath(agentName, teamName);
+  const inboxPath = getInboxPath(sessionDir, agentName, teamName);
   try {
     // Use 'r+' so we throw ENOENT if the file doesn't exist
     await writeFile(inboxPath, '[]', { encoding: 'utf-8', flag: 'r+' });
@@ -465,9 +467,9 @@ export async function clearMailbox(
 }
 
 /** Delete all inboxes for a team. */
-export async function deleteTeamMailboxes(teamName: string): Promise<void> {
+export async function deleteTeamMailboxes(sessionDir: string, teamName: string): Promise<void> {
   const safeTeam = sanitizePathComponent(teamName);
-  const inboxesDir = join(TEAMS_DIR, safeTeam, 'inboxes');
+  const inboxesDir = join(sessionDir, 'teams', safeTeam, 'inboxes');
   try {
     const { rm } = await import('node:fs/promises');
     await rm(inboxesDir, { recursive: true, force: true });
@@ -824,6 +826,7 @@ export function createShutdownRejectedMessage(params: {
 }
 
 export async function sendShutdownRequestToMailbox(
+  sessionDir: string,
   targetName: string,
   teamName?: string,
   reason?: string,
@@ -839,6 +842,7 @@ export async function sendShutdownRequestToMailbox(
   });
 
   await writeToMailbox(
+    sessionDir,
     targetName,
     {
       from: senderName,
@@ -1043,6 +1047,7 @@ export function getLastPeerDmSummary(
  * Returns the response when it arrives, or rejects if aborted.
  */
 export async function waitForPermissionResponse(
+  sessionDir: string,
   agentName: string,
   requestId: string,
   teamName: string,
@@ -1058,11 +1063,11 @@ export async function waitForPermissionResponse(
       throw new Error('Permission request timed out waiting for leader response');
     }
 
-    const unread = await readUnreadMessages(agentName, teamName);
+    const unread = await readUnreadMessages(sessionDir, agentName, teamName);
     for (const msg of unread) {
       const response = isPermissionResponse(msg.text);
       if (response && response.request_id === requestId) {
-        await markMessagesAsRead(agentName, teamName);
+        await markMessagesAsRead(sessionDir, agentName, teamName);
         return {
           approved: response.subtype === 'success',
           feedback: response.subtype === 'error' ? response.error : undefined,

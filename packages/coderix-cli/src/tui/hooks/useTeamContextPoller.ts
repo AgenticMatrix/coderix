@@ -26,6 +26,7 @@ const POLL_INTERVAL_MS = 500;
 
 export interface TeamContextPollerDeps {
   teamContext?: TeamContextState;
+  sessionDir?: string;
   dispatch: React.Dispatch<ChatAction>;
   setAppState: (partial: Partial<AppState>) => void;
 }
@@ -36,14 +37,19 @@ export interface TeamContextPollerDeps {
  */
 export function useTeamContextPoller({
   teamContext,
+  sessionDir,
   dispatch,
   setAppState,
 }: TeamContextPollerDeps) {
   const teamContextRef = useRef(teamContext);
   teamContextRef.current = teamContext;
+  const sessionDirRef = useRef(sessionDir);
+  sessionDirRef.current = sessionDir;
 
   useEffect(() => {
     if (!teamContext?.isLeader) return;
+    const sd = sessionDirRef.current;
+    if (!sd) return;
 
     let active = true;
 
@@ -55,7 +61,7 @@ export function useTeamContextPoller({
       try {
         // The leader's mailbox is always at "leader"
         const leaderName = 'leader';
-        const unread = await readUnreadMessages(leaderName, ctx!.teamName);
+        const unread = await readUnreadMessages(sd!, leaderName, ctx!.teamName);
 
         if (unread.length === 0) return;
 
@@ -131,7 +137,7 @@ export function useTeamContextPoller({
         }
 
         // Mark all as read
-        await markMessagesAsRead(leaderName, ctx!.teamName);
+        await markMessagesAsRead(sd!, leaderName, ctx!.teamName);
       } catch {
         // Silently ignore poll errors (team may have been deleted)
       }

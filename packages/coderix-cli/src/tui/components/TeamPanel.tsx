@@ -195,6 +195,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               soloMembers.push(agentToMember(agent));
             }
           }
+          process.stderr.write(`[TeamPanel] poll: teamAgentIds=${JSON.stringify([...teamAgentIds])}, soloAgents=${JSON.stringify(soloMembers.map(m => m.agentId + ':' + m.status))}, focused=${focusedRef.current}\n`);
           if (soloMembers.length > 0) {
             loaded.push({
               name: 'solo',
@@ -241,7 +242,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
       active = false;
       clearInterval(interval);
     };
-  }, [dismissed, onDismissReset, focused]);
+  }, [dismissed, onDismissReset, focused, sessionDir]);
 
   const visible = focused ? configs : configs.filter(c => !hiddenTeams.current.has(c.name));
   const allMembers = visible.flatMap(c => c.members);

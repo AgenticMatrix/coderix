@@ -325,3 +325,62 @@ export function writeTeamAgentSystemPrompt(
     writeFileSync(teamAgentSystemPromptPath(sessionDir, teamName, agentId), text, 'utf-8');
   } catch { /* best-effort */ }
 }
+
+// ---------------------------------------------------------------------------
+// Unified disk lookup — finds an agent across both regular and team paths
+// ---------------------------------------------------------------------------
+
+export interface DiskAgentInfo {
+  meta: AgentMetadata;
+  transcript: Message[];
+  systemPrompt?: string;
+  /** Present when the agent is a team member. */
+  teamName?: string;
+}
+
+/**
+ * Find an agent on disk by scanning both regular sub-agent paths and
+ * team agent directories. Returns metadata, transcript, and optional
+ * teamName so callers can reconstruct the agent regardless of type.
+ */
+export async function findAgentOnDisk(
+  agentId: string,
+  sessionDir: string,
+): Promise<DiskAgentInfo | null> {
+  // 1. Try regular sub-agent path
+  const regularMeta = await readAgentMetadata(agentId, sessionDir);
+  if (regularMeta) {
+    const transcript = await getAgentTranscript(agentId, sessionDir);
+    if (transcript) {
+      let systemPrompt: string | undefined;
+      try {
+        systemPrompt = await readFile(agentSystemPromptPath(sessionDir, agentId), 'utf-8');
+      } catch { /* optional */ }
+      return { meta: regularMeta, transcript, systemPrompt };
+    }
+  }
+
+  // 2. Scan team directories
+  try {
+    const { listTeams } = await import('../teams/team-store.js');
+    const teams = await listTeams(sessionDir);
+    for (const teamName of teams) {
+      const teamMeta = await readTeamAgentMetadata(agentId, sessionDir, teamName);
+      if (teamMeta) {
+        const transcript = await getTeamAgentTranscript(agentId, sessionDir, teamName);
+        if (transcript) {
+          let systemPrompt: string | undefined;
+          try {
+            systemPrompt = await readFile(
+              teamAgentSystemPromptPath(sessionDir, teamName, agentId),
+              'utf-8',
+            );
+          } catch { /* optional */ }
+          return { meta: teamMeta, transcript, systemPrompt, teamName };
+        }
+      }
+    }
+  } catch { /* best-effort */ }
+
+  return null;
+}

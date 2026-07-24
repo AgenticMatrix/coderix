@@ -38,6 +38,7 @@ export const execute: ToolExecutor = async (input, options) => {
     for (const member of activeMembers) {
       try {
         const result = await sendShutdownRequestToMailbox(
+          sd,
           member.agentId,
           teamName,
           'Team is being deleted',
@@ -50,7 +51,7 @@ export const execute: ToolExecutor = async (input, options) => {
   }
 
   // Delete team directory (config + inboxes)
-  await deleteTeamMailboxes(teamName);
+  await deleteTeamMailboxes(sd, teamName);
   await deleteTeam(sd, teamName);
 
   const resultText = [

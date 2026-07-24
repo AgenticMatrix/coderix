@@ -228,13 +228,17 @@ async function restoreSubAgents(
   subAgentRegistry: any,
   sessionDir: string,
 ): Promise<RestoredAgent[]> {
-  const { readAgentMetadata, getAgentTranscript } = await import('@coderix/core');
+  const { findAgentOnDisk } = await import('@coderix/core');
   const restored: RestoredAgent[] = [];
   for (const agentId of subAgentIds) {
     try {
-      const meta = await readAgentMetadata(agentId, sessionDir);
-      if (!meta) continue;
-      const transcript = await getAgentTranscript(agentId, sessionDir);
+      const diskInfo = await findAgentOnDisk(agentId, sessionDir);
+      if (!diskInfo) {
+        process.stderr.write(`[restore] agent ${agentId.slice(0,8)}: NOT FOUND on disk\n`);
+        continue;
+      }
+      const meta = diskInfo.meta;
+      const transcript = diskInfo.transcript;
       subAgentRegistry.register({
         id: agentId,
         name: `${meta.agentType}-${agentId.slice(0, 8)}`,
@@ -258,7 +262,9 @@ async function restoreSubAgents(
           messages: transcript,
         });
       }
-    } catch {
+      process.stderr.write(`[restore] agent ${agentId.slice(0,8)}: registered (${meta.agentType}, ${transcript?.length ?? 0} msgs)\n`);
+    } catch (e) {
+      process.stderr.write(`[restore] agent ${agentId.slice(0,8)}: ERROR ${(e as Error).message}\n`);
       // Agent data missing or corrupted — skip
     }
   }

@@ -32,8 +32,7 @@ import { drainUnreadMessages } from '../teams/team-mailbox.js';
 import { execute as executeSendMessage } from '../teams/tools/team-message/executor.js';
 import { filterToolsForResumedAgent, GLOBAL_DISALLOWED_FOR_SUBAGENTS } from '../agents/tool-filtering.js';
 import {
-  readAgentMetadata,
-  getAgentTranscript,
+  findAgentOnDisk,
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../agents/agent-persistence.js';
@@ -636,6 +635,7 @@ export class QueryEngine {
 
     // ── Resolve agent (with disk fallback) ──────────────────────────
     let agent = subAgentRegistry.get(agentId);
+    let diskInfo: Awaited<ReturnType<typeof findAgentOnDisk>> = null;
 
     if (!agent) {
       if (!parentSessionDir) {
@@ -645,10 +645,9 @@ export class QueryEngine {
         };
         return;
       }
-      const meta = await readAgentMetadata(agentId, parentSessionDir);
-      const diskTranscript = await getAgentTranscript(agentId, parentSessionDir);
+      diskInfo = await findAgentOnDisk(agentId, parentSessionDir);
 
-      if (!meta || !diskTranscript) {
+      if (!diskInfo) {
         yield {
           type: 'error',
           data: { message: `Agent '${agentId}' not found in registry or on disk.` },
@@ -659,17 +658,19 @@ export class QueryEngine {
       const diskAbortController = new AbortController();
       subAgentRegistry.register({
         id: agentId,
-        name: `${meta.agentType}-${agentId}`,
-        agentType: (meta.agentType as any) || 'general-purpose',
+        name: diskInfo.teamName
+          ? `${diskInfo.meta.agentType}-${agentId}`
+          : `${diskInfo.meta.agentType}-${agentId}`,
+        agentType: (diskInfo.meta.agentType as any) || 'general-purpose',
         status: 'stopped',
-        prompt: meta.description ?? '',
-        createdAt: meta.createdAt,
-        turnCount: diskTranscript.filter((m: any) => m.role === 'assistant').length,
-        messageCount: diskTranscript.length,
+        prompt: diskInfo.meta.description ?? '',
+        createdAt: diskInfo.meta.createdAt,
+        turnCount: diskInfo.transcript.filter((m: any) => m.role === 'assistant').length,
+        messageCount: diskInfo.transcript.length,
         toolCount: 0,
         abortController: diskAbortController,
         notified: true,
-        transcript: diskTranscript,
+        transcript: diskInfo.transcript,
       });
 
       agent = subAgentRegistry.get(agentId);
@@ -724,7 +725,9 @@ export class QueryEngine {
 
     // ── Build system prompt ─────────────────────────────────────────
     let systemPromptText: string;
-    if (agentDef) {
+    if (diskInfo?.systemPrompt) {
+      systemPromptText = diskInfo.systemPrompt;
+    } else if (agentDef) {
       try {
         const workerPrompt = await systemPromptAssembler.assemble({
           cwd: process.cwd(),
@@ -759,6 +762,12 @@ export class QueryEngine {
       status: 'running',
       abortController: subAbortController,
     });
+
+    // Update team config status so TeamPanel shows the resumed agent
+    if (diskInfo?.teamName && parentSessionDir) {
+      const { updateMemberInTeam } = await import('../utils/swarm/teamHelpers.js');
+      updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, { status: 'running' }).catch(() => {});
+    }
 
     // ── Run the query loop ──────────────────────────────────────────
     let assistantTurnCount = 0;
@@ -836,10 +845,11 @@ export class QueryEngine {
       }
 
       // ── Finalize ──────────────────────────────────────────────────
+      const finalStatus = subAbortController.signal.aborted ? 'stopped' : 'done';
       const cumulativeTranscript = [...transcript, ...newTranscript];
       const finalUsage = subSessionManager.getActive().tokenUsage;
       subAgentRegistry.update(agentId, {
-        status: subAbortController.signal.aborted ? 'stopped' : 'done',
+        status: finalStatus,
         finishedAt: Date.now(),
         turnCount: agent.turnCount + assistantTurnCount,
         messageCount: cumulativeTranscript.length,
@@ -863,6 +873,13 @@ export class QueryEngine {
           createdAt: agent.createdAt,
           finishedAt: Date.now(),
         }, parentSessionDir).catch(() => {});
+        if (diskInfo?.teamName) {
+          const { updateMemberInTeam } = await import('../utils/swarm/teamHelpers.js');
+          updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, {
+            status: finalStatus,
+            finishedAt: Date.now(),
+          }).catch(() => {});
+        }
       }
 
       yield {
@@ -885,6 +902,13 @@ export class QueryEngine {
           totalTokens: errorUsage.totalTokens,
         },
       });
+      if (diskInfo?.teamName && parentSessionDir) {
+        const { updateMemberInTeam } = await import('../utils/swarm/teamHelpers.js');
+        updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, {
+          status: 'error',
+          finishedAt: Date.now(),
+        }).catch(() => {});
+      }
       yield { type: 'error', data: { message: errorMsg } };
     }
   }
