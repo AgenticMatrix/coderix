@@ -51,6 +51,7 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
 interface TeamAgentPickerProps {
   onSelect: (agentId: string) => void;
   onCancel: () => void;
+  sessionDir?: string;
 }
 
 /**
@@ -63,20 +64,21 @@ interface TeamAgentPickerProps {
  *   Esc      — cancel
  *   1-9      — quick pick
  */
-export function TeamAgentPicker({ onSelect, onCancel }: TeamAgentPickerProps) {
+export function TeamAgentPicker({ onSelect, onCancel, sessionDir }: TeamAgentPickerProps) {
   const [members, setMembers] = useState<SelectableMember[]>([]);
   const [sel, setSel] = useState(0);
 
   useEffect(() => {
     async function load() {
+      if (!sessionDir) return;
       const registry = getSubAgentRegistry();
       const result: SelectableMember[] = [];
       const teamAgentIds = new Set<string>();
 
       // Team members from disk configs
-      const names = await listTeams();
+      const names = await listTeams(sessionDir);
       for (const name of names) {
-        const cfg = await loadTeamConfig(name);
+        const cfg = await loadTeamConfig(sessionDir, name);
         if (!cfg) continue;
         for (const m of cfg.members) {
           if (m.agentId && !m.agentId.startsWith('pending-')) {

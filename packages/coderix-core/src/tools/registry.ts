@@ -21,6 +21,7 @@ import agentSpawnPlugin from '../agents/agent-spawn/index.js';
 import sendMessagePlugin from '../teams/tools/team-message/index.js';
 import teamCreatePlugin from '../teams/tools/team-create/index.js';
 import teamDeletePlugin from '../teams/tools/team-delete/index.js';
+import teamAgentPlugin from '../teams/tools/team-agent/index.js';
 import taskOutputPlugin from './task-output/index.js';
 import taskStopPlugin from './task-stop/index.js';
 import skillPlugin from './skill/index.js';
@@ -54,6 +55,7 @@ export const plugins: ToolPlugin[] = [
   sendMessagePlugin,
   teamCreatePlugin,
   teamDeletePlugin,
+  teamAgentPlugin,
   taskOutputPlugin,
   taskStopPlugin,
   skillPlugin,

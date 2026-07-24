@@ -45,6 +45,8 @@ interface TeamPanelProps {
   viewedAgentId?: string | null;
   /** Active team context — enables team-specific display. */
   teamContext?: TeamContextState;
+  /** Session directory for team storage. */
+  sessionDir?: string;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -113,7 +115,7 @@ function agentToMember(agent: SubAgentRecord): TeamMember {
  * Read-only display — press Ctrl+J to open the TeamAgentPicker
  * for selecting a member to view their transcript.
  */
-export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect, viewedAgentId, teamContext }: TeamPanelProps) {
+export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, onSelect, viewedAgentId, teamContext, sessionDir }: TeamPanelProps) {
   const [configs, setConfigs] = useState<TeamConfig[]>([]);
   const [cursorIndex, setCursorIndex] = useState(0);
   const prevActiveCount = useRef(0);
@@ -156,14 +158,15 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     let active = true;
 
     async function poll() {
+      if (!sessionDir) return;
       try {
         const registry = getSubAgentRegistry();
-        const names = await listTeams();
+        const names = await listTeams(sessionDir!);
         const loaded: TeamConfig[] = [];
         const teamAgentIds = new Set<string>();
 
         for (const name of names) {
-          const cfg = await loadTeamConfig(name);
+          const cfg = await loadTeamConfig(sessionDir!, name);
           if (cfg) {
             // Only show members whose agents exist in the in-memory registry.
             // Disk configs persist across sessions, but the registry does not.

@@ -36,6 +36,7 @@ import { ExitPlanModeRenderer } from './exit-plan-mode/renderer.js';
 import { ExitPlanModeResultRenderer } from './exit-plan-mode/result-renderer.js';
 import { NotebookEditRenderer } from './notebook-edit/renderer.js';
 import { AgentRenderer } from './agent/renderer.js';
+import { TeamAgentRenderer } from './team-agent/renderer.js';
 import { SendMessageRenderer } from './send-message/renderer.js';
 import { ListenRenderer, ListenResultRenderer } from './listen/renderer.js';
 import { TeamCreateResultRenderer } from './team-create/result-renderer.js';
@@ -98,6 +99,7 @@ useRendererByName.set('EnterPlanMode', EnterPlanModeRenderer);
 useRendererByName.set('ExitPlanMode', ExitPlanModeRenderer);
 useRendererByName.set('NotebookEdit', NotebookEditRenderer);
 useRendererByName.set('Agent', AgentRenderer);
+useRendererByName.set('TeamAgent', TeamAgentRenderer);
 useRendererByName.set('SendMessage', SendMessageRenderer);
 useRendererByName.set('Listen', ListenRenderer);
 useRendererByName.set('TeamCreate', TeamCreateRenderer);
@@ -123,6 +125,7 @@ resultRendererByName.set('AskUserQuestion', AskUserQuestionResultRenderer);
 resultRendererByName.set('Listen', ListenResultRenderer);
 resultRendererByName.set('TeamCreate', TeamCreateResultRenderer);
 resultRendererByName.set('TeamDelete', TeamDeleteResultRenderer);
+resultRendererByName.set('TeamAgent', GenericToolResultRenderer);
 
 // Generic fallback for known (executor-less) tool names
 for (const name of KNOWN_TOOL_NAMES) {

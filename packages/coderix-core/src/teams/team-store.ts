@@ -1,12 +1,11 @@
 /**
  * Team store — persistence layer for team configs.
  *
- * Teams are stored at ~/.coderix/teams/{team-name}/config.json.
+ * Teams are stored at <sessionDir>/teams/{team-name}/config.json.
  * Uses proper-lockfile for concurrent access.
  */
 
 import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
 
@@ -16,8 +15,6 @@ import type { TeamConfig, TeamMember } from './types.js';
 // Path helpers
 // ---------------------------------------------------------------------------
 
-const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
-
 function sanitize(name: string): string {
   return name
     .replace(/[\/\\\0\n\r\t:*?"<>|]/g, '-')
@@ -26,12 +23,12 @@ function sanitize(name: string): string {
     .trim() || 'unnamed';
 }
 
-export function teamDir(teamName: string): string {
-  return join(TEAMS_DIR, sanitize(teamName));
+export function teamDir(sessionDir: string, teamName: string): string {
+  return join(sessionDir, 'teams', sanitize(teamName));
 }
 
-function configPath(teamName: string): string {
-  return join(teamDir(teamName), 'config.json');
+function configPath(sessionDir: string, teamName: string): string {
+  return join(teamDir(sessionDir, teamName), 'config.json');
 }
 
 // ---------------------------------------------------------------------------
@@ -70,81 +67,84 @@ async function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function loadTeamConfig(teamName: string): Promise<TeamConfig | null> {
+export async function loadTeamConfig(
+  sessionDir: string,
+  teamName: string,
+): Promise<TeamConfig | null> {
   try {
-    const raw = await readFile(configPath(teamName), 'utf-8');
+    const raw = await readFile(configPath(sessionDir, teamName), 'utf-8');
     return JSON.parse(raw) as TeamConfig;
   } catch {
     return null;
   }
 }
 
-export async function saveTeamConfig(config: TeamConfig): Promise<void> {
-  const dir = teamDir(config.name);
+export async function saveTeamConfig(
+  sessionDir: string,
+  config: TeamConfig,
+): Promise<void> {
+  const dir = teamDir(sessionDir, config.name);
   await withLock(dir, async () => {
-    await writeFile(configPath(config.name), JSON.stringify(config, null, 2), 'utf-8');
+    await writeFile(configPath(sessionDir, config.name), JSON.stringify(config, null, 2), 'utf-8');
   });
 }
 
 export async function addTeamMember(
+  sessionDir: string,
   teamName: string,
   member: TeamMember,
 ): Promise<TeamConfig> {
-  const dir = teamDir(teamName);
+  const dir = teamDir(sessionDir, teamName);
 
   return withLock(dir, async () => {
-    const config = await loadTeamConfig(teamName);
+    const config = await loadTeamConfig(sessionDir, teamName);
     if (!config) {
       throw new Error(`Team '${teamName}' not found`);
     }
     config.members.push(member);
-    await writeFile(configPath(teamName), JSON.stringify(config, null, 2), 'utf-8');
+    await writeFile(configPath(sessionDir, teamName), JSON.stringify(config, null, 2), 'utf-8');
     return config;
   });
 }
 
 export async function updateTeamMember(
+  sessionDir: string,
   teamName: string,
   agentId: string,
   patch: Partial<TeamMember>,
 ): Promise<TeamConfig | null> {
-  const dir = teamDir(teamName);
+  const dir = teamDir(sessionDir, teamName);
 
   return withLock(dir, async () => {
-    const config = await loadTeamConfig(teamName);
+    const config = await loadTeamConfig(sessionDir, teamName);
     if (!config) return null;
 
     const member = config.members.find(m => m.agentId === agentId);
     if (!member) return null;
 
     Object.assign(member, patch);
-    await writeFile(configPath(teamName), JSON.stringify(config, null, 2), 'utf-8');
+    await writeFile(configPath(sessionDir, teamName), JSON.stringify(config, null, 2), 'utf-8');
     return config;
   });
 }
 
-export async function listTeams(): Promise<string[]> {
+export async function listTeams(sessionDir: string): Promise<string[]> {
+  const teamsDir = join(sessionDir, 'teams');
   try {
-    const entries = await readdir(TEAMS_DIR, { withFileTypes: true });
+    const entries = await readdir(teamsDir, { withFileTypes: true });
     return entries.filter(e => e.isDirectory()).map(e => e.name);
   } catch {
     return [];
   }
 }
 
-export async function deleteTeam(teamName: string): Promise<void> {
-  const dir = teamDir(teamName);
+export async function deleteTeam(sessionDir: string, teamName: string): Promise<void> {
+  const dir = teamDir(sessionDir, teamName);
   try {
     await rm(dir, { recursive: true, force: true });
   } catch {
     // Already gone — fine
   }
-}
-
-/** Remove all team configs — called on session start to clear stale state. */
-export async function resetAllTeams(): Promise<void> {
-  const names = await listTeams();
-  await Promise.all(names.map(n => deleteTeam(n)));
 }
 
 export { sanitize as sanitizeTeamName };

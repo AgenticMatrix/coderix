@@ -97,14 +97,17 @@ function trimTranscriptForResume(messages: Message[]): Message[] {
 
 // ── Team messaging mode ──────────────────────────────────────────────
 
-async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolResult> {
+async function handleTeamMessage(
+  input: Record<string, unknown>,
+  sessionDir: string,
+): Promise<ToolResult> {
   const teamName = input.team_name as string;
   const to = input.to as string;
   const text = input.text as string | undefined;
   const from = (input.from as string) || process.env.CODERIX_AGENT_ID || 'leader';
   const messageType = input.message_type as string | undefined;
 
-  const config = await loadTeamConfig(teamName);
+  const config = await loadTeamConfig(sessionDir, teamName);
   if (!config) {
     return {
       content: `Team '${teamName}' not found. Use TeamCreate to create it first.`,
@@ -177,7 +180,7 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
     let sent = 0;
     for (const member of config.members) {
       try {
-        await sendMessage(teamName, from, member.agentId, text);
+        await sendMessage(sessionDir, teamName, from, member.agentId, text);
         sent++;
       } catch {
         // Skip unreachable members
@@ -199,7 +202,7 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
     };
   }
 
-  await sendMessage(teamName, from, recipient.agentId, text);
+  await sendMessage(sessionDir, teamName, from, recipient.agentId, text);
 
   return {
     content: `Message sent to ${recipient.name} (${to}) in team '${teamName}'.`,
@@ -210,11 +213,12 @@ async function handleTeamMessage(input: Record<string, unknown>): Promise<ToolRe
 
 // ── Sub-agent resume mode ────────────────────────────────────────────
 
-async function resolveAgentName(agentId: string): Promise<string | undefined> {
+async function resolveAgentName(agentId: string, sessionDir: string | undefined): Promise<string | undefined> {
+  if (!sessionDir) return undefined;
   try {
-    const teams = await listTeams();
+    const teams = await listTeams(sessionDir);
     for (const t of teams) {
-      const cfg = await loadTeamConfig(t);
+      const cfg = await loadTeamConfig(sessionDir, t);
       if (!cfg) continue;
       const member = cfg.members.find(m => m.agentId === agentId);
       if (member) return member.name;
@@ -472,7 +476,7 @@ async function handleSubAgentResume(
       }, parentSessionDir).catch(() => {});
     }
 
-    const agentDisplayName = await resolveAgentName(agentId);
+    const agentDisplayName = await resolveAgentName(agentId, parentSessionDir);
 
     return {
       content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${assistantTurnCount} LLM turns, +${toolCount} tools.\n\n${resultText}`,
@@ -499,7 +503,7 @@ async function handleSubAgentResume(
       content: `Sub-agent ${agentId} (${agentType}) resume error after ${assistantTurnCount} turns: ${errorMsg}`,
       isError: true,
       duration: Date.now() - startTime,
-      metadata: { agentId, agentType, agentName: await resolveAgentName(agentId).catch(() => undefined), error: errorMsg },
+      metadata: { agentId, agentType, agentName: await resolveAgentName(agentId, parentSessionDir).catch(() => undefined), error: errorMsg },
     };
   }
 }
@@ -522,7 +526,12 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   }
 
   if (hasTeamName) {
-    return handleTeamMessage(input);
+    const sessionId = options.sessionId;
+    if (!sessionId) {
+      return { content: 'Error: no active session.', isError: true };
+    }
+    const sd = getSessionDir(sessionId);
+    return handleTeamMessage(input, sd);
   }
 
   return {

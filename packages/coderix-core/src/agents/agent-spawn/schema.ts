@@ -8,6 +8,7 @@ The Agent tool spawns specialized sub-agents that work in parallel. Each agent t
 - explore: Fast, read-only codebase search. Use for finding files by pattern (e.g. "src/components/**/*.tsx"), searching for symbols, or answering "where is X defined?".
 - plan: Architecture design before implementation. Use for designing the strategy and identifying critical files for a task.
 - general-purpose: Full tool access for complex multi-step research and implementation.
+- fork_main: Forks the parent agent with full conversation context and unfiltered tools. Use when the agent needs to know what's been discussed and decided — ideal for open-ended research and implementation work that spans multiple files. This is equivalent to omitting agent_type entirely.
 
 Prefer to fork (omit agent_type) when the work benefits from full conversation context — forking inherits your history and shares the prompt cache, so it's faster and smarter about the task. Fork by default for open-ended research and for implementation work that spans more than a couple of files.
 
@@ -16,6 +17,7 @@ When NOT to use the Agent tool:
 - Searching for a specific class or function definition — use Glob or Grep directly
 - Searching code within 1-3 known files — use Read directly
 - Simple, single-step tasks you can handle without delegation overhead
+- Spawning a team worker — use TeamAgent instead (requires team_name + name)
 
 Usage notes:
 - Always include a short description (3-5 words) summarizing what the agent will do.
@@ -40,9 +42,8 @@ The agent starts with zero context — it hasn't seen your conversation or the u
 Never delegate understanding. Don't write "based on your findings, fix the bug" or "based on the research, implement it." Write prompts that prove you understood the situation.
 
 Spawn paths:
-- Standard: provide agent_type to launch a pre-defined sub-agent.
-- Fork: omit agent_type to fork the parent with full context.
-- Swarm teammate: provide team_name + name to add a team member (requires CODERIX_EXPERIMENTAL_AGENT_TEAMS).
+- Standard: provide agent_type to launch a pre-defined sub-agent (explore, plan, general-purpose).
+- Fork: use agent_type="fork_main" (or omit agent_type) to fork the parent with full context and tools.
 - Resume: provide agent_id + resume: true to continue a stopped or completed agent.
 
 Sub-agents cannot spawn further sub-agents.`,
@@ -52,7 +53,7 @@ Sub-agents cannot spawn further sub-agents.`,
     properties: {
       agent_type: {
         type: 'string',
-        description: 'The type of sub-agent. "explore" is read-only search, "plan" is architecture design, "general-purpose" has full tool access. Omit to fork the parent agent with full context.',
+        description: 'The type of sub-agent. "explore" is read-only search, "plan" is architecture design, "general-purpose" has full tool access, "fork_main" forks the parent with full context and tools. Omit to also trigger fork mode.',
       },
       prompt: {
         type: 'string',
@@ -68,15 +69,7 @@ Sub-agents cannot spawn further sub-agents.`,
       },
       background: {
         type: 'boolean',
-        description: 'When true, the agent runs in the background. Use TaskGet to check progress. Defaults to true for swarm teammates.',
-      },
-      team_name: {
-        type: 'string',
-        description: 'Team name when spawning as a swarm teammate. Requires name to also be set. Enables SendMessage for inter-team communication.',
-      },
-      name: {
-        type: 'string',
-        description: 'Member display name within the team. Used as the sender identity for SendMessage and as the addressable name for inter-team communication.',
+        description: 'When true, the agent runs in the background. Use TaskGet to check progress.',
       },
       mode: {
         type: 'string',

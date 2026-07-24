@@ -4,9 +4,8 @@
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 
-const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
+import { teamDir } from '../../teams/team-store.js';
 
 export interface TeammateStatus {
   name: string;
@@ -30,9 +29,8 @@ export interface TeamSummary {
 }
 
 /** Read a team config file and extract teammate statuses. */
-export async function getTeammateStatuses(teamName: string): Promise<TeammateStatus[]> {
-  const safeName = teamName.replace(/[^a-zA-Z0-9_-]/g, '-');
-  const configPath = join(TEAMS_DIR, safeName, 'config.json');
+export async function getTeammateStatuses(sessionDir: string, teamName: string): Promise<TeammateStatus[]> {
+  const configPath = join(teamDir(sessionDir, teamName), 'config.json');
 
   try {
     const raw = await readFile(configPath, 'utf-8');

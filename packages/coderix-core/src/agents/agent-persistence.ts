@@ -4,13 +4,13 @@
  * Shared between the Agent tool executor and the SendMessage tool executor.
  *
  * Storage layout:
- *   ~/.coderix/sessions/<uuid>/subagents/<agent-id>/
+ *   <sessionDir>/subagents/<agent-id>/
  *     transcript.jsonl              # Sub-agent transcript (JSONL, append-only)
  *     system_prompt.md              # Agent's system prompt
  *     meta.json                     # Agent metadata
  *
  * Team agent storage:
- *   ~/.coderix/teams/<team-name>/<agent-id>/
+ *   <sessionDir>/teams/<team-name>/<agent-id>/
  *     transcript.jsonl              # Sub-agent transcript
  *     system_prompt.md              # Agent's system prompt
  *     meta.json                     # TeamAgentMetadata (extends AgentMetadata)
@@ -19,7 +19,6 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import type { Message, SessionEntry } from '../core/types.js';
 import {
@@ -94,23 +93,21 @@ export function agentSystemPromptPath(sessionDir: string, agentId: string): stri
 // Paths — Team sub-agents
 // ---------------------------------------------------------------------------
 
-const TEAMS_DIR = join(homedir(), '.coderix', 'teams');
-
-/** Team sub-agent directory: ~/.coderix/teams/<team-name>/<agent-id>/ */
-export function teamAgentDir(teamName: string, agentId: string): string {
-  return join(TEAMS_DIR, sanitizeTeamName(teamName), agentId);
+/** Team sub-agent directory: <sessionDir>/teams/<team-name>/<agent-id>/ */
+export function teamAgentDir(sessionDir: string, teamName: string, agentId: string): string {
+  return join(sessionDir, 'teams', sanitizeTeamName(teamName), agentId);
 }
 
-export function teamAgentTranscriptPath(teamName: string, agentId: string): string {
-  return join(teamAgentDir(teamName, agentId), 'transcript.jsonl');
+export function teamAgentTranscriptPath(sessionDir: string, teamName: string, agentId: string): string {
+  return join(teamAgentDir(sessionDir, teamName, agentId), 'transcript.jsonl');
 }
 
-export function teamAgentMetaPath(teamName: string, agentId: string): string {
-  return join(teamAgentDir(teamName, agentId), 'meta.json');
+export function teamAgentMetaPath(sessionDir: string, teamName: string, agentId: string): string {
+  return join(teamAgentDir(sessionDir, teamName, agentId), 'meta.json');
 }
 
-export function teamAgentSystemPromptPath(teamName: string, agentId: string): string {
-  return join(teamAgentDir(teamName, agentId), 'system_prompt.md');
+export function teamAgentSystemPromptPath(sessionDir: string, teamName: string, agentId: string): string {
+  return join(teamAgentDir(sessionDir, teamName, agentId), 'system_prompt.md');
 }
 
 // ---------------------------------------------------------------------------
@@ -146,19 +143,21 @@ export async function readAgentMetadata(
 export async function writeTeamAgentMetadata(
   agentId: string,
   meta: TeamAgentMetadata,
+  sessionDir: string,
   teamName: string,
 ): Promise<void> {
-  const dir = teamAgentDir(teamName, agentId);
+  const dir = teamAgentDir(sessionDir, teamName, agentId);
   await mkdir(dir, { recursive: true });
-  await writeFile(teamAgentMetaPath(teamName, agentId), JSON.stringify(meta, null, 2));
+  await writeFile(teamAgentMetaPath(sessionDir, teamName, agentId), JSON.stringify(meta, null, 2));
 }
 
 export async function readTeamAgentMetadata(
   agentId: string,
+  sessionDir: string,
   teamName: string,
 ): Promise<TeamAgentMetadata | null> {
   try {
-    const raw = await readFile(teamAgentMetaPath(teamName, agentId), 'utf-8');
+    const raw = await readFile(teamAgentMetaPath(sessionDir, teamName, agentId), 'utf-8');
     return JSON.parse(raw) as TeamAgentMetadata;
   } catch {
     return null;
@@ -253,6 +252,7 @@ export function getAgentTranscriptSync(
 export async function saveTeamAgentTranscript(
   agentId: string,
   transcript: Message[],
+  sessionDir: string,
   teamName: string,
 ): Promise<void> {
   const entries: SessionEntry[] = [];
@@ -270,15 +270,16 @@ export async function saveTeamAgentTranscript(
     prevUuid = uuid;
   }
 
-  const path = teamAgentTranscriptPath(teamName, agentId);
+  const path = teamAgentTranscriptPath(sessionDir, teamName, agentId);
   await rewriteEntries(path, entries);
 }
 
 export async function getTeamAgentTranscript(
   agentId: string,
+  sessionDir: string,
   teamName: string,
 ): Promise<Message[] | null> {
-  const path = teamAgentTranscriptPath(teamName, agentId);
+  const path = teamAgentTranscriptPath(sessionDir, teamName, agentId);
   if (!existsSync(path)) return null;
 
   try {
@@ -313,13 +314,14 @@ export function writeAgentSystemPrompt(
 }
 
 export function writeTeamAgentSystemPrompt(
+  sessionDir: string,
   teamName: string,
   agentId: string,
   text: string,
 ): void {
   try {
-    const dir = teamAgentDir(teamName, agentId);
+    const dir = teamAgentDir(sessionDir, teamName, agentId);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(teamAgentSystemPromptPath(teamName, agentId), text, 'utf-8');
+    writeFileSync(teamAgentSystemPromptPath(sessionDir, teamName, agentId), text, 'utf-8');
   } catch { /* best-effort */ }
 }

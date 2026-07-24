@@ -23,6 +23,7 @@ import { buildTeammatePromptAddendum } from './teammatePromptAddendum.js';
 import type { TeammateIdentity } from './spawnInProcess.js';
 import { TEAM_LEAD_NAME } from './constants.js';
 import { loadTeamConfig } from '../../teams/team-store.js';
+import { sessionDir as getSessionDir } from '../../core/session-store.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -213,7 +214,8 @@ export async function runInProcessTeammate(
     // Build dynamic team communication context
     let addendum = '';
     try {
-      const teamConfig = await loadTeamConfig(identity.teamName);
+      const sd = getSessionDir(identity.parentSessionId);
+      const teamConfig = await loadTeamConfig(sd, identity.teamName);
       if (teamConfig) {
         addendum = buildTeammatePromptAddendum({
           myAgentId: identity.agentId,

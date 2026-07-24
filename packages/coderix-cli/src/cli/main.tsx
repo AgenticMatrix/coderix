@@ -392,10 +392,7 @@ async function main(): Promise<void> {
   const { setTaskListId } = await import('@coderix/core');
   setTaskListId(sm.getActive().id);
 
-  // Clear stale team configs from previous sessions
-  const { resetAllTeams } = await import('@coderix/core');
-  await resetAllTeams();
-
+  // ── Create unified AppState store ──────────────────────────────────
   const { SubAgentRegistry } = await import('@coderix/core');
   const { SystemPromptAssembler } = await import('@coderix/core');
   const { QueryEngine } = await import('@coderix/core');

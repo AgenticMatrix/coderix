@@ -162,9 +162,13 @@ export class QueryEngine {
     // If coordinator with team active, inject team context into append prompt
     let appendPrompt = this.config.appendSystemPrompt;
     if (agentRole === 'coordinator' && this.config.teamName) {
-      const teamCtx = await getCoordinatorSystemContext(this.config.teamName);
-      if (teamCtx) {
-        appendPrompt = appendPrompt ? `${appendPrompt}\n\n${teamCtx}` : teamCtx;
+      const activeSessionId = this.config.sessionManager.getActive()?.id;
+      if (activeSessionId) {
+        const sd = getSessionDir(activeSessionId);
+        const teamCtx = await getCoordinatorSystemContext(sd, this.config.teamName);
+        if (teamCtx) {
+          appendPrompt = appendPrompt ? `${appendPrompt}\n\n${teamCtx}` : teamCtx;
+        }
       }
     }
 
@@ -344,19 +348,23 @@ export class QueryEngine {
     // Drain team messages for coordinator (inject unread messages as context)
     if (this.config.teamName && this.config.settings) {
       const leaderName = 'leader';
-      const teamMsgs = await drainUnreadMessages(this.config.teamName, leaderName);
-      if (teamMsgs.length > 0) {
-        const msgsText = teamMsgs.map(m =>
-          `[${m.from} → ${m.to}]: ${m.text}`
-        ).join('\n');
-        const contextBlock: ContentBlock = {
-          type: 'text',
-          text: '[Team messages]\n' + msgsText,
-        };
-        this.config.sessionManager.addMessage({
-          role: 'user',
-          content: [contextBlock],
-        });
+      const activeSessionId = this.config.sessionManager.getActive()?.id;
+      if (activeSessionId) {
+        const sd = getSessionDir(activeSessionId);
+        const teamMsgs = await drainUnreadMessages(sd, this.config.teamName, leaderName);
+        if (teamMsgs.length > 0) {
+          const msgsText = teamMsgs.map(m =>
+            `[${m.from} → ${m.to}]: ${m.text}`
+          ).join('\n');
+          const contextBlock: ContentBlock = {
+            type: 'text',
+            text: '[Team messages]\n' + msgsText,
+          };
+          this.config.sessionManager.addMessage({
+            role: 'user',
+            content: [contextBlock],
+          });
+        }
       }
     }
 

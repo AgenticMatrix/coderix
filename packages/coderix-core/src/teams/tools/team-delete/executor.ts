@@ -1,16 +1,23 @@
 import type { ToolExecutor } from '../../../tools/types.js';
 import { loadTeamConfig } from '../../team-store.js';
 import { deleteTeam } from '../../team-store.js';
+import { sessionDir as getSessionDir } from '../../../core/session-store.js';
 import { deleteTeamMailboxes, sendShutdownRequestToMailbox } from '../../../utils/swarm/teammateMailbox.js';
 
-export const execute: ToolExecutor = async (input, _options) => {
+export const execute: ToolExecutor = async (input, options) => {
   const teamName = (input.team_name as string) || (input.name as string);
 
   if (!teamName) {
     return { content: 'Error: team_name is required.', isError: true };
   }
 
-  const config = await loadTeamConfig(teamName);
+  const sessionId = options.sessionId;
+  if (!sessionId) {
+    return { content: 'Error: no active session.', isError: true };
+  }
+  const sd = getSessionDir(sessionId);
+
+  const config = await loadTeamConfig(sd, teamName);
   if (!config) {
     return {
       content: `Team '${teamName}' does not exist.`,
@@ -44,7 +51,7 @@ export const execute: ToolExecutor = async (input, _options) => {
 
   // Delete team directory (config + inboxes)
   await deleteTeamMailboxes(teamName);
-  await deleteTeam(teamName);
+  await deleteTeam(sd, teamName);
 
   const resultText = [
     `Team '${teamName}' deleted.`,

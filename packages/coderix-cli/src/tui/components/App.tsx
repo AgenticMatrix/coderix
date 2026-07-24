@@ -69,6 +69,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
   const setAppState = useSetAppState();
 
+  const activeSessionDir = useMemo(() => {
+    const activeId = sessionManager.getActive()?.id;
+    return activeId ? sessionDir(activeId) : undefined;
+  }, [sessionManager]);
+
   // Clean exit: prefer parent-provided unmount (Ink restores terminal),
   // fall back to raw process.exit.
   const handleExit = useCallback(() => {
@@ -124,7 +129,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     if (!teamName || !agentName) return;
 
     import('@coderix/core').then(({ computeInitialTeamContext }) => {
-      computeInitialTeamContext().then((ctx) => {
+      computeInitialTeamContext(activeSessionDir ?? '').then((ctx) => {
         if (ctx) {
           setAppState({ teamContext: ctx } as Partial<AppState>);
         }
@@ -951,6 +956,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           onFocusRequest={() => dispatch({ type: 'HIDE_TEAM_PICKER' })}
           viewedAgentId={state.subAgentView?.agentId ?? null}
           teamContext={teamContext}
+          sessionDir={activeSessionDir}
           onSelect={(agentId) => {
             if (agentId === '__main__') {
               dispatch({ type: 'HIDE_TEAM_PICKER' });

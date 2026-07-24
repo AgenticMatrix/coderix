@@ -31,15 +31,16 @@ export function getAgentRole(settings?: CoderSettings): 'default' | 'coordinator
 // ---------------------------------------------------------------------------
 
 export async function getCoordinatorSystemContext(
+  sessionDir: string,
   teamName: string,
 ): Promise<string | null> {
-  const config = await loadTeamConfig(teamName);
+  const config = await loadTeamConfig(sessionDir, teamName);
   if (!config) return null;
 
-  return buildTeamContextBlock(config);
+  return buildTeamContextBlock(sessionDir, config);
 }
 
-async function buildTeamContextBlock(config: TeamConfig): Promise<string> {
+async function buildTeamContextBlock(sessionDir: string, config: TeamConfig): Promise<string> {
   const lines: string[] = [
     `# Active Team: ${config.name}`,
     `Description: ${config.description}`,
@@ -57,7 +58,7 @@ async function buildTeamContextBlock(config: TeamConfig): Promise<string> {
   if (config.members.length > 0) {
     lines.push('Workers (use the agentId to address them):');
     for (const m of config.members) {
-      const unread = await getUnreadCount(config.name, m.agentId).catch(() => 0);
+      const unread = await getUnreadCount(sessionDir, config.name, m.agentId).catch(() => 0);
       const unreadNote = unread > 0 ? ` (${unread} unread)` : '';
       lines.push(`- ${m.name} \`${m.agentId}\` [${m.agentType}] [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
     }

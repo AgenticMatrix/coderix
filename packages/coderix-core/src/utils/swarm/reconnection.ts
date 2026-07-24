@@ -31,15 +31,15 @@ export interface TeamContextState {
  * Computes the initial teamContext for AppState on startup.
  * Called asynchronously before the first render.
  */
-export async function computeInitialTeamContext(): Promise<TeamContextState | undefined> {
+export async function computeInitialTeamContext(sessionDir: string): Promise<TeamContextState | undefined> {
   const context = getDynamicTeamContext();
   if (!context?.teamName || !context?.agentName) return undefined;
 
   const { teamName, agentId, agentName } = context;
-  const teamFile = await loadTeamFile(teamName);
+  const teamFile = await loadTeamFile(sessionDir, teamName);
   if (!teamFile) return undefined;
 
-  const teamFilePath = join(teamDir(teamName), 'config.json');
+  const teamFilePath = join(teamDir(sessionDir, teamName), 'config.json');
   const filed = teamFile as unknown as Record<string, unknown>;
   const isLeader = !agentId;
 
@@ -59,17 +59,18 @@ export async function computeInitialTeamContext(): Promise<TeamContextState | un
  * Called when resuming a session that has teamName/agentName in its transcript.
  */
 export async function initializeTeammateContextFromSession(
+  sessionDir: string,
   teamName: string,
   agentName: string,
 ): Promise<TeamContextState | undefined> {
-  const teamFile = await loadTeamFile(teamName);
+  const teamFile = await loadTeamFile(sessionDir, teamName);
   if (!teamFile) return undefined;
 
   const filed = teamFile as unknown as Record<string, unknown>;
   const members = filed.members as Array<{ name: string; agentId: string }> | undefined;
   const member = members?.find(m => m.name === agentName);
   const agentId = member?.agentId;
-  const teamFilePath = join(teamDir(teamName), 'config.json');
+  const teamFilePath = join(teamDir(sessionDir, teamName), 'config.json');
 
   return {
     teamName,

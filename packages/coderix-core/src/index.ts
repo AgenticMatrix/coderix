@@ -110,7 +110,7 @@ export type {
 // ── Teams ──────────────────────────────────────────────────────────
 export { getAgentRole, getCoordinatorSystemContext } from './teams/coordinator-mode.js';
 export { drainUnreadMessages } from './teams/team-mailbox.js';
-export { loadTeamConfig, listTeams, resetAllTeams } from './teams/team-store.js';
+export { loadTeamConfig, listTeams } from './teams/team-store.js';
 export { execute as executeSendMessage } from './teams/tools/team-message/executor.js';
 export type { TeamConfig, TeamMember } from './teams/types.js';
 

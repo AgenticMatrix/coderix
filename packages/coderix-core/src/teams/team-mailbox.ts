@@ -2,7 +2,7 @@
  * Team mailbox — inter-agent messaging.
  *
  * Each team member gets an inbox file:
- *   ~/.coderix/teams/{team-name}/inboxes/{agent-name}.json
+ *   <sessionDir>/teams/{team-name}/inboxes/{agent-name}.json
  *
  * Messages are appended to the recipient's inbox under a file lock.
  * The coordinator drains unread messages before each turn.
@@ -20,16 +20,16 @@ import type { TeamMessage } from './types.js';
 // Path helpers
 // ---------------------------------------------------------------------------
 
-function inboxDir(teamName: string): string {
-  return join(teamDir(teamName), 'inboxes');
+function inboxDir(sessionDir: string, teamName: string): string {
+  return join(teamDir(sessionDir, teamName), 'inboxes');
 }
 
-function inboxPath(teamName: string, agentName: string): string {
-  return join(inboxDir(teamName), `${sanitizeTeamName(agentName)}.json`);
+function inboxPath(sessionDir: string, teamName: string, agentName: string): string {
+  return join(inboxDir(sessionDir, teamName), `${sanitizeTeamName(agentName)}.json`);
 }
 
-function inboxLockPath(teamName: string, agentName: string): string {
-  return join(inboxDir(teamName), `${sanitizeTeamName(agentName)}.lock`);
+function inboxLockPath(sessionDir: string, teamName: string, agentName: string): string {
+  return join(inboxDir(sessionDir, teamName), `${sanitizeTeamName(agentName)}.lock`);
 }
 
 // ---------------------------------------------------------------------------
@@ -45,13 +45,14 @@ async function ensureLockFile(lockPath: string): Promise<void> {
 }
 
 async function withInboxLock<T>(
+  sessionDir: string,
   teamName: string,
   agentName: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const dir = inboxDir(teamName);
+  const dir = inboxDir(sessionDir, teamName);
   await mkdir(dir, { recursive: true });
-  const lockPath = inboxLockPath(teamName, agentName);
+  const lockPath = inboxLockPath(sessionDir, teamName, agentName);
   await ensureLockFile(lockPath);
   const release = await lockfile.lock(lockPath, {
     retries: { retries: 10, minTimeout: 5, maxTimeout: 100 },
@@ -67,8 +68,8 @@ async function withInboxLock<T>(
 // Read / write helpers
 // ---------------------------------------------------------------------------
 
-async function readInbox(teamName: string, agentName: string): Promise<TeamMessage[]> {
-  const path = inboxPath(teamName, agentName);
+async function readInbox(sessionDir: string, teamName: string, agentName: string): Promise<TeamMessage[]> {
+  const path = inboxPath(sessionDir, teamName, agentName);
   try {
     const raw = await readFile(path, 'utf-8');
     return JSON.parse(raw) as TeamMessage[];
@@ -78,13 +79,14 @@ async function readInbox(teamName: string, agentName: string): Promise<TeamMessa
 }
 
 async function writeInbox(
+  sessionDir: string,
   teamName: string,
   agentName: string,
   messages: TeamMessage[],
 ): Promise<void> {
-  const dir = inboxDir(teamName);
+  const dir = inboxDir(sessionDir, teamName);
   await mkdir(dir, { recursive: true });
-  await writeFile(inboxPath(teamName, agentName), JSON.stringify(messages, null, 2), 'utf-8');
+  await writeFile(inboxPath(sessionDir, teamName, agentName), JSON.stringify(messages, null, 2), 'utf-8');
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +94,7 @@ async function writeInbox(
 // ---------------------------------------------------------------------------
 
 export async function sendMessage(
+  sessionDir: string,
   teamName: string,
   from: string,
   to: string,
@@ -105,43 +108,46 @@ export async function sendMessage(
     read: false,
   };
 
-  await withInboxLock(teamName, to, async () => {
-    const messages = await readInbox(teamName, to);
+  await withInboxLock(sessionDir, teamName, to, async () => {
+    const messages = await readInbox(sessionDir, teamName, to);
     messages.push(msg);
-    await writeInbox(teamName, to, messages);
+    await writeInbox(sessionDir, teamName, to, messages);
   });
 
   return msg;
 }
 
 export async function readMessages(
+  sessionDir: string,
   teamName: string,
   agentName: string,
 ): Promise<TeamMessage[]> {
-  return readInbox(teamName, agentName);
+  return readInbox(sessionDir, teamName, agentName);
 }
 
 export async function drainUnreadMessages(
+  sessionDir: string,
   teamName: string,
   agentName: string,
 ): Promise<TeamMessage[]> {
-  return withInboxLock(teamName, agentName, async () => {
-    const messages = await readInbox(teamName, agentName);
+  return withInboxLock(sessionDir, teamName, agentName, async () => {
+    const messages = await readInbox(sessionDir, teamName, agentName);
     const unread = messages.filter(m => !m.read);
     if (unread.length > 0) {
       for (const m of unread) {
         m.read = true;
       }
-      await writeInbox(teamName, agentName, messages);
+      await writeInbox(sessionDir, teamName, agentName, messages);
     }
     return unread;
   });
 }
 
 export async function getUnreadCount(
+  sessionDir: string,
   teamName: string,
   agentName: string,
 ): Promise<number> {
-  const messages = await readInbox(teamName, agentName);
+  const messages = await readInbox(sessionDir, teamName, agentName);
   return messages.filter(m => !m.read).length;
 }
