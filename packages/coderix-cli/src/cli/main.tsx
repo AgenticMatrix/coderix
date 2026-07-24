@@ -106,6 +106,7 @@ async function buildToolRegistry(mcpPlugins?: any[]): Promise<any> {
             maxOutput: 50_000,
             bashTimeout: ctx.timeoutMs ?? 30_000,
             agentSpawn: ctx.agentSpawn,
+            sessionId: ctx.sessionId,
             getAppState: ctx.getAppState,
             setAppState: ctx.setAppState,
             setPermissionMode: ctx.setPermissionMode,
