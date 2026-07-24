@@ -26,6 +26,9 @@ export const GLOBAL_DISALLOWED_FOR_SUBAGENTS = new Set([
   'EnterWorktree',
   'ExitWorktree',
   'workflow',
+  'TeamCreate',
+  'TeamDelete',
+  'TeamAgent',
 ]);
 
 /** backward-compat alias */

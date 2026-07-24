@@ -1,109 +1,52 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { Box, Text } from '@coderix/ink';
-import { getSubAgentRegistry } from '@coderix/core';
+import { BaseToolRenderer } from '../base/BaseToolRenderer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
-const POLL_MS = 250;
+function buildSummary(input: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const name = input.name as string | undefined;
+  const teamName = input.team_name as string | undefined;
+  const desc = input.description as string | undefined;
+  if (desc) parts.push(desc);
+  if (name) parts.push(name);
+  if (teamName) parts.push(teamName);
+  return parts.length > 0 ? `(${parts.join(', ')})` : '';
+}
 
+/**
+ * TeamAgent tool-use renderer.
+ *
+ * Renders:
+ *   ● TeamAgent(description, team_name, name)  1.2s
+ *     └ <prompt first line or full prompt when expanded>
+ *       ... N more lines, Ctrl+D to detail
+ *
+ * Ctrl+D toggles prompt expansion via contentExpanded.
+ * The separate tool_result block is suppressed via TeamAgentResultRenderer.
+ */
 export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode {
-  const teamName = props.input.team_name as string | undefined;
-  const workerName = props.input.name as string | undefined;
-  const description = props.input.description as string | undefined;
   const prompt = props.input.prompt as string | undefined;
-  const hasResult = !!props.result;
-  const isDone = props.state === 'done' || hasResult;
-  const isExecuting = props.state === 'executing' && !hasResult;
-  const isPending = props.state === 'pending' && !hasResult;
-  const isError = props.state === 'error';
+  const promptLines = prompt ? prompt.split('\n') : [];
+  const expanded = props.contentExpanded;
+  const displayLines = expanded ? promptLines : promptLines.slice(0, 1);
+  const hidden = promptLines.length - displayLines.length;
 
-  const shortDesc = description || (prompt ? (prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt) : '');
-  const headerText = workerName && teamName
-    ? `${workerName}@${teamName}`
-    : (shortDesc ? `TeamAgent (${shortDesc})` : 'TeamAgent');
-
-  // Derive elapsed time from the agent's createdAt registry timestamp
-  const createdAtRef = useRef<number>(0);
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(id);
-  }, []);
-  const elapsedSecs = createdAtRef.current > 0
-    ? ((now - createdAtRef.current) / 1000).toFixed(1)
-    : '0.0';
-  const blinkOn = Math.floor(now / 500) % 2 === 0;
-
-  const workerAgentId = props.result?.metadata?.agentId as string | undefined;
-
-  // Poll registry for the worker's status
-  const [liveTick, setLiveTick] = useState(0);
-  const [bgRunning, setBgRunning] = useState(true);
-  const isActive = isExecuting || isPending || (isDone && bgRunning);
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    function poll() {
-      try {
-        const registry = getSubAgentRegistry();
-        if (!registry) return;
-
-        const running = registry.list().filter(a => a.status === 'running');
-        const matching = running.filter(a => props.toolId ? a.toolUseId === props.toolId : false);
-
-        const agent = matching[0];
-        if (!agent) {
-          if (isDone) setBgRunning(false);
-          return;
-        }
-
-        if (agent.createdAt) {
-          createdAtRef.current = agent.createdAt;
-        }
-
-        setLiveTick(t => t + 1);
-      } catch {
-        // Ignore poll errors
-      }
-    }
-
-    poll();
-    const interval = setInterval(poll, POLL_MS);
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  if (isError) {
-    return (
-      <Box flexDirection="column" marginBottom={1}>
-        <Text>
-          <Text color="ansi:red">X </Text>
-          <Text bold>{headerText}</Text>
-          <Text color="ansi:red"> failed</Text>
-        </Text>
-      </Box>
-    );
-  }
-
-  const trulyDone = isDone && !bgRunning;
-  const indicator = trulyDone ? '●' : (blinkOn ? '●' : '○');
-  const indicatorColor = trulyDone ? 'ansi:green' : 'ansi:yellow';
-  const showTimer = !trulyDone;
+  const summary = buildSummary(props.input);
+  const fullName = summary ? `TeamAgent${summary}` : 'TeamAgent';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text>
-        <Text color={indicatorColor}>{indicator} </Text>
-        <Text bold>{headerText}</Text>
-        {showTimer ? (
-          <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
-        ) : null}
-        {trulyDone ? <Text dimColor> {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
-      </Text>
-      {trulyDone && workerAgentId ? (
-        <Box flexDirection="row" marginLeft={2}>
-          <Text dimColor>worker({workerAgentId}) completed</Text>
+    <BaseToolRenderer {...props} toolName={fullName} paramSummary="">
+      {displayLines.length > 0 ? (
+        <Box flexDirection="column">
+          {displayLines.map((line, i) => (
+            <Text key={i} dimColor>{i === 0 ? '└ ' : '  '}{line.length > 120 ? line.slice(0, 117) + '...' : line}</Text>
+          ))}
+          {hidden > 0 ? (
+            <Text dimColor>  ... {hidden} more lines, Ctrl+D to detail</Text>
+          ) : null}
         </Box>
       ) : null}
-    </Box>
+    </BaseToolRenderer>
   );
 }
