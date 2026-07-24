@@ -37,6 +37,7 @@ import {
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../agents/agent-persistence.js';
+import { sessionDir as getSessionDir } from './session-store.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { EventBus } from '../state/observable.js';
@@ -605,6 +606,8 @@ export class QueryEngine {
     message: string,
   ): AsyncGenerator<QueryEngineEvent> {
     const { subAgentRegistry, toolRegistry, callModel, hookManager, systemPromptAssembler, agentRegistry } = this.config;
+    const parentSessionId = this.config.sessionManager.getActive()?.id;
+    const parentSessionDir = parentSessionId ? getSessionDir(parentSessionId) : undefined;
     if (!subAgentRegistry || !systemPromptAssembler || !agentRegistry) {
       yield { type: 'error', data: { message: 'Sub-agent infrastructure not available.' } };
       return;
@@ -614,8 +617,15 @@ export class QueryEngine {
     let agent = subAgentRegistry.get(agentId);
 
     if (!agent) {
-      const meta = await readAgentMetadata(agentId);
-      const diskTranscript = await getAgentTranscript(agentId);
+      if (!parentSessionDir) {
+        yield {
+          type: 'error',
+          data: { message: `Agent '${agentId}' not found in registry and no session directory available for disk fallback.` },
+        };
+        return;
+      }
+      const meta = await readAgentMetadata(agentId, parentSessionDir);
+      const diskTranscript = await getAgentTranscript(agentId, parentSessionDir);
 
       if (!meta || !diskTranscript) {
         yield {
@@ -823,14 +833,16 @@ export class QueryEngine {
         },
       });
 
-      saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
-      writeAgentMetadata(agentId, {
-        agentType,
-        worktreePath: undefined,
-        description: agent.prompt,
-        createdAt: agent.createdAt,
-        finishedAt: Date.now(),
-      }).catch(() => {});
+      if (parentSessionDir) {
+        saveAgentTranscript(agentId, cumulativeTranscript, parentSessionDir).catch(() => {});
+        writeAgentMetadata(agentId, {
+          agentType,
+          worktreePath: undefined,
+          description: agent.prompt,
+          createdAt: agent.createdAt,
+          finishedAt: Date.now(),
+        }, parentSessionDir).catch(() => {});
+      }
 
       yield {
         type: 'done',

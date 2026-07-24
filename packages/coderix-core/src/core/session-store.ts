@@ -48,12 +48,12 @@ export function legacySessionJsonPath(sessionDir: string): string {
   return join(sessionDir, 'session.json');
 }
 
-export function subAgentDir(sessionDir: string): string {
-  return join(sessionDir, 'subagents');
+export function subAgentDir(sessionDir: string, agentId: string): string {
+  return join(sessionDir, 'subagents', agentId);
 }
 
 export function subAgentJsonlPath(sessionDir: string, agentId: string): string {
-  return join(subAgentDir(sessionDir), `agent-${agentId}.jsonl`);
+  return join(subAgentDir(sessionDir, agentId), 'transcript.jsonl');
 }
 
 // ---------------------------------------------------------------------------
@@ -449,68 +449,6 @@ export async function migrateLegacySession(dir: string): Promise<boolean> {
     type: 'title',
     title: session.title,
   } as SessionEntry);
-
-  // Append agent-metadata entries for sub-agents
-  if (session.metadata.subAgentIds) {
-    for (const agentId of session.metadata.subAgentIds) {
-      // Try to load agent metadata from legacy path
-      const legacyAgentDir = join(homedir(), '.coderix', 'agents', agentId);
-      const legacyMetaPath = join(legacyAgentDir, 'metadata.json');
-      const legacyTranscriptPath = join(legacyAgentDir, 'transcript.json');
-
-      let agentType = 'unknown';
-      let prompt = '';
-      let description: string | undefined;
-
-      if (existsSync(legacyMetaPath)) {
-        try {
-          const meta = JSON.parse(readFileSync(legacyMetaPath, 'utf-8'));
-          agentType = meta.agentType ?? 'unknown';
-          prompt = meta.description ?? '';
-          description = meta.displayDescription;
-        } catch { /* skip */ }
-      }
-
-      entries.push({
-        type: 'agent-metadata',
-        agentId,
-        agentType,
-        prompt,
-        description,
-        timestamp: Date.now(),
-      } as SessionEntry);
-
-      // Migrate sub-agent transcript to JSONL
-      if (existsSync(legacyTranscriptPath)) {
-        try {
-          const transcript: Message[] = JSON.parse(
-            readFileSync(legacyTranscriptPath, 'utf-8'),
-          );
-          const agentEntries: SessionEntry[] = [];
-          let agentPrevUuid: string | null = null;
-
-          for (const msg of transcript) {
-            const auuid = randomUUID();
-            agentEntries.push({
-              type: msg.role as 'user' | 'assistant' | 'system',
-              uuid: auuid,
-              parentUuid: agentPrevUuid,
-              timestamp: Date.now(),
-              message: msg,
-            } as SessionEntry);
-            agentPrevUuid = auuid;
-          }
-
-          const agentJsonlPath = subAgentJsonlPath(dir, agentId);
-          await rewriteEntries(agentJsonlPath, agentEntries);
-        } catch {
-          process.stderr.write(
-            `[session-store] Failed to migrate sub-agent transcript for ${agentId}\n`,
-          );
-        }
-      }
-    }
-  }
 
   // Write JSONL
   await rewriteEntries(jsonlPath, entries);

@@ -225,7 +225,7 @@ interface RestoredAgent {
 async function restoreSubAgents(
   subAgentIds: string[],
   subAgentRegistry: any,
-  sessionDir?: string,
+  sessionDir: string,
 ): Promise<RestoredAgent[]> {
   const { readAgentMetadata, getAgentTranscript } = await import('@coderix/core');
   const restored: RestoredAgent[] = [];

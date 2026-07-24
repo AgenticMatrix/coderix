@@ -67,8 +67,28 @@ export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types
 // ── Agents ─────────────────────────────────────────────────────────
 export { buildAgentRegistry } from './agents/registry.js';
 export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';
-export { readAgentMetadata, getAgentTranscript, getAgentTranscriptSync, saveAgentTranscript, writeAgentMetadata } from './agents/agent-persistence.js';
-export type { AgentMetadata } from './agents/agent-persistence.js';
+export {
+  readAgentMetadata,
+  getAgentTranscript,
+  getAgentTranscriptSync,
+  saveAgentTranscript,
+  writeAgentMetadata,
+  writeAgentSystemPrompt,
+  readTeamAgentMetadata,
+  getTeamAgentTranscript,
+  saveTeamAgentTranscript,
+  writeTeamAgentMetadata,
+  writeTeamAgentSystemPrompt,
+  agentDir,
+  agentTranscriptPath,
+  agentMetaPath,
+  agentSystemPromptPath,
+  teamAgentDir,
+  teamAgentTranscriptPath,
+  teamAgentMetaPath,
+  teamAgentSystemPromptPath,
+} from './agents/agent-persistence.js';
+export type { AgentMetadata, TeamAgentMetadata } from './agents/agent-persistence.js';
 
 // ── Skills ─────────────────────────────────────────────────────────
 export { getSkillRegistry } from './skills/index.js';

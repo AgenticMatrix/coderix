@@ -32,13 +32,16 @@ import { writeAgentOutput } from './output-writer.js';
 import { spawnTeammate } from './spawn-teammate.js';
 import { updateMemberInTeam } from '../../utils/swarm/teamHelpers.js';
 import {
-  agentDir,
   writeAgentMetadata,
   readAgentMetadata,
   getAgentTranscript,
   saveAgentTranscript,
+  writeAgentSystemPrompt,
+  writeTeamAgentMetadata,
+  saveTeamAgentTranscript,
+  writeTeamAgentSystemPrompt,
 } from '../agent-persistence.js';
-import { sessionDir as getSessionDir } from '../../core/session-store.js';
+import { sessionDir as getSessionDir, subAgentJsonlPath } from '../../core/session-store.js';
 
 const DEFAULT_MAX_TURNS = 200;
 const DEFAULT_CONTEXT_BUDGET = 120_000;
@@ -647,6 +650,13 @@ async function executeStandardSubagent(
     }
   }
 
+  // Save system prompt to disk (best-effort, mirrors main agent pattern)
+  if (teamNameForPrompt && memberNameForPrompt) {
+    writeTeamAgentSystemPrompt(teamNameForPrompt, agentId, enrichedPrompt);
+  } else if (parentSessionDir) {
+    writeAgentSystemPrompt(parentSessionDir, agentId, enrichedPrompt);
+  }
+
   agentSpawn.subAgentRegistry.register({
     id: agentId,
     name: `${agentType}-${agentId}`,
@@ -729,11 +739,30 @@ async function executeStandardSubagent(
         }
 
         // Persist to disk for cross-session resume
-        writeAgentMetadata(agentId, {
-          agentType, worktreePath, description: prompt, displayDescription: description,
-          model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-        }, parentSessionDir).catch(() => {});
-        saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
+        if (teamName && memberName) {
+          writeTeamAgentMetadata(agentId, {
+            agentType, worktreePath, description: prompt, displayDescription: description,
+            model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+            teamName, memberName, task: prompt, joinedAt: result.startTime,
+            allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
+            disallowedTools: agentDef.disallowedTools,
+            permissionMode: 'auto',
+            maxTurns: agentDef.maxTurns,
+            contextBudget: agentDef.contextBudget,
+          }, teamName).catch(() => {});
+          saveTeamAgentTranscript(agentId, result.transcript, teamName).catch(() => {});
+        } else if (parentSessionDir) {
+          writeAgentMetadata(agentId, {
+            agentType, worktreePath, description: prompt, displayDescription: description,
+            model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+            allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
+            disallowedTools: agentDef.disallowedTools,
+            permissionMode: 'auto',
+            maxTurns: agentDef.maxTurns,
+            contextBudget: agentDef.contextBudget,
+          }, parentSessionDir).catch(() => {});
+          saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
+        }
 
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
@@ -804,11 +833,30 @@ async function executeStandardSubagent(
   });
 
   // Persist to disk for cross-session resume
-  writeAgentMetadata(agentId, {
-    agentType, worktreePath, description: prompt, displayDescription: description,
-    model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-  }, parentSessionDir).catch(() => {});
-  saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
+  if (teamName && memberName) {
+    writeTeamAgentMetadata(agentId, {
+      agentType, worktreePath, description: prompt, displayDescription: description,
+      model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+      teamName, memberName, task: prompt, joinedAt: result.startTime,
+      allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
+      disallowedTools: agentDef.disallowedTools,
+      permissionMode: 'auto',
+      maxTurns: agentDef.maxTurns,
+      contextBudget: agentDef.contextBudget,
+    }, teamName).catch(() => {});
+    saveTeamAgentTranscript(agentId, result.transcript, teamName).catch(() => {});
+  } else if (parentSessionDir) {
+    writeAgentMetadata(agentId, {
+      agentType, worktreePath, description: prompt, displayDescription: description,
+      model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+      allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
+      disallowedTools: agentDef.disallowedTools,
+      permissionMode: 'auto',
+      maxTurns: agentDef.maxTurns,
+      contextBudget: agentDef.contextBudget,
+    }, parentSessionDir).catch(() => {});
+    saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
+  }
 
   if (result.error) {
     return {
@@ -819,7 +867,7 @@ async function executeStandardSubagent(
     };
   }
 
-  const transcriptPath = join(agentDir(agentId), 'transcript.json');
+  const transcriptPath = parentSessionDir ? subAgentJsonlPath(parentSessionDir, agentId) : '';
 
   return {
     content: `Sub-agent ${agentId} (${agentType}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}\n\nFull transcript: ${transcriptPath}`,
@@ -1007,11 +1055,14 @@ async function executeFork(
         });
 
         // Persist to disk for cross-session resume
-        writeAgentMetadata(agentId, {
-          agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
-          model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-        }, forkSessionDir).catch(() => {});
-        saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
+        if (forkSessionDir) {
+          writeAgentMetadata(agentId, {
+            agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
+            model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+            permissionMode: agentSpawn.sessionManager.getActive()?.id ? 'auto' : undefined,
+          }, forkSessionDir).catch(() => {});
+          saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
+        }
 
         agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }).catch(async err => {
@@ -1071,11 +1122,14 @@ async function executeFork(
   });
 
   // Persist to disk for cross-session resume
-  writeAgentMetadata(agentId, {
-    agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
-    model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-  }, forkSessionDir).catch(() => {});
-  saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
+  if (forkSessionDir) {
+    writeAgentMetadata(agentId, {
+      agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
+      model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+      permissionMode: 'auto',
+    }, forkSessionDir).catch(() => {});
+    saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
+  }
 
   if (result.error) {
     return {
@@ -1086,7 +1140,7 @@ async function executeFork(
     };
   }
 
-  const forkTranscriptPath = join(agentDir(agentId), 'transcript.json');
+  const forkTranscriptPath = forkSessionDir ? subAgentJsonlPath(forkSessionDir, agentId) : '';
 
   return {
     content: `Fork agent ${agentId} completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}\n\nFull transcript: ${forkTranscriptPath}`,
@@ -1124,6 +1178,12 @@ async function executeResume(
 
   // ── Fallback: try loading from disk (cross-session resume) ──────────
   if (!agent) {
+    if (!resumeSessionDir) {
+      return {
+        content: 'No active session directory available for disk fallback.',
+        isError: true,
+      };
+    }
     const meta = await readAgentMetadata(agentId, resumeSessionDir);
     const transcript = await getAgentTranscript(agentId, resumeSessionDir);
 
@@ -1277,11 +1337,13 @@ async function executeResume(
   });
 
   // Persist updated transcript to disk
-  saveAgentTranscript(agentId, cumulativeTranscript, resumeSessionDir).catch(() => {});
-  writeAgentMetadata(agentId, {
-    agentType, worktreePath: undefined, description: agent.prompt, displayDescription: agent.description,
-    createdAt: agent.createdAt, finishedAt: Date.now(),
-  }, resumeSessionDir).catch(() => {});
+  if (resumeSessionDir) {
+    saveAgentTranscript(agentId, cumulativeTranscript, resumeSessionDir).catch(() => {});
+    writeAgentMetadata(agentId, {
+      agentType, worktreePath: undefined, description: agent.prompt, displayDescription: agent.description,
+      createdAt: agent.createdAt, finishedAt: Date.now(),
+    }, resumeSessionDir).catch(() => {});
+  }
 
   if (result.error) {
     return {
@@ -1292,7 +1354,7 @@ async function executeResume(
     };
   }
 
-  const resumeTranscriptPath = join(agentDir(agentId), 'transcript.json');
+  const resumeTranscriptPath = resumeSessionDir ? subAgentJsonlPath(resumeSessionDir, agentId) : '';
 
   return {
     content: `Sub-agent ${agentId} (${agentType}) resumed and completed. +${result.assistantTurnCount} LLM turns, +${result.toolCount} tools.\n\n${compressed}\n\nFull transcript: ${resumeTranscriptPath}`,

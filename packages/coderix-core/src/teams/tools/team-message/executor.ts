@@ -16,6 +16,7 @@ import {
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../../../agents/agent-persistence.js';
+import { sessionDir as getSessionDir } from '../../../core/session-store.js';
 import { truncateToTokenLimit, countTokens } from '../../../core/token-counter.js';
 
 const MAX_RESUME_TURNS = 200;
@@ -239,12 +240,20 @@ async function handleSubAgentResume(
   }
 
   const registry = agentSpawn.subAgentRegistry;
+  const parentSessionId = agentSpawn.sessionManager.getActive()?.id;
+  const parentSessionDir = parentSessionId ? getSessionDir(parentSessionId) : undefined;
   let agent = registry.get(agentId);
 
   // ── Disk fallback: try loading agent from disk (cross-session resume) ─
   if (!agent) {
-    const meta = await readAgentMetadata(agentId);
-    const diskTranscript = await getAgentTranscript(agentId);
+    if (!parentSessionDir) {
+      return {
+        content: 'No active session directory available for disk fallback.',
+        isError: true,
+      };
+    }
+    const meta = await readAgentMetadata(agentId, parentSessionDir);
+    const diskTranscript = await getAgentTranscript(agentId, parentSessionDir);
 
     if (!meta || !diskTranscript) {
       return {
@@ -455,11 +464,13 @@ async function handleSubAgentResume(
     });
 
     // Persist updated transcript to disk
-    saveAgentTranscript(agentId, cumulativeTranscript).catch(() => {});
-    writeAgentMetadata(agentId, {
-      agentType, worktreePath: undefined, description: agent.prompt,
-      createdAt: agent.createdAt, finishedAt: Date.now(),
-    }).catch(() => {});
+    if (parentSessionDir) {
+      saveAgentTranscript(agentId, cumulativeTranscript, parentSessionDir).catch(() => {});
+      writeAgentMetadata(agentId, {
+        agentType, worktreePath: undefined, description: agent.prompt,
+        createdAt: agent.createdAt, finishedAt: Date.now(),
+      }, parentSessionDir).catch(() => {});
+    }
 
     const agentDisplayName = await resolveAgentName(agentId);
 
