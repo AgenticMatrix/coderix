@@ -255,6 +255,7 @@ export function readTailMetadata(filePath: string): {
   entryCount: number;
   hasParent: boolean;
   transcriptEntryCount: number;
+  hasAssistantEntry: boolean;
 } {
   const result = {
     lastTitle: null as string | null,
@@ -263,6 +264,7 @@ export function readTailMetadata(filePath: string): {
     entryCount: 0,
     hasParent: false,
     transcriptEntryCount: 0,
+    hasAssistantEntry: false,
   };
 
   if (!existsSync(filePath)) return result;
@@ -289,6 +291,9 @@ export function readTailMetadata(filePath: string): {
         }
         if (entry.type === 'user' || entry.type === 'assistant') {
           result.transcriptEntryCount++;
+        }
+        if (entry.type === 'assistant') {
+          result.hasAssistantEntry = true;
         }
         if (!foundTitle && entry.type === 'title') {
           result.lastTitle = entry.title;

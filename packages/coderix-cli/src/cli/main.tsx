@@ -344,6 +344,11 @@ async function main(): Promise<void> {
   let showSessionPicker = false;
   let hasPreloadedSession = false;
 
+  // ── Clean up incomplete sessions before resume ─────────────────
+  if (cliArgs.continueFlag || cliArgs.resume !== undefined) {
+    sm.cleanupIncompleteSessions();
+  }
+
   // ── Handle --resume / --continue ──────────────────────────────
   if (cliArgs.continueFlag || cliArgs.resume !== undefined) {
     if (cliArgs.continueFlag) {

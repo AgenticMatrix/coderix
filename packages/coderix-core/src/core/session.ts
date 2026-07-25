@@ -662,6 +662,44 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Clean up incomplete session directories.
+   * Removes sessions that lack session.jsonl or have no assistant entry in it.
+   * Returns the number of deleted sessions.
+   */
+  cleanupIncompleteSessions(): number {
+    let entries: string[];
+    try {
+      entries = readdirSync(SESSIONS_DIR, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      return 0;
+    }
+
+    let deleted = 0;
+    for (const id of entries) {
+      const dir = getSessionDir(id);
+      const jsonlPath = sessionJsonlPath(dir);
+
+      if (!existsSync(jsonlPath)) {
+        // No session.jsonl — incomplete session, remove directory
+        this.delete(id);
+        deleted++;
+        continue;
+      }
+
+      const meta = readTailMetadata(jsonlPath);
+      if (!meta.hasAssistantEntry) {
+        // Has session.jsonl but no assistant response — incomplete, remove
+        this.delete(id);
+        deleted++;
+      }
+    }
+
+    return deleted;
+  }
+
   // -----------------------------------------------------------------------
   // Private helpers
   // -----------------------------------------------------------------------
