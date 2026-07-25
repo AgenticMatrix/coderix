@@ -78,10 +78,15 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const isPending = props.state === 'pending' && !hasResult;
   const isError = props.state === 'error';
 
-  // Build header: TeamAgent(description, name, team, prompt preview)
-  const promptPreview = prompt ? (prompt.length > 20 ? prompt.slice(0, 17) + '...' : prompt) : '';
-  const headerParts = [description, name, teamName, promptPreview].filter(Boolean);
-  const headerText = 'TeamAgent' + (headerParts.length > 0 ? `(${headerParts.join(', ')})` : '');
+  // Build header: prompt wraps to next line, indented to align after "TeamAgent("
+  const promptOneLine = prompt ? prompt.replace(/\n/g, ' ') : '';
+  const promptPreview = promptOneLine.length > 60 ? promptOneLine.slice(0, 57) + '...' : promptOneLine;
+  const headerParts = [description, name, teamName].filter(Boolean);
+  const hasPromptWrap = !!promptPreview;
+  const headerLine1 = headerParts.length > 0
+    ? `TeamAgent(${headerParts.join(', ')}${hasPromptWrap ? ',' : ''}`
+    : (hasPromptWrap ? 'TeamAgent(' : 'TeamAgent');
+  const headerLine1Close = hasPromptWrap ? '' : (headerParts.length > 0 ? ')' : '');
 
   const isBackground = props.result?.metadata?.background === true;
 
@@ -180,18 +185,12 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const visibleCalls = expanded ? displayCalls : (lastCall ? [lastCall] : []);
   const hiddenCount = displayCalls.length - visibleCalls.length;
 
-  // Prompt expand via Ctrl+D — only when no tool calls
-  const promptExpanded = props.contentExpanded;
-  const promptLines = prompt ? prompt.split('\n') : [];
-  const displayLines = promptExpanded ? promptLines : promptLines.slice(0, 1);
-  const hidden = promptLines.length - displayLines.length;
-
   if (isError) {
     return (
       <Box flexDirection="column" marginBottom={0}>
         <Text>
           <Text color="ansi:red">✕ </Text>
-          <Text bold>{headerText}</Text>
+          <Text bold>{headerLine1}{headerLine1Close}</Text>
           <Text color="ansi:red"> failed</Text>
         </Text>
       </Box>
@@ -200,20 +199,41 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
 
   return (
     <Box flexDirection="column" marginBottom={0}>
-      {/* Header line */}
+      {/* Header — splits into two lines when prompt wraps */}
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
-        <Text bold>{headerText}</Text>
-        {showCounts ? (
+        <Text bold>{headerLine1}{headerLine1Close}</Text>
+        {!hasPromptWrap && showCounts ? (
           <Text dimColor> · {toolCount} tools, {turnCount} turns</Text>
         ) : null}
-        {showTimer ? (
+        {!hasPromptWrap && showTimer ? (
           <Text dimColor color="ansi:yellow"> · {elapsedSecs}s</Text>
-        ) : (
+        ) : null}
+        {!hasPromptWrap && !showTimer ? (
           <Text dimColor> · {elapsedSecs}s</Text>
-        )}
-        {isolation ? <Text dimColor> · isolated: {isolation}</Text> : null}
+        ) : null}
+        {!hasPromptWrap && isolation ? (
+          <Text dimColor> · isolated: {isolation}</Text>
+        ) : null}
       </Text>
+      {hasPromptWrap && (
+        <Text>
+          <Text dimColor>{' '.repeat(10)}{promptPreview}</Text>
+          <Text bold>)</Text>
+          {showCounts ? (
+            <Text dimColor> · {toolCount} tools, {turnCount} turns</Text>
+          ) : null}
+          {showTimer ? (
+            <Text dimColor color="ansi:yellow"> · {elapsedSecs}s</Text>
+          ) : null}
+          {!showTimer ? (
+            <Text dimColor> · {elapsedSecs}s</Text>
+          ) : null}
+          {isolation ? (
+            <Text dimColor> · isolated: {isolation}</Text>
+          ) : null}
+        </Text>
+      )}
       {/* Tool call list — collapsed vs expanded */}
       {hasToolCalls && visibleCalls.map((tc, i) => (
         <Box key={i} flexDirection="column" marginLeft={2}>
@@ -226,18 +246,7 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
       ))}
       {!expanded && hiddenCount > 0 && (
         <Box marginLeft={2}>
-          <Text dimColor>  {hiddenCount} more lines, Ctrl+D to detail</Text>
-        </Box>
-      )}
-      {/* Prompt detail — shown when no tool calls and prompt is available */}
-      {!hasToolCalls && displayLines.length > 0 && (
-        <Box flexDirection="column">
-          {displayLines.map((line, i) => (
-            <Text key={i} dimColor>{i === 0 ? '└ ' : '  '}{line.length > 120 ? line.slice(0, 117) + '...' : line}</Text>
-          ))}
-          {hidden > 0 ? (
-            <Text dimColor>  ... {hidden} more lines, Ctrl+D to detail</Text>
-          ) : null}
+          <Text dimColor>  ... {hiddenCount} more lines, Ctrl+D to detail</Text>
         </Box>
       )}
     </Box>

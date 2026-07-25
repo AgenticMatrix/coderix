@@ -32,6 +32,7 @@ export function TeamDeleteRenderer(props: ToolUseRendererProps): React.ReactNode
       ? props.result.content.split('\n')
       : [];
     const firstLine = resultLines[0] || `Team '${teamName}' deleted.`;
+    const extraLines = resultLines.length - 1;
 
     return (
       <Box flexDirection="column" marginBottom={0}>
@@ -49,7 +50,12 @@ export function TeamDeleteRenderer(props: ToolUseRendererProps): React.ReactNode
             ))}
           </Box>
         ) : (
-          <Text dimColor>  ⎿ {firstLine}  ...Ctrl+D to detail</Text>
+          <Box marginLeft={2}>
+            <Text dimColor>
+              ⎿ {firstLine}
+              {extraLines > 0 ? '  ...Ctrl+D to detail' : ''}
+            </Text>
+          </Box>
         )}
       </Box>
     );
