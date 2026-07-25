@@ -17,7 +17,7 @@
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Message, SessionEntry } from '../core/types.js';
@@ -197,14 +197,39 @@ export async function saveAgentTranscript(
 }
 
 /**
+ * Search team directories for an agent's transcript.
+ * Team agent transcripts are stored at <sessionDir>/teams/<teamName>/<agentId>/transcript.jsonl.
+ */
+function findTeamTranscriptPath(sessionDir: string, agentId: string): string | null {
+  const teamsDir = join(sessionDir, 'teams');
+  if (!existsSync(teamsDir)) return null;
+  try {
+    const teamNames = readdirSync(teamsDir, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name);
+    for (const teamName of teamNames) {
+      const path = teamAgentTranscriptPath(sessionDir, teamName, agentId);
+      if (existsSync(path)) return path;
+    }
+  } catch {
+    // Directory unreadable
+  }
+  return null;
+}
+
+/**
  * Load a sub-agent transcript from the per-agent directory.
+ * Falls back to searching team directories for team agent transcripts.
  */
 export async function getAgentTranscript(
   agentId: string,
   sessionDir: string,
 ): Promise<Message[] | null> {
-  const path = agentTranscriptPath(sessionDir, agentId);
-  if (!existsSync(path)) return null;
+  let path = agentTranscriptPath(sessionDir, agentId);
+  if (!existsSync(path)) {
+    path = findTeamTranscriptPath(sessionDir, agentId);
+    if (!path) return null;
+  }
 
   try {
     const entries = await readEntries(path);
@@ -224,8 +249,11 @@ export function getAgentTranscriptSync(
   agentId: string,
   sessionDir: string,
 ): Message[] | null {
-  const path = agentTranscriptPath(sessionDir, agentId);
-  if (!existsSync(path)) return null;
+  let path = agentTranscriptPath(sessionDir, agentId);
+  if (!existsSync(path)) {
+    path = findTeamTranscriptPath(sessionDir, agentId);
+    if (!path) return null;
+  }
 
   try {
     const raw = readFileSync(path, 'utf-8');
