@@ -286,9 +286,6 @@ export function readTailMetadata(filePath: string): {
         if (!result.hasParent && entry.type === 'parent-session') {
           result.hasParent = true;
         }
-        if (!result.hasParent && entry.type === 'agent-metadata' && entry.agentId?.startsWith('sub-')) {
-          result.hasParent = true;
-        }
         if (entry.type === 'user' || entry.type === 'assistant') {
           result.transcriptEntryCount++;
         }

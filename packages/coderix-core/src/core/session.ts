@@ -749,6 +749,14 @@ export class SessionManager {
         }
       }
 
+      // Fall back to meta.json title (LLM-summarized titles are stored there)
+      if (!title) {
+        const meta = readSessionMeta(dir);
+        if (meta?.title) {
+          title = meta.title;
+        }
+      }
+
       const now = new Date();
 
       // Track the last entry's uuid for parentUuid chaining
