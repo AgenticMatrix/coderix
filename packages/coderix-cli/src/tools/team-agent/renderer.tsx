@@ -127,9 +127,18 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
         }
 
         let changed = false;
-        if (agent.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
-          liveCallsRef.current = [...agent.liveToolCalls];
-          changed = true;
+        if (agent.liveToolCalls && agent.liveToolCalls.length > 0) {
+          // Accumulate tools across turns — registry clears liveToolCalls each turn,
+          // so we merge instead of replace to show all tools seen so far.
+          const seen = new Set(liveCallsRef.current.map(tc => tc.name + tc.input));
+          for (const tc of agent.liveToolCalls) {
+            const key = tc.name + tc.input;
+            if (!seen.has(key)) {
+              liveCallsRef.current = [...liveCallsRef.current, tc];
+              seen.add(key);
+              changed = true;
+            }
+          }
         }
         if (agent.turnCount !== liveCountsRef.current.turnCount || agent.toolCount !== liveCountsRef.current.toolCount) {
           liveCountsRef.current = { turnCount: agent.turnCount, toolCount: agent.toolCount };
@@ -151,7 +160,9 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
     liveCallsRef.current = doneToolCalls;
   }
 
-  const displayCalls = liveCallsRef.current.length > 0 ? liveCallsRef.current : doneToolCalls;
+  // Prefer doneToolCalls when done (has complete list from extractToolCalls),
+  // fall back to liveCallsRef for real-time polling during execution.
+  const displayCalls = (isDone && doneToolCalls.length > 0) ? doneToolCalls : liveCallsRef.current;
   const lastCall = displayCalls.length > 0 ? displayCalls[displayCalls.length - 1] : null;
 
   const turnCount = isDone ? (doneTurnCount ?? liveCountsRef.current.turnCount) : liveCountsRef.current.turnCount;
@@ -163,10 +174,16 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const indicatorColor = agentAlive ? 'ansi:yellow' : 'ansi:green';
   const showTimer = agentAlive;
 
-  // Prompt expand via Ctrl+D
+  // Tool call list: collapsed shows latest + hint, expanded shows all
   const expanded = props.contentExpanded;
+  const hasToolCalls = displayCalls.length > 0;
+  const visibleCalls = expanded ? displayCalls : (lastCall ? [lastCall] : []);
+  const hiddenCount = displayCalls.length - visibleCalls.length;
+
+  // Prompt expand via Ctrl+D — only when no tool calls
+  const promptExpanded = props.contentExpanded;
   const promptLines = prompt ? prompt.split('\n') : [];
-  const displayLines = expanded ? promptLines : promptLines.slice(0, 1);
+  const displayLines = promptExpanded ? promptLines : promptLines.slice(0, 1);
   const hidden = promptLines.length - displayLines.length;
 
   if (isError) {
@@ -197,18 +214,23 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
         )}
         {isolation ? <Text dimColor> · isolated: {isolation}</Text> : null}
       </Text>
-      {/* Latest tool call */}
-      {lastCall && (
-        <Box flexDirection="column" marginLeft={2}>
+      {/* Tool call list — collapsed vs expanded */}
+      {hasToolCalls && visibleCalls.map((tc, i) => (
+        <Box key={i} flexDirection="column" marginLeft={2}>
           <Text>
             <Text dimColor>⎿ </Text>
-            <Text bold>{toolLabel(lastCall.name)}</Text>
-            <Text dimColor>({formatToolCallDetail(lastCall)})</Text>
+            <Text bold>{toolLabel(tc.name)}</Text>
+            <Text dimColor>({formatToolCallDetail(tc)})</Text>
           </Text>
         </Box>
+      ))}
+      {!expanded && hiddenCount > 0 && (
+        <Box marginLeft={2}>
+          <Text dimColor>  {hiddenCount} more lines, Ctrl+D to detail</Text>
+        </Box>
       )}
-      {/* Prompt detail — shown when no live calls and prompt is available */}
-      {!lastCall && displayLines.length > 0 && (
+      {/* Prompt detail — shown when no tool calls and prompt is available */}
+      {!hasToolCalls && displayLines.length > 0 && (
         <Box flexDirection="column">
           {displayLines.map((line, i) => (
             <Text key={i} dimColor>{i === 0 ? '└ ' : '  '}{line.length > 120 ? line.slice(0, 117) + '...' : line}</Text>

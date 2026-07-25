@@ -146,9 +146,18 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
         }
 
         let changed = false;
-        if (agent.liveToolCalls && agent.liveToolCalls.length > liveCallsRef.current.length) {
-          liveCallsRef.current = [...agent.liveToolCalls];
-          changed = true;
+        if (agent.liveToolCalls && agent.liveToolCalls.length > 0) {
+          // Accumulate tools across turns — registry clears liveToolCalls each turn,
+          // so we merge instead of replace to show all tools seen so far.
+          const seen = new Set(liveCallsRef.current.map(tc => tc.name + tc.input));
+          for (const tc of agent.liveToolCalls) {
+            const key = tc.name + tc.input;
+            if (!seen.has(key)) {
+              liveCallsRef.current = [...liveCallsRef.current, tc];
+              seen.add(key);
+              changed = true;
+            }
+          }
         }
         if (agent.turnCount !== liveCountsRef.current.turnCount || agent.toolCount !== liveCountsRef.current.toolCount) {
           liveCountsRef.current = { turnCount: agent.turnCount, toolCount: agent.toolCount };
@@ -170,12 +179,20 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
     liveCallsRef.current = doneToolCalls;
   }
 
-  const displayCalls = liveCallsRef.current.length > 0 ? liveCallsRef.current : doneToolCalls;
+  // Prefer doneToolCalls when done (has complete list from extractToolCalls),
+  // fall back to liveCallsRef for real-time polling during execution.
+  const displayCalls = (isDone && doneToolCalls.length > 0) ? doneToolCalls : liveCallsRef.current;
   const lastCall = displayCalls.length > 0 ? displayCalls[displayCalls.length - 1] : null;
 
   const turnCount = isDone ? (doneTurnCount ?? liveCountsRef.current.turnCount) : liveCountsRef.current.turnCount;
   const toolCount = isDone ? (doneToolCount ?? liveCountsRef.current.toolCount) : liveCountsRef.current.toolCount;
   const showCounts = turnCount > 0 || toolCount > 0;
+
+  // Tool call list: collapsed shows latest + hint, expanded shows all
+  const expanded = props.contentExpanded;
+  const hasToolCalls = displayCalls.length > 0;
+  const visibleCalls = expanded ? displayCalls : (lastCall ? [lastCall] : []);
+  const hiddenCount = displayCalls.length - visibleCalls.length;
 
   if (isError) {
     return (
@@ -210,13 +227,18 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
         {isolation ? <Text dimColor> isolated: {isolation}</Text> : null}
         {trulyDone ? <Text dimColor> {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : ''}</Text> : null}
       </Text>
-      {lastCall && (
-        <Box flexDirection="column" marginLeft={2}>
+      {hasToolCalls && visibleCalls.map((tc, i) => (
+        <Box key={i} flexDirection="column" marginLeft={2}>
           <Text>
             <Text dimColor>└ </Text>
-            <Text bold>{toolLabel(lastCall.name)}</Text>
-            <Text dimColor>({formatToolCallDetail(lastCall)})</Text>
+            <Text bold>{toolLabel(tc.name)}</Text>
+            <Text dimColor>({formatToolCallDetail(tc)})</Text>
           </Text>
+        </Box>
+      ))}
+      {!expanded && hiddenCount > 0 && (
+        <Box marginLeft={2}>
+          <Text dimColor>  {hiddenCount} more lines, Ctrl+D to detail</Text>
         </Box>
       )}
     </Box>
