@@ -282,6 +282,8 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     toolUseId: options.toolUseId,
   });
 
+  agentSpawn.sessionManager.trackSubAgent(agentId);
+
   const spawnTime = Date.now();
 
   // ── Background path: fire-and-forget ────────────────────────────────

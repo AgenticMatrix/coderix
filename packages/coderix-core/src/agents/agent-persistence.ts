@@ -225,7 +225,7 @@ export async function getAgentTranscript(
   agentId: string,
   sessionDir: string,
 ): Promise<Message[] | null> {
-  let path = agentTranscriptPath(sessionDir, agentId);
+  let path: string | null = agentTranscriptPath(sessionDir, agentId);
   if (!existsSync(path)) {
     path = findTeamTranscriptPath(sessionDir, agentId);
     if (!path) return null;
@@ -249,7 +249,7 @@ export function getAgentTranscriptSync(
   agentId: string,
   sessionDir: string,
 ): Message[] | null {
-  let path = agentTranscriptPath(sessionDir, agentId);
+  let path: string | null = agentTranscriptPath(sessionDir, agentId);
   if (!existsSync(path)) {
     path = findTeamTranscriptPath(sessionDir, agentId);
     if (!path) return null;
