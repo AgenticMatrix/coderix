@@ -121,13 +121,79 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   }
 
   // ── Sub-agent resume mode ─────────────────────────────────────────────
+  if (isResumeMode) {
+    const metadata = props.result?.metadata as Record<string, unknown> | undefined;
+    const registry = getSubAgentRegistry();
+    const agentDisplayName = (metadata?.agentName as string)
+      || registry?.get(agentId!)?.name
+      || agentId
+      || '?';
+    const resumeHeaderText = `(leader → ${agentDisplayName}) · resume`;
+
+    if (isError) {
+      return (
+        <Box flexDirection="column" marginBottom={1}>
+          <Text>
+            <Text color="ansi:red">❌ </Text>
+            <Text bold>SendMessage</Text>
+            <Text dimColor> {resumeHeaderText}</Text>
+            <Text color="ansi:red"> failed</Text>
+          </Text>
+          {description ? (
+            <Box marginLeft={2}>
+              {renderContentLines(description)}
+            </Box>
+          ) : null}
+        </Box>
+      );
+    }
+
+    const indicator = isDone ? '●' : (blinkOn ? '●' : '○');
+    const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
+    const showTimer = (isExecuting || isPending) && !isDone;
+
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <Text>
+          <Text color={indicatorColor}>{indicator} </Text>
+          <Text bold>SendMessage</Text>
+          <Text dimColor> {resumeHeaderText}</Text>
+          {showTimer ? (
+            <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
+          ) : null}
+        </Text>
+        {message ? (
+          <Box marginLeft={2}>
+            {props.contentExpanded
+              ? renderContentLines(message)
+              : (
+                <Box flexDirection="column">
+                  <Text>
+                    <Text dimColor>└ </Text>
+                    <Text dimColor>{description || message.slice(0, 80)}</Text>
+                  </Text>
+                  <Text>
+                    <Text dimColor>  ...Ctrl+D to detail</Text>
+                  </Text>
+                </Box>
+              )}
+          </Box>
+        ) : description ? (
+          <Box marginLeft={2}>
+            {renderContentLines(description)}
+          </Box>
+        ) : null}
+      </Box>
+    );
+  }
+
+  // ── Generic / fallback mode ────────────────────────────────────────────
   const metadata = props.result?.metadata as Record<string, unknown> | undefined;
-  const registry = getSubAgentRegistry();
-  const agentDisplayName = (metadata?.agentName as string)
-    || registry?.get(agentId!)?.name
-    || agentId
-    || '?';
-  const headerText = `(leader → ${agentDisplayName}) · resume`;
+  const sender = (metadata?.fromName as string) || (props.input.from as string) || undefined;
+  const recipient = (metadata?.toName as string) || to || undefined;
+  const genericHeader = sender && recipient
+    ? `(${sender} → ${recipient})`
+    : (to ? `(→ ${to})` : '');
 
   if (isError) {
     return (
@@ -135,7 +201,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>SendMessage</Text>
-          <Text dimColor> {headerText}</Text>
+          {genericHeader ? <Text dimColor> {genericHeader}</Text> : null}
           <Text color="ansi:red"> failed</Text>
         </Text>
         {description ? (
@@ -156,20 +222,20 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>SendMessage</Text>
-        <Text dimColor> {headerText}</Text>
+        {genericHeader ? <Text dimColor> {genericHeader}</Text> : null}
         {showTimer ? (
           <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
         ) : null}
       </Text>
-      {message ? (
+      {text ? (
         <Box marginLeft={2}>
           {props.contentExpanded
-            ? renderContentLines(message)
+            ? renderContentLines(text)
             : (
               <Box flexDirection="column">
                 <Text>
                   <Text dimColor>└ </Text>
-                  <Text dimColor>{description || message.slice(0, 80)}</Text>
+                  <Text dimColor>{description || text.slice(0, 80)}</Text>
                 </Text>
                 <Text>
                   <Text dimColor>  ...Ctrl+D to detail</Text>
