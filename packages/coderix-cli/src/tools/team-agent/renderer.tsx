@@ -3,13 +3,6 @@ import { Box, Text } from '@coderix/ink';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { ToolUseRendererProps } from '../types.js';
 
-const AGENT_TYPE_LABEL: Record<string, string> = {
-  explore: 'Explore',
-  plan: 'Plan',
-  'general-purpose': 'General Purpose',
-  worker: 'Worker',
-};
-
 const TOOL_LABEL: Record<string, string> = {
   bash: 'Bash',
   read: 'Read',
@@ -85,10 +78,10 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const isPending = props.state === 'pending' && !hasResult;
   const isError = props.state === 'error';
 
-  const label = agentType ? (AGENT_TYPE_LABEL[agentType] || agentType) : 'TeamAgent';
-  const identity = name || teamName || '';
-  const shortDesc = description || (prompt ? (prompt.length > 50 ? prompt.slice(0, 47) + '...' : prompt) : '');
-  const headerText = [label, identity, shortDesc].filter(Boolean).join(' · ');
+  // Build header: TeamAgent(description, name, team, prompt preview)
+  const promptPreview = prompt ? (prompt.length > 20 ? prompt.slice(0, 17) + '...' : prompt) : '';
+  const headerParts = [description, name, teamName, promptPreview].filter(Boolean);
+  const headerText = 'TeamAgent' + (headerParts.length > 0 ? `(${headerParts.join(', ')})` : '');
 
   const isBackground = props.result?.metadata?.background === true;
 
@@ -96,27 +89,19 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const doneTurnCount = props.result?.metadata?.turnCount as number | undefined;
   const doneToolCount = props.result?.metadata?.toolCount as number | undefined;
 
-  // Elapsed timer
-  const nowRef = useRef(Date.now());
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => {
-      nowRef.current = Date.now();
-      setNow(Date.now());
-    }, 100);
-    return () => clearInterval(id);
-  }, []);
+  // Track elapsed time from tool execution
   const elapsedSecs = props.duration
     ? (props.duration / 1000).toFixed(1)
     : '0.0';
 
-  // Poll registry for live tool calls and counts during execution.
+  // Poll registry for live tool calls and counts.
+  // Unlike regular sub-agents, team agents keep running (idle loop) even after
+  // the tool call returns. Continue polling as long as the agent is alive.
   const liveCallsRef = useRef<ToolCallSummary[]>([]);
   const liveCountsRef = useRef<{ turnCount: number; toolCount: number }>({ turnCount: 0, toolCount: 0 });
   const [liveTick, setLiveTick] = useState(0);
-  // Background agents keep polling even after the tool_use block is "done"
-  const [bgRunning, setBgRunning] = useState(isBackground);
-  const isActive = isExecuting || isPending || (isDone && isBackground);
+  const [agentAlive, setAgentAlive] = useState(true);
+  const isActive = isExecuting || isPending || agentAlive;
 
   useEffect(() => {
     if (!isActive) return;
@@ -126,14 +111,18 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
         const registry = getSubAgentRegistry();
         if (!registry) return;
 
-        const running = registry.list().filter(a => a.status === 'running');
-        const matching = running.filter(a => {
+        const agent = registry.list().find(a => {
           return props.toolId ? a.toolUseId === props.toolId : false;
         });
 
-        const agent = matching[0];
         if (!agent) {
-          if (isBackground) setBgRunning(false);
+          // Agent removed from registry — stop polling
+          if (isDone || hasResult) setAgentAlive(false);
+          return;
+        }
+
+        if (agent.status === 'done' || agent.status === 'error' || agent.status === 'stopped') {
+          setAgentAlive(false);
           return;
         }
 
@@ -169,18 +158,22 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const toolCount = isDone ? (doneToolCount ?? liveCountsRef.current.toolCount) : liveCountsRef.current.toolCount;
   const showCounts = turnCount > 0 || toolCount > 0;
 
-  const blinkOn = Math.floor(now / 500) % 2 === 0;
-  const trulyDone = isDone && !bgRunning;
-  const indicator = trulyDone ? '●' : (blinkOn ? '●' : '○');
-  const indicatorColor = trulyDone ? 'ansi:green' : 'ansi:yellow';
-  const statusText = isPending ? 'queued' : (bgRunning ? 'background' : '');
-  const showTimer = (isExecuting || isPending || bgRunning) && !trulyDone;
+  const blinkOn = Math.floor(Date.now() / 500) % 2 === 0;
+  const indicator = agentAlive ? (blinkOn ? '●' : '○') : '●';
+  const indicatorColor = agentAlive ? 'ansi:yellow' : 'ansi:green';
+  const showTimer = agentAlive;
+
+  // Prompt expand via Ctrl+D
+  const expanded = props.contentExpanded;
+  const promptLines = prompt ? prompt.split('\n') : [];
+  const displayLines = expanded ? promptLines : promptLines.slice(0, 1);
+  const hidden = promptLines.length - displayLines.length;
 
   if (isError) {
     return (
       <Box flexDirection="column" marginBottom={0}>
         <Text>
-          <Text color="ansi:red">❌ </Text>
+          <Text color="ansi:red">✕ </Text>
           <Text bold>{headerText}</Text>
           <Text color="ansi:red"> failed</Text>
         </Text>
@@ -190,6 +183,7 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
 
   return (
     <Box flexDirection="column" marginBottom={0}>
+      {/* Header line */}
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>{headerText}</Text>
@@ -197,18 +191,31 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
           <Text dimColor> · {toolCount} tools, {turnCount} turns</Text>
         ) : null}
         {showTimer ? (
-          <Text dimColor color="ansi:yellow"> · {statusText} {elapsedSecs}s</Text>
-        ) : null}
+          <Text dimColor color="ansi:yellow"> · {elapsedSecs}s</Text>
+        ) : (
+          <Text dimColor> · {elapsedSecs}s</Text>
+        )}
         {isolation ? <Text dimColor> · isolated: {isolation}</Text> : null}
-        {trulyDone ? <Text dimColor> · {props.duration ? `${(props.duration / 1000).toFixed(1)}s` : elapsedSecs + 's'}</Text> : null}
       </Text>
+      {/* Latest tool call */}
       {lastCall && (
         <Box flexDirection="column" marginLeft={2}>
           <Text>
-            <Text dimColor>└ </Text>
+            <Text dimColor>⎿ </Text>
             <Text bold>{toolLabel(lastCall.name)}</Text>
             <Text dimColor>({formatToolCallDetail(lastCall)})</Text>
           </Text>
+        </Box>
+      )}
+      {/* Prompt detail — shown when no live calls and prompt is available */}
+      {!lastCall && displayLines.length > 0 && (
+        <Box flexDirection="column">
+          {displayLines.map((line, i) => (
+            <Text key={i} dimColor>{i === 0 ? '└ ' : '  '}{line.length > 120 ? line.slice(0, 117) + '...' : line}</Text>
+          ))}
+          {hidden > 0 ? (
+            <Text dimColor>  ... {hidden} more lines, Ctrl+D to detail</Text>
+          ) : null}
         </Box>
       )}
     </Box>

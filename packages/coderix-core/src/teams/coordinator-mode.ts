@@ -38,7 +38,8 @@ export function getTeamLeaderStaticDeclaration(
     `# Active Team: ${teamName}`,
     `Description: ${description}`,
     '',
-    'You are the team leader. Use Agent(name, team_name) to spawn workers.',
+    'You are the team leader. Use TeamAgent(name, team_name) to spawn workers.',
+    'TeamAgent always runs in the foreground — it blocks until the worker completes. Do NOT use background mode for team workers.',
     '',
     'IMPORTANT — SendMessage addressing:',
     '- Workers are addressed by agentId ONLY (the ID in backticks like `swarm-xxx`). Names will NOT work.',
@@ -70,7 +71,7 @@ export async function getTeamStatusBlock(
       lines.push(`- ${m.name} \`${m.agentId}\` [${m.agentType}] [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
     }
   } else {
-    lines.push('No workers yet. Use Agent(name, team_name) to spawn one.');
+    lines.push('No workers yet. Use TeamAgent(name, team_name) to spawn one.');
   }
 
   return lines.join('\n');

@@ -12,6 +12,7 @@ import teamMessagePlugin from '../team-message/index.js';
 import {
   runAgentLoop,
   compressTranscript,
+  extractToolCalls,
   cleanupAgentWorktree,
   shortId,
   DEFAULT_MAX_TURNS,
@@ -278,9 +279,8 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     toolCount: 0,
     abortController: subAbortController,
     notified: false,
+    toolUseId: options.toolUseId,
   });
-
-  agentSpawn.sessionManager.trackSubAgent(agentId);
 
   const spawnTime = Date.now();
 
@@ -436,7 +436,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       content: `Teammate '${agentName}' (${agentId}) error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
       isError: true,
       duration: Date.now() - spawnTime,
-      metadata: { agentId, teamName, agentName, agentType, error: result.error, worktreePath },
+      metadata: { agentId, teamName, agentName, agentType, error: result.error, worktreePath, toolCalls: extractToolCalls(result.transcript) },
     };
   }
 
@@ -453,6 +453,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       toolCount: result.toolCount,
       duration: Date.now() - spawnTime,
       worktreePath,
+      toolCalls: extractToolCalls(result.transcript),
     },
   };
 };

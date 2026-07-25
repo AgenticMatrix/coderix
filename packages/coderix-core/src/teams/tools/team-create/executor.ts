@@ -48,7 +48,7 @@ export const execute: ToolExecutor = async (input, options) => {
       `Team '${name}' created. You are the team leader.`,
       ``,
       `Next steps:`,
-      `- Spawn workers: TeamAgent(name: "researcher", team_name: "${name}", prompt: "explore the codebase")`,
+      `- Spawn workers (foreground, blocks until done): TeamAgent(name: "researcher", team_name: "${name}", prompt: "explore the codebase")`,
       `- Send messages: SendMessage(team_name: "${name}", to: "<member>", text: "...")`,
       `- Broadcast: SendMessage(team_name: "${name}", to: "*", text: "...")`,
       `- Monitor: TaskList to check member progress`,
