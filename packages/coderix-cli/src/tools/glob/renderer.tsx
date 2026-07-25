@@ -52,7 +52,7 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
             ))}
           </Box>
         ) : null}
-        <Text dimColor>  ⎿ Found {resultLines.length} files, consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s ，Ctrl+D to detail</Text>
+        <Text dimColor>  ⎿ Found {resultLines.length} files, consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s ，Ctrl+O to detail</Text>
       </Box>
     );
   }

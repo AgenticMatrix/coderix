@@ -175,10 +175,10 @@ export function ThinkingBlockRenderer({ content, thinkingExpanded, thinkingDurat
             <Text key={i} dimColor color="ansi:blackBright">{line || ' '}</Text>
           ))}
           {collapsed ? (
-            <Text dimColor color="ansi:blackBright">{`... ${thinkingLines.length - 2} more lines (Ctrl+D to detail)`}</Text>
+            <Text dimColor color="ansi:blackBright">{`... ${thinkingLines.length - 2} more lines (Ctrl+O to detail)`}</Text>
           ) : null}
           {tooLong && thinkingExpanded ? (
-            <Text dimColor color="ansi:blackBright">{'(Ctrl+D to detail)'}</Text>
+            <Text dimColor color="ansi:blackBright">{'(Ctrl+O to detail)'}</Text>
           ) : null}
         </Box>
       </Box>

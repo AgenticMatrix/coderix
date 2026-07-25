@@ -22,9 +22,10 @@ export const coreCommands: SlashCommand[] = [
       lines.push('Hotkeys:');
       lines.push('  Enter          Send message');
       lines.push('  Esc            Clear input');
-      lines.push('  Ctrl+E         Toggle thinking display');
+      lines.push('  Ctrl+O         Toggle expand/collapse all blocks');
+      lines.push('  Ctrl+B         Send sub-agent to background');
       lines.push('  Ctrl+T         View sub-agent transcript');
-      lines.push('  Ctrl+P         Toggle task panel');
+      lines.push('  Ctrl+P         Toggle task & todo panels');
       lines.push('  ← → Home End   Cursor movement');
       lines.push('  Backspace/Del  Delete character');
       ctx.sys(lines.join('\n'));

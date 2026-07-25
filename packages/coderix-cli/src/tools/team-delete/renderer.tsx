@@ -53,7 +53,7 @@ export function TeamDeleteRenderer(props: ToolUseRendererProps): React.ReactNode
           <Box marginLeft={2}>
             <Text dimColor>
               ⎿ {firstLine}
-              {extraLines > 0 ? '  ...Ctrl+D to detail' : ''}
+              {extraLines > 0 ? '  ...Ctrl+O to detail' : ''}
             </Text>
           </Box>
         )}

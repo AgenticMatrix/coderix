@@ -30,7 +30,7 @@ function buildSummary(group: CollapsedGroup): string {
 
   if (parts.length === 0) return '';
 
-  const hint = isActive ? '… (Ctrl+D to expand)' : ' (Ctrl+D to expand)';
+  const hint = isActive ? '… (Ctrl+O to expand)' : ' (Ctrl+O to expand)';
   return parts.join(', ') + hint;
 }
 

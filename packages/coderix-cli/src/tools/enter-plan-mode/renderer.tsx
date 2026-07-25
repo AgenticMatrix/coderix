@@ -34,7 +34,7 @@ export function EnterPlanModeRenderer(
           <Text dimColor>
             ⎿ planning mode active — safe tools only
             {' — '}
-            {resultLines.length > 0 ? `${resultLines.length} lines` : '(empty)'}，Ctrl+D to detail
+            {resultLines.length > 0 ? `${resultLines.length} lines` : '(empty)'}，Ctrl+O to detail
           </Text>
           {props.contentExpanded && resultLines.length > 0 ? (
             <Box flexDirection="column" marginTop={1}>

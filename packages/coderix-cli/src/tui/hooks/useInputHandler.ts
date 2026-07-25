@@ -59,11 +59,11 @@ export interface InputHandlerDeps {
  * Keys:
  *   Enter       — send message
  *   Escape      — clear input
- *   Ctrl+E      — toggle expand / collapse tool blocks
-   Ctrl+D      — toggle expand / collapse block content (thinking, etc.)
-   Ctrl+T      — view sub-agent transcript
-   Ctrl+P      — toggle task panel
-   Ctrl+K      — toggle team picker
+ *   Ctrl+O      — toggle expand / collapse all blocks (tools + content)
+ *   Ctrl+B      — send sub-agent to background (close view)
+ *   Ctrl+T      — view sub-agent transcript
+ *   Ctrl+P      — toggle task & todo panels
+ *   Ctrl+K      — toggle team picker
    Esc         — close sub-agent view / clear input
  *   ← → Home End — cursor movement
  *   Backspace/Del — deletion
@@ -203,6 +203,19 @@ export function useInputHandler({
         return;
       }
 
+      // Ctrl+B: send sub-agent to background (close view, agent keeps running)
+      if (key.ctrl && input === 'b') {
+        if (subAgentView) {
+          dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
+          return;
+        }
+        if (teamPicker) {
+          dispatch({ type: 'HIDE_TEAM_PICKER' });
+          return;
+        }
+        return;
+      }
+
       // Ctrl+T toggles sub-agent transcript view
       if (key.ctrl && input === 't') {
         if (subAgentView) {
@@ -229,14 +242,9 @@ export function useInputHandler({
         return;
       }
 
-      // Ctrl+P toggles task panel
+      // Ctrl+P toggles task & todo panels
       if (key.ctrl && input === 'p') {
         dispatch({ type: 'TOGGLE_TASK_PANEL' });
-        return;
-      }
-
-      // Ctrl+O toggles todo panel
-      if (key.ctrl && input === 'o') {
         dispatch({ type: 'TOGGLE_TODO_PANEL' });
         return;
       }
@@ -289,14 +297,9 @@ export function useInputHandler({
         return;
       }
 
-      // Ctrl+E toggles expand / collapse of tool blocks
-      if (key.ctrl && input === 'e') {
+      // Ctrl+O toggles expand / collapse of all blocks (tools + content)
+      if (key.ctrl && input === 'o') {
         dispatch({ type: 'TOGGLE_ALL_EXPAND' });
-        return;
-      }
-
-      // Ctrl+D toggles expand / collapse of block content (thinking, etc.)
-      if (key.ctrl && input === 'd') {
         dispatch({ type: 'TOGGLE_ALL_CONTENT' });
         return;
       }

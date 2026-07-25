@@ -93,7 +93,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
             </>
           )}
           {hiddenCount > 0 ? (
-            <Text dimColor>  ... {hiddenCount} more lines, Ctrl+D to detail</Text>
+            <Text dimColor>  ... {hiddenCount} more lines, Ctrl+O to detail</Text>
           ) : null}
         </Box>
       </Box>

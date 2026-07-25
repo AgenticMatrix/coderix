@@ -105,6 +105,26 @@ coderix -m "deepseek/deepseek-v4-pro"
 
 ---
 
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Enter` | Send message |
+| `Escape` | Clear input / close sub-agent view |
+| `Ctrl+C` | Interrupt agent / kill sub-agents / clear input / double-press to exit |
+| `Ctrl+B` | Send sub-agent to background (close view, agent keeps running) |
+| `Ctrl+T` | Toggle sub-agent transcript view |
+| `Ctrl+P` | Toggle task & todo panels |
+| `Ctrl+O` | Toggle expand/collapse all blocks |
+| `Ctrl+K` | Toggle team picker |
+| `Ctrl+Enter` | Insert newline |
+| `↑ / ↓` | Navigate input history |
+| `← / →` | Move cursor |
+| `Tab` | Auto-complete slash command |
+| `PageUp / PageDown` | Freeze / unfreeze display |
+
+---
+
 ## Configuration
 
 Edit `~/.coderix/settings.json`:

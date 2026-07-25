@@ -106,7 +106,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
                     <Text dimColor>{description || text.slice(0, 80)}</Text>
                   </Text>
                   <Text>
-                    <Text dimColor>  ...Ctrl+D to detail</Text>
+                    <Text dimColor>  ...Ctrl+O to detail</Text>
                   </Text>
                 </Box>
               )}
@@ -173,7 +173,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
                     <Text dimColor>{description || message.slice(0, 80)}</Text>
                   </Text>
                   <Text>
-                    <Text dimColor>  ...Ctrl+D to detail</Text>
+                    <Text dimColor>  ...Ctrl+O to detail</Text>
                   </Text>
                 </Box>
               )}
@@ -238,7 +238,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
                   <Text dimColor>{description || text.slice(0, 80)}</Text>
                 </Text>
                 <Text>
-                  <Text dimColor>  ...Ctrl+D to detail</Text>
+                  <Text dimColor>  ...Ctrl+O to detail</Text>
                 </Text>
               </Box>
             )}

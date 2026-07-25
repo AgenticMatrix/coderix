@@ -238,7 +238,7 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
       ))}
       {!expanded && hiddenCount > 0 && (
         <Box marginLeft={2}>
-          <Text dimColor>  {hiddenCount} more lines, Ctrl+D to detail</Text>
+          <Text dimColor>  {hiddenCount} more lines, Ctrl+O to detail</Text>
         </Box>
       )}
     </Box>

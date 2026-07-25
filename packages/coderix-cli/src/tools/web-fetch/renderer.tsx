@@ -65,7 +65,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
             ))}
           </Box>
         ) : null}
-        <Text dimColor>  ⎿ {parts.join(' · ')}，Ctrl+D to detail</Text>
+        <Text dimColor>  ⎿ {parts.join(' · ')}，Ctrl+O to detail</Text>
       </Box>
     );
   }

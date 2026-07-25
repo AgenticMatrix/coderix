@@ -52,7 +52,7 @@ export function GrepRenderer(props: ToolUseRendererProps): React.ReactNode {
             ))}
           </Box>
         ) : null}
-        <Text dimColor>  ⎿ Found {resultLines.length} matches, consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s ，Ctrl+D to detail</Text>
+        <Text dimColor>  ⎿ Found {resultLines.length} matches, consumed {props.duration ? (props.duration / 1000).toFixed(1) : elapsedSecs}s ，Ctrl+O to detail</Text>
       </Box>
     );
   }

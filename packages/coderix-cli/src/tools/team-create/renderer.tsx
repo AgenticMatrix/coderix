@@ -53,7 +53,7 @@ export function TeamCreateRenderer(props: ToolUseRendererProps): React.ReactNode
         ) : (
           <Box flexDirection="column">
             <Text dimColor>  ⎿ {teamName} created</Text>
-            <Text dimColor>    ...Ctrl+D to detail</Text>
+            <Text dimColor>    ...Ctrl+O to detail</Text>
           </Box>
         )}
       </Box>

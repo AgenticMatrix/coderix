@@ -97,6 +97,26 @@ coderix -m "deepseek/deepseek-v4-pro"
 
 ---
 
+## 键盘快捷键
+
+| 快捷键 | 功能 |
+|---|---|
+| `Enter` | 发送消息 |
+| `Escape` | 清空输入 / 关闭子 Agent 视图 |
+| `Ctrl+C` | 中断 Agent / 终止子 Agent / 清空输入 / 双击退出 |
+| `Ctrl+B` | 将子 Agent 转入后台运行（关闭视图，Agent 继续运行） |
+| `Ctrl+T` | 切换子 Agent 对话视图 |
+| `Ctrl+P` | 切换任务和待办面板 |
+| `Ctrl+O` | 展开/折叠所有内容块 |
+| `Ctrl+K` | 切换团队选择器 |
+| `Ctrl+Enter` | 插入换行 |
+| `↑ / ↓` | 浏览输入历史 |
+| `← / →` | 移动光标 |
+| `Tab` | 自动补全斜杠命令 |
+| `PageUp / PageDown` | 冻结 / 取消冻结显示 |
+
+---
+
 ## 配置说明
 
 编辑 `~/.coderix/settings.json`：

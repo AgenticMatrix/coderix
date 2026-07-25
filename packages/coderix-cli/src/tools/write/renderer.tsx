@@ -95,7 +95,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
               })}
               {tooLong ? (
                 <Box width={diffWidth}>
-                  <Text dimColor>... {hiddenCount} more lines (Ctrl+D to detail)</Text>
+                  <Text dimColor>... {hiddenCount} more lines (Ctrl+O to detail)</Text>
                 </Box>
               ) : null}
             </Box>
