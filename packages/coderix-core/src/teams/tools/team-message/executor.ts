@@ -193,21 +193,31 @@ async function handleTeamMessage(
     };
   }
 
-  const recipient = config.members.find(m => m.agentId === to);
-  if (!recipient) {
-    const available = config.members.map(m => `${m.name} (${m.agentId})`).join(', ');
-    return {
-      content: `Worker '${to}' not found in team '${teamName}'. Available: ${available}`,
-      isError: true,
-    };
+  // Resolve recipient: support "leader", agentId, and display name
+  let resolvedTo: string;
+  let resolvedName: string;
+  if (to === 'leader') {
+    resolvedTo = 'leader';
+    resolvedName = 'leader';
+  } else {
+    const recipient = config.members.find(m => m.agentId === to || m.name === to);
+    if (!recipient) {
+      const available = config.members.map(m => `${m.name} (${m.agentId})`).join(', ');
+      return {
+        content: `Recipient '${to}' not found in team '${teamName}'. Available: leader, ${available}`,
+        isError: true,
+      };
+    }
+    resolvedTo = recipient.agentId;
+    resolvedName = recipient.name;
   }
 
-  await sendMessage(sessionDir, teamName, from, recipient.agentId, text);
+  await sendMessage(sessionDir, teamName, from, resolvedTo, text);
 
   return {
-    content: `Message sent to ${recipient.name} (${to}) in team '${teamName}'.`,
+    content: `Message sent to ${resolvedName} in team '${teamName}'.`,
     isError: false,
-    metadata: { teamName, to, fromName, toName: recipient.name },
+    metadata: { teamName, to: resolvedTo, fromName, toName: resolvedName },
   };
 }
 
