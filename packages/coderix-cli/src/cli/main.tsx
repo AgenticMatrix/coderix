@@ -192,6 +192,25 @@ function formatRelativeTime(date: Date): string {
   return `${days}d ago`;
 }
 
+function displayWidth(str: string): number {
+  let width = 0;
+  for (const ch of str) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp >= 0x2E80 && cp <= 0xA4CF || cp >= 0xAC00 && cp <= 0xD7A3 ||
+        cp >= 0xF900 && cp <= 0xFAFF || cp >= 0xFE30 && cp <= 0xFE6F ||
+        cp >= 0xFF01 && cp <= 0xFF60 || cp >= 0x20000 && cp <= 0x3FFFD ||
+        cp >= 0x1F000 && cp <= 0x1FAFF) { width += 2; }
+    else { width += 1; }
+  }
+  return width;
+}
+
+function padDisplayEnd(str: string, targetWidth: number): string {
+  const dw = displayWidth(str);
+  if (dw >= targetWidth) return str;
+  return str + ' '.repeat(targetWidth - dw);
+}
+
 function printSessionTable(sessions: Array<{ id: string; title: string; turnCount: number; model: string; updatedAt: Date; lastUserPreview?: string }>): void {
   if (sessions.length === 0) {
     console.log('No previous sessions found.');
@@ -208,7 +227,7 @@ function printSessionTable(sessions: Array<{ id: string; title: string; turnCoun
     const turns = s.turnCount > 0 ? `${s.turnCount} turns` : '';
     const time = formatRelativeTime(s.updatedAt);
     console.log(
-      `  ${String(i + 1).padEnd(3)} ${s.id.slice(0, 8).padEnd(9)} ${turns.padEnd(10)} ${time.padEnd(14)} ${title}${empty}`,
+      `  ${String(i + 1).padEnd(3)} ${padDisplayEnd(title + empty, 40)}  ${turns.padEnd(10)} ${time.padEnd(14)} ${s.id.slice(0, 8)}`,
     );
   }
   console.log('\n  --resume <id>  resume a session');

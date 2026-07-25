@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from '@coderix/ink';
 import { useMemo, useState } from 'react';
+import { displayWidth } from './MarkdownRenderer.js';
 
 interface SessionSummary {
   id: string;
@@ -35,6 +36,12 @@ function sessionLabel(s: SessionSummary): string {
     return s.title.length > 56 ? s.title.slice(0, 56) + '...' : s.title;
   }
   return '--';
+}
+
+function padDisplayEnd(str: string, targetWidth: number): string {
+  const dw = displayWidth(str);
+  if (dw >= targetWidth) return str;
+  return str + ' '.repeat(targetWidth - dw);
 }
 
 export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerProps) {
@@ -141,7 +148,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
               inverse={isSelected}
             >
               {isSelected ? '> ' : '  '}
-              {String(actualIndex + 1).padEnd(3)} {s.id.slice(0, 8)}  {turns.padEnd(10)} {time.padEnd(14)} {label}
+              {String(actualIndex + 1).padEnd(3)} {padDisplayEnd(label, 40)}  {turns.padEnd(10)} {time.padEnd(14)} {s.id.slice(0, 8)}
             </Text>
           </Text>
         );
