@@ -90,6 +90,9 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
 
   const isBackground = props.result?.metadata?.background === true;
 
+  // Background agents keep polling even after the tool_use block is "done"
+  const [bgRunning, setBgRunning] = useState(isBackground);
+
   const doneToolCalls: ToolCallSummary[] = (props.result?.metadata?.toolCalls as ToolCallSummary[]) ?? [];
   const doneTurnCount = props.result?.metadata?.turnCount as number | undefined;
   const doneToolCount = props.result?.metadata?.toolCount as number | undefined;
@@ -106,7 +109,15 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const liveCountsRef = useRef<{ turnCount: number; toolCount: number }>({ turnCount: 0, toolCount: 0 });
   const [liveTick, setLiveTick] = useState(0);
   const [agentAlive, setAgentAlive] = useState(true);
-  const isActive = isExecuting || isPending || agentAlive;
+  const [blinkOn, setBlinkOn] = useState(true);
+  const isActive = isExecuting || isPending || (isDone && isBackground) || agentAlive;
+
+  // Blink the running indicator every 500ms when agent is alive
+  useEffect(() => {
+    if (!agentAlive) return;
+    const interval = setInterval(() => setBlinkOn(b => !b), 500);
+    return () => clearInterval(interval);
+  }, [agentAlive]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -122,11 +133,13 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
 
         if (!agent) {
           // Agent removed from registry — stop polling
+          if (isBackground) setBgRunning(false);
           if (isDone || hasResult) setAgentAlive(false);
           return;
         }
 
         if (agent.status === 'done' || agent.status === 'error' || agent.status === 'stopped') {
+          if (isBackground) setBgRunning(false);
           setAgentAlive(false);
           return;
         }
@@ -174,10 +187,12 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   const toolCount = isDone ? (doneToolCount ?? liveCountsRef.current.toolCount) : liveCountsRef.current.toolCount;
   const showCounts = turnCount > 0 || toolCount > 0;
 
-  const blinkOn = Math.floor(Date.now() / 500) % 2 === 0;
-  const indicator = agentAlive ? (blinkOn ? '●' : '○') : '●';
-  const indicatorColor = agentAlive ? 'ansi:yellow' : 'ansi:green';
-  const showTimer = agentAlive;
+  const trulyDone = isDone && !bgRunning && !agentAlive;
+  const isBackgrounded = isDone && (isBackground || bgRunning);
+  // Solid green when backgrounded or truly done, blinking yellow only when actively running in foreground
+  const indicator = (agentAlive && !isBackgrounded) ? (blinkOn ? '●' : '○') : '●';
+  const indicatorColor = (agentAlive && !isBackgrounded) ? 'ansi:yellow' : 'ansi:green';
+  const showTimer = agentAlive && !isBackgrounded;
 
   // Tool call list: collapsed shows latest + hint, expanded shows all
   const expanded = props.contentExpanded;

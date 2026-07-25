@@ -104,7 +104,7 @@ coderix -m "deepseek/deepseek-v4-pro"
 | `Enter` | 发送消息 |
 | `Escape` | 清空输入 / 关闭子 Agent 视图 |
 | `Ctrl+C` | 中断 Agent / 终止子 Agent / 清空输入 / 双击退出 |
-| `Ctrl+B` | 将子 Agent 转入后台运行（关闭视图，Agent 继续运行） |
+| `Ctrl+B` | 将子 Agent 转入后台（解除主 Agent 阻塞，子 Agent 继续运行） |
 | `Ctrl+T` | 切换子 Agent 对话视图 |
 | `Ctrl+P` | 切换任务和待办面板 |
 | `Ctrl+O` | 展开/折叠所有内容块 |

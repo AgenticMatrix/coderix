@@ -165,6 +165,81 @@ function buildWorktreeNotice(parentCwd: string, worktreeCwd: string): string {
 // Standard subagent path — explicit agent_type
 // ---------------------------------------------------------------------------
 
+/**
+ * Shared completion handler for agents that finish in the background.
+ * Handles cleanup, persistence, and notification.
+ */
+async function handleBackgroundedAgentCompletion(
+  result: Awaited<ReturnType<typeof runAgentLoop>>,
+  agentId: string,
+  agentType: string,
+  prompt: string,
+  agentSpawn: AgentSpawnContext,
+  subAbortController: AbortController,
+  worktreePath: string | undefined,
+  worktreeBranch: string | undefined,
+  worktreeGitRoot: string | undefined,
+  worktreeHeadCommit: string | undefined,
+  worktreeHookBased: boolean | undefined,
+  parentSessionDir: string | undefined,
+  effectiveModel: string | undefined,
+  bgSessionId: string | undefined,
+  description: string | undefined,
+): Promise<void> {
+  let cleanupNote = '';
+  if (worktreePath) {
+    cleanupNote = await cleanupAgentWorktree({
+      worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+    }, agentSpawn.hookManager);
+  }
+
+  const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+  const compressed = compressTranscript(result.transcript);
+
+  let outputPath: string | undefined;
+  if (bgSessionId) {
+    try {
+      outputPath = await writeAgentOutput(bgSessionId, agentId, {
+        status, agentType, prompt,
+        turnCount: result.assistantTurnCount,
+        toolCount: result.toolCount,
+        elapsed: (Date.now() - result.startTime) / 1000,
+        result: compressed, error: result.error,
+        transcript: result.transcript,
+      });
+    } catch { /* Non-fatal */ }
+  }
+
+  agentSpawn.subAgentRegistry.update(agentId, {
+    status, finishedAt: Date.now(),
+    turnCount: result.assistantTurnCount,
+    messageCount: result.transcript.length,
+    toolCount: result.toolCount,
+    result: compressed,
+    error: result.error,
+    outputPath,
+    tokenUsage: result.tokenUsage,
+    liveToolCalls: [],
+    transcript: undefined,
+  });
+
+  // Persist to disk for cross-session resume
+  if (parentSessionDir) {
+    writeAgentMetadata(agentId, {
+      agentType, worktreePath, description: prompt, displayDescription: description,
+      model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+      allowedTools: undefined,
+      disallowedTools: undefined,
+      permissionMode: 'auto',
+      maxTurns: undefined,
+      contextBudget: undefined,
+    }, parentSessionDir).catch(() => {});
+    saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
+  }
+
+  agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+}
+
 async function executeStandardSubagent(
   input: Record<string, unknown>,
   agentSpawn: AgentSpawnContext,
@@ -307,58 +382,12 @@ async function executeStandardSubagent(
         initialMessages,
         cwd: worktreePath ?? effectiveCwd,
       }).then(async result => {
-        let cleanupNote = '';
-        if (worktreePath) {
-          cleanupNote = await cleanupAgentWorktree({
-            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-          }, agentSpawn.hookManager);
-        }
-
-        const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-        const compressed = compressTranscript(result.transcript);
-        const elapsed = (Date.now() - result.startTime) / 1000;
-
-        let outputPath: string | undefined;
-        if (bgSessionId) {
-          try {
-            outputPath = await writeAgentOutput(bgSessionId, agentId, {
-              status, agentType, prompt,
-              turnCount: result.assistantTurnCount,
-              toolCount: result.toolCount, elapsed,
-              result: compressed, error: result.error,
-              transcript: result.transcript,
-            });
-          } catch { /* Non-fatal */ }
-        }
-
-        agentSpawn.subAgentRegistry.update(agentId, {
-          status, finishedAt: Date.now(),
-          turnCount: result.assistantTurnCount,
-          messageCount: result.transcript.length,
-          toolCount: result.toolCount,
-          result: compressed,
-          error: result.error,
-          outputPath,
-          tokenUsage: result.tokenUsage,
-          liveToolCalls: [],
-          transcript: undefined,
-        });
-
-        // Persist to disk for cross-session resume
-        if (parentSessionDir) {
-          writeAgentMetadata(agentId, {
-            agentType, worktreePath, description: prompt, displayDescription: description,
-            model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-            allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
-            disallowedTools: agentDef.disallowedTools,
-            permissionMode: 'auto',
-            maxTurns: agentDef.maxTurns,
-            contextBudget: agentDef.contextBudget,
-          }, parentSessionDir).catch(() => {});
-          saveAgentTranscript(agentId, result.transcript, parentSessionDir).catch(() => {});
-        }
-
-        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+        await handleBackgroundedAgentCompletion(
+          result, agentId, agentType, prompt, agentSpawn,
+          subAbortController, worktreePath, worktreeBranch,
+          worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          parentSessionDir, effectiveModel, bgSessionId, description,
+        );
       }).catch(async err => {
         if (worktreePath) {
           await cleanupAgentWorktree({
@@ -384,12 +413,20 @@ async function executeStandardSubagent(
     };
   }
 
-  // ── Sync path ──────────────────────────────────────────────────
+  // ── Sync path (with Ctrl+B background support) ──────────────────
   const subContext: SubagentContext = createSubagentContext(
     agentId, agentType, agentDef.source === 'built-in',
   );
 
-  const result = await runWithAgentContext(subContext, () =>
+  // Create background signal for Ctrl+B support
+  let backgroundResolve: (() => void) | null = null;
+  const backgroundPromise = new Promise<void>(resolve => { backgroundResolve = resolve; });
+  agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: backgroundResolve });
+
+  const fgSessionId = options.sessionId;
+  const raceStartTime = Date.now();
+
+  const loopPromise = runWithAgentContext(subContext, () =>
     runAgentLoop({
       agentId, agentType, prompt, agentSpawn,
       systemPromptText: enrichedPrompt,
@@ -400,6 +437,49 @@ async function executeStandardSubagent(
       cwd: worktreePath ?? effectiveCwd,
     }),
   );
+
+  const raceResult = await Promise.race([
+    loopPromise.then(r => ({ backgrounded: false as const, result: r })),
+    backgroundPromise.then(() => ({ backgrounded: true as const })),
+  ]);
+
+  // Clean up resolver regardless of outcome
+  agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: null });
+
+  if (raceResult.backgrounded) {
+    // Agent was moved to background — switch to fire-and-forget
+    loopPromise.then(async result => {
+      await handleBackgroundedAgentCompletion(
+        result, agentId, agentType, prompt, agentSpawn,
+        subAbortController, worktreePath, worktreeBranch,
+        worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        parentSessionDir, effectiveModel, fgSessionId, description,
+      );
+    }).catch(async err => {
+      if (worktreePath) {
+        await cleanupAgentWorktree({
+          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        }, agentSpawn.hookManager).catch(() => {});
+      }
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      agentSpawn.subAgentRegistry.update(agentId, {
+        status: 'error', finishedAt: Date.now(),
+        error: errorMsg,
+        liveToolCalls: [],
+        transcript: undefined,
+      });
+      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+    });
+
+    return {
+      content: `Sub-agent ${agentId} (${agentType}) moved to background. Results will be delivered when complete.${worktreePath ? ` (worktree: ${worktreePath})` : ''}`,
+      isError: false,
+      duration: Date.now() - raceStartTime,
+      metadata: { agentId, agentType, background: true, worktreePath },
+    };
+  }
+
+  const result = raceResult.result;
 
   let cleanupNote = '';
   if (worktreePath) {
@@ -596,52 +676,12 @@ async function executeFork(
         cwd,
         enableCacheControl: true,
       }).then(async result => {
-        let cleanupNote = '';
-        if (worktreePath) {
-          cleanupNote = await cleanupAgentWorktree({
-            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-          }, agentSpawn.hookManager);
-        }
-        const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-        const compressed = compressTranscript(result.transcript);
-        const elapsed = (Date.now() - result.startTime) / 1000;
-
-        let outputPath: string | undefined;
-        if (forkBgSessionId) {
-          try {
-            outputPath = await writeAgentOutput(forkBgSessionId, agentId, {
-              status, agentType: 'fork', prompt,
-              turnCount: result.assistantTurnCount,
-              toolCount: result.toolCount, elapsed,
-              result: compressed, error: result.error,
-              transcript: result.transcript,
-            });
-          } catch { /* Non-fatal */ }
-        }
-
-        agentSpawn.subAgentRegistry.update(agentId, {
-          status, finishedAt: Date.now(),
-          turnCount: result.assistantTurnCount,
-          messageCount: result.transcript.length,
-          toolCount: result.toolCount,
-          result: compressed,
-          error: result.error,
-          outputPath,
-          tokenUsage: result.tokenUsage,
-          transcript: undefined,
-        });
-
-        // Persist to disk for cross-session resume
-        if (forkSessionDir) {
-          writeAgentMetadata(agentId, {
-            agentType: 'fork', worktreePath, description: prompt, displayDescription: description,
-            model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-            permissionMode: agentSpawn.sessionManager.getActive()?.id ? 'auto' : undefined,
-          }, forkSessionDir).catch(() => {});
-          saveAgentTranscript(agentId, result.transcript, forkSessionDir).catch(() => {});
-        }
-
-        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+        await handleBackgroundedAgentCompletion(
+          result, agentId, 'fork', prompt, agentSpawn,
+          subAbortController, worktreePath, worktreeBranch,
+          worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          forkSessionDir, effectiveModel, forkBgSessionId, description,
+        );
       }).catch(async err => {
         if (worktreePath) {
           await cleanupAgentWorktree({
@@ -665,10 +705,16 @@ async function executeFork(
     };
   }
 
-  // Sync fork
+  // Sync fork (with Ctrl+B background support)
   const forkContext: SubagentContext = createSubagentContext(agentId, 'fork', true);
 
-  const result = await runWithAgentContext(forkContext, () =>
+  // Create background signal for Ctrl+B support
+  let forkBgResolve: (() => void) | null = null;
+  const forkBgPromise = new Promise<void>(resolve => { forkBgResolve = resolve; });
+  agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: forkBgResolve });
+
+  const forkStartTime = Date.now();
+  const forkLoopPromise = runWithAgentContext(forkContext, () =>
     runAgentLoop({
       agentId, agentType, prompt, agentSpawn,
       systemPromptText, effectiveModel, subToolRegistry, subAbortController,
@@ -677,6 +723,45 @@ async function executeFork(
       enableCacheControl: true,
     }),
   );
+
+  const forkRaceResult = await Promise.race([
+    forkLoopPromise.then(r => ({ backgrounded: false as const, result: r })),
+    forkBgPromise.then(() => ({ backgrounded: true as const })),
+  ]);
+
+  agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: null });
+
+  if (forkRaceResult.backgrounded) {
+    forkLoopPromise.then(async result => {
+      await handleBackgroundedAgentCompletion(
+        result, agentId, 'fork', prompt, agentSpawn,
+        subAbortController, worktreePath, worktreeBranch,
+        worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        forkSessionDir, effectiveModel, bgSessionId, description,
+      );
+    }).catch(async err => {
+      if (worktreePath) {
+        await cleanupAgentWorktree({
+          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        }, agentSpawn.hookManager).catch(() => {});
+      }
+      agentSpawn.subAgentRegistry.update(agentId, {
+        status: 'error', finishedAt: Date.now(),
+        error: err instanceof Error ? err.message : String(err),
+        transcript: undefined,
+      });
+      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+    });
+
+    return {
+      content: `Fork agent ${agentId} moved to background. Results will be delivered when complete.${worktreePath ? ` (worktree: ${worktreePath})` : ''}`,
+      isError: false,
+      duration: Date.now() - forkStartTime,
+      metadata: { agentId, agentType: 'fork', background: true, worktreePath },
+    };
+  }
+
+  const result = forkRaceResult.result;
 
   let cleanupNote = '';
   if (worktreePath) {

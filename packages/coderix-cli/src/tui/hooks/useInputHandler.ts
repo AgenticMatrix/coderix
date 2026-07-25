@@ -60,7 +60,7 @@ export interface InputHandlerDeps {
  *   Enter       — send message
  *   Escape      — clear input
  *   Ctrl+O      — toggle expand / collapse all blocks (tools + content)
- *   Ctrl+B      — send sub-agent to background (close view)
+ *   Ctrl+B      — move sub-agent to background (unblocks main agent)
  *   Ctrl+T      — view sub-agent transcript
  *   Ctrl+P      — toggle task & todo panels
  *   Ctrl+K      — toggle team picker
@@ -203,15 +203,22 @@ export function useInputHandler({
         return;
       }
 
-      // Ctrl+B: send sub-agent to background (close view, agent keeps running)
+      // Ctrl+B: send sub-agent to background
       if (key.ctrl && input === 'b') {
+        const registry = getSubAgentRegistry();
         if (subAgentView) {
+          // Background the currently-viewed agent via registry signal
+          registry?.background(subAgentView.agentId);
           dispatch({ type: 'CLOSE_SUBAGENT_VIEW' });
           return;
         }
         if (teamPicker) {
           dispatch({ type: 'HIDE_TEAM_PICKER' });
           return;
+        }
+        // No sub-agent view open — background all running foreground agents
+        if (registry) {
+          registry.backgroundAll();
         }
         return;
       }

@@ -38,6 +38,8 @@ export interface SubAgentRecord {
   toolUseId?: string;
   /** Accumulated token usage (context window consumption) for this agent. */
   tokenUsage?: { inputTokens: number; outputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number; totalTokens?: number };
+  /** Internal: resolve function for background signal. Not serialized. */
+  _backgroundResolve?: (() => void) | null;
 }
 
 export class SubAgentRegistry {
@@ -109,6 +111,37 @@ export class SubAgentRegistry {
         agent.abortController.abort();
       }
     }
+  }
+
+  /**
+   * Send a running foreground agent to the background.
+   * Resolves the background signal so the foreground executor returns early,
+   * while the agent continues running in the background.
+   */
+  background(id: string): boolean {
+    const agent = this.agents.get(id);
+    if (!agent || agent.status !== 'running') return false;
+    if (agent._backgroundResolve) {
+      agent._backgroundResolve();
+      agent._backgroundResolve = null;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Background all running foreground agents.
+   */
+  backgroundAll(): number {
+    let count = 0;
+    for (const agent of this.agents.values()) {
+      if (agent.status === 'running' && agent._backgroundResolve) {
+        agent._backgroundResolve();
+        agent._backgroundResolve = null;
+        count++;
+      }
+    }
+    return count;
   }
 
   /**

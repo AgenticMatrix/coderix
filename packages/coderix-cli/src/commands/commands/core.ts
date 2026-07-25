@@ -23,7 +23,7 @@ export const coreCommands: SlashCommand[] = [
       lines.push('  Enter          Send message');
       lines.push('  Esc            Clear input');
       lines.push('  Ctrl+O         Toggle expand/collapse all blocks');
-      lines.push('  Ctrl+B         Send sub-agent to background');
+      lines.push('  Ctrl+B         Move sub-agent to background');
       lines.push('  Ctrl+T         View sub-agent transcript');
       lines.push('  Ctrl+P         Toggle task & todo panels');
       lines.push('  ← → Home End   Cursor movement');

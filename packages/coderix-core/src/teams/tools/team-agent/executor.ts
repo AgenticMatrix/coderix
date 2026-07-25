@@ -286,6 +286,58 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   const spawnTime = Date.now();
 
+  // Capture for use in background completion handler (TypeScript narrowing)
+  const capturedAgentSpawn = agentSpawn;
+  const capturedAgentDef = agentDef!;
+
+  /**
+   * Shared completion handler for team agents that finish in the background.
+   */
+  async function handleTeamAgentBackgroundCompletion(
+    result: Awaited<ReturnType<typeof runAgentLoop>>,
+  ): Promise<void> {
+    let cleanupNote = '';
+    if (worktreePath) {
+      cleanupNote = await cleanupAgentWorktree({
+        worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+      }, capturedAgentSpawn.hookManager);
+    }
+
+    const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+    const compressed = compressTranscript(result.transcript);
+
+    capturedAgentSpawn.subAgentRegistry.update(agentId, {
+      status, finishedAt: Date.now(),
+      turnCount: result.assistantTurnCount,
+      messageCount: result.transcript.length,
+      toolCount: result.toolCount,
+      result: compressed,
+      error: result.error,
+      tokenUsage: result.tokenUsage,
+      liveToolCalls: [],
+      transcript: undefined,
+    });
+
+    updateMemberInTeam(sd, teamName, agentId, {
+      status, finishedAt: Date.now(),
+    }).catch(() => {});
+
+    // Persist to disk
+    writeTeamAgentMetadata(agentId, {
+      agentType, worktreePath, description: prompt, displayDescription: description,
+      model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+      teamName, memberName: agentName, task: prompt, joinedAt: spawnTime,
+      allowedTools: Array.isArray(capturedAgentDef.tools) ? capturedAgentDef.tools : undefined,
+      disallowedTools: capturedAgentDef.disallowedTools,
+      permissionMode: 'auto',
+      maxTurns: capturedAgentDef.maxTurns,
+      contextBudget: capturedAgentDef.contextBudget,
+    }, sd, teamName).catch(() => {});
+    saveTeamAgentTranscript(agentId, result.transcript, sd, teamName).catch(() => {});
+
+    capturedAgentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+  }
+
   // ── Background path: fire-and-forget ────────────────────────────────
   if (isBackground) {
     const teamContext: SubagentContext = createSubagentContext(
@@ -304,46 +356,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         initialMessages,
         cwd: worktreePath ?? effectiveCwd,
       }).then(async result => {
-        let cleanupNote = '';
-        if (worktreePath) {
-          cleanupNote = await cleanupAgentWorktree({
-            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-          }, agentSpawn.hookManager);
-        }
-
-        const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-        const compressed = compressTranscript(result.transcript);
-
-        agentSpawn.subAgentRegistry.update(agentId, {
-          status, finishedAt: Date.now(),
-          turnCount: result.assistantTurnCount,
-          messageCount: result.transcript.length,
-          toolCount: result.toolCount,
-          result: compressed,
-          error: result.error,
-          tokenUsage: result.tokenUsage,
-          liveToolCalls: [],
-          transcript: undefined,
-        });
-
-        updateMemberInTeam(sd, teamName, agentId, {
-          status, finishedAt: Date.now(),
-        }).catch(() => {});
-
-        // Persist to disk
-        writeTeamAgentMetadata(agentId, {
-          agentType, worktreePath, description: prompt, displayDescription: description,
-          model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-          teamName, memberName: agentName, task: prompt, joinedAt: spawnTime,
-          allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
-          disallowedTools: agentDef.disallowedTools,
-          permissionMode: 'auto',
-          maxTurns: agentDef.maxTurns,
-          contextBudget: agentDef.contextBudget,
-        }, sd, teamName).catch(() => {});
-        saveTeamAgentTranscript(agentId, result.transcript, sd, teamName).catch(() => {});
-
-        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+        await handleTeamAgentBackgroundCompletion(result);
       }).catch(async err => {
         if (worktreePath) {
           await cleanupAgentWorktree({
@@ -379,12 +392,19 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     };
   }
 
-  // ── Foreground path: run synchronously ──────────────────────────────
+  // ── Foreground path (with Ctrl+B background support) ──────────────────
   const teamContext: SubagentContext = createSubagentContext(
     agentId, agentType, agentDef.source === 'built-in',
   );
 
-  const result = await runWithAgentContext(teamContext, () =>
+  // Create background signal for Ctrl+B support
+  let teamBgResolve: (() => void) | null = null;
+  const teamBgPromise = new Promise<void>(resolve => { teamBgResolve = resolve; });
+  agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: teamBgResolve });
+
+  const fgStartTime = Date.now();
+
+  const loopPromise = runWithAgentContext(teamContext, () =>
     runAgentLoop({
       agentId, agentType, prompt, agentSpawn,
       systemPromptText: enrichedPrompt,
@@ -395,6 +415,45 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       cwd: worktreePath ?? effectiveCwd,
     }),
   );
+
+  const raceResult = await Promise.race([
+    loopPromise.then(r => ({ backgrounded: false as const, result: r })),
+    teamBgPromise.then(() => ({ backgrounded: true as const })),
+  ]);
+
+  agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: null });
+
+  if (raceResult.backgrounded) {
+    loopPromise.then(async result => {
+      await handleTeamAgentBackgroundCompletion(result);
+    }).catch(async err => {
+      if (worktreePath) {
+        await cleanupAgentWorktree({
+          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        }, agentSpawn.hookManager).catch(() => {});
+      }
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      agentSpawn.subAgentRegistry.update(agentId, {
+        status: 'error', finishedAt: Date.now(),
+        error: errorMsg,
+        liveToolCalls: [],
+        transcript: undefined,
+      });
+      updateMemberInTeam(sd, teamName, agentId, {
+        status: 'error', finishedAt: Date.now(),
+      }).catch(() => {});
+      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+    });
+
+    return {
+      content: `Teammate '${agentName}' (${agentId}) moved to background. Results will be delivered when complete.${worktreePath ? ` (worktree: ${worktreePath})` : ''}`,
+      isError: false,
+      duration: Date.now() - fgStartTime,
+      metadata: { agentId, teamName, agentName, agentType, background: true, worktreePath },
+    };
+  }
+
+  const result = raceResult.result;
 
   let cleanupNote = '';
   if (worktreePath) {

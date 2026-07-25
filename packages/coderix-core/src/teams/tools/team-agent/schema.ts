@@ -6,7 +6,7 @@ export const schema: ToolSchema = {
 
 Team workers are different from regular sub-agents (use the Agent tool for those):
 - Team workers persist across the session and use SendMessage for communication
-- TeamAgent ALWAYS blocks until the worker completes — it does NOT support background mode
+- TeamAgent blocks until the worker completes by default, but supports background mode via background: true or Ctrl+B
 - To run multiple workers, spawn them one at a time sequentially
 
 Use TeamAgent when you need persistent workers within a team structure. Use Agent when you need a one-off sub-agent to complete a task and return results directly.
@@ -43,6 +43,10 @@ The worker will be registered in the team and can be messaged via SendMessage(to
       description: {
         type: 'string',
         description: 'A short (3-5 word) human-readable label for this worker, shown in the UI. Example: "Research auth bug".',
+      },
+      background: {
+        type: 'boolean',
+        description: 'When true, the worker runs in the background. Use SendMessage to communicate with it. Results will be delivered automatically when complete.',
       },
       isolation: {
         type: 'string',

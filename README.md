@@ -112,7 +112,7 @@ coderix -m "deepseek/deepseek-v4-pro"
 | `Enter` | Send message |
 | `Escape` | Clear input / close sub-agent view |
 | `Ctrl+C` | Interrupt agent / kill sub-agents / clear input / double-press to exit |
-| `Ctrl+B` | Send sub-agent to background (close view, agent keeps running) |
+| `Ctrl+B` | Move sub-agent to background (unblocks main agent, agent keeps running) |
 | `Ctrl+T` | Toggle sub-agent transcript view |
 | `Ctrl+P` | Toggle task & todo panels |
 | `Ctrl+O` | Toggle expand/collapse all blocks |
