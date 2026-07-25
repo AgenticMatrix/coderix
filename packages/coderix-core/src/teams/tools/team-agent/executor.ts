@@ -65,6 +65,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const modelOverride = input.model as string | undefined;
   const description = input.description as string | undefined;
   const isolation = input.isolation as 'worktree' | undefined;
+  const isBackground = (input.background as boolean) ?? false;
 
   // ── Validate team exists ────────────────────────────────────────────
   const config = await loadTeamConfig(sd, teamName);
@@ -204,10 +205,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   }
 
   // ── Build system prompt ─────────────────────────────────────────────
-  // Inherit the parent agent's FULL system prompt as the base, then layer on
-  // the agent type's custom instructions and the team member addendum.
-  // This gives team members the same tool knowledge and environment context
-  // as the leader, matching claude-code-best's approach.
   const userPrompt = agentDef.initialPrompt
     ? `${agentDef.initialPrompt}\n\n${prompt}`
     : prompt;
@@ -216,7 +213,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   if (agentSpawn.renderedSystemPrompt) {
     enrichedPrompt = agentSpawn.renderedSystemPrompt.prompt;
   } else {
-    // Fallback: reassemble from agent definition + system prompt assembler
     enrichedPrompt = agentDef.getSystemPrompt();
   }
 
@@ -286,15 +282,107 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   agentSpawn.sessionManager.trackSubAgent(agentId);
 
-  // ── Run in background ───────────────────────────────────────────────
   const spawnTime = Date.now();
+
+  // ── Background path: fire-and-forget ────────────────────────────────
+  if (isBackground) {
+    const teamContext: SubagentContext = createSubagentContext(
+      agentId,
+      agentType,
+      agentDef.source === 'built-in',
+    );
+
+    runWithAgentContext(teamContext, () => {
+      runAgentLoop({
+        agentId, agentType, prompt, agentSpawn,
+        systemPromptText: enrichedPrompt,
+        effectiveModel, subToolRegistry, subAbortController,
+        effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
+        effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+        initialMessages,
+        cwd: worktreePath ?? effectiveCwd,
+      }).then(async result => {
+        let cleanupNote = '';
+        if (worktreePath) {
+          cleanupNote = await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager);
+        }
+
+        const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+        const compressed = compressTranscript(result.transcript);
+
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status, finishedAt: Date.now(),
+          turnCount: result.assistantTurnCount,
+          messageCount: result.transcript.length,
+          toolCount: result.toolCount,
+          result: compressed,
+          error: result.error,
+          tokenUsage: result.tokenUsage,
+          liveToolCalls: [],
+          transcript: undefined,
+        });
+
+        updateMemberInTeam(sd, teamName, agentId, {
+          status, finishedAt: Date.now(),
+        }).catch(() => {});
+
+        // Persist to disk
+        writeTeamAgentMetadata(agentId, {
+          agentType, worktreePath, description: prompt, displayDescription: description,
+          model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+          teamName, memberName: agentName, task: prompt, joinedAt: spawnTime,
+          allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
+          disallowedTools: agentDef.disallowedTools,
+          permissionMode: 'auto',
+          maxTurns: agentDef.maxTurns,
+          contextBudget: agentDef.contextBudget,
+        }, sd, teamName).catch(() => {});
+        saveTeamAgentTranscript(agentId, result.transcript, sd, teamName).catch(() => {});
+
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+      }).catch(async err => {
+        if (worktreePath) {
+          await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager).catch(() => {});
+        }
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status: 'error', finishedAt: Date.now(),
+          error: errorMsg,
+          liveToolCalls: [],
+          transcript: undefined,
+        });
+        updateMemberInTeam(sd, teamName, agentId, {
+          status: 'error', finishedAt: Date.now(),
+        }).catch(() => {});
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+      });
+    });
+
+    return {
+      content: `Teammate '${agentName}' (${agentId}) spawned in team '${teamName}' (background). Use SendMessage to communicate with it.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
+      isError: false,
+      duration: Date.now() - spawnTime,
+      metadata: {
+        agentId,
+        teamName,
+        agentName,
+        agentType,
+        background: true,
+        worktreePath,
+      },
+    };
+  }
+
+  // ── Foreground path: run synchronously ──────────────────────────────
   const teamContext: SubagentContext = createSubagentContext(
-    agentId,
-    agentType,
-    agentDef.source === 'built-in',
+    agentId, agentType, agentDef.source === 'built-in',
   );
 
-  runWithAgentContext(teamContext, () => {
+  const result = await runWithAgentContext(teamContext, () =>
     runAgentLoop({
       agentId, agentType, prompt, agentSpawn,
       systemPromptText: enrichedPrompt,
@@ -303,69 +391,57 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
       initialMessages,
       cwd: worktreePath ?? effectiveCwd,
-    }).then(async result => {
-      let cleanupNote = '';
-      if (worktreePath) {
-        cleanupNote = await cleanupAgentWorktree({
-          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-        }, agentSpawn.hookManager);
-      }
+    }),
+  );
 
-      const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-      const compressed = compressTranscript(result.transcript);
+  let cleanupNote = '';
+  if (worktreePath) {
+    cleanupNote = await cleanupAgentWorktree({
+      worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+    }, agentSpawn.hookManager);
+  }
 
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status, finishedAt: Date.now(),
-        turnCount: result.assistantTurnCount,
-        messageCount: result.transcript.length,
-        toolCount: result.toolCount,
-        result: compressed,
-        error: result.error,
-        tokenUsage: result.tokenUsage,
-        liveToolCalls: [],
-        transcript: undefined,
-      });
+  const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
+  const compressed = compressTranscript(result.transcript);
 
-      updateMemberInTeam(sd, teamName, agentId, {
-        status, finishedAt: Date.now(),
-      }).catch(() => {});
-
-      // Persist to disk
-      writeTeamAgentMetadata(agentId, {
-        agentType, worktreePath, description: prompt, displayDescription: description,
-        model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-        teamName, memberName: agentName, task: prompt, joinedAt: spawnTime,
-        allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
-        disallowedTools: agentDef.disallowedTools,
-        permissionMode: 'auto',
-        maxTurns: agentDef.maxTurns,
-        contextBudget: agentDef.contextBudget,
-      }, sd, teamName).catch(() => {});
-      saveTeamAgentTranscript(agentId, result.transcript, sd, teamName).catch(() => {});
-
-      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
-    }).catch(async err => {
-      if (worktreePath) {
-        await cleanupAgentWorktree({
-          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-        }, agentSpawn.hookManager).catch(() => {});
-      }
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status: 'error', finishedAt: Date.now(),
-        error: errorMsg,
-        liveToolCalls: [],
-        transcript: undefined,
-      });
-      updateMemberInTeam(sd, teamName, agentId, {
-        status: 'error', finishedAt: Date.now(),
-      }).catch(() => {});
-      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
-    });
+  agentSpawn.subAgentRegistry.update(agentId, {
+    status, finishedAt: Date.now(),
+    turnCount: result.assistantTurnCount,
+    messageCount: result.transcript.length,
+    toolCount: result.toolCount,
+    result: compressed,
+    error: result.error,
+    transcript: undefined,
   });
 
+  updateMemberInTeam(sd, teamName, agentId, {
+    status, finishedAt: Date.now(),
+  }).catch(() => {});
+
+  // Persist to disk
+  writeTeamAgentMetadata(agentId, {
+    agentType, worktreePath, description: prompt, displayDescription: description,
+    model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
+    teamName, memberName: agentName, task: prompt, joinedAt: spawnTime,
+    allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
+    disallowedTools: agentDef.disallowedTools,
+    permissionMode: 'auto',
+    maxTurns: agentDef.maxTurns,
+    contextBudget: agentDef.contextBudget,
+  }, sd, teamName).catch(() => {});
+  saveTeamAgentTranscript(agentId, result.transcript, sd, teamName).catch(() => {});
+
+  if (result.error) {
+    return {
+      content: `Teammate '${agentName}' (${agentId}) error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
+      isError: true,
+      duration: Date.now() - spawnTime,
+      metadata: { agentId, teamName, agentName, agentType, error: result.error, worktreePath },
+    };
+  }
+
   return {
-    content: `Teammate '${agentName}' (${agentId}) spawned in team '${teamName}'. Use SendMessage to communicate with it.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
+    content: `Teammate '${agentName}' (${agentId}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`,
     isError: false,
     duration: Date.now() - spawnTime,
     metadata: {
@@ -373,7 +449,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       teamName,
       agentName,
       agentType,
-      background: true,
+      turnCount: result.assistantTurnCount,
+      toolCount: result.toolCount,
+      duration: Date.now() - spawnTime,
       worktreePath,
     },
   };

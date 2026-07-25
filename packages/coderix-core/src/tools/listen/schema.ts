@@ -3,7 +3,7 @@ import type { ToolSchema } from '../types.js';
 export const schema: ToolSchema = {
   name: 'Listen',
   description:
-    'Listen for background sub-agent completions. Use this when you have spawned background sub-agents and need to wait for their results. Do NOT poll with TaskGet — just call Listen and the results will arrive automatically when background agents finish.',
+    'Listen for background sub-agent completions. Use only when you have nothing else to process and need to wait. Background results arrive automatically between turns — Listen is optional, not required.',
   input_schema: {
     type: 'object',
     properties: {

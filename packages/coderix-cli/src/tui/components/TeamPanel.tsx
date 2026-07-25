@@ -15,14 +15,11 @@ function formatDuration(ms: number): string {
   return `${mins}m ${remain}s`;
 }
 
-function statusLabel(m: TeamMember, now: number, stats?: LiveAgentStats): string {
+function statusLabel(m: TeamMember, now: number): string {
   const elapsed = m.finishedAt ? m.finishedAt - m.joinedAt : now - m.joinedAt;
   switch (m.status) {
-    case 'running': {
-      const hasLiveCalls = stats && stats.lastCall !== null;
-      if (!hasLiveCalls) return 'idle';
+    case 'running':
       return `running ${formatDuration(elapsed)}`;
-    }
     case 'pending':
       return 'pending';
     case 'done':
@@ -50,45 +47,6 @@ interface TeamPanelProps {
 }
 
 const POLL_INTERVAL_MS = 2000;
-const LIVE_POLL_MS = 500;
-
-interface LiveAgentStats {
-  turnCount: number;
-  toolCount: number;
-  lastCall: string | null;
-}
-
-function formatToolCallDetail(name: string, input: string): string {
-  let inputObj: Record<string, unknown> | null = null;
-  try {
-    inputObj = JSON.parse(input);
-  } catch {
-    return input.length > 50 ? input.slice(0, 47) + '...' : input;
-  }
-
-  const keyParam = TOOL_KEY_PARAM[name];
-  if (keyParam) {
-    const val = inputObj?.[keyParam] as string | undefined;
-    if (val) return val.length > 90 ? val.slice(0, 87) + '...' : val;
-  }
-
-  const desc = inputObj?.description as string | undefined;
-  if (desc) return desc.length > 90 ? desc.slice(0, 87) + '...' : desc;
-
-  return input.length > 50 ? input.slice(0, 47) + '...' : input;
-}
-
-const TOOL_KEY_PARAM: Record<string, string> = {
-  bash: 'command',
-  read: 'file_path',
-  grep: 'pattern',
-  glob: 'pattern',
-  write: 'file_path',
-  update: 'file_path',
-  edit: 'file_path',
-  WebSearch: 'query',
-  WebFetch: 'url',
-};
 
 function agentToMember(agent: SubAgentRecord): TeamMember {
   const statusMap: Record<string, TeamMember['status']> = {
@@ -133,27 +91,6 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
     return () => clearInterval(interval);
   }, [hasRunning]);
 
-  // Live agent stats (tool/turn counts, last tool call)
-  const [liveStats, setLiveStats] = useState<Map<string, LiveAgentStats>>(new Map());
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const registry = getSubAgentRegistry();
-      if (!registry) return;
-      const next = new Map<string, LiveAgentStats>();
-      for (const agent of registry.list()) {
-        const calls = agent.liveToolCalls ?? [];
-        const last = calls.length > 0 ? calls[calls.length - 1] : null;
-        next.set(agent.id, {
-          turnCount: agent.turnCount,
-          toolCount: agent.toolCount,
-          lastCall: last ? `${last.name}(${formatToolCallDetail(last.name, last.input)})` : null,
-        });
-      }
-      setLiveStats(next);
-    }, LIVE_POLL_MS);
-    return () => clearInterval(interval);
-  }, []);
-
   useEffect(() => {
     let active = true;
 
@@ -195,7 +132,6 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               soloMembers.push(agentToMember(agent));
             }
           }
-          process.stderr.write(`[TeamPanel] poll: teamAgentIds=${JSON.stringify([...teamAgentIds])}, soloAgents=${JSON.stringify(soloMembers.map(m => m.agentId + ':' + m.status))}, focused=${focusedRef.current}\n`);
           if (soloMembers.length > 0) {
             loaded.push({
               name: 'solo',
@@ -310,8 +246,6 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   if (dismissed) return null;
   if (visible.length === 0) return null;
 
-  const hasActive = allMembers.some(m => m.status === 'running' || m.status === 'pending');
-
   const runningCount = allMembers.filter(m => m.status === 'running').length;
   const pendingCount = allMembers.filter(m => m.status === 'pending').length;
   const doneCount = allMembers.filter(m => m.status === 'done').length;
@@ -362,13 +296,8 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const isAutoName = m.name.startsWith(`${m.agentType}-`) || m.name.startsWith('fork-');
         const teamOrSolo = m.teamName || 'solo';
         const middleLabel = isAutoName ? (m.task || m.name.slice(0, 50)) : m.name;
-        const stats = m.status === 'running' ? liveStats.get(m.agentId) : undefined;
-        const statusText = statusLabel(m, now, stats);
-        const isIdle = stats && stats.lastCall === null;
-        const statusColor = m.status === 'running' && !isIdle ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
-        const statsSuffix = stats && (stats.turnCount > 0 || stats.toolCount > 0)
-          ? ` · ${stats.toolCount} tools, ${stats.turnCount} turns${stats.lastCall ? ` · ${stats.lastCall}` : ''}`
-          : '';
+        const statusText = statusLabel(m, now);
+        const statusColor = m.status === 'running' ? 'ansi:yellow' : m.status === 'error' ? 'ansi:red' : undefined;
 
         return (
           <Box key={`${m.name}-${m.agentId}`} flexShrink={0}>
@@ -385,9 +314,6 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               <Text dimColor={m.status === 'done'}>{middleLabel}</Text>
               <Text dimColor> · </Text>
               <Text color={statusColor} dimColor={m.status === 'done'}>{statusText}</Text>
-              {statsSuffix ? (
-                <Text dimColor>{statsSuffix}</Text>
-              ) : null}
             </Text>
           </Box>
         );
@@ -404,7 +330,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
           <Text dimColor>    Up/Down navigate · Enter select · Esc defocus</Text>
         </Box>
       )}
-      {!focused && hasActive && (
+      {!focused && hasRunning && (
         <Box>
           <Text dimColor>    Up/Down navigate · Ctrl+K to toggle filter</Text>
         </Box>
