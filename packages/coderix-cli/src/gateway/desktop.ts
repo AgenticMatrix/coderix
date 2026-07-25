@@ -418,6 +418,7 @@ export async function startDesktopGateway(
                     turnCount: s.turnCount,
                     model: s.model,
                     updatedAt: s.updatedAt,
+                    displayTitle: s.displayTitle,
                   })),
                 resumeSession: (id: string) => {
                   if (id === '__last__') {

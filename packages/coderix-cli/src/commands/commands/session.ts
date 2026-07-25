@@ -33,9 +33,9 @@ export const sessionCommands: SlashCommand[] = [
         for (let i = 0; i < Math.min(sessions.length, 20); i++) {
           const s = sessions[i]!;
           const updated = s.updatedAt.toISOString().split('T')[0];
-          // Auto-generated titles like "Session 6cd7a6f0" are useless
           const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
-          const title = isAuto ? '—' : s.title.length > 48 ? s.title.slice(0, 48) + '...' : s.title;
+          const displayTitle = s.displayTitle ?? (isAuto ? '—' : s.title);
+          const title = displayTitle.length > 48 ? displayTitle.slice(0, 48) + '...' : displayTitle;
           const empty = s.turnCount === 0 ? ' (empty)' : '';
           lines.push(
             `  ${String(i + 1).padEnd(3)} ${s.id.slice(0, 8).padEnd(9)} ${String(s.turnCount).padStart(4)}t  ${s.model.padEnd(18)} ${updated}  ${title}${empty}`,

@@ -10,6 +10,7 @@ export interface SessionSummary {
   turnCount: number;
   model: string;
   updatedAt: Date;
+  displayTitle?: string;
 }
 
 export interface SlashRunContext {

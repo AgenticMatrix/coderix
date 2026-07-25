@@ -19,6 +19,7 @@ export {
   sessionDir,
   sessionJsonlPath,
   sessionSystemPromptPath,
+  sessionMetaPath,
   subAgentJsonlPath,
   appendEntry,
   appendEntrySync,
@@ -27,11 +28,17 @@ export {
   rewriteEntries,
   entriesToMessages,
   readTailMetadata,
+  readSessionMeta,
+  writeSessionMeta,
+  generateSessionTitle,
+  isAutoTitle,
+  refineSessionTitle,
   createEntryBatcher,
   migrateLegacySession,
   needsMigration,
 } from './core/session-store.js';
 export type { EntryBatcher } from './core/session-store.js';
+export type { SessionMeta } from './core/session-store.js';
 export { CheckpointManager } from './core/checkpoint.js';
 export { SubAgentRegistry } from './core/subagent-registry.js';
 export type { SubAgentRecord } from './core/subagent-registry.js';

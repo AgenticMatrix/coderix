@@ -463,6 +463,10 @@ export interface SessionSummary {
   model: string;
   /** First 60 chars of the latest user message for preview. */
   lastUserPreview?: string;
+  /** Generated display title from first user message. */
+  displayTitle?: string;
+  /** Full text of the first user message (for LLM title summarization). */
+  firstUserText?: string;
 }
 
 export interface Session {

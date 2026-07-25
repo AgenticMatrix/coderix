@@ -31,13 +31,33 @@ import {
   sessionDir as getSessionDir,
   sessionJsonlPath,
   sessionSystemPromptPath,
+  sessionMetaPath,
   appendEntry,
   appendEntrySync,
   readEntriesSync,
   rewriteEntries,
   entriesToMessages,
   readTailMetadata,
+  readSessionMeta,
+  writeSessionMeta,
+  generateSessionTitle,
+  isAutoTitle,
 } from './session-store.js';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function extractMessageText(message: Message): string {
+  if (typeof message.content === 'string') return message.content;
+  if (Array.isArray(message.content)) {
+    return (message.content as Array<{ type?: string; text?: string }>)
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join(' ');
+  }
+  return '';
+}
 
 // ---------------------------------------------------------------------------
 // SessionManager
@@ -287,13 +307,16 @@ export class SessionManager {
     const dir = getSessionDir(session.id);
     const jsonlPath = sessionJsonlPath(dir);
 
-    // Bootstrap the session.jsonl on first message: write title + parent metadata
+    // Bootstrap the session on first message: init entry count, write parent metadata
     if (((session as any)._entryCount as number ?? 0) === 0) {
-      const titleEntry: SessionEntry = {
-        type: 'title',
-        title: session.title,
-      } as SessionEntry;
-      appendEntry(jsonlPath, titleEntry).catch(() => {});
+      // Update in-memory title from the first user message
+      // (actual persistence happens in the CLI layer via LLM)
+      if (message.role === 'user') {
+        const text = extractMessageText(message);
+        if (text) {
+          session.title = generateSessionTitle(text);
+        }
+      }
       (session as any)._entryCount = 1;
 
       if (session.parentSessionId) {
@@ -447,19 +470,11 @@ export class SessionManager {
   }
 
   /**
-   * Re-append title and other metadata entries to the end of the JSONL
-   * so they're visible in the tail read for session listing.
+   * Write session metadata to meta.json for session listing.
    */
   private appendMetadata(session: Session): void {
     const dir = getSessionDir(session.id);
-    const jsonlPath = sessionJsonlPath(dir);
-
-    const titleEntry: SessionEntry = {
-      type: 'title',
-      title: session.title,
-    } as SessionEntry;
-
-    appendEntry(jsonlPath, titleEntry).catch(() => {});
+    writeSessionMeta(dir, { title: session.title }).catch(() => {});
   }
 
   /**
@@ -487,11 +502,6 @@ export class SessionManager {
     }
 
     (session as any)._lastEntryUuid = prevUuid;
-
-    entries.push({
-      type: 'title',
-      title: session.title,
-    } as SessionEntry);
 
     rewriteEntries(jsonlPath, entries).catch(() => {});
   }
@@ -550,7 +560,7 @@ export class SessionManager {
       if (!existsSync(jsonlPath)) continue;
 
       // Fast path: read tail metadata from JSONL
-      const { lastTitle, lastUserPreview, hasParent, transcriptEntryCount } = readTailMetadata(jsonlPath);
+      const { lastTitle, lastUserPreview, firstUserText, hasParent, transcriptEntryCount } = readTailMetadata(jsonlPath);
 
       // Skip sub-agent / workflow sessions (child sessions)
       if (hasParent) continue;
@@ -561,8 +571,20 @@ export class SessionManager {
       // Approximate turnCount from transcript entries (one turn = user + assistant)
       const approxTurns = Math.floor(transcriptEntryCount / 2);
 
-      const title = lastTitle ?? `Session ${id.slice(0, 8)}`;
+      // Read title from meta.json (new), fall back to session.jsonl title entry (legacy)
+      const meta = readSessionMeta(dir);
+      const title = meta?.title ?? lastTitle ?? `Session ${id.slice(0, 8)}`;
       const mtime = statSync(jsonlPath).mtime;
+
+      // Compute display title for the session picker
+      let displayTitle: string | undefined;
+      if (meta?.title) {
+        // meta.json has a title — use it directly (may be truncated placeholder or LLM-refined)
+        displayTitle = meta.title;
+      } else if (isAutoTitle(title) && firstUserText) {
+        // Legacy session without meta.json — generate from first user text
+        displayTitle = generateSessionTitle(firstUserText);
+      }
 
       summaries.push({
         id,
@@ -574,6 +596,8 @@ export class SessionManager {
         updatedAt: mtime,
         model: lastUserPreview ?? 'unknown',
         lastUserPreview: lastUserPreview ?? undefined,
+        displayTitle,
+        firstUserText: firstUserText ?? undefined,
       });
     }
 

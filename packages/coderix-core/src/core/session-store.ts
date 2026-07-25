@@ -44,6 +44,10 @@ export function sessionSystemPromptPath(sessionDir: string): string {
   return join(sessionDir, 'system_prompt.md');
 }
 
+export function sessionMetaPath(sessionDir: string): string {
+  return join(sessionDir, 'meta.json');
+}
+
 export function legacySessionJsonPath(sessionDir: string): string {
   return join(sessionDir, 'session.json');
 }
@@ -247,6 +251,7 @@ function extractUserText(content: unknown): string {
 export function readTailMetadata(filePath: string): {
   lastTitle: string | null;
   lastUserPreview: string | null;
+  firstUserText: string | null;
   entryCount: number;
   hasParent: boolean;
   transcriptEntryCount: number;
@@ -254,6 +259,7 @@ export function readTailMetadata(filePath: string): {
   const result = {
     lastTitle: null as string | null,
     lastUserPreview: null as string | null,
+    firstUserText: null as string | null,
     entryCount: 0,
     hasParent: false,
     transcriptEntryCount: 0,
@@ -316,11 +322,118 @@ export function readTailMetadata(filePath: string): {
         } catch { /* skip corrupted */ }
       }
     }
+
+    // Always scan from start for the first user message (for title generation)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!.trim();
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'user' && entry.message) {
+          const text = extractUserText(entry.message.content);
+          if (text) {
+            result.firstUserText = text;
+            break;
+          }
+        }
+      } catch { /* skip corrupted */ }
+    }
   } catch {
     // File missing or unreadable
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Session meta.json — lightweight session metadata
+// ---------------------------------------------------------------------------
+
+export interface SessionMeta {
+  title?: string;
+}
+
+/**
+ * Read session metadata from meta.json.
+ * Returns null if the file doesn't exist or is corrupted.
+ */
+export function readSessionMeta(sessionDir: string): SessionMeta | null {
+  const metaPath = sessionMetaPath(sessionDir);
+  if (!existsSync(metaPath)) return null;
+  try {
+    const raw = readFileSync(metaPath, 'utf-8');
+    return JSON.parse(raw) as SessionMeta;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write session metadata to meta.json.
+ * Creates the session directory if it doesn't exist.
+ */
+export async function writeSessionMeta(
+  sessionDir: string,
+  meta: SessionMeta,
+): Promise<void> {
+  const metaPath = sessionMetaPath(sessionDir);
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  await mkdir(sessionDir, { recursive: true, mode: 0o700 });
+  await writeFile(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+}
+
+// ---------------------------------------------------------------------------
+// Title management
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a session title from the first user message.
+ * If the text is 30 characters or fewer, use it directly.
+ * Otherwise returns a short placeholder (LLM refinement should follow).
+ */
+export function generateSessionTitle(firstUserText: string): string {
+  const cleaned = firstUserText.trim();
+  if (cleaned.length <= 30) return cleaned;
+  return cleaned.slice(0, 10) + '...';
+}
+
+/**
+ * Check whether a session title is auto-generated and could benefit
+ * from LLM-powered summarization.
+ */
+export function isAutoTitle(title: string): boolean {
+  return /^Session [0-9a-f]{8}$/.test(title) || /\.{3}$/.test(title);
+}
+
+/**
+ * Refine a session's title using an LLM summarizer.
+ * Only refines if the first user text is longer than 30 characters
+ * and the current title is still a placeholder (ends with '...').
+ * Writes the result to meta.json.
+ * Returns the new title, or null if no refinement was needed.
+ */
+export async function refineSessionTitle(
+  sessionId: string,
+  summarize: (text: string) => Promise<string>,
+): Promise<string | null> {
+  const dir = sessionDir(sessionId);
+  const jsonlPath = sessionJsonlPath(dir);
+  const { firstUserText } = readTailMetadata(jsonlPath);
+  if (!firstUserText || firstUserText.length <= 30) return null;
+
+  // Skip if meta.json already has a non-placeholder title
+  const meta = readSessionMeta(dir);
+  if (meta?.title && !isAutoTitle(meta.title)) return null;
+
+  try {
+    const title = await summarize(firstUserText);
+    const cleaned = title.trim().slice(0, 20);
+    if (!cleaned) return null;
+    await writeSessionMeta(dir, { title: cleaned });
+    return cleaned;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

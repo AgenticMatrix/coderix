@@ -8,6 +8,7 @@ interface SessionSummary {
   model: string;
   updatedAt: Date;
   lastUserPreview?: string;
+  displayTitle?: string;
 }
 
 interface SessionPickerProps {
@@ -28,12 +29,11 @@ function formatRelativeTime(date: Date): string {
 }
 
 function sessionLabel(s: SessionSummary): string {
+  if (s.displayTitle) return s.displayTitle;
   const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
   if (!isAuto && s.title.length > 0) {
     return s.title.length > 56 ? s.title.slice(0, 56) + '...' : s.title;
   }
-  // Auto-generated title — use first user message as preview
-  if (s.lastUserPreview) return s.lastUserPreview;
   return '--';
 }
 
