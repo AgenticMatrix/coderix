@@ -41,6 +41,7 @@ import type { AgentRegistry } from './agent-registry.js';
 import { estimateTokens, tokenCountWithEstimation } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
+import { sessionDir } from './session-store.js';
 import type { CoreState } from '../state/core-state.js';
 import type { ToolRequestEvent } from '../state/observable.js';
 import { applyToolResultLimits } from './tool-result-limiter.js';
@@ -1374,7 +1375,10 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     // the immediately following message.
     let notificationJustDrained = false;
     const allNotifications: string[] = [];
-    if (config.subAgentRegistry) {
+    // Workers don't need background notifications — those are for the
+    // coordinator / main agent only. A worker seeing another worker's
+    // completion is noise that clutters its transcript.
+    if (config.subAgentRegistry && agentRole !== 'worker') {
       allNotifications.push(...config.subAgentRegistry.drainNotifications());
     }
     allNotifications.push(...drainTaskNotifications());
@@ -1382,6 +1386,43 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     if (autoRetryNotifications.length > 0) {
       allNotifications.push(...autoRetryNotifications);
     }
+
+    // Drain team messages (mid-turn injection).
+    // Team messages arrive during the LLM's tool-use loop (e.g. after Listen),
+    // so they must be drained here, not just in submitMessage().
+    // Always attempt — listTeams is a cheap readdir when no teams exist.
+    const teamMsgBlocks: ContentBlock[] = [];
+    try {
+      const sDir = sessionDir(sessionId);
+      const { listTeams } = await import('../teams/team-store.js');
+      const { drainUnreadMessages: drainTeamMsgs } = await import('../teams/team-mailbox.js');
+      const teamNames = await listTeams(sDir);
+      for (const teamName of teamNames) {
+        const msgs = await drainTeamMsgs(sDir, teamName, 'leader');
+        if (msgs.length > 0) {
+          const msgsText = msgs.map(m =>
+            `[${m.from} → ${m.to}]: ${m.text}`
+          ).join('\n');
+          teamMsgBlocks.push({
+            type: 'text' as const,
+            text: '[Team messages]\n' + msgsText,
+          });
+        }
+      }
+    } catch { /* best-effort */ }
+
+    // Inject team messages as a separate user message so they appear
+    // distinctly from background notifications.
+    if (teamMsgBlocks.length > 0) {
+      const teamMsg = {
+        role: 'user' as const,
+        content: teamMsgBlocks,
+      };
+      messages.push(teamMsg);
+      yield { type: 'user' as const, message: teamMsg };
+      notificationJustDrained = true;
+    }
+
     if (allNotifications.length > 0) {
       notificationJustDrained = true;
       const resultMsg = {

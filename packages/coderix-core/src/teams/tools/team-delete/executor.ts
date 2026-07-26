@@ -11,6 +11,19 @@ export const execute: ToolExecutor = async (input, options) => {
     return { content: 'Error: team_name is required.', isError: true };
   }
 
+  // Hard gate: refuse to delete without explicit confirmation.
+  // The prompt-level restriction alone is not enough — LLMs will still
+  // proactively clean up after tests.
+  if (input.confirmed !== true) {
+    return {
+      content:
+        'TeamDelete requires confirmed: true. '
+        + 'Only delete a team when the user explicitly asks you to. '
+        + 'If the user has not asked to delete this team, do NOT call this tool.',
+      isError: true,
+    };
+  }
+
   const sessionId = options.sessionId;
   if (!sessionId) {
     return { content: 'Error: no active session.', isError: true };

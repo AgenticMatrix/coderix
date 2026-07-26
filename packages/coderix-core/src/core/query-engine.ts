@@ -158,17 +158,20 @@ export class QueryEngine {
     const assembler = this.config.systemPromptAssembler ?? new SystemPromptAssembler();
     const agentRole = getAgentRole(this.config.settings);
 
-    // If coordinator with team active, inject static team declaration into system prompt.
+    // If teams exist on disk, inject static team declarations into system prompt.
     // Dynamic worker list is injected per-turn in submitMessage() to stay cache-friendly.
     let appendPrompt = this.config.appendSystemPrompt;
-    if (agentRole === 'coordinator' && this.config.teamName) {
-      const activeSessionId = this.config.sessionManager.getActive()?.id;
-      if (activeSessionId) {
-        const sd = getSessionDir(activeSessionId);
-        const { loadTeamConfig } = await import('../teams/team-store.js');
-        const teamConfig = await loadTeamConfig(sd, this.config.teamName);
+    const activeSessionId = this.config.sessionManager.getActive()?.id;
+    if (activeSessionId) {
+      const sd = getSessionDir(activeSessionId);
+      const { listTeams, loadTeamConfig } = await import('../teams/team-store.js');
+      const activeTeams = this.config.teamName
+        ? [this.config.teamName]
+        : await listTeams(sd).catch(() => []);
+      for (const teamName of activeTeams) {
+        const teamConfig = await loadTeamConfig(sd, teamName);
         if (teamConfig) {
-          const staticDecl = getTeamLeaderStaticDeclaration(this.config.teamName, teamConfig.description);
+          const staticDecl = getTeamLeaderStaticDeclaration(teamName, teamConfig.description);
           appendPrompt = appendPrompt ? `${appendPrompt}\n\n${staticDecl}` : staticDecl;
         }
       }
@@ -347,35 +350,43 @@ export class QueryEngine {
       }
     }
 
-    // Drain team messages for coordinator (inject unread messages as context)
-    if (this.config.teamName && this.config.settings) {
-      const leaderName = 'leader';
+    // Drain team messages (inject unread messages as context).
+    // Always attempt — listTeams is a cheap readdir when no teams exist.
+    if (this.config.settings) {
       const activeSessionId = this.config.sessionManager.getActive()?.id;
       if (activeSessionId) {
         const sd = getSessionDir(activeSessionId);
-        const teamMsgs = await drainUnreadMessages(sd, this.config.teamName, leaderName);
-        if (teamMsgs.length > 0) {
-          const msgsText = teamMsgs.map(m =>
-            `[${m.from} → ${m.to}]: ${m.text}`
-          ).join('\n');
-          const contextBlock: ContentBlock = {
-            type: 'text',
-            text: '[Team messages]\n' + msgsText,
-          };
-          this.config.sessionManager.addMessage({
-            role: 'user',
-            content: [contextBlock],
-          });
-        }
+        const { listTeams } = await import('../teams/team-store.js');
+        const activeTeams = this.config.teamName
+          ? [this.config.teamName]
+          : await listTeams(sd).catch(() => []);
+        const leaderName = 'leader';
 
-        // Inject dynamic team status (worker list with statuses) at conversation tail.
-        // This stays cache-friendly because it's always the newest user message.
-        const statusBlock = await getTeamStatusBlock(sd, this.config.teamName);
-        if (statusBlock) {
-          this.config.sessionManager.addMessage({
-            role: 'user',
-            content: [{ type: 'text', text: '[Team status]\n' + statusBlock }],
-          });
+        for (const teamName of activeTeams) {
+          const teamMsgs = await drainUnreadMessages(sd, teamName, leaderName);
+          if (teamMsgs.length > 0) {
+            const msgsText = teamMsgs.map(m =>
+              `[${m.from} → ${m.to}]: ${m.text}`
+            ).join('\n');
+            const contextBlock: ContentBlock = {
+              type: 'text',
+              text: '[Team messages]\n' + msgsText,
+            };
+            this.config.sessionManager.addMessage({
+              role: 'user',
+              content: [contextBlock],
+            });
+          }
+
+          // Inject dynamic team status (worker list with statuses) at conversation tail.
+          // This stays cache-friendly because it's always the newest user message.
+          const statusBlock = await getTeamStatusBlock(sd, teamName);
+          if (statusBlock) {
+            this.config.sessionManager.addMessage({
+              role: 'user',
+              content: [{ type: 'text', text: '[Team status]\n' + statusBlock }],
+            });
+          }
         }
       }
     }

@@ -261,6 +261,8 @@ async function resumeAgent(
       maxToolConcurrency: MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
       hookManager: agentSpawn.hookManager,
+      subAgentRegistry: agentSpawn.subAgentRegistry,
+      agentRole: 'worker',
     });
 
     const timeoutPromise = new Promise<'timeout'>((resolve) =>

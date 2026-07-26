@@ -342,6 +342,7 @@ async function runAgentLoop(params: RunAgentLoopParams): Promise<{
         subAgentRegistry: agentSpawn.subAgentRegistry,
         systemPromptAssembler: agentSpawn.systemPromptAssembler,
         agentRegistry: agentSpawn.agentRegistry,
+        agentRole: 'worker',
       });
 
       for await (const msg of generator) {

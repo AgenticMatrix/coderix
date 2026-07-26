@@ -191,6 +191,7 @@ export async function runAgentLoop(params: RunAgentParams): Promise<{
       subAgentRegistry: agentSpawn.subAgentRegistry,
       systemPromptAssembler: agentSpawn.systemPromptAssembler,
       agentRegistry: agentSpawn.agentRegistry,
+      agentRole: 'worker',
       enableCacheControl,
     });
 

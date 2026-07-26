@@ -66,15 +66,39 @@ function findLatestThinking(messages: Message[]): { block: ThinkingBlock; durati
 
 async function restoreSessionAgents(sessionManager: SessionManager): Promise<void> {
   const active = sessionManager.getActive();
-  if (!active?.metadata.subAgentIds?.length) return;
+  if (!active) return;
 
   const registry = getSubAgentRegistry();
   if (!registry) return;
 
   const sDir = sessionDir(active.id);
   const { findAgentOnDisk } = await import('@coderix/core');
+  const { readdirSync, existsSync } = await import('node:fs');
+  const { join } = await import('node:path');
 
-  for (const agentId of active.metadata.subAgentIds) {
+  // Collect agent IDs from both regular sub-agent metadata and team directories.
+  const agentIds = new Set(active.metadata.subAgentIds ?? []);
+
+  // Also scan team directories for team agent IDs not tracked in subAgentIds.
+  const teamsDir = join(sDir, 'teams');
+  if (existsSync(teamsDir)) {
+    try {
+      const teamNames = readdirSync(teamsDir, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
+      for (const teamName of teamNames) {
+        const teamDir = join(teamsDir, teamName);
+        const memberDirs = readdirSync(teamDir, { withFileTypes: true })
+          .filter(d => d.isDirectory() && d.name !== 'inboxes')
+          .map(d => d.name);
+        for (const agentId of memberDirs) {
+          agentIds.add(agentId);
+        }
+      }
+    } catch { /* best-effort */ }
+  }
+
+  for (const agentId of agentIds) {
     if (registry.get(agentId)) continue;
 
     try {
