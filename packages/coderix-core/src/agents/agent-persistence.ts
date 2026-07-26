@@ -16,9 +16,9 @@
  *     meta.json                     # TeamAgentMetadata (extends AgentMetadata)
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, appendFile } from 'node:fs/promises';
 import { existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Message, SessionEntry } from '../core/types.js';
 import {
@@ -283,12 +283,23 @@ export async function saveTeamAgentTranscript(
   sessionDir: string,
   teamName: string,
 ): Promise<void> {
-  const entries: SessionEntry[] = [];
-  let prevUuid: string | null = null;
+  const path = teamAgentTranscriptPath(sessionDir, teamName, agentId);
 
+  // Build new entries, chaining parentUuid from the last existing entry
+  let prevUuid: string | null = null;
+  try {
+    const existing = await readEntries(path);
+    if (existing.length > 0) {
+      prevUuid = existing[existing.length - 1].uuid;
+    }
+  } catch {
+    // File doesn't exist yet — start fresh
+  }
+
+  const newEntries: SessionEntry[] = [];
   for (const msg of transcript) {
     const uuid = randomUUID();
-    entries.push({
+    newEntries.push({
       type: msg.role as 'user' | 'assistant' | 'system',
       uuid,
       parentUuid: prevUuid,
@@ -298,8 +309,10 @@ export async function saveTeamAgentTranscript(
     prevUuid = uuid;
   }
 
-  const path = teamAgentTranscriptPath(sessionDir, teamName, agentId);
-  await rewriteEntries(path, entries);
+  // Append to existing file so poll loop iterations accumulate
+  const lines = newEntries.map((e) => JSON.stringify(e)).join('\n') + '\n';
+  await mkdir(dirname(path), { recursive: true });
+  await appendFile(path, lines, 'utf-8');
 }
 
 export async function getTeamAgentTranscript(
