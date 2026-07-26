@@ -682,11 +682,13 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     const memberIndex = await buildTeamMemberIndex(parentSessionDir);
     diskInfo = await findAgentOnDisk(resolvedId, parentSessionDir);
 
+    const formattedText = `[Team messages]\n[${fromName} -> ${resolvedName}]: ${text}`;
+
     return resumeAgent(
       resolvedId,
       member.agentType,
       transcript,
-      text,
+      formattedText,
       agentSpawn!,
       diskInfo,
       memberIndex,

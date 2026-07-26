@@ -178,20 +178,53 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
       ? [...contentLines.slice(0, 30), `... [${contentLines.length - 30} more lines]`]
       : contentLines;
 
+    // Detect team messages: "[Team messages]\n[from -> to]: text"
+    const isTeamMsg = displayContent.startsWith('[Team messages]');
+
     return (
       <Box flexDirection="column" marginBottom={1} width={maxWidth}>
-        {displayLines.map((line, i) => (
-          <Box key={i} flexDirection="row">
-            <Box width={2}>
-              <Text color="#A855F7" bold>
-                {i === 0 ? '❯' : ' '}
-              </Text>
+        {isTeamMsg ? (
+          // Team message styling — distinct header for inter-agent communication
+          displayLines.map((line, i) => {
+            if (i === 0) {
+              // Header: [Team messages]
+              return (
+                <Box key={i} flexDirection="row">
+                  <Box width={2}>
+                    <Text color="#4ECDC4" bold>→</Text>
+                  </Box>
+                  <Box flexGrow={1}>
+                    <Text color="#4ECDC4" bold>[Team messages]</Text>
+                  </Box>
+                </Box>
+              );
+            }
+            // Message body: [from -> to]: text
+            return (
+              <Box key={i} flexDirection="row">
+                <Box width={2}>
+                  <Text> </Text>
+                </Box>
+                <Box flexGrow={1}>
+                  <Text dimColor={!line.trim()}>{line || ' '}</Text>
+                </Box>
+              </Box>
+            );
+          })
+        ) : (
+          displayLines.map((line, i) => (
+            <Box key={i} flexDirection="row">
+              <Box width={2}>
+                <Text color="#A855F7" bold>
+                  {i === 0 ? '❯' : ' '}
+                </Text>
+              </Box>
+              <Box flexGrow={1} backgroundColor={userBgColor}>
+                <Text color={userTextColor}>{line || ' '}</Text>
+              </Box>
             </Box>
-            <Box flexGrow={1} backgroundColor={userBgColor}>
-              <Text color={userTextColor}>{line || ' '}</Text>
-            </Box>
-          </Box>
-        ))}
+          ))
+        )}
       </Box>
     );
   }

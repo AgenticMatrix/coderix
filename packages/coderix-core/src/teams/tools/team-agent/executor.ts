@@ -147,6 +147,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const filteredDefs = filterToolsForAgent(parentDefs, agentDefForFilter);
   const subToolRegistry = new ToolRegistry();
   for (const def of filteredDefs) {
+    // Listen checks for sub-agent completion notifications, not team inbox
+    // messages. Team agents use the built-in poll loop for communication.
+    if (def.name === 'Listen') continue;
     const registration = agentSpawn.toolRegistry.get(def.name);
     if (registration) {
       subToolRegistry.register(def, registration.execute);
@@ -273,6 +276,10 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     '- When your task is done: report to the leader via SendMessage.',
     '- Teammates have a 30-second idle timeout — reply promptly.',
     '- Do NOT assume others know your status — tell them.',
+    '',
+    'IMPORTANT: You do NOT need to wait or poll for messages. The system',
+    'automatically delivers incoming messages to you. Just complete your',
+    'current task and new messages will appear in your next turn.',
   ].join('\n');
   enrichedPrompt = enrichedPrompt + teamCtx;
 
@@ -330,7 +337,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         const msgs = pending.splice(0, pending.length);
         return [{
           role: 'user',
-          content: '[Team messages - instant delivery]\n' + msgs.join('\n'),
+          content: '[Team messages]\n' + msgs.join('\n'),
         }];
       }
 
