@@ -8,7 +8,8 @@ export const schema: ToolSchema = {
     + '- Stopped/done agent: automatically resumes with full history and text as the new task.\n'
     + '- Use "leader" as agent_name to report to the team leader.\n'
     + '- Use "*" as agent_name to broadcast to all running team members.\n'
-    + '- ALWAYS reply when a teammate sends you a message — they are waiting for your response.',
+    + '- Only reply when there is a specific question to answer or new information to share.\n'
+    + '- Do NOT send pure acknowledgments ("Got it", "Standing by") — they create infinite reply loops.',
   input_schema: {
     type: 'object',
     properties: {
