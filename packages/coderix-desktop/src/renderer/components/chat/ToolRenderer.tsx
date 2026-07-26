@@ -158,8 +158,8 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
   SendMessage: {
     icon: <Users size={13} />,
     label: (input) => {
-      const to = input.to as string ?? '';
-      return `SendMessage → ${to}`;
+      const agentName = input.agent_name as string ?? '';
+      return `SendMessage → ${agentName}`;
     },
   },
   TeamCreate: {

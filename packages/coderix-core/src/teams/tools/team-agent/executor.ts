@@ -245,11 +245,11 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     '',
     '# Team Communication',
     `You are "${agentName}" (\`${agentId}\`) in team "${teamName}".`,
-    `The team leader is at "leader" — use SendMessage(team_name: "${teamName}", to: "leader", text: "...") to report.`,
+    `The team leader is at "leader" — use SendMessage(agent_name: "leader", team_name: "${teamName}", text: "...") to report.`,
     '',
     `Peer workers:\n${peerList}`,
-    `- SendMessage(team_name: "${teamName}", to: "<agent_name>") to message a specific teammate by name`,
-    `- SendMessage(team_name: "${teamName}", to: "*") to broadcast to all workers (use sparingly)`,
+    `- SendMessage(agent_name: "<name>", team_name: "${teamName}", text: "...") to message a specific teammate by name`,
+    `- SendMessage(agent_name: "*", team_name: "${teamName}", text: "...") to broadcast to all workers (use sparingly)`,
     '- Just writing text is NOT visible to others — you MUST use SendMessage',
     '',
     'Your work is coordinated through the task system and teammate messaging.',
@@ -291,8 +291,8 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   const capturedAgentSpawn = agentSpawn;
   const capturedAgentDef = agentDef!;
 
-  const MAX_IDLE_TIME_MS = 5 * 60 * 1000; // 5 minutes idle timeout
-  const POLL_INTERVAL_MS = 500;
+  const MAX_IDLE_TIME_MS = 30 * 1000; // 30 seconds idle timeout
+  const POLL_INTERVAL_MS = 2000; // 2 seconds between polls
 
   /**
    * Poll the agent's team inbox for new messages. Returns unread messages
@@ -441,17 +441,28 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       try {
         let result = await runAgentLoop({ ...runParams, initialMessages });
 
-        // Keep the agent alive: poll inbox for new messages and re-enter
-        // the agent loop when messages arrive. Exit after idle timeout.
+        // Notify leader immediately with the task result, then keep the
+        // agent alive to poll for follow-up messages.
+        await handleTeamAgentBackgroundCompletion(result);
+
         while (!subAbortController.signal.aborted) {
           const messages = await pollTeamInbox();
           if (messages.length === 0) break;
 
-          // Re-enter agent loop with new messages
-          result = await runAgentLoop({ ...runParams, initialMessages: messages });
-        }
+          // Reset status so the agent appears running again
+          capturedAgentSpawn.subAgentRegistry.update(agentId, {
+            status: 'running',
+            notified: false,
+          });
+          updateMemberInTeam(sd, teamName, agentId, {
+            status: 'running',
+          }).catch(() => {});
 
-        await handleTeamAgentBackgroundCompletion(result);
+          result = await runAgentLoop({ ...runParams, initialMessages: messages });
+
+          // Notify again with updated result
+          await handleTeamAgentBackgroundCompletion(result);
+        }
       } catch (err) {
         await handleError(err);
       }
@@ -501,11 +512,22 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       try {
         let result = firstResult;
 
+        // Notify leader immediately with the task result
+        await handleTeamAgentBackgroundCompletion(result);
+
         // Same poll loop as background path: keep agent alive after
         // Ctrl+B moves it to background.
         while (!subAbortController.signal.aborted) {
           const messages = await pollTeamInbox();
           if (messages.length === 0) break;
+
+          capturedAgentSpawn.subAgentRegistry.update(agentId, {
+            status: 'running',
+            notified: false,
+          });
+          updateMemberInTeam(sd, teamName, agentId, {
+            status: 'running',
+          }).catch(() => {});
 
           result = await runWithAgentContext(teamContext, () =>
             runAgentLoop({
@@ -518,9 +540,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
               cwd: worktreePath ?? effectiveCwd,
             }),
           );
-        }
 
-        await handleTeamAgentBackgroundCompletion(result);
+          await handleTeamAgentBackgroundCompletion(result);
+        }
       } catch (err) {
         if (worktreePath) {
           await cleanupAgentWorktree({
@@ -551,46 +573,66 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
   const result = raceResult.result;
 
-  let cleanupNote = '';
-  if (worktreePath) {
-    cleanupNote = await cleanupAgentWorktree({
-      worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-    }, agentSpawn.hookManager);
-  }
+  // Fire-and-forget: persist initial result and start poll loop so the
+  // agent stays alive to receive follow-up messages via SendMessage.
+  // This mirrors the Ctrl+B background path behaviour.
+  void (async () => {
+    try {
+      let loopResult = result;
+      await handleTeamAgentBackgroundCompletion(loopResult);
 
-  const status = result.error ? 'error' : (subAbortController.signal.aborted ? 'stopped' : 'done');
-  const compressed = compressTranscript(result.transcript);
+      while (!subAbortController.signal.aborted) {
+        const messages = await pollTeamInbox();
+        if (messages.length === 0) break;
 
-  agentSpawn.subAgentRegistry.update(agentId, {
-    status, finishedAt: Date.now(),
-    turnCount: result.assistantTurnCount,
-    messageCount: result.transcript.length,
-    toolCount: result.toolCount,
-    result: compressed,
-    error: result.error,
-    transcript: undefined,
-  });
+        capturedAgentSpawn.subAgentRegistry.update(agentId, {
+          status: 'running',
+          notified: false,
+        });
+        updateMemberInTeam(sd, teamName, agentId, {
+          status: 'running',
+        }).catch(() => {});
 
-  updateMemberInTeam(sd, teamName, agentId, {
-    status, finishedAt: Date.now(),
-  }).catch(() => {});
+        loopResult = await runWithAgentContext(teamContext, () =>
+          runAgentLoop({
+            agentId, agentType, prompt, agentSpawn,
+            systemPromptText: enrichedPrompt,
+            effectiveModel, subToolRegistry, subAbortController,
+            effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
+            effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+            initialMessages: messages,
+            cwd: worktreePath ?? effectiveCwd,
+          }),
+        );
 
-  // Persist to disk
-  writeTeamAgentMetadata(agentId, {
-    agentType, worktreePath, description: prompt, displayDescription: description,
-    model: effectiveModel, createdAt: result.startTime, finishedAt: Date.now(),
-    teamName, memberName: agentName, task: prompt, joinedAt: spawnTime,
-    allowedTools: Array.isArray(agentDef.tools) ? agentDef.tools : undefined,
-    disallowedTools: agentDef.disallowedTools,
-    permissionMode: 'auto',
-    maxTurns: agentDef.maxTurns,
-    contextBudget: agentDef.contextBudget,
-  }, sd, teamName).catch(() => {});
-  saveTeamAgentTranscript(agentId, result.transcript, sd, teamName).catch(() => {});
+        await handleTeamAgentBackgroundCompletion(loopResult);
+      }
+    } catch (err) {
+      if (worktreePath) {
+        await cleanupAgentWorktree({
+          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        }, agentSpawn.hookManager).catch(() => {});
+      }
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      agentSpawn.subAgentRegistry.update(agentId, {
+        status: 'error', finishedAt: Date.now(),
+        error: errorMsg,
+        liveToolCalls: [],
+        transcript: undefined,
+      });
+      updateMemberInTeam(sd, teamName, agentId, {
+        status: 'error', finishedAt: Date.now(),
+      }).catch(() => {});
+      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+    }
+  })();
+
+  // Worktree cleanup is deferred to handleTeamAgentBackgroundCompletion
+  // since the agent stays alive for the poll loop.
 
   if (result.error) {
     return {
-      content: `Teammate '${agentName}' (${agentId}) error after ${result.assistantTurnCount} turns: ${result.error}${cleanupNote}`,
+      content: `Teammate '${agentName}' (${agentId}) error after ${result.assistantTurnCount} turns: ${result.error}`,
       isError: true,
       duration: Date.now() - spawnTime,
       metadata: { agentId, teamName, agentName, agentType, error: result.error, worktreePath, toolCalls: extractToolCalls(result.transcript) },
@@ -598,7 +640,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   }
 
   return {
-    content: `Teammate '${agentName}' (${agentId}) completed. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used.\n\n${compressed}${cleanupNote}`,
+    content: `Teammate '${agentName}' (${agentId}) completed initial task. ${result.assistantTurnCount} LLM turns, ${result.toolCount} tools used. Listening for messages...\n\n${compressTranscript(result.transcript)}`,
     isError: false,
     duration: Date.now() - spawnTime,
     metadata: {

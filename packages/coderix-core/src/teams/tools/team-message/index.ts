@@ -7,18 +7,13 @@ const sendMessagePlugin: ToolPlugin = {
   schema,
   executor: execute,
   paramSummary: (input) => {
-    const hasAgentId = !!(input.agent_id as string);
-    if (hasAgentId) {
-      const agentId = input.agent_id as string;
-      const msg = input.message as string;
-      const preview = msg ? (msg.length > 20 ? msg.slice(0, 17) + '...' : msg) : '';
-      return `→ ${agentId}${preview ? ': ' + preview : ''} (resume)`;
-    }
-    const to = input.to as string;
+    const agentName = input.agent_name as string;
     const text = input.text as string;
-    if (!to) return undefined;
+    if (!agentName) return undefined;
     const preview = text ? (text.length > 20 ? text.slice(0, 17) + '...' : text) : '';
-    return to === '*' ? 'broadcast' : `→ ${to}${preview ? ': ' + preview : ''}`;
+    if (agentName === '*') return 'broadcast';
+    if (agentName === 'leader') return `→ leader${preview ? ': ' + preview : ''}`;
+    return `→ ${agentName}${preview ? ': ' + preview : ''}`;
   },
 };
 

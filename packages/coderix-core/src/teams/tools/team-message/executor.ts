@@ -63,10 +63,6 @@ function extractToolCalls(messages: Message[]): ToolCallSummary[] {
   return tools;
 }
 
-/** Trim large tool outputs in historical messages to prevent context bloat
- *  across repeated resumes. Keeps the full message structure but caps
- *  tool_result content at a limit so the model still sees all the context
- *  without O(N) duplication of giant outputs. */
 function trimTranscriptForResume(messages: Message[]): Message[] {
   const MAX_TOOL_OUTPUT = 4000;
   return messages.map((msg) => {
@@ -95,174 +91,10 @@ function trimTranscriptForResume(messages: Message[]): Message[] {
   });
 }
 
-// ── Team messaging mode ──────────────────────────────────────────────
-
-async function handleTeamMessage(
-  input: Record<string, unknown>,
-  sessionDir: string,
-  agentSpawn?: AgentSpawnContext,
-): Promise<ToolResult> {
-  const teamName = input.team_name as string;
-  const to = input.to as string;
-  const text = input.text as string | undefined;
-  const from = (input.from as string) || process.env.CODERIX_AGENT_NAME || process.env.CODERIX_AGENT_ID || 'leader';
-  const messageType = input.message_type as string | undefined;
-
-  const config = await loadTeamConfig(sessionDir, teamName);
-  if (!config) {
-    return {
-      content: `Team '${teamName}' not found. Use TeamCreate to create it first.`,
-      isError: true,
-    };
-  }
-
-  // --- Structured message support ---
-
-  // Shutdown request
-  if (messageType === 'shutdown_request') {
-    const { sendShutdownRequestToMailbox } = await import(
-      '../../../utils/swarm/teammateMailbox.js'
-    );
-    const reason = (input.reason as string) || undefined;
-    const result = await sendShutdownRequestToMailbox(sessionDir, to, teamName, reason);
-    return {
-      content: `Shutdown request sent to '${to}' in team '${teamName}' (requestId: ${result.requestId}).`,
-      isError: false,
-      metadata: { teamName, to, messageType, requestId: result.requestId },
-    };
-  }
-
-  // Shutdown response (approve/reject)
-  if (messageType === 'shutdown_response') {
-    const approve = input.approve as boolean;
-    const reason = input.reason as string | undefined;
-    const { createShutdownApprovedMessage, createShutdownRejectedMessage, writeToMailbox } =
-      await import('../../../utils/swarm/teammateMailbox.js');
-
-    const msg = approve
-      ? createShutdownApprovedMessage({
-          requestId: (input.request_id as string) || 'unknown',
-          from: from,
-        })
-      : createShutdownRejectedMessage({
-          requestId: (input.request_id as string) || 'unknown',
-          from: from,
-          reason: reason || 'Rejected by user',
-        });
-
-    await writeToMailbox(sessionDir, to, {
-      from,
-      text: JSON.stringify(msg),
-      timestamp: new Date().toISOString(),
-    });
-
-    return {
-      content: approve
-        ? `Shutdown approved for '${to}' in team '${teamName}'.`
-        : `Shutdown rejected for '${to}' in team '${teamName}'. Reason: ${reason || 'unspecified'}`,
-      isError: false,
-      metadata: { teamName, to, messageType, approved: approve },
-    };
-  }
-
-  // --- Plain text messaging ---
-
-  if (!text) {
-    return {
-      content: 'Message text is required for plain text messages. Use message_type for structured messages.',
-      isError: true,
-    };
-  }
-
-  // Resolve sender name
-  const fromName = from === 'leader' ? 'leader' : (config.members.find(m => m.name === from || m.agentId === from)?.name ?? from);
-
-  if (to === '*') {
-    let sent = 0;
-    let instantCount = 0;
-    for (const member of config.members) {
-      // Try in-memory fast path first for running agents
-      let delivered = false;
-      if (agentSpawn && text) {
-        const recipientRecord = agentSpawn.subAgentRegistry.list()
-          .find(r => r.name.includes(member.name) && r.status === 'running');
-        if (recipientRecord) {
-          if (!recipientRecord.pendingMessages) {
-            recipientRecord.pendingMessages = [];
-          }
-          recipientRecord.pendingMessages.push(`[${fromName} -> ${member.name}]: ${text}`);
-          instantCount++;
-          sent++;
-          delivered = true;
-        }
-      }
-      if (!delivered) {
-        try {
-          await sendMessage(sessionDir, teamName, fromName, member.name, text);
-          sent++;
-        } catch {
-          // Skip unreachable members
-        }
-      }
-    }
-    return {
-      content: `Broadcast message sent to ${sent}/${config.members.length} worker(s) in '${teamName}'.${instantCount > 0 ? ` (${instantCount} delivered instantly)` : ''}`,
-      isError: false,
-      metadata: { teamName, broadcast: true, recipientCount: sent, instantCount, fromName, toName: 'all' },
-    };
-  }
-
-  // Resolve recipient: support "leader", agent name (primary), and agentId (fallback)
-  let resolvedTo: string;
-  let resolvedName: string;
-  if (to === 'leader') {
-    resolvedTo = 'leader';
-    resolvedName = 'leader';
-  } else {
-    const recipient = config.members.find(m => m.name === to) ?? config.members.find(m => m.agentId === to);
-    if (!recipient) {
-      const available = config.members.map(m => `${m.name}`).join(', ');
-      return {
-        content: `Recipient '${to}' not found in team '${teamName}'. Available: leader, ${available}`,
-        isError: true,
-      };
-    }
-    resolvedTo = recipient.name;
-    resolvedName = recipient.name;
-  }
-
-  // ── In-memory fast path: deliver directly to running agents ──────
-  if (agentSpawn && resolvedTo !== 'leader' && text) {
-    const recipientRecord = agentSpawn.subAgentRegistry.list()
-      .find(r => r.name.includes(resolvedName) && r.status === 'running');
-    if (recipientRecord) {
-      if (!recipientRecord.pendingMessages) {
-        recipientRecord.pendingMessages = [];
-      }
-      recipientRecord.pendingMessages.push(`[${fromName} -> ${resolvedName}]: ${text}`);
-      return {
-        content: `Message delivered instantly to ${resolvedName} in team '${teamName}'.`,
-        isError: false,
-        metadata: { teamName, to: resolvedTo, fromName, toName: resolvedName, instant: true },
-      };
-    }
-  }
-
-  await sendMessage(sessionDir, teamName, fromName, resolvedTo, text);
-
-  return {
-    content: `Message sent to ${resolvedName} in team '${teamName}'.`,
-    isError: false,
-    metadata: { teamName, to: resolvedTo, fromName, toName: resolvedName },
-  };
-}
-
-// ── Sub-agent resume mode ────────────────────────────────────────────
+// ── Team member index (name ↔ agentId) ─────────────────────────────────
 
 interface TeamMemberIndex {
-  /** agentId → name */
   byId: Map<string, string>;
-  /** name → agentId */
   byName: Map<string, string>;
 }
 
@@ -284,102 +116,28 @@ async function buildTeamMemberIndex(sessionDir: string | undefined): Promise<Tea
   return { byId, byName };
 }
 
-async function handleSubAgentResume(
-  input: Record<string, unknown>,
-  options: { agentSpawn?: AgentSpawnContext },
+// ── Auto-resume a stopped agent ──────────────────────────────────────
+
+async function resumeAgent(
+  agentId: string,
+  agentType: string,
+  transcript: Message[],
+  text: string,
+  agentSpawn: AgentSpawnContext,
+  diskInfo: DiskAgentInfo | null,
+  memberIndex: TeamMemberIndex,
+  parentSessionDir: string,
 ): Promise<ToolResult> {
-  const agentSpawn = options.agentSpawn;
-  if (!agentSpawn) {
-    return { content: 'SendMessage sub-agent resume requires agentSpawn context.', isError: true };
-  }
-
-  const agentId = input.agent_id as string;
-  const message = input.message as string;
-
-  if (!agentId || !message) {
-    return { content: 'Both agent_id and message are required for sub-agent resume mode.', isError: true };
-  }
-
   const registry = agentSpawn.subAgentRegistry;
-  const parentSessionId = agentSpawn.sessionManager.getActive()?.id;
-  const parentSessionDir = parentSessionId ? getSessionDir(parentSessionId) : undefined;
-  const memberIndex = await buildTeamMemberIndex(parentSessionDir);
-  let agent = registry.get(agentId);
-  let diskInfo: DiskAgentInfo | null = null;
-
-  // ── Disk fallback: try loading agent from disk (cross-session resume) ─
-  if (!agent) {
-    if (!parentSessionDir) {
-      return {
-        content: 'No active session directory available for disk fallback.',
-        isError: true,
-      };
-    }
-    diskInfo = await findAgentOnDisk(agentId, parentSessionDir);
-
-    // ── Name-based fallback: resolve name → agentId via team configs ─
-    if (!diskInfo) {
-      const resolvedId = memberIndex.byName.get(agentId);
-      if (resolvedId) {
-        diskInfo = await findAgentOnDisk(resolvedId, parentSessionDir);
-      }
-    }
-
-    if (!diskInfo) {
-      return {
-        content: [
-          `Agent '${agentId}' not found in registry or on disk.`,
-          'The agent may have been cleaned up or never existed.',
-          'Use TaskGet to list available agents.',
-        ].join('\n'),
-        isError: true,
-      };
-    }
-
-    // Re-register in memory
-    const diskAbortController = new AbortController();
-    registry.register({
-      id: agentId,
-      name: `${diskInfo.meta.agentType}-${agentId}`,
-      agentType: (diskInfo.meta.agentType as any) || 'general-purpose',
-      status: 'stopped',
-      prompt: diskInfo.meta.description ?? '',
-      createdAt: diskInfo.meta.createdAt,
-      turnCount: diskInfo.transcript.filter((m: Message) => m.role === 'assistant').length,
-      messageCount: diskInfo.transcript.length,
-      toolCount: 0,
-      abortController: diskAbortController,
-      notified: true,
-      transcript: diskInfo.transcript,
-    });
-
-    agent = registry.get(agentId);
-    if (!agent) {
-      return { content: `Failed to re-register agent '${agentId}' from disk.`, isError: true };
-    }
-  }
-
-  if (agent.status === 'running') {
-    return {
-      content: `Cannot message running agent '${agentId}'. Wait for it to complete, or use TaskStop to cancel it first.`,
-      isError: true,
-    };
-  }
-
-  const transcript = agent.transcript ?? [];
-  const agentType = agent.agentType;
   const agentDef = agentSpawn.agentRegistry?.get(agentType);
 
-  // Trim large tool outputs in the transcript to prevent context bloat.
-  // Each resume appends the full transcript, so after N resumes the model
-  // receives O(N) copies of every tool output, causing multi-minute delays.
   const trimmedTranscript = trimTranscriptForResume(transcript);
   const resumedMessages: Message[] = [
     ...trimmedTranscript,
-    { role: 'user', content: message },
+    { role: 'user', content: text },
   ];
 
-  // Recreate sub-agent tooling — use resume-specific filtering
+  // Build sub-agent tooling
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
   const filteredDefs = agentDef
     ? filterToolsForResumedAgent(parentDefs, agentDef)
@@ -392,9 +150,7 @@ async function handleSubAgentResume(
     }
   }
 
-  // ── Restore team SendMessage wrapper for resumed team agents ──────
-  // When a team agent is resumed, re-register SendMessage with the
-  // leader's session dir override so team messaging works correctly.
+  // Restore team SendMessage wrapper
   const isTeamAgent = !!(diskInfo?.teamName);
   const resumeAgentName = diskInfo?.memberName || memberIndex.byId.get(agentId);
   if (isTeamAgent && resumeAgentName && parentSessionDir) {
@@ -435,8 +191,7 @@ async function handleSubAgentResume(
 
   const subCheckpointManager = new CheckpointManager();
 
-  // Build system prompt — use saved prompt from disk for team agents,
-  // otherwise assemble from agent definition + env info.
+  // Build system prompt
   let systemPromptText: string;
   if (diskInfo?.systemPrompt) {
     systemPromptText = diskInfo.systemPrompt;
@@ -476,7 +231,6 @@ async function handleSubAgentResume(
     abortController: subAbortController,
   });
 
-  // Update team config status so TeamPanel shows the resumed agent
   if (diskInfo?.teamName && parentSessionDir) {
     const { updateMemberInTeam } = await import('../../../utils/swarm/teamHelpers.js');
     updateMemberInTeam(parentSessionDir, diskInfo.teamName, agentId, { status: 'running' }).catch(() => {});
@@ -488,7 +242,7 @@ async function handleSubAgentResume(
   const newTranscript: Message[] = [];
   const accumulatedLiveCalls: ToolCallSummary[] = [];
 
-  const RESUMED_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  const RESUMED_TIMEOUT_MS = 10 * 60 * 1000;
 
   try {
     const generator = query({
@@ -540,9 +294,9 @@ async function handleSubAgentResume(
             case 'system':
               if (msg.subtype === 'progress') {
                 registry.update(agentId, {
-                  turnCount: agent.turnCount + assistantTurnCount,
+                  turnCount: (registry.get(agentId)?.turnCount ?? 0) + assistantTurnCount,
                   messageCount: transcript.length + newTranscript.length,
-                  toolCount: agent.toolCount + toolCount,
+                  toolCount: (registry.get(agentId)?.toolCount ?? 0) + toolCount,
                   liveToolCalls: [...accumulatedLiveCalls],
                 });
               }
@@ -558,28 +312,30 @@ async function handleSubAgentResume(
       timedOut = true;
     }
 
-    const cumulativeTranscript = [...transcript, { role: 'user' as const, content: message }, ...newTranscript];
+    const cumulativeTranscript = [...transcript, { role: 'user' as const, content: text }, ...newTranscript];
     const resultText = timedOut
       ? `(timed out after ${RESUMED_TIMEOUT_MS / 1000}s)`
       : compressTranscript(newTranscript);
+
+    const baseTurnCount = registry.get(agentId)?.turnCount ?? 0;
+    const baseToolCount = registry.get(agentId)?.toolCount ?? 0;
 
     const finalStatus = subAbortController.signal.aborted ? 'stopped' : 'done';
     registry.update(agentId, {
       status: finalStatus,
       finishedAt: Date.now(),
-      turnCount: agent.turnCount + assistantTurnCount,
+      turnCount: baseTurnCount + assistantTurnCount,
       messageCount: cumulativeTranscript.length,
-      toolCount: agent.toolCount + toolCount,
+      toolCount: baseToolCount + toolCount,
       result: resultText,
       transcript: cumulativeTranscript,
     });
 
-    // Persist updated transcript to disk
     if (parentSessionDir) {
       saveAgentTranscript(agentId, cumulativeTranscript, parentSessionDir).catch(() => {});
       writeAgentMetadata(agentId, {
-        agentType, worktreePath: undefined, description: agent.prompt,
-        createdAt: agent.createdAt, finishedAt: Date.now(),
+        agentType, worktreePath: undefined, description: '',
+        createdAt: registry.get(agentId)?.createdAt ?? Date.now(), finishedAt: Date.now(),
       }, parentSessionDir).catch(() => {});
       if (diskInfo?.teamName) {
         const { updateMemberInTeam } = await import('../../../utils/swarm/teamHelpers.js');
@@ -600,7 +356,7 @@ async function handleSubAgentResume(
         agentId, agentType, resumed: true,
         agentName: agentDisplayName,
         turnCount: assistantTurnCount, toolCount,
-        totalTurns: agent.turnCount + assistantTurnCount,
+        totalTurns: baseTurnCount + assistantTurnCount,
         duration: Date.now() - startTime,
         toolCalls: extractToolCalls(newTranscript),
       },
@@ -610,7 +366,7 @@ async function handleSubAgentResume(
     registry.update(agentId, {
       status: 'error',
       finishedAt: Date.now(),
-      turnCount: agent.turnCount + assistantTurnCount,
+      turnCount: (registry.get(agentId)?.turnCount ?? 0) + assistantTurnCount,
       error: errorMsg,
     });
     if (diskInfo?.teamName && parentSessionDir) {
@@ -629,38 +385,317 @@ async function handleSubAgentResume(
   }
 }
 
-// ── Main executor ───────────────────────────────────────────────────
+// ── Legacy internal resume (non-team sub-agents) ─────────────────────
+// Used by query-engine.sendSubAgentMessage, not exposed to the model.
 
-export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
-  const hasAgentId = !!(input.agent_id as string);
-  const hasTeamName = !!(input.team_name as string);
+async function handleLegacySubAgentResume(
+  agentId: string,
+  message: string,
+  options: Record<string, unknown>,
+): Promise<ToolResult> {
+  const agentSpawn = (options as any).agentSpawn as AgentSpawnContext | undefined;
+  if (!agentSpawn) {
+    return { content: 'SendMessage sub-agent resume requires agentSpawn context.', isError: true };
+  }
 
-  if (hasAgentId && hasTeamName) {
+  const registry = agentSpawn.subAgentRegistry;
+  const parentSessionId = agentSpawn.sessionManager.getActive()?.id;
+  const parentSessionDir = parentSessionId ? getSessionDir(parentSessionId) : undefined;
+  let agent = registry.get(agentId);
+  let diskInfo: DiskAgentInfo | null = null;
+
+  if (!agent) {
+    if (!parentSessionDir) {
+      return { content: 'No active session directory available for disk fallback.', isError: true };
+    }
+    diskInfo = await findAgentOnDisk(agentId, parentSessionDir);
+    if (!diskInfo) {
+      return {
+        content: `Agent '${agentId}' not found in registry or on disk. Use TaskGet to list available agents.`,
+        isError: true,
+      };
+    }
+
+    const diskAbortController = new AbortController();
+    registry.register({
+      id: agentId,
+      name: `${diskInfo.meta.agentType}-${agentId}`,
+      agentType: (diskInfo.meta.agentType as any) || 'general-purpose',
+      status: 'stopped',
+      prompt: diskInfo.meta.description ?? '',
+      createdAt: diskInfo.meta.createdAt,
+      turnCount: diskInfo.transcript.filter((m: Message) => m.role === 'assistant').length,
+      messageCount: diskInfo.transcript.length,
+      toolCount: 0,
+      abortController: diskAbortController,
+      notified: true,
+      transcript: diskInfo.transcript,
+    });
+    agent = registry.get(agentId);
+    if (!agent) {
+      return { content: `Failed to re-register agent '${agentId}' from disk.`, isError: true };
+    }
+  }
+
+  if (agent.status === 'running') {
     return {
-      content: 'Provide either agent_id (sub-agent resume) or team_name (team messaging), not both.',
+      content: `Cannot message running agent '${agentId}'. Wait for it to complete, or use TaskStop to cancel it first.`,
       isError: true,
     };
   }
 
-  if (hasAgentId) {
-    return handleSubAgentResume(input, options as unknown as { agentSpawn?: AgentSpawnContext });
+  // Delegate to the unified resume function
+  const memberIndex = await buildTeamMemberIndex(parentSessionDir);
+  return resumeAgent(
+    agentId,
+    agent.agentType,
+    agent.transcript ?? [],
+    message,
+    agentSpawn,
+    diskInfo,
+    memberIndex,
+    parentSessionDir ?? '',
+  );
+}
+
+// ── Main executor ───────────────────────────────────────────────────
+
+export const execute: ToolExecutor = async (input, options): Promise<ToolResult> => {
+  // ── Backward-compatible internal path: agent_id + message (non-team sub-agents) ─
+  // Used by query-engine.sendSubAgentMessage for resuming regular (non-team)
+  // sub-agents via the TUI bridge. Not exposed in the model-facing schema.
+  const legacyAgentId = input.agent_id as string | undefined;
+  const legacyMessage = input.message as string | undefined;
+  if (legacyAgentId && legacyMessage) {
+    return handleLegacySubAgentResume(legacyAgentId, legacyMessage, options);
   }
 
-  if (hasTeamName) {
-    // Prefer _teamSessionDir override (set by TeamAgent wrapper) over the
-    // caller's own session dir, so workers always resolve team configs and
-    // inboxes against the leader's session directory.
-    const teamSessionDir = input._teamSessionDir as string | undefined;
-    const sessionId = options.sessionId;
-    if (!teamSessionDir && !sessionId) {
-      return { content: 'Error: no active session.', isError: true };
+  const agentName = input.agent_name as string;
+  const teamName = input.team_name as string;
+  const text = input.text as string | undefined;
+  const from = (input.from as string) || process.env.CODERIX_AGENT_NAME || process.env.CODERIX_AGENT_ID || 'leader';
+  const messageType = input.message_type as string | undefined;
+
+  // Resolve session dir — prefer _teamSessionDir override for workers
+  const teamSessionDir = input._teamSessionDir as string | undefined;
+  const sessionId = options.sessionId;
+  if (!teamSessionDir && !sessionId) {
+    return { content: 'Error: no active session.', isError: true };
+  }
+  const sd = teamSessionDir || getSessionDir(sessionId!);
+
+  if (!teamName) {
+    return { content: 'team_name is required.', isError: true };
+  }
+
+  const config = await loadTeamConfig(sd, teamName);
+  if (!config) {
+    return {
+      content: `Team '${teamName}' not found. Use TeamCreate to create it first.`,
+      isError: true,
+    };
+  }
+
+  // ── Structured message: shutdown_request ─────────────────────────
+  if (messageType === 'shutdown_request') {
+    if (!agentName) {
+      return { content: 'agent_name is required for shutdown_request.', isError: true };
     }
-    const sd = teamSessionDir || getSessionDir(sessionId!);
-    return handleTeamMessage(input, sd, options.agentSpawn);
+    const { sendShutdownRequestToMailbox } = await import(
+      '../../../utils/swarm/teammateMailbox.js'
+    );
+    const reason = (input.reason as string) || undefined;
+    const result = await sendShutdownRequestToMailbox(sd, agentName, teamName, reason);
+    return {
+      content: `Shutdown request sent to '${agentName}' in team '${teamName}' (requestId: ${result.requestId}).`,
+      isError: false,
+      metadata: { teamName, agentName, messageType, requestId: result.requestId },
+    };
+  }
+
+  // ── Structured message: shutdown_response ────────────────────────
+  if (messageType === 'shutdown_response') {
+    if (!agentName) {
+      return { content: 'agent_name is required for shutdown_response.', isError: true };
+    }
+    const approve = input.approve as boolean;
+    const reason = input.reason as string | undefined;
+    const { createShutdownApprovedMessage, createShutdownRejectedMessage, writeToMailbox } =
+      await import('../../../utils/swarm/teammateMailbox.js');
+
+    const msg = approve
+      ? createShutdownApprovedMessage({
+          requestId: (input.request_id as string) || 'unknown',
+          from,
+        })
+      : createShutdownRejectedMessage({
+          requestId: (input.request_id as string) || 'unknown',
+          from,
+          reason: reason || 'Rejected by user',
+        });
+
+    await writeToMailbox(sd, agentName, {
+      from,
+      text: JSON.stringify(msg),
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      content: approve
+        ? `Shutdown approved for '${agentName}' in team '${teamName}'.`
+        : `Shutdown rejected for '${agentName}' in team '${teamName}'. Reason: ${reason || 'unspecified'}`,
+      isError: false,
+      metadata: { teamName, agentName, messageType, approved: approve },
+    };
+  }
+
+  // ── Plain text messaging — agent_name is required ─────────────────
+  if (!agentName) {
+    return {
+      content: 'agent_name is required. Use agent_name: "<name>", agent_name: "leader", or agent_name: "*" for broadcast.',
+      isError: true,
+    };
+  }
+
+  if (!text) {
+    return {
+      content: 'text is required for plain text messages.',
+      isError: true,
+    };
+  }
+
+  // Resolve sender name
+  const fromName = from === 'leader' ? 'leader' : (config.members.find(m => m.name === from || m.agentId === from)?.name ?? from);
+
+  const agentSpawn = options.agentSpawn;
+
+  // ── Broadcast ─────────────────────────────────────────────────────
+  if (agentName === '*') {
+    let sent = 0;
+    let instantCount = 0;
+    for (const member of config.members) {
+      let delivered = false;
+      if (agentSpawn) {
+        const recipientRecord = agentSpawn.subAgentRegistry.list()
+          .find(r => r.name.includes(member.name) && r.status === 'running');
+        if (recipientRecord) {
+          if (!recipientRecord.pendingMessages) {
+            recipientRecord.pendingMessages = [];
+          }
+          recipientRecord.pendingMessages.push(`[${fromName} -> ${member.name}]: ${text}`);
+          instantCount++;
+          sent++;
+          delivered = true;
+        }
+      }
+      if (!delivered) {
+        try {
+          await sendMessage(sd, teamName, fromName, member.name, text);
+          sent++;
+        } catch {
+          // Skip unreachable members
+        }
+      }
+    }
+    return {
+      content: `Broadcast message sent to ${sent}/${config.members.length} worker(s) in '${teamName}'.${instantCount > 0 ? ` (${instantCount} delivered instantly)` : ''}`,
+      isError: false,
+      metadata: { teamName, broadcast: true, recipientCount: sent, instantCount, fromName, agentName: '*' },
+    };
+  }
+
+  // ── Leader message ────────────────────────────────────────────────
+  if (agentName === 'leader') {
+    await sendMessage(sd, teamName, fromName, 'leader', text);
+    return {
+      content: `Message sent to leader in team '${teamName}'.`,
+      isError: false,
+      metadata: { teamName, agentName: 'leader', fromName },
+    };
+  }
+
+  // ── Unicast: resolve recipient by name (primary) or agentId (fallback) ─
+  const member = config.members.find(m => m.name === agentName) ?? config.members.find(m => m.agentId === agentName);
+  if (!member) {
+    const available = config.members.map(m => m.name).join(', ');
+    return {
+      content: `Agent '${agentName}' not found in team '${teamName}'. Available: leader, ${available}. Use TeamAgent to create a new worker first.`,
+      isError: true,
+    };
+  }
+
+  const resolvedName = member.name;
+  const resolvedId = member.agentId;
+
+  // ── Check registry for running agent → deliver message ────────────
+  if (agentSpawn) {
+    const runningRecord = agentSpawn.subAgentRegistry.list()
+      .find(r => r.name.includes(resolvedName) && r.status === 'running');
+    if (runningRecord) {
+      // In-memory fast path
+      if (!runningRecord.pendingMessages) {
+        runningRecord.pendingMessages = [];
+      }
+      runningRecord.pendingMessages.push(`[${fromName} -> ${resolvedName}]: ${text}`);
+      return {
+        content: `Message delivered instantly to ${resolvedName} in team '${teamName}'.`,
+        isError: false,
+        metadata: { teamName, agentName: resolvedName, fromName, instant: true },
+      };
+    }
+  }
+
+  // Write to inbox for running agents not in the in-memory registry
+  await sendMessage(sd, teamName, fromName, resolvedName, text);
+
+  // ── Check if agent is stopped → auto-resume ───────────────────────
+  const registry = agentSpawn?.subAgentRegistry;
+  let stoppedRecord = registry?.get(resolvedId);
+  let diskInfo: DiskAgentInfo | null = null;
+
+  if (!stoppedRecord || stoppedRecord.status === 'running') {
+    // Agent is running (message delivered above) or not in registry at all
+    if (!stoppedRecord) {
+      // Check if the message arrived at a running agent outside our registry
+      // (e.g. different process). Just return "sent".
+      return {
+        content: `Message sent to ${resolvedName} in team '${teamName}'.`,
+        isError: false,
+        metadata: { teamName, agentName: resolvedName, fromName },
+      };
+    }
+    // Running agent — message already delivered above
+    return {
+      content: `Message sent to ${resolvedName} in team '${teamName}'.`,
+      isError: false,
+      metadata: { teamName, agentName: resolvedName, fromName },
+    };
+  }
+
+  // Agent is stopped/done/error in registry — auto-resume
+  if (stoppedRecord.status === 'done' || stoppedRecord.status === 'stopped' || stoppedRecord.status === 'error') {
+    const transcript = stoppedRecord.transcript ?? [];
+
+    // Try to get diskInfo for team context restoration
+    const parentSessionDir = sd;
+    const memberIndex = await buildTeamMemberIndex(parentSessionDir);
+    diskInfo = await findAgentOnDisk(resolvedId, parentSessionDir);
+
+    return resumeAgent(
+      resolvedId,
+      member.agentType,
+      transcript,
+      text,
+      agentSpawn!,
+      diskInfo,
+      memberIndex,
+      parentSessionDir,
+    );
   }
 
   return {
-    content: 'SendMessage requires either agent_id + message (sub-agent resume) or team_name + to + text (team messaging).',
-    isError: true,
+    content: `Message sent to ${resolvedName} in team '${teamName}'.`,
+    isError: false,
+    metadata: { teamName, agentName: resolvedName, fromName },
   };
 };

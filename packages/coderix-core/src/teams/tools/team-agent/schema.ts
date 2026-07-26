@@ -15,7 +15,7 @@ Prerequisites:
 - A team must already exist (use TeamCreate first)
 - The team_name must match an existing team
 
-The worker will be registered in the team and can be messaged via SendMessage(to: "<agentId>") or SendMessage(to: "<name>").`,
+The worker will be registered in the team and can be messaged via SendMessage(agent_name: "<name>", team_name: "<team>", text: "...").`,
 
   input_schema: {
     type: 'object',

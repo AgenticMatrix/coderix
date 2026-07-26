@@ -180,51 +180,49 @@ describe('TaskStop executor (sub-agent stop)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// SendMessage (team-message executor, sub-agent resume mode)
+// SendMessage (team-message executor, unified API)
 // ---------------------------------------------------------------------------
 
 describe('SendMessage executor', () => {
-  it('should require agent_id or team_name', async () => {
+  it('should require team_name', async () => {
     const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
     const result = await execute({}, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(result.isError).toBe(true);
-    expect(result.content).toContain('agent_id');
+    expect(result.content).toContain('team_name');
   });
 
-  it('should require message along with agent_id', async () => {
-    const agentSpawn = buildAgentSpawn();
+  it('should require agent_name and text', async () => {
     const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
 
-    const r1 = await execute({}, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
+    const r1 = await execute({ team_name: 'test' }, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(r1.isError).toBe(true);
-    expect(r1.content).toContain('agent_id');
+    expect(r1.content).toContain('agent_name');
 
-    const r2 = await execute({ agent_id: 'sub-1' }, { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
+    const r2 = await execute({ team_name: 'test', agent_name: 'alice' }, { sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal });
     expect(r2.isError).toBe(true);
-    expect(r2.content).toContain('message');
+    expect(r2.content).toContain('text');
   });
 
   it('should return error for unknown agent', async () => {
     const agentSpawn = buildAgentSpawn();
     const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
     const result = await execute(
-      { agent_id: 'nonexistent', message: 'Hello' },
+      { agent_name: 'nonexistent', team_name: 'test', text: 'Hello' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
     );
     expect(result.isError).toBe(true);
     expect(result.content).toContain('not found');
   });
 
-  it('should reject messaging a running agent', async () => {
+  it('should deliver message to running agent', async () => {
     const agentSpawn = buildAgentSpawn();
-    seedAgent(agentSpawn.subAgentRegistry, 'sub-running', { status: 'running' });
-
     const { execute } = await import('../../packages/coderix-core/src/teams/tools/team-message/executor.js');
     const result = await execute(
-      { agent_id: 'sub-running', message: 'Hello' },
+      { agent_name: 'leader', team_name: 'test', text: 'Hello' },
       { agentSpawn, sessionId: 's1', cwd: '/tmp', signal: new AbortController().signal },
     );
-    expect(result.isError).toBe(true);
-    expect(result.content).toContain('Cannot message running');
+    // Leader message should succeed (writes to leader inbox)
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('sent');
   });
 });

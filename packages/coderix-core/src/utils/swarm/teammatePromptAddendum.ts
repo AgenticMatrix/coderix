@@ -22,13 +22,13 @@ export function buildTeammatePromptAddendum(opts: {
 # Team Communication
 
 You are "${opts.myName}" (\`${opts.myAgentId}\`) in team "${opts.teamName}".
-The team leader is at "leader" — use SendMessage(to: "leader", text: "...") to report.
+The team leader is at "leader" — use SendMessage(agent_name: "leader", team_name: "${opts.teamName}", text: "...") to report.
 
 Peer workers:
 ${peerList || '  (none)'}
 
-- SendMessage(to: "<agentId>") to message a specific teammate
-- SendMessage(to: "*") to broadcast to all workers
+- SendMessage(agent_name: "<name>", team_name: "${opts.teamName}", text: "...") to message a specific teammate
+- SendMessage(agent_name: "*", team_name: "${opts.teamName}", text: "...") to broadcast to all workers
 - Just writing text in your response is NOT visible to others — you MUST use SendMessage
 `;
 }

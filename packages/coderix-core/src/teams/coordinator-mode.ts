@@ -43,9 +43,10 @@ export function getTeamLeaderStaticDeclaration(
     '',
     'IMPORTANT — SendMessage addressing:',
     '- Workers are addressed by agent name (e.g. "alice"). Agent IDs also work as fallback.',
-    '- SendMessage(to: "<agent_name>", text: "...") — use the agent name from the worker list below',
-    '- SendMessage(to: "*") — broadcast to all workers',
-    '- SendMessage(to: "leader") — workers use this to reach you',
+    '- SendMessage(agent_name: "<name>", team_name: "<team>", text: "...") — use the agent name from the worker list below',
+    '- SendMessage(agent_name: "*", team_name: "<team>", text: "...") — broadcast to all workers',
+    '- SendMessage(agent_name: "leader", team_name: "<team>", text: "...") — workers use this to reach you',
+    '- Stopped workers are auto-resumed when you send them a message — no separate resume step needed',
     '',
   ].join('\n');
 }

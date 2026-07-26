@@ -65,8 +65,8 @@ export const workerAgent: BuiltInAgentDefinition = {
     '- Include absolute file paths and line numbers where relevant.',
     '- If you hit a blocker you cannot resolve, report it clearly and stop.',
     '',
-    'When communicating with your leader, use SendMessage(to: "leader", text: "...").',
-    'To message a peer worker, use their agentId (e.g. SendMessage(to: "swarm-xxx", text: "...")).',
+    'When communicating with your leader, use SendMessage(agent_name: "leader", team_name: "<team>", text: "...").',
+    'To message a peer worker, use their agent name (e.g. SendMessage(agent_name: "alice", team_name: "<team>", text: "...")).',
     'Your final response is your deliverable. Make it self-contained and actionable.',
   ].join('\n'),
 };

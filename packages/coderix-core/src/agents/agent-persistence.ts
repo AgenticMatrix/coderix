@@ -351,7 +351,9 @@ export function writeTeamAgentSystemPrompt(
     const dir = teamAgentDir(sessionDir, teamName, agentId);
     mkdirSync(dir, { recursive: true });
     writeFileSync(teamAgentSystemPromptPath(sessionDir, teamName, agentId), text, 'utf-8');
-  } catch { /* best-effort */ }
+  } catch (err) {
+    console.warn(`[agent-persistence] Failed to write team agent system prompt for ${agentId}: ${(err as Error).message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

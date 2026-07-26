@@ -1,9 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { Box, Text, useInput } from '@coderix/ink';
-import { listTeams, loadTeamConfig } from '@coderix/core';
+import { listTeams, loadTeamConfig, readTeamAgentMetadata } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamConfig, TeamMember } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import type { TeamContextState } from '@coderix/core';
 
@@ -103,7 +105,42 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
         const teamAgentIds = new Set<string>();
 
         for (const name of names) {
-          const cfg = await loadTeamConfig(sessionDir!, name);
+          let cfg = await loadTeamConfig(sessionDir!, name);
+          if (!cfg) {
+            // Fallback: config.json missing — reconstruct from agent meta.json files
+            const teamDir = join(sessionDir!, 'teams', name);
+            try {
+              const agentDirs = (await readdir(teamDir, { withFileTypes: true }))
+                .filter(e => e.isDirectory() && e.name !== 'inboxes');
+              const fallbackMembers: TeamMember[] = [];
+              for (const d of agentDirs) {
+                const meta = await readTeamAgentMetadata(d.name, sessionDir!, name);
+                if (meta) {
+                  const status: TeamMember['status'] = meta.finishedAt ? 'done' : 'running';
+                  fallbackMembers.push({
+                    agentId: d.name,
+                    name: meta.memberName || meta.displayDescription || d.name,
+                    agentType: meta.agentType,
+                    status,
+                    task: meta.task ?? meta.description ?? '',
+                    teamName: name,
+                    joinedAt: meta.joinedAt ?? meta.createdAt,
+                    finishedAt: meta.finishedAt,
+                  });
+                }
+              }
+              if (fallbackMembers.length > 0) {
+                cfg = {
+                  name,
+                  description: '',
+                  createdAt: fallbackMembers[0]?.joinedAt ?? Date.now(),
+                  members: fallbackMembers,
+                };
+              }
+            } catch {
+              // Directory doesn't exist or can't be read
+            }
+          }
           if (cfg) {
             // Only show members whose agents exist in the in-memory registry.
             // Disk configs persist across sessions, but the registry does not.

@@ -1019,14 +1019,14 @@ export function getLastPeerDmSummary(
         b.name === SEND_MESSAGE_TOOL_NAME &&
         typeof b.input === 'object' &&
         b.input !== null &&
-        'to' in b.input &&
-        typeof b.input.to === 'string' &&
-        b.input.to !== '*' &&
-        b.input.to.toLowerCase() !== TEAM_LEAD_NAME.toLowerCase() &&
-        'message' in b.input &&
-        typeof b.input.message === 'string'
+        'agent_name' in b.input &&
+        typeof b.input.agent_name === 'string' &&
+        b.input.agent_name !== '*' &&
+        b.input.agent_name.toLowerCase() !== TEAM_LEAD_NAME.toLowerCase() &&
+        'text' in b.input &&
+        typeof b.input.text === 'string'
       ) {
-        const to = b.input.to as string;
+        const to = b.input.agent_name as string;
         const summary =
           'summary' in b.input && typeof b.input.summary === 'string'
             ? (b.input.summary as string)
