@@ -188,6 +188,9 @@ export async function runAgentLoop(params: RunAgentParams): Promise<{
       maxToolConcurrency: DEFAULT_MAX_CONCURRENCY,
       callModel: agentSpawn.callModel,
       hookManager: agentSpawn.hookManager,
+      subAgentRegistry: agentSpawn.subAgentRegistry,
+      systemPromptAssembler: agentSpawn.systemPromptAssembler,
+      agentRegistry: agentSpawn.agentRegistry,
       enableCacheControl,
     });
 

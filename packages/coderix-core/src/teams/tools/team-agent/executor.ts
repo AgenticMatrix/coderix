@@ -239,20 +239,40 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   // Inject team member addendum (identity + communication rules)
   const peerMembers = config.members.filter(m => m.agentId !== agentId);
   const peerList = peerMembers.length > 0
-    ? peerMembers.map(m => `  - ${m.name} (\`${m.agentId}\`) [${m.agentType}]`).join('\n')
-    : '  (none)';
+    ? peerMembers.map(m => `"${m.name}"`).join(', ')
+    : '(none)';
   const teamCtx = [
     '',
-    '# Team Communication',
-    `You are "${agentName}" (\`${agentId}\`) in team "${teamName}".`,
-    `The team leader is at "leader" — use SendMessage(agent_name: "leader", team_name: "${teamName}", text: "...") to report.`,
+    '# Team Communication Rules (CRITICAL — read carefully)',
     '',
-    `Peer workers:\n${peerList}`,
-    `- SendMessage(agent_name: "<name>", team_name: "${teamName}", text: "...") to message a specific teammate by name`,
-    `- SendMessage(agent_name: "*", team_name: "${teamName}", text: "...") to broadcast to all workers (use sparingly)`,
-    '- Just writing text is NOT visible to others — you MUST use SendMessage',
+    `You are **${agentName}** in team **${teamName}**.`,
     '',
-    'Your work is coordinated through the task system and teammate messaging.',
+    '**SendMessage is your ONLY way to communicate.** You cannot see what other',
+    'members write unless they SendMessage to you. Plain text you output goes',
+    'nowhere — no teammate will see it.',
+    '',
+    '## When you MUST use SendMessage',
+    '1. **Reply to any incoming message** — your teammate is blocked waiting for',
+    '   your response. If you ignore them, they will time out and the task fails.',
+    '2. **Report results to the leader** — when you finish a task, tell the leader',
+    '   what happened, even if there were no issues.',
+    '3. **Ask for information or help** — if you need input from a specific teammate.',
+    '4. **Acknowledge receipt** — at minimum confirm you received a message.',
+    '',
+    '## How to send',
+    `- To the leader: SendMessage(agent_name: "leader", team_name: "${teamName}", text: "<message>")`,
+    `- To a peer: SendMessage(agent_name: "<name>", team_name: "${teamName}", text: "<message>")`,
+    `- Broadcast to all: SendMessage(agent_name: "*", team_name: "${teamName}", text: "<message>")`,
+    '',
+    `Peers in this team: ${peerList || '(none)'}`,
+    `Leader: "leader"`,
+    '',
+    '## Communication protocol',
+    '- When you receive a message: READ it, then REPLY with SendMessage.',
+    '- If asked a direct question: answer it via SendMessage.',
+    '- When your task is done: report to the leader via SendMessage.',
+    '- Teammates have a 30-second idle timeout — reply promptly.',
+    '- Do NOT assume others know your status — tell them.',
   ].join('\n');
   enrichedPrompt = enrichedPrompt + teamCtx;
 
@@ -445,6 +465,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         // agent alive to poll for follow-up messages.
         await handleTeamAgentBackgroundCompletion(result);
 
+        capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: true });
         while (!subAbortController.signal.aborted) {
           const messages = await pollTeamInbox();
           if (messages.length === 0) break;
@@ -463,7 +484,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
           // Notify again with updated result
           await handleTeamAgentBackgroundCompletion(result);
         }
+        capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: false });
       } catch (err) {
+        capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: false });
         await handleError(err);
       }
     });
@@ -543,7 +566,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
           await handleTeamAgentBackgroundCompletion(result);
         }
+        capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: false });
       } catch (err) {
+        capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: false });
         if (worktreePath) {
           await cleanupAgentWorktree({
             worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
@@ -607,7 +632,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
 
         await handleTeamAgentBackgroundCompletion(loopResult);
       }
+      capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: false });
     } catch (err) {
+      capturedAgentSpawn.subAgentRegistry.update(agentId, { _alive: false });
       if (worktreePath) {
         await cleanupAgentWorktree({
           worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,

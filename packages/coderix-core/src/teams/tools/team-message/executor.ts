@@ -672,8 +672,9 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     };
   }
 
-  // Agent is stopped/done/error in registry — auto-resume
-  if (stoppedRecord.status === 'done' || stoppedRecord.status === 'stopped' || stoppedRecord.status === 'error') {
+  // Agent is stopped/done/error in registry — auto-resume (unless the
+  // agent is still alive in its poll loop waiting for messages).
+  if (!stoppedRecord._alive && (stoppedRecord.status === 'done' || stoppedRecord.status === 'stopped' || stoppedRecord.status === 'error')) {
     const transcript = stoppedRecord.transcript ?? [];
 
     // Try to get diskInfo for team context restoration

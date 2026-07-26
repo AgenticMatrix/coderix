@@ -3,12 +3,12 @@ import type { ToolSchema } from '../../../tools/types.js';
 export const schema: ToolSchema = {
   name: 'SendMessage',
   description:
-    'Send a message to a teammate or resume a completed agent. The system automatically detects the agent\'s state:\n'
-    + '- If the agent is running: delivers the message instantly (in-memory) or via inbox.\n'
-    + '- If the agent is stopped/done/error: automatically resumes it with full conversation history and text as the new task prompt.\n'
+    'REQUIRED for all inter-agent communication. Your plain text output is NOT visible to teammates — you MUST use this tool to send messages, reply to teammates, report results, or ask questions.\n'
+    + '- Running agent: message is delivered instantly and they will see it in their next turn.\n'
+    + '- Stopped/done agent: automatically resumes with full history and text as the new task.\n'
+    + '- Use "leader" as agent_name to report to the team leader.\n'
     + '- Use "*" as agent_name to broadcast to all running team members.\n'
-    + '- Use "leader" as agent_name to send a message to the team leader.\n'
-    + '- Structured messages: provide message_type for shutdown_request or shutdown_response.',
+    + '- ALWAYS reply when a teammate sends you a message — they are waiting for your response.',
   input_schema: {
     type: 'object',
     properties: {

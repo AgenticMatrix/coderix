@@ -45,6 +45,10 @@ export interface SubAgentRecord {
    *  both the poll loop and SendMessage executor run on the main thread.
    *  If parallel tool execution is added, replace with a lock-free queue. */
   pendingMessages?: string[];
+  /** True while the agent's post-completion poll loop is active.
+   *  Prevents SendMessage auto-resume from spawning a duplicate agent
+   *  while the original is still polling for new messages. */
+  _alive?: boolean;
 }
 
 export class SubAgentRegistry {
