@@ -444,6 +444,8 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     const initialCount = state.subAgentMessageCache[agentId]?.length ?? 0;
     let lastCount = initialCount;
     let missingCount = 0;
+    let diskLoaded = false;
+    let diskResolved = false;
     let interval: ReturnType<typeof setInterval> | null = null;
 
     const pollTranscript = () => {
@@ -466,10 +468,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
         dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
       }
 
-      // If agent is done but transcript was cleared from memory,
-      // try loading from disk as a one-shot fallback
-      if (agent.status !== 'running' && lastCount === 0 && !agent.transcript) {
-        missingCount++;
+      // If transcript was cleared from memory (team agents clear it after
+      // saving to disk), load from disk once. Don't gate on lastCount === 0
+      // because the cache may hold stale messages from a previous view.
+      if (!agent.transcript && !diskLoaded) {
+        diskLoaded = true;
         const activeId = sessionManager.getActive()?.id;
         if (activeId) {
           const sDir = sessionDir(activeId);
@@ -479,17 +482,18 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
               const messages = convertTranscriptToMessages(diskTranscript);
               dispatch({ type: 'LOAD_SUBAGENT_TRANSCRIPT', agentId, messages });
             }
-          }).catch(() => {});
+          }).catch(() => {}).finally(() => {
+            diskResolved = true;
+          });
         }
-        if (missingCount > 5) {
-          clearInterval(interval!);
-        }
-        return;
       }
 
-      // Stop polling once the agent is done and we've loaded all messages
+      // Stop polling once the agent is done and we have messages.
+      // Wait for disk load to resolve if transcript was cleared from memory.
       if (agent.status !== 'running' && lastCount > 0) {
-        clearInterval(interval!);
+        if (agent.transcript || diskResolved) {
+          clearInterval(interval!);
+        }
       }
     };
 

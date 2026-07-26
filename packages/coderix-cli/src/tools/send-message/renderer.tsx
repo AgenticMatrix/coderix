@@ -1,6 +1,5 @@
 import React from 'react';
 import { Box, Text } from '@coderix/ink';
-import { getSubAgentRegistry } from '@coderix/core';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -40,15 +39,13 @@ function renderContentLines(text: string): React.ReactNode {
 }
 
 export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNode {
-  const agentName = props.input.agent_name as string | undefined;
-  const teamName = props.input.team_name as string | undefined;
-  const text = props.input.text as string | undefined;
-  const description = props.input.description as string | undefined;
+  const agentName = (props.input.agent_name as string) || '?';
+  const teamName = (props.input.team_name as string) || '?';
+  const text = (props.input.text as string) || '';
+  const description = (props.input.description as string) || '';
 
   const metadata = props.result?.metadata as Record<string, unknown> | undefined;
-  const isResume = !!(metadata?.resumed);
-  const isBroadcast = agentName === '*';
-  const isLeader = agentName === 'leader';
+  const senderName = (metadata?.fromName as string) || (props.input.from as string) || 'leader';
 
   const hasResult = !!props.result;
   const isDone = props.state === 'done' || hasResult;
@@ -57,14 +54,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   const isError = props.state === 'error';
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting || isPending);
 
-  const senderName = (metadata?.fromName as string) || (props.input.from as string) || 'leader';
-  const recipientName = isBroadcast ? 'all'
-    : isLeader ? 'leader'
-    : ((metadata?.agentName as string) || agentName || '?');
-
-  const headerSuffix = isResume
-    ? `(${senderName} → ${recipientName}) · resume`
-    : `(${senderName} → ${recipientName})`;
+  const recipientLabel = agentName === '*' ? 'all' : agentName;
 
   if (isError) {
     return (
@@ -72,14 +62,9 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>SendMessage</Text>
-          <Text dimColor> {headerSuffix}</Text>
+          <Text dimColor> ({teamName}/{senderName} → {recipientLabel}{description ? `: ${description}` : ''})</Text>
           <Text color="ansi:red"> failed</Text>
         </Text>
-        {description ? (
-          <Box marginLeft={2}>
-            {renderContentLines(description)}
-          </Box>
-        ) : null}
       </Box>
     );
   }
@@ -88,14 +73,17 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
   const showTimer = (isExecuting || isPending) && !isDone;
 
-  const displayText = text || '';
+  const displayText = text;
+  const wrappedLines = wrapText(displayText, WRAP_WIDTH);
+  const firstLine = wrappedLines[0] || '';
+  const moreCount = wrappedLines.length - 1;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>SendMessage</Text>
-        <Text dimColor> {headerSuffix}</Text>
+        <Text dimColor> ({teamName}/{senderName} → {recipientLabel}{description ? `: ${description}` : ''})</Text>
         {showTimer ? (
           <Text dimColor color="ansi:yellow"> {elapsedSecs}s</Text>
         ) : null}
@@ -108,17 +96,15 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
               <Box flexDirection="column">
                 <Text>
                   <Text dimColor>└ </Text>
-                  <Text dimColor>{description || displayText.slice(0, 80)}</Text>
+                  <Text dimColor>{firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine}</Text>
                 </Text>
-                <Text>
-                  <Text dimColor>  ...Ctrl+O to detail</Text>
-                </Text>
+                {moreCount > 0 && (
+                  <Text>
+                    <Text dimColor>  ... {moreCount} more line{moreCount > 1 ? 's' : ''}, Ctrl+O to detail</Text>
+                  </Text>
+                )}
               </Box>
             )}
-        </Box>
-      ) : description ? (
-        <Box marginLeft={2}>
-          {renderContentLines(description)}
         </Box>
       ) : null}
     </Box>

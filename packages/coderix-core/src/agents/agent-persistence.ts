@@ -21,6 +21,7 @@ import { existsSync, readFileSync, mkdirSync, writeFileSync, readdirSync } from 
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Message, SessionEntry } from '../core/types.js';
+import { isTranscriptEntry } from '../core/types.js';
 import {
   readEntries,
   rewriteEntries,
@@ -290,7 +291,8 @@ export async function saveTeamAgentTranscript(
   try {
     const existing = await readEntries(path);
     if (existing.length > 0) {
-      prevUuid = existing[existing.length - 1].uuid;
+      const lastTranscript = existing.filter(isTranscriptEntry).pop();
+      if (lastTranscript) prevUuid = lastTranscript.uuid;
     }
   } catch {
     // File doesn't exist yet — start fresh
