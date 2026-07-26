@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text } from '@coderix/ink';
 import { getSubAgentRegistry } from '@coderix/core';
-import type { SubAgentRecord } from '@coderix/core';
+import { listTasks as listTrackedTasks } from '@coderix/core/tasks/task-tracker';
 import type { ToolUseRendererProps, ToolResultRendererProps } from '../types.js';
-import { useToolTimer } from '../shared/useToolTimer.js';
 
 const AGENT_TYPE_LABEL: Record<string, string> = {
   explore: 'Explore',
@@ -13,19 +12,12 @@ const AGENT_TYPE_LABEL: Record<string, string> = {
 };
 
 const POLL_MS = 250;
+const AUTO_INCREMENT = 5;
 
-interface AgentSnapshot {
+interface ProcessSnapshot {
   id: string;
-  agentType: string;
-  latestTool: string | null;
-}
-
-interface ListenAttemptMeta {
-  attempt: number;
-  duration: number;
-  actualDuration: number;
-  wokeEarly: boolean;
-  runningSummary: string;
+  label: string;
+  detail: string;
 }
 
 export function ListenRenderer(props: ToolUseRendererProps) {
@@ -33,34 +25,71 @@ export function ListenRenderer(props: ToolUseRendererProps) {
   const isExecuting = props.state === 'executing';
   const isPending = props.state === 'pending';
   const isActive = isExecuting || isPending;
-  const resultContent = props.result?.content;
-  const attempts = props.result?.metadata?.attempts as ListenAttemptMeta[] | undefined;
-  const reason = props.input.reason as string | undefined;
+  const attempts = props.result?.metadata?.attempts as
+    | { attempt: number; duration: number; actualDuration: number; wokeEarly: boolean; runningSummary: string }[]
+    | undefined;
 
-  const { elapsedSecs, blinkOn } = useToolTimer(isActive);
+  // Manual ref-based timer so elapsed resets synchronously on retry,
+  // avoiding the one-frame stale-timer leak that useToolTimer's
+  // useEffect-based reset causes.
+  const startTimeRef = useRef(Date.now());
+  const prevRetryRef = useRef(attempts?.length ?? 0);
+  const currentRetry = attempts?.length ?? 0;
+  if (isActive && currentRetry !== prevRetryRef.current) {
+    startTimeRef.current = Date.now();
+    prevRetryRef.current = currentRetry;
+  }
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => tick((t) => t + 1), 100);
+    return () => clearInterval(id);
+  }, [isActive]);
 
-  const [agents, setAgents] = useState<AgentSnapshot[]>([]);
+  const blinkOn = Math.floor(tick / 5) % 2 === 0;
+
+  const [processes, setProcesses] = useState<ProcessSnapshot[]>([]);
+  const lastProcessesRef = useRef<ProcessSnapshot[]>([]);
 
   useEffect(() => {
     if (!isActive) return;
 
     function poll() {
+      const snapshots: ProcessSnapshot[] = [];
+
       try {
         const registry = getSubAgentRegistry();
-        if (!registry) return;
+        if (registry) {
+          for (const a of registry.list()) {
+            if (a.status === 'running') {
+              const label = AGENT_TYPE_LABEL[a.agentType] || a.agentType;
+              const tool = a.liveToolCalls?.length
+                ? ` · ${a.liveToolCalls[a.liveToolCalls.length - 1].name}`
+                : '';
+              snapshots.push({
+                id: a.id,
+                label,
+                detail: `${a.id.slice(0, 12)}${tool}`,
+              });
+            }
+          }
+        }
+      } catch { /* ignore */ }
 
-        const running = registry.list().filter((a: SubAgentRecord) => a.status === 'running');
-        const snapshots: AgentSnapshot[] = running.map((a: SubAgentRecord) => ({
-          id: a.id,
-          agentType: a.agentType,
-          latestTool: a.liveToolCalls?.length
-            ? a.liveToolCalls[a.liveToolCalls.length - 1].name
-            : null,
-        }));
-        setAgents(snapshots);
-      } catch {
-        // Ignore poll errors
-      }
+      try {
+        for (const t of listTrackedTasks()) {
+          if (t.type === 'bash' && t.status === 'running') {
+            snapshots.push({
+              id: t.id,
+              label: 'Bash',
+              detail: t.description || t.id.slice(0, 12),
+            });
+          }
+        }
+      } catch { /* ignore */ }
+
+      setProcesses(snapshots);
+      if (snapshots.length > 0) lastProcessesRef.current = snapshots;
     }
 
     poll();
@@ -68,29 +97,24 @@ export function ListenRenderer(props: ToolUseRendererProps) {
     return () => clearInterval(interval);
   }, [isActive]);
 
-  // Title bar
-  const statusIcon = isActive
-    ? (blinkOn ? '●' : '○')
-    : '●';
+  // Cumulative tracking across auto-retry attempts.
+  const retryCount = currentRetry;
+  const attemptCount = isDone ? (retryCount || 1) : retryCount + 1;
+  const pastElapsed = (props.result?.metadata?.totalDuration as number) ?? 0;
+  const currentElapsed = isActive ? (Date.now() - startTimeRef.current) / 1000 : 0;
+  const cumulativeElapsed = isDone
+    ? (pastElapsed || currentElapsed)
+    : pastElapsed + currentElapsed;
+
+  const originalDuration = (props.input.duration as number) ?? 0;
+  const cumulativeTotal =
+    attemptCount * originalDuration +
+    (AUTO_INCREMENT * attemptCount * (attemptCount - 1)) / 2;
+
+  const statusIcon = isActive ? (blinkOn ? '●' : '○') : '●';
   const statusColor = isActive ? 'ansi:yellow' : 'ansi:green';
 
-  const hasAttempts = attempts && attempts.length > 0;
-  const reasonSuffix = reason ? ` ${reason}` : '';
-
-  // Title bar timer: during auto-retry show cumulative total / original;
-  // otherwise show elapsed vs requested (single attempt).
-  const titleTimer = (() => {
-    if (isActive && hasAttempts) {
-      const total = (props.result?.metadata?.totalDuration as number) ?? 0;
-      const elapsedNum = parseFloat(elapsedSecs) || 0;
-      return `${(total + elapsedNum).toFixed(1)}/${(props.input.duration as number) ?? 0} (${attempts!.length} attempts)`;
-    }
-    if (isActive) {
-      return `${elapsedSecs}/${(props.input.duration as number) ?? 0}`;
-    }
-    const dur = ((props.duration ?? 0) / 1000).toFixed(1);
-    return `${dur}/${(props.input.duration as number) ?? 0}${attempts && attempts.length > 1 ? ` (${attempts.length} attempts)` : ''}`;
-  })();
+  const displayProcesses = isActive ? processes : lastProcessesRef.current;
 
   return (
     <Box flexDirection="column" marginBottom={0}>
@@ -102,65 +126,25 @@ export function ListenRenderer(props: ToolUseRendererProps) {
         <Box flexDirection="row" flexGrow={1}>
           <Text>
             <Text bold>Listen</Text>
-            <Text dimColor> · ⏱ {titleTimer}</Text>
+            <Text dimColor>
+              {' '}for {attemptCount} times, duration {cumulativeElapsed.toFixed(1)}/{cumulativeTotal.toFixed(0)}s
+            </Text>
           </Text>
         </Box>
       </Box>
 
-      {/* Body — aligned under L in Listen (icon width = 2) */}
-      {hasAttempts ? (
+      {/* Body — monitored processes */}
+      {displayProcesses.length > 0 ? (
         <Box flexDirection="row">
           <Box width={2} flexShrink={0} />
-          <Box flexDirection="column">
-            {attempts!.map((a, i) => {
-              const isLast = i === attempts!.length - 1;
-              const statusText = a.wokeEarly
-                ? `completed${reasonSuffix}`
-                : `timed out, ${a.runningSummary}`;
-              return (
-                <Text key={i} dimColor>
-                  {isLast ? '└' : '│'} Attempt {a.attempt}: {a.actualDuration.toFixed(1)}s ({statusText})
-                </Text>
-              );
-            })}
-            {/* While still listening (auto-retry in progress), show live agents */}
-            {isActive && agents.length > 0 ? (
-              agents.map((a, i) => (
-                <Box key={a.id} flexDirection="row">
-                  <Text dimColor>{i === agents.length - 1 ? '⎿' : '│'} </Text>
-                  <Text dimColor>{AGENT_TYPE_LABEL[a.agentType] || a.agentType}</Text>
-                  <Text dimColor> {a.id.slice(0, 12)}</Text>
-                  {a.latestTool ? (
-                    <Text dimColor> · {a.latestTool}</Text>
-                  ) : null}
-                  <Text dimColor> running</Text>
-                </Box>
-              ))
-            ) : null}
-          </Box>
-        </Box>
-      ) : isActive && agents.length > 0 ? (
-        <Box flexDirection="row">
-          <Box width={2} flexShrink={0} />
-          <Box flexDirection="column">
-            {agents.map((a, i) => (
-              <Box key={a.id} flexDirection="row">
-                <Text dimColor>{i === agents.length - 1 ? '⎿' : '│'} </Text>
-                <Text dimColor>{AGENT_TYPE_LABEL[a.agentType] || a.agentType}</Text>
-                <Text dimColor> {a.id.slice(0, 12)}</Text>
-                {a.latestTool ? (
-                  <Text dimColor> · {a.latestTool}</Text>
-                ) : null}
-                <Text dimColor> running</Text>
+          <Box flexDirection="column" flexGrow={1}>
+            {displayProcesses.map((p, i) => (
+              <Box key={p.id} flexDirection="row">
+                <Text dimColor>{i === displayProcesses.length - 1 ? '└' : '│'} </Text>
+                <Text bold>{p.label}</Text>
+                <Text dimColor> ({p.detail} {isActive ? 'running' : 'completed'})</Text>
               </Box>
             ))}
-          </Box>
-        </Box>
-      ) : isDone && resultContent ? (
-        <Box flexDirection="row">
-          <Box width={2} flexShrink={0} />
-          <Box flexDirection="column">
-            <Text dimColor>└ {resultContent}</Text>
           </Box>
         </Box>
       ) : null}
@@ -168,10 +152,6 @@ export function ListenRenderer(props: ToolUseRendererProps) {
   );
 }
 
-/**
- * Result renderer that suppresses the default content display,
- * since the tool-use renderer already shows the result.
- */
 export function ListenResultRenderer(_props: ToolResultRendererProps) {
   return null;
 }

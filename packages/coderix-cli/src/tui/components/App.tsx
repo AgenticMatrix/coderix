@@ -807,7 +807,14 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // The reducer continues updating state.messages in the background.
   const frozenRef = useRef(state.messages);
   if (!state.isFrozen) frozenRef.current = state.messages;
-  const displayMessages = state.isFrozen ? frozenRef.current : state.messages;
+  const displayMessages = (state.isFrozen ? frozenRef.current : state.messages)
+    .filter(m => {
+      if (m.content.startsWith('<background-agent-notifications>')) return false;
+      for (const block of m.blocks) {
+        if (block.type === 'text' && block.content.startsWith('<background-agent-notifications>')) return false;
+      }
+      return true;
+    });
 
   // Cache the last visible ActivityLine element. When the phase transitions
   // to idle but completedTurn hasn't been set yet (one-frame race), showing
