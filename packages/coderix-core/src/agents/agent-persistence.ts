@@ -364,6 +364,8 @@ export interface DiskAgentInfo {
   systemPrompt?: string;
   /** Present when the agent is a team member. */
   teamName?: string;
+  /** Human-readable member name within the team. */
+  memberName?: string;
 }
 
 /**
@@ -404,7 +406,7 @@ export async function findAgentOnDisk(
               'utf-8',
             );
           } catch { /* optional */ }
-          return { meta: teamMeta, transcript, systemPrompt, teamName };
+          return { meta: teamMeta, transcript, systemPrompt, teamName, memberName: teamMeta.memberName };
         }
       }
     }

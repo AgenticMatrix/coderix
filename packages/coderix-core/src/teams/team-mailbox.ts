@@ -100,6 +100,10 @@ export async function sendMessage(
   to: string,
   text: string,
 ): Promise<TeamMessage> {
+  if (to === '*') {
+    throw new Error('sendMessage does not support broadcast ("*"). Use SendMessage with to: "*" which handles broadcast at a higher level.');
+  }
+
   const msg: TeamMessage = {
     from,
     to,

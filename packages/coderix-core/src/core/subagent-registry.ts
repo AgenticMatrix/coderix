@@ -40,6 +40,11 @@ export interface SubAgentRecord {
   tokenUsage?: { inputTokens: number; outputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number; totalTokens?: number };
   /** Internal: resolve function for background signal. Not serialized. */
   _backgroundResolve?: (() => void) | null;
+  /** In-memory message queue for fast delivery to running team agents.
+   *  Safe for concurrent push/splice within a single JS event loop since
+   *  both the poll loop and SendMessage executor run on the main thread.
+   *  If parallel tool execution is added, replace with a lock-free queue. */
+  pendingMessages?: string[];
 }
 
 export class SubAgentRegistry {

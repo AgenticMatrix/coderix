@@ -12,10 +12,10 @@ export const schema: ToolSchema = {
     type: 'object',
     properties: {
       team_name: { type: 'string', description: 'Team name (for team messaging mode)' },
-      to: { type: 'string', description: 'Recipient agentId (use the backtick-quoted ID like "swarm-abc123", NOT the worker name), "leader" for the team leader, or "*" to broadcast to all workers' },
+      to: { type: 'string', description: 'Recipient agent name (e.g. "alice"), "leader" for the team leader, or "*" to broadcast to all workers' },
       text: { type: 'string', description: 'Message content (for plain text messaging)' },
       description: { type: 'string', description: 'Short summary of the message, 3-8 words' },
-      from: { type: 'string', description: 'Sender name (defaults to "leader")' },
+      from: { type: 'string', description: 'Sender name (defaults to "leader"). When used by a team agent worker, this is automatically set to the agent\'s name.' },
       message_type: {
         type: 'string',
         description: 'Type of structured message: "shutdown_request" or "shutdown_response"',
@@ -24,7 +24,7 @@ export const schema: ToolSchema = {
       reason: { type: 'string', description: 'Reason for shutdown request or rejection' },
       approve: { type: 'boolean', description: 'Whether to approve a shutdown request (for shutdown_response)' },
       request_id: { type: 'string', description: 'Request ID for shutdown_response' },
-      agent_id: { type: 'string', description: 'ID of a completed sub-agent to resume (for sub-agent resume mode)' },
+      agent_id: { type: 'string', description: 'ID or name of a completed sub-agent to resume (for sub-agent resume mode). Agent name (e.g. "alice") is preferred and will be resolved to the agent ID automatically.' },
       message: { type: 'string', description: 'Follow-up message for the sub-agent (for sub-agent resume mode)' },
     },
   },

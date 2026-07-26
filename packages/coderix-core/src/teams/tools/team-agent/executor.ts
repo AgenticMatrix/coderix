@@ -7,6 +7,7 @@ import { RiskLevel } from '../../../core/types.js';
 import { filterToolsForAgent } from '../../../agents/tool-filtering.js';
 import { loadTeamConfig, teamDir, listTeams } from '../../team-store.js';
 import { addMemberToTeam, updateMemberInTeam } from '../../../utils/swarm/teamHelpers.js';
+import { drainUnreadMessages } from '../../team-mailbox.js';
 import type { SwarmTeamMember } from '../../../utils/swarm/teamHelpers.js';
 import teamMessagePlugin from '../team-message/index.js';
 import {
@@ -163,7 +164,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     },
     async (toolInput: Record<string, unknown>, ctx: ToolContext) => {
       const result = await teamMessagePlugin.executor(
-        { ...toolInput, from: agentId },
+        { ...toolInput, from: agentName, _teamSessionDir: sd },
         {
           cwd: ctx.cwd ?? process.cwd(),
           allowMutation: true,
@@ -247,7 +248,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     `The team leader is at "leader" — use SendMessage(team_name: "${teamName}", to: "leader", text: "...") to report.`,
     '',
     `Peer workers:\n${peerList}`,
-    `- SendMessage(team_name: "${teamName}", to: "<agentId>") to message a specific teammate`,
+    `- SendMessage(team_name: "${teamName}", to: "<agent_name>") to message a specific teammate by name`,
     `- SendMessage(team_name: "${teamName}", to: "*") to broadcast to all workers (use sparingly)`,
     '- Just writing text is NOT visible to others — you MUST use SendMessage',
     '',
@@ -289,6 +290,68 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   // Capture for use in background completion handler (TypeScript narrowing)
   const capturedAgentSpawn = agentSpawn;
   const capturedAgentDef = agentDef!;
+
+  const MAX_IDLE_TIME_MS = 5 * 60 * 1000; // 5 minutes idle timeout
+  const POLL_INTERVAL_MS = 500;
+
+  /**
+   * Poll the agent's team inbox for new messages. Returns unread messages
+   * formatted as user messages suitable for feeding back into runAgentLoop.
+   * Returns an empty array when the idle timeout expires with no messages.
+   */
+  async function pollTeamInbox(): Promise<Message[]> {
+    let idleStart = Date.now();
+
+    while (!subAbortController.signal.aborted) {
+      // Check in-memory pending messages first (fast path)
+      const record = capturedAgentSpawn.subAgentRegistry.get(agentId);
+      const pending = record?.pendingMessages;
+      if (pending && pending.length > 0) {
+        const msgs = pending.splice(0, pending.length);
+        return [{
+          role: 'user',
+          content: '[Team messages - instant delivery]\n' + msgs.join('\n'),
+        }];
+      }
+
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, POLL_INTERVAL_MS);
+        subAbortController.signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
+
+      if (subAbortController.signal.aborted) break;
+
+      try {
+        const unread = await drainUnreadMessages(sd, teamName, agentName);
+        if (unread.length > 0) {
+          const msgsText = unread.map(m =>
+            `[${m.from} -> ${m.to}]: ${m.text}`
+          ).join('\n');
+          return [{
+            role: 'user',
+            content: '[Team messages]\n' + msgsText,
+          }];
+        }
+        // Reset idle timer after each successful poll — only time out if
+        // the agent is truly idle with no activity, not just slow I/O.
+        idleStart = Date.now();
+      } catch (err) {
+        // Inbox may not exist yet — keep polling, but don't count I/O
+        // errors as idle time either.
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          // Unexpected error — still reset timer to avoid premature timeout
+        }
+        idleStart = Date.now();
+      }
+
+      if (Date.now() - idleStart > MAX_IDLE_TIME_MS) break;
+    }
+
+    return [];
+  }
 
   /**
    * Shared completion handler for team agents that finish in the background.
@@ -338,7 +401,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     capturedAgentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
   }
 
-  // ── Background path: fire-and-forget ────────────────────────────────
+  // ── Background path: fire-and-forget with poll loop ──────────────────
   if (isBackground) {
     const teamContext: SubagentContext = createSubagentContext(
       agentId,
@@ -346,49 +409,59 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       agentDef.source === 'built-in',
     );
 
-    runWithAgentContext(teamContext, () => {
-      runAgentLoop({
-        agentId, agentType, prompt, agentSpawn,
-        systemPromptText: enrichedPrompt,
-        effectiveModel, subToolRegistry, subAbortController,
-        effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
-        effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
-        initialMessages,
-        cwd: worktreePath ?? effectiveCwd,
-      }).then(async result => {
-        await handleTeamAgentBackgroundCompletion(result);
-      }).catch(async err => {
-        if (worktreePath) {
-          await cleanupAgentWorktree({
-            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-          }, agentSpawn.hookManager).catch(() => {});
-        }
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        agentSpawn.subAgentRegistry.update(agentId, {
-          status: 'error', finishedAt: Date.now(),
-          error: errorMsg,
-          liveToolCalls: [],
-          transcript: undefined,
-        });
-        updateMemberInTeam(sd, teamName, agentId, {
-          status: 'error', finishedAt: Date.now(),
-        }).catch(() => {});
-        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+    const runParams = {
+      agentId, agentType, prompt, agentSpawn,
+      systemPromptText: enrichedPrompt,
+      effectiveModel, subToolRegistry, subAbortController,
+      effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
+      effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+      cwd: worktreePath ?? effectiveCwd,
+    };
+
+    const handleError = async (err: unknown) => {
+      if (worktreePath) {
+        await cleanupAgentWorktree({
+          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+        }, agentSpawn.hookManager).catch(() => {});
+      }
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      agentSpawn.subAgentRegistry.update(agentId, {
+        status: 'error', finishedAt: Date.now(),
+        error: errorMsg,
+        liveToolCalls: [],
+        transcript: undefined,
       });
+      updateMemberInTeam(sd, teamName, agentId, {
+        status: 'error', finishedAt: Date.now(),
+      }).catch(() => {});
+      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
+    };
+
+    runWithAgentContext(teamContext, async () => {
+      try {
+        let result = await runAgentLoop({ ...runParams, initialMessages });
+
+        // Keep the agent alive: poll inbox for new messages and re-enter
+        // the agent loop when messages arrive. Exit after idle timeout.
+        while (!subAbortController.signal.aborted) {
+          const messages = await pollTeamInbox();
+          if (messages.length === 0) break;
+
+          // Re-enter agent loop with new messages
+          result = await runAgentLoop({ ...runParams, initialMessages: messages });
+        }
+
+        await handleTeamAgentBackgroundCompletion(result);
+      } catch (err) {
+        await handleError(err);
+      }
     });
 
     return {
       content: `Teammate '${agentName}' (${agentId}) spawned in team '${teamName}' (background). Use SendMessage to communicate with it.${worktreePath ? ` (isolated in worktree: ${worktreePath})` : ''}`,
       isError: false,
       duration: Date.now() - spawnTime,
-      metadata: {
-        agentId,
-        teamName,
-        agentName,
-        agentType,
-        background: true,
-        worktreePath,
-      },
+      metadata: { agentId, teamName, agentName, agentType, background: true, worktreePath },
     };
   }
 
@@ -424,25 +497,48 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
   agentSpawn.subAgentRegistry.update(agentId, { _backgroundResolve: null });
 
   if (raceResult.backgrounded) {
-    loopPromise.then(async result => {
-      await handleTeamAgentBackgroundCompletion(result);
-    }).catch(async err => {
-      if (worktreePath) {
-        await cleanupAgentWorktree({
-          worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
-        }, agentSpawn.hookManager).catch(() => {});
+    loopPromise.then(async firstResult => {
+      try {
+        let result = firstResult;
+
+        // Same poll loop as background path: keep agent alive after
+        // Ctrl+B moves it to background.
+        while (!subAbortController.signal.aborted) {
+          const messages = await pollTeamInbox();
+          if (messages.length === 0) break;
+
+          result = await runWithAgentContext(teamContext, () =>
+            runAgentLoop({
+              agentId, agentType, prompt, agentSpawn,
+              systemPromptText: enrichedPrompt,
+              effectiveModel, subToolRegistry, subAbortController,
+              effectiveMaxTurns: agentDef.maxTurns ?? DEFAULT_MAX_TURNS,
+              effectiveContextBudget: agentDef.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
+              initialMessages: messages,
+              cwd: worktreePath ?? effectiveCwd,
+            }),
+          );
+        }
+
+        await handleTeamAgentBackgroundCompletion(result);
+      } catch (err) {
+        if (worktreePath) {
+          await cleanupAgentWorktree({
+            worktreePath, worktreeBranch, worktreeGitRoot, worktreeHeadCommit, worktreeHookBased,
+          }, agentSpawn.hookManager).catch(() => {});
+        }
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        agentSpawn.subAgentRegistry.update(agentId, {
+          status: 'error', finishedAt: Date.now(),
+          error: errorMsg,
+          liveToolCalls: [],
+          transcript: undefined,
+        });
+        updateMemberInTeam(sd, teamName, agentId, {
+          status: 'error', finishedAt: Date.now(),
+        }).catch(() => {});
+        agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
       }
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      agentSpawn.subAgentRegistry.update(agentId, {
-        status: 'error', finishedAt: Date.now(),
-        error: errorMsg,
-        liveToolCalls: [],
-        transcript: undefined,
-      });
-      updateMemberInTeam(sd, teamName, agentId, {
-        status: 'error', finishedAt: Date.now(),
-      }).catch(() => {});
-      agentSpawn.subAgentRegistry.notifyAgentCompletion(agentId);
     });
 
     return {

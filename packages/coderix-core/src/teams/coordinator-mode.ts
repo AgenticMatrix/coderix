@@ -42,8 +42,8 @@ export function getTeamLeaderStaticDeclaration(
     'TeamAgent always runs in the foreground — it blocks until the worker completes. Do NOT use background mode for team workers.',
     '',
     'IMPORTANT — SendMessage addressing:',
-    '- Workers are addressed by agentId ONLY (the ID in backticks like `swarm-xxx`). Names will NOT work.',
-    '- SendMessage(to: "<agentId>", text: "...") — use the agentId from the worker list below',
+    '- Workers are addressed by agent name (e.g. "alice"). Agent IDs also work as fallback.',
+    '- SendMessage(to: "<agent_name>", text: "...") — use the agent name from the worker list below',
     '- SendMessage(to: "*") — broadcast to all workers',
     '- SendMessage(to: "leader") — workers use this to reach you',
     '',
@@ -66,9 +66,9 @@ export async function getTeamStatusBlock(
   if (config.members.length > 0) {
     lines.push('Current team workers:');
     for (const m of config.members) {
-      const unread = await getUnreadCount(sessionDir, config.name, m.agentId).catch(() => 0);
+      const unread = await getUnreadCount(sessionDir, config.name, m.name).catch(() => 0);
       const unreadNote = unread > 0 ? ` (${unread} unread)` : '';
-      lines.push(`- ${m.name} \`${m.agentId}\` [${m.agentType}] [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
+      lines.push(`- ${m.name} [${m.agentType}] [${m.status}]${unreadNote}${m.task ? ` — ${m.task}` : ''}`);
     }
   } else {
     lines.push('No workers yet. Use TeamAgent(name, team_name) to spawn one.');
