@@ -30,7 +30,7 @@ export function EnterPlanModeRenderer(
           <Text color="ansi:green">● </Text>
           <Text bold>EnterPlanMode</Text>
         </Text>
-        <Box paddingLeft={4} flexDirection="column">
+        <Box paddingLeft={2} flexDirection="column">
           <Text dimColor>
             ⎿ planning mode active — safe tools only
             {' — '}

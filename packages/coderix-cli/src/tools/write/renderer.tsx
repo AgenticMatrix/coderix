@@ -86,9 +86,9 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 const dimBase = (c: Color): Color => c === '#FFFFFF' ? 'ansi:white' : c;
                 return (
                   <Box key={i} width={diffWidth} backgroundColor={bgColor}>
-                    <Text color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
+                    <Text backgroundColor={bgColor} color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
                     {codeTokens.map((t, j) => (
-                      <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
+                      <Text key={j} backgroundColor={bgColor} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
                     ))}
                   </Box>
                 );
