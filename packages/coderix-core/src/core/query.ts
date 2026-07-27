@@ -26,7 +26,7 @@ import { AgentError, RiskLevel, PermissionMode } from './types.js';
 import type { PlanModeState } from './types.js';
 import type { ToolContext } from './types.js';
 import { ToolRegistry } from './tool-registry.js';
-import { PermissionEngine } from './permission.js';
+import { PermissionEngine, extractRuleContent } from './permission.js';
 import { SessionManager } from './session.js';
 import { CheckpointManager } from './checkpoint.js';
 import { CommandCategory } from '../tools/bash/command-classifier.js';
@@ -850,10 +850,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 };
               }
 
-              // Extract command content for bash permission rules
-              const cmdContent = toolBlock.name === 'bash'
-                ? (toolBlock.input as Record<string, unknown>).command as string | undefined
-                : undefined;
+              // Extract command content for content-aware permission rules
+              const cmdContent = extractRuleContent(
+                toolBlock.name,
+                toolBlock.input as Record<string, unknown>,
+              );
 
               // ExitPlanMode is always auto-approved (handled above)
               const permissionResult = toolBlock.name === 'ExitPlanMode'
@@ -917,7 +918,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 const promise = new Promise<boolean>((res) => { resolve = res; });
                 const deferred: DeferredPermission = {
                   toolName: toolBlock.name, command, description,
-                  toolUseId: toolBlock.id, resolve, promise,
+                  toolUseId: toolBlock.id,
+                  toolInput: toolBlock.input as Record<string, unknown>,
+                  resolve, promise,
                 };
                 yield { type: 'system', subtype: 'permission_required', deferred };
 
@@ -1088,6 +1091,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                     };
                   }
 
+                  // Extract command content for content-aware permission rules
+                  const cmdContent2 = extractRuleContent(
+                    toolBlock.name,
+                    toolBlock.input as Record<string, unknown>,
+                  );
+
                   // ExitPlanMode is always auto-approved (handled above)
                   const permissionResult = toolBlock.name === 'ExitPlanMode'
                     ? { allowed: true, behavior: 'approve' as const }
@@ -1098,6 +1107,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                           riskLevel: effectiveRiskLevel,
                         },
                         toolDef,
+                        cmdContent2,
                       );
 
                   if (hookManager && permissionResult.behavior !== 'approve' && toolBlock.name !== 'ExitPlanMode') {
@@ -1136,7 +1146,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
                     let resolve!: (allowed: boolean) => void;
                     const promise = new Promise<boolean>((res) => { resolve = res; });
-                    const deferred: DeferredPermission = { toolName: toolBlock.name, command, description, toolUseId: toolBlock.id, resolve, promise };
+                    const deferred: DeferredPermission = {
+                      toolName: toolBlock.name, command, description,
+                      toolUseId: toolBlock.id,
+                      toolInput: toolBlock.input as Record<string, unknown>,
+                      resolve, promise,
+                    };
                     yield { type: 'system', subtype: 'permission_required', deferred };
 
                     const allowed = await new Promise<boolean>((res) => {

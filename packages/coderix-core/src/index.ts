@@ -11,7 +11,8 @@ export type { QueryEngineConfig, QueryEngineEvent } from './core/query-engine.js
 export { query } from './core/query.js';
 export type { QueryConfig, CallModelParams } from './core/query.js';
 export { ToolRegistry } from './core/tool-registry.js';
-export { PermissionEngine } from './core/permission.js';
+export { PermissionEngine, extractRuleContent } from './core/permission.js';
+export type { PermissionRule, PermissionRuleSource, PermissionBehavior } from './core/permission-rules.js';
 export { SystemPromptAssembler } from './core/system-prompt.js';
 export type { SystemPrompt } from './core/system-prompt.js';
 export { SessionManager } from './core/session.js';
@@ -184,9 +185,11 @@ export { runChromeMcpServer } from './mcp/builtin/chrome-mcp/index.js';
 export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js';
 
 // ── Config ─────────────────────────────────────────────────────────
-export type { CoderSettings, ModelItem, ModelEntry, ModelPrice, WebSearchConfig, WebBridgeConfig } from './config.js';
-export { inferProvider, getMaxToolConcurrency, loadConfig, loadSettings } from './config.js';
-export type { AppConfig } from './config.js';
+export { loadSettings, saveSettings, loadConfig, inferProvider, getMaxToolConcurrency } from './config.js';
+export type {
+  CoderSettings, AppConfig, ModelItem, ModelEntry, ModelPrice,
+  WebSearchConfig, WebBridgeConfig, PermissionRuleEntry,
+} from './config.js';
 
 // ── Platform utilities ─────────────────────────────────────────────
 export { IS_WINDOWS, IS_MACOS, onShutdownSignal } from './utils/platform.js';

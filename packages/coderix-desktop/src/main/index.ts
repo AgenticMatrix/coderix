@@ -20,7 +20,7 @@ import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/co
 import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModelFromClient } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
-import { PermissionMode } from '../../../../packages/coderix-core/src/core/types.js';
+import { PermissionMode, loadSettings } from '../../../../packages/coderix-core/src/index.js';
 import { loadConfig } from '../../../../packages/coderix-core/src/config.js';
 
 // Tool schema + executor imports (avoid index.ts → renderers → React/ink)
@@ -236,10 +236,12 @@ async function initQueryEngine(): Promise<void> {
   };
 
   await ipcBridge.initEngine(config);
-  // Default to auto mode for desktop — avoid blocking writes with permission prompts
+  const settings = loadSettings();
+  const permMode: PermissionMode = (settings.default_permission_mode as PermissionMode)
+    ?? PermissionMode.ASK;
   if (ipcBridge.queryEngine) {
-    ipcBridge.queryEngine.setPermissionMode(PermissionMode.AUTO);
-    console.log('[Coderix] Permission mode set to: auto');
+    ipcBridge.queryEngine.setPermissionMode(permMode);
+    console.log(`[Coderix] Permission mode set to: ${permMode}`);
   }
   console.log('[Coderix] QueryEngine initialized');
 }

@@ -20,7 +20,8 @@ import type { DeferredQuestion } from './types.js';
 import { PermissionMode, AgentError } from './types.js';
 import { query, type QueryConfig, type CallModelParams } from './query.js';
 import { ToolRegistry } from './tool-registry.js';
-import { PermissionEngine } from './permission.js';
+import { PermissionEngine, extractRuleContent } from './permission.js';
+import type { PermissionRule, PermissionRuleSource } from './permission-rules.js';
 import { SystemPromptAssembler, type SystemPrompt } from './system-prompt.js';
 import { SessionManager } from './session.js';
 import { CheckpointManager } from './checkpoint.js';
@@ -38,6 +39,7 @@ import {
 } from '../agents/agent-persistence.js';
 import { sessionDir as getSessionDir } from './session-store.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../config.js';
+import { loadSettings, saveSettings } from '../config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { EventBus } from '../state/observable.js';
 import type { CoreState } from '../state/core-state.js';
@@ -148,7 +150,17 @@ export class QueryEngine {
       }
     }
 
-    this.permissionEngine = new PermissionEngine(config.cwd);
+    // Load permission rules from settings
+    const permissionRules: PermissionRule[] = (config.settings?.permissions?.allow ?? [])
+      .map((entry) => ({
+        toolName: entry.toolName,
+        ruleContent: entry.ruleContent,
+        behavior: entry.behavior,
+        source: 'userSettings' as PermissionRuleSource,
+        description: entry.description,
+      }));
+
+    this.permissionEngine = new PermissionEngine(config.cwd, permissionRules);
     this.checkpointManager = new CheckpointManager();
     this.memoryConfig = loadMemoryConfig(config.settings?.memory);
     initMemoryExtraction();
@@ -968,6 +980,54 @@ export class QueryEngine {
       } catch {
         // Non-blockable: session may not be active yet
       }
+    }
+  }
+
+  /**
+   * Add a permission rule for the current session (in-memory, not persisted).
+   * Rule content is extracted from the tool input for content-aware matching.
+   */
+  addPermissionRule(
+    toolName: string,
+    ruleContent: string | undefined,
+    behavior: PermissionRule['behavior'],
+  ): void {
+    this.permissionEngine.addPermissionRule({
+      toolName,
+      ruleContent,
+      behavior,
+      source: 'session',
+    });
+  }
+
+  /**
+   * Persist a permission rule to ~/.coderix/settings.json so it survives
+   * across sessions. Also adds it as a session rule for immediate effect.
+   */
+  persistPermissionRule(
+    toolName: string,
+    ruleContent: string | undefined,
+    behavior: PermissionRule['behavior'],
+  ): void {
+    // Add session rule for immediate effect
+    this.addPermissionRule(toolName, ruleContent, behavior);
+
+    // Persist to settings.json
+    const settings = loadSettings();
+    const allow = settings.permissions?.allow ?? [];
+    // Avoid duplicates
+    const exists = allow.some(
+      (r) => r.toolName === toolName && r.ruleContent === ruleContent,
+    );
+    if (!exists) {
+      settings.permissions = {
+        ...settings.permissions,
+        allow: [
+          ...allow,
+          { toolName, ruleContent, behavior },
+        ],
+      };
+      saveSettings(settings);
     }
   }
 

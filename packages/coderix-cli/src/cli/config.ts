@@ -64,6 +64,16 @@ export interface WebBridgeConfig {
   userDataDir?: string;
 }
 
+export interface PermissionRuleEntry {
+  /** Exact tool name, e.g. 'bash', 'write', 'read' */
+  toolName: string;
+  /** Optional command pattern, e.g. 'git push:*', 'npm run test' */
+  ruleContent?: string;
+  behavior: 'allow' | 'deny' | 'ask';
+  /** Human-readable description for the rule */
+  description?: string;
+}
+
 export interface CoderSettings {
   env?: Record<string, string>;
   /** Web search configuration. */
@@ -91,6 +101,12 @@ export interface CoderSettings {
   auto_compact_enabled?: boolean;
   /** Ratio (0–1) at which auto-compaction triggers. Default 0.85 (85%). */
   compact_threshold?: number;
+  /** Permission rules persisted to disk. */
+  permissions?: {
+    allow?: PermissionRuleEntry[];
+  };
+  /** Default permission mode. One of 'auto', 'ask', 'plan', 'low'. Defaults to 'ask'. */
+  default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
 }
 
 // ---------------------------------------------------------------------------

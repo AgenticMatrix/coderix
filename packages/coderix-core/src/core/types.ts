@@ -154,6 +154,8 @@ export interface DeferredPermission {
   command: string;
   description: string;
   toolUseId: string;
+  /** Raw tool input for constructing permission rules. */
+  toolInput: Record<string, unknown>;
   resolve: (allowed: boolean) => void;
   promise: Promise<boolean>;
 }

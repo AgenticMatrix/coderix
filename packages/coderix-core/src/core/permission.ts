@@ -46,6 +46,37 @@ export interface PermissionResult {
 
 // ── PermissionEngine ────────────────────────────────────────────────
 
+/**
+ * Extract the primary content field from a tool input for use as
+ * a permission rule pattern (ruleContent).
+ *
+ * Returns undefined if the tool has no extractable content (tool-wide rule).
+ */
+export function extractRuleContent(
+  toolName: string,
+  input: Record<string, unknown>,
+): string | undefined {
+  switch (toolName.toLowerCase()) {
+    case 'bash':
+      return input.command as string | undefined;
+    case 'write':
+    case 'read':
+    case 'notebookedit':
+      return input.file_path as string | undefined;
+    case 'webfetch':
+    case 'websearch': {
+      const url = (input.url as string) ?? '';
+      try {
+        return `domain:${new URL(url).hostname}`;
+      } catch {
+        return url || undefined;
+      }
+    }
+    default:
+      return undefined;
+  }
+}
+
 export class PermissionEngine {
   private mode: PermissionMode = PermissionMode.ASK;
   private cwd: string;
@@ -194,6 +225,13 @@ export class PermissionEngine {
       };
     }
 
-    return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'default' } };
+    // Fallback: unrecognized mode — default to ASK for safety
+    // (Never silently approve everything)
+    return {
+      allowed: false,
+      behavior: 'ask_user',
+      reason: { type: 'mode_default', mode: 'default' },
+      prompt: `Allow ${permission.toolName}?`,
+    };
   }
 }

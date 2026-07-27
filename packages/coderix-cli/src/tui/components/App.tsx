@@ -5,7 +5,7 @@ import { useTerminalSize } from '@coderix/ink';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
-import { PermissionMode, getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, writeSessionMeta } from '@coderix/core';
+import { getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, writeSessionMeta } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -757,9 +757,10 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       dispatch({ type: 'INTERRUPT' });
     } else {
       pending.deferred.resolve(true);
-      if (choice === 'session' || choice === 'always') {
-        engine.setPermissionMode(PermissionMode.AUTO);
-        dispatch({ type: 'SET_MODE', mode: 'auto' });
+      if (choice === 'session') {
+        engine.addPermissionRule(pending.toolName, undefined, 'allow');
+      } else if (choice === 'always') {
+        engine.persistPermissionRule(pending.toolName, undefined, 'allow');
       }
     }
   }, [setAppState, dispatch, engine]);

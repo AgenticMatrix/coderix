@@ -336,7 +336,7 @@ export async function startDesktopGateway(
   });
 
   await engine.init();
-  engine.setPermissionMode(PermissionMode.ASK);
+  engine.setPermissionMode((settings.default_permission_mode as PermissionMode) ?? PermissionMode.ASK);
 
   let currentSessionId = sessionManager.list()[0]?.id ?? '';
 

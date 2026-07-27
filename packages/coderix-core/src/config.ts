@@ -88,6 +88,16 @@ export interface WebBridgeConfig {
   userDataDir?: string;
 }
 
+export interface PermissionRuleEntry {
+  /** Exact tool name, e.g. 'bash', 'write', 'read' */
+  toolName: string;
+  /** Optional command pattern, e.g. 'git push:*', 'npm run test' */
+  ruleContent?: string;
+  behavior: 'allow' | 'deny' | 'ask';
+  /** Human-readable description for the rule */
+  description?: string;
+}
+
 export interface CoderSettings {
   env?: Record<string, string>;
   /** Web search configuration. */
@@ -115,6 +125,12 @@ export interface CoderSettings {
   auto_compact_enabled?: boolean;
   /** Ratio (0–1) at which auto-compaction triggers. Default 0.85 (85%). */
   compact_threshold?: number;
+  /** Permission rules persisted to disk. */
+  permissions?: {
+    allow?: PermissionRuleEntry[];
+  };
+  /** Default permission mode. One of 'auto', 'ask', 'plan', 'low'. Defaults to 'ask'. */
+  default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +142,13 @@ export function inferProvider(model: string): string {
   if (lower.includes('deepseek')) return 'deepseek';
   if (lower.includes('openai') || lower.includes('gpt') || lower.includes('o1') || lower.includes('o3') || lower.includes('o4')) return 'openai';
   return 'anthropic';
+}
+
+export function saveSettings(settings: CoderSettings): void {
+  const settingsDir = join(homedir(), '.coderix');
+  mkdirSync(settingsDir, { recursive: true });
+  const settingsPath = join(settingsDir, 'settings.json');
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
 export function loadSettings(): CoderSettings {

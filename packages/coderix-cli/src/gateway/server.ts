@@ -379,7 +379,7 @@ export async function startGateway(): Promise<void> {
   notify({ type: 'gateway.ready', payload: { model: config.model }, session_id: currentSessionId });
 
   await engine.init();
-  engine.setPermissionMode(PermissionMode.ASK);
+  engine.setPermissionMode((settings.default_permission_mode as PermissionMode) ?? PermissionMode.ASK);
   ready = true;
   for (const fn of pendingQueue) await fn();
   pendingQueue.length = 0;

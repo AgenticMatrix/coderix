@@ -10,7 +10,7 @@
  */
 
 import { loadConfig, loadSettings, getMaxToolConcurrency } from './config.js';
-import type { ToolDefinition, ToolContext, ToolExecutionResult, QueryMessage, StreamEvent } from '@coderix/core';
+import type { ToolDefinition, ToolContext, ToolExecutionResult, QueryMessage, StreamEvent, PermissionMode } from '@coderix/core';
 
 // ── CLI args ──────────────────────────────────────────────────────────
 
@@ -428,6 +428,7 @@ async function main(): Promise<void> {
   const { SystemPromptAssembler } = await import('@coderix/core');
   const { QueryEngine } = await import('@coderix/core');
   const { buildAgentRegistry: buildAgentReg } = await import('@coderix/core');
+  const { PermissionMode } = await import('@coderix/core');
   const subAgentRegistry = new SubAgentRegistry();
   const { setSubAgentRegistry } = await import('@coderix/core');
   setSubAgentRegistry(subAgentRegistry);
@@ -492,6 +493,7 @@ async function main(): Promise<void> {
 
   const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPluginsTui), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings, eventBus, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init();
+  engine.setPermissionMode((settings.default_permission_mode as PermissionMode) || 'ask');
 
   // ── Create unified AppState store ──────────────────────────────────
   const { createStore } = await import('@coderix/core');
