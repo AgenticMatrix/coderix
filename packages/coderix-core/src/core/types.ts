@@ -244,6 +244,8 @@ export interface PlanModeState {
   needsExitAttachment: boolean;
   /** User's choice from ExitPlanMode confirmation: 'auto-accept' | 'manual-approve' | 'request-changes'. */
   exitChoice?: string;
+  /** One-shot flag: user requested changes — inject revision prompt on next turn. */
+  needsRevisionPrompt?: boolean;
 }
 
 export enum RiskLevel {

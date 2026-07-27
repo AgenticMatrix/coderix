@@ -59,7 +59,7 @@ export const execute: ToolExecutor = async (input, options) => {
 
   let statusMessage: string;
   if (exitChoice === 'request-changes') {
-    statusMessage = `Plan written to ${filePath}\n\nUser wants changes to the plan — waiting for feedback.`;
+    statusMessage = `Plan written to ${filePath}\n\nUser wants changes to the plan — still in plan mode. Waiting for feedback so the plan can be revised.`;
   } else if (exitChoice === 'manual-approve') {
     statusMessage = `Plan written to ${filePath}\n\nUser chose manual approval — each tool call will require confirmation.`;
   } else {
