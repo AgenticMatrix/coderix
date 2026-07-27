@@ -55,27 +55,25 @@ export const execute: ToolExecutor = async (input, options) => {
     };
   }
 
-  // Restore the pre-plan permission mode and mark plan mode as exited
-  const restoreMode = options.planModeState?.prePlanMode ?? 'auto';
+  const exitChoice = input._exitChoice as string | undefined;
 
-  if (options.setPermissionMode) {
-    options.setPermissionMode(restoreMode);
-  }
-
-  if (options.planModeState) {
-    options.planModeState.hasExitedPlanMode = true;
+  let statusMessage: string;
+  if (exitChoice === 'request-changes') {
+    statusMessage = `Plan written to ${filePath}\n\nUser wants changes to the plan — waiting for feedback.`;
+  } else if (exitChoice === 'manual-approve') {
+    statusMessage = `Plan written to ${filePath}\n\nUser chose manual approval — each tool call will require confirmation.`;
+  } else {
+    statusMessage = `Plan written to ${filePath}\n\nUser chose auto-accept — implementation can now begin.`;
   }
 
   return {
-    content:
-      `Plan written to ${filePath}\n\n` +
-      `Switched to ${restoreMode} mode — implementation can now begin.`,
+    content: statusMessage,
     isError: false,
     metadata: {
       planFile: filePath,
       plan,
       allowedPrompts: allowedPrompts ?? null,
-      restoreMode,
+      exitChoice: exitChoice ?? 'auto-accept',
     },
   };
 };

@@ -30,24 +30,64 @@ export function ExitPlanModeRenderer(
 
   if (isDone) {
     const planFile = props.result?.metadata?.planFile as string | undefined;
+    const plan = props.result?.metadata?.plan as string | undefined;
+    const SEP = '╌'.repeat(100);
+
     return (
       <Box flexDirection="column" marginTop={1}>
         <Text>
-          <Text color="ansi:green">● </Text>
+          <Text color="ansi:green">{'● '}</Text>
           <Text bold>ExitPlanMode</Text>
           <Text dimColor> plan approved</Text>
         </Text>
         {planFile ? (
           <Box paddingLeft={3}>
-            <Text dimColor>⎿ Saved to {planFile}</Text>
+            <Text dimColor>{'⏿'} Saved to {planFile}</Text>
+          </Box>
+        ) : null}
+        {plan ? (
+          <Box flexDirection="column" marginTop={1} paddingLeft={1}>
+            <Text dimColor>{SEP}</Text>
+            <Text bold> Here is Coderix's plan:</Text>
+            <Text dimColor>{SEP}</Text>
+            <Text>{plan}</Text>
+            <Text dimColor>{SEP}</Text>
           </Box>
         ) : null}
       </Box>
     );
   }
 
-  // Executing / pending (waiting for user approval)
+  // Executing / pending (waiting for user confirmation)
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
+  const inputPlan = props.input._planContent as string | undefined;
+  const SEP = '╌'.repeat(100);
+
+  // Show plan content even while waiting for confirmation
+  if (isExecuting && inputPlan) {
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <Box flexDirection="column" marginTop={1} paddingLeft={1}>
+          <Text dimColor>{SEP}</Text>
+          <Text bold> Here is Coderix's plan:</Text>
+          <Text dimColor>{SEP}</Text>
+          <Text>{inputPlan}</Text>
+          <Text dimColor>{SEP}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text>
+            <Text color="ansi:yellow">{blinkOn ? '●' : '○'} </Text>
+            <Text bold>ExitPlanMode</Text>
+            <Text dimColor> waiting for confirmation</Text>
+            <Text dimColor color="ansi:yellow">
+              {' '}
+              {elapsedSecs}s
+            </Text>
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" marginBottom={1}>

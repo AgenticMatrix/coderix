@@ -59,7 +59,7 @@ import { loadMemoryConfig } from '../memory/config.js';
 import { listTasks } from '../tasks/store.js';
 import { drainTaskNotifications, listTasks as listTrackedTasks } from '../tasks/task-tracker.js';
 import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
-import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
+import { generatePlanSlug, getPlanFilePath, getPlan } from './plan-files.js';
 import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
 // Types
 // ---------------------------------------------------------------------------
@@ -578,8 +578,24 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         const planRef = pm.current.planFilePath
           ? ` The plan file is located at ${pm.current.planFilePath} if you need to reference it.`
           : '';
+        const exitChoice = pm.current.exitChoice ?? 'auto-accept';
+        let exitMessage: string;
+        if (exitChoice === 'request-changes') {
+          exitMessage =
+            'You have exited plan mode, but the user wants changes to the plan. ' +
+            'Do NOT start implementing. Instead, ask the user what they would like to change, ' +
+            'and wait for their response before making any edits.';
+        } else if (exitChoice === 'manual-approve') {
+          exitMessage =
+            'You have exited plan mode. The user wants to manually approve each change. ' +
+            'You may proceed with implementation, but each tool call will require approval.';
+        } else {
+          exitMessage =
+            'You have exited plan mode. The user chose auto-accept. ' +
+            'You may now make edits, run tools, and take actions freely.';
+        }
         systemText =
-          `<system-reminder>\n## Exited Plan Mode\n\nYou have exited plan mode. You can now make edits, run tools, and take actions.${planRef}\n</system-reminder>\n\n` +
+          `<system-reminder>\n## Exited Plan Mode\n\n${exitMessage}${planRef}\n</system-reminder>\n\n` +
           systemText;
         pm.current.needsExitAttachment = false;
       }
@@ -745,6 +761,65 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               // Fall through to normal execution — executor returns the answers
             }
 
+            // ── exit-plan-mode: read plan, show confirmation prompt ──
+            if (toolBlock.name === 'ExitPlanMode') {
+              const planState = pm.current;
+              const planFilePath = planState?.planFilePath ?? '';
+              const planContent = planFilePath ? getPlan(planFilePath) : null;
+
+              if (planContent) {
+                // Inject plan into input so renderer can display it
+                toolBlock.input = {
+                  ...toolBlock.input,
+                  _planContent: planContent,
+                  _planFilePath: planFilePath,
+                };
+
+                const questions = [{
+                  question: 'Coderix has written up a plan and is ready to execute. Would you like to proceed?',
+                  header: 'Proceed?',
+                  options: [
+                    { label: 'Yes, auto-accept edits', description: 'Proceed with implementation without asking for each change' },
+                    { label: 'Yes, manually approve edits', description: 'Proceed but ask before each tool call' },
+                    { label: 'Tell Coderix what to change', description: 'User wants modifications to the plan' },
+                  ],
+                }];
+
+                let resolve!: (answers: Record<string, string | string[]>) => void;
+                const promise = new Promise<Record<string, string | string[]>>((r) => { resolve = r; });
+                const deferred = {
+                  toolName: toolBlock.name, toolUseId: toolBlock.id,
+                  questions, resolve, promise,
+                };
+
+                yield {
+                  type: 'system', subtype: 'question_required',
+                  deferred,
+                } as any;
+
+                const answers = await promise;
+
+                // Apply permission mode based on answer
+                const answer = answers['Proceed?'] as string;
+                let choice: string;
+                if (answer === 'Yes, auto-accept edits') {
+                  execOpts.setPermissionMode?.('auto');
+                  choice = 'auto-accept';
+                } else if (answer === 'Yes, manually approve edits') {
+                  execOpts.setPermissionMode?.('ask');
+                  choice = 'manual-approve';
+                } else {
+                  execOpts.setPermissionMode?.('ask');
+                  choice = 'request-changes';
+                }
+                if (planState) planState.exitChoice = choice;
+
+                // Merge answers and choice so executor can include them
+                toolBlock.input = { ...toolBlock.input, _exitAnswers: answers, _exitChoice: choice };
+              }
+              // Fall through to normal execution
+            }
+
             // Permission check + enqueue (may yield for ASK mode)
             if (!abortController.signal.aborted) {
               const toolDef = toolRegistry.get(toolBlock.name)?.definition;
@@ -774,18 +849,21 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                 ? (toolBlock.input as Record<string, unknown>).command as string | undefined
                 : undefined;
 
-              let permissionResult = await permissionEngine.check(
-                {
-                  toolName: toolBlock.name,
-                  input: toolBlock.input,
-                  riskLevel: effectiveRiskLevel,
-                },
-                toolDef,
-                cmdContent,
-              );
+              // ExitPlanMode is always auto-approved (handled above)
+              const permissionResult = toolBlock.name === 'ExitPlanMode'
+                ? { allowed: true, behavior: 'approve' as const }
+                : await permissionEngine.check(
+                    {
+                      toolName: toolBlock.name,
+                      input: toolBlock.input,
+                      riskLevel: effectiveRiskLevel,
+                    },
+                    toolDef,
+                    cmdContent,
+                  );
 
-              // PermissionRequest hook
-              if (hookManager && permissionResult.behavior !== 'approve') {
+              // PermissionRequest hook (skip for ExitPlanMode — already confirmed)
+              if (hookManager && permissionResult.behavior !== 'approve' && toolBlock.name !== 'ExitPlanMode') {
                 const riskLevelStr = effectiveRiskLevel;
                 const { permissionOverride } = await hookManager.onPermissionRequest(
                   sessionId, cwd, toolBlock.name, toolBlock.input,
@@ -926,6 +1004,63 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                   }
                 }
 
+                // ── exit-plan-mode: read plan, show confirmation prompt ──
+                if (toolBlock.name === 'ExitPlanMode') {
+                  const planState = pm.current;
+                  const planFilePath = planState?.planFilePath ?? '';
+                  const planContent = planFilePath ? getPlan(planFilePath) : null;
+
+                  if (planContent) {
+                    toolBlock.input = {
+                      ...toolBlock.input,
+                      _planContent: planContent,
+                      _planFilePath: planFilePath,
+                    };
+
+                    const questions = [{
+                      question: 'Coderix has written up a plan and is ready to execute. Would you like to proceed?',
+                      header: 'Proceed?',
+                      options: [
+                        { label: 'Yes, auto-accept edits', description: 'Proceed with implementation without asking for each change' },
+                        { label: 'Yes, manually approve edits', description: 'Proceed but ask before each tool call' },
+                        { label: 'Tell Coderix what to change', description: 'User wants modifications to the plan' },
+                      ],
+                    }];
+
+                    let resolve!: (answers: Record<string, string | string[]>) => void;
+                    const promise = new Promise<Record<string, string | string[]>>((r) => { resolve = r; });
+                    const deferred = {
+                      toolName: toolBlock.name, toolUseId: toolBlock.id,
+                      questions, resolve, promise,
+                    };
+
+                    yield {
+                      type: 'system', subtype: 'question_required',
+                      deferred,
+                    } as any;
+
+                    const answers = await promise;
+
+                    const answer = answers['Proceed?'] as string;
+                    let choice: string;
+                    if (answer === 'Yes, auto-accept edits') {
+                      execOpts.setPermissionMode?.('auto');
+                      choice = 'auto-accept';
+                    } else if (answer === 'Yes, manually approve edits') {
+                      execOpts.setPermissionMode?.('ask');
+                      choice = 'manual-approve';
+                    } else {
+                      execOpts.setPermissionMode?.('ask');
+                      choice = 'request-changes';
+                    }
+                    if (planState) planState.exitChoice = choice;
+
+                    toolBlock.input = { ...toolBlock.input, _exitAnswers: answers, _exitChoice: choice };
+
+                    toolBlock.input = { ...toolBlock.input, _exitAnswers: answers };
+                  }
+                }
+
                 // Permission check + enqueue (same logic as streaming path above)
                 if (!abortController.signal.aborted) {
                   const toolDef = toolRegistry.get(toolBlock.name)?.definition;
@@ -949,16 +1084,19 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
                     };
                   }
 
-                  let permissionResult = await permissionEngine.check(
-                    {
-                      toolName: toolBlock.name,
-                      input: toolBlock.input,
-                      riskLevel: effectiveRiskLevel,
-                    },
-                    toolDef,
-                  );
+                  // ExitPlanMode is always auto-approved (handled above)
+                  const permissionResult = toolBlock.name === 'ExitPlanMode'
+                    ? { allowed: true, behavior: 'approve' as const }
+                    : await permissionEngine.check(
+                        {
+                          toolName: toolBlock.name,
+                          input: toolBlock.input,
+                          riskLevel: effectiveRiskLevel,
+                        },
+                        toolDef,
+                      );
 
-                  if (hookManager && permissionResult.behavior !== 'approve') {
+                  if (hookManager && permissionResult.behavior !== 'approve' && toolBlock.name !== 'ExitPlanMode') {
                     const riskLevelStr = effectiveRiskLevel;
                     const { permissionOverride } = await hookManager.onPermissionRequest(
                       sessionId, cwd, toolBlock.name, toolBlock.input,

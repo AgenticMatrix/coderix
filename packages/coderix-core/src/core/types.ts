@@ -242,6 +242,8 @@ export interface PlanModeState {
   hasExitedPlanMode: boolean;
   /** One-shot flag: inject exit attachment on the next turn. */
   needsExitAttachment: boolean;
+  /** User's choice from ExitPlanMode confirmation: 'auto-accept' | 'manual-approve' | 'request-changes'. */
+  exitChoice?: string;
 }
 
 export enum RiskLevel {
