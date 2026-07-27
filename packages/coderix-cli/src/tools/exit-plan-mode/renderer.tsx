@@ -51,6 +51,9 @@ export function ExitPlanModeRenderer(
   if (isDone) {
     const planFile = props.result?.metadata?.planFile as string | undefined;
     const plan = props.result?.metadata?.plan as string | undefined;
+    const exitChoice = (props.result?.metadata?.exitChoice
+      ?? props.input._exitChoice) as string | undefined;
+    const isRevision = exitChoice === 'request-changes';
 
     return (
       <Box flexDirection="column" marginTop={1}>
@@ -64,16 +67,33 @@ export function ExitPlanModeRenderer(
           </Box>
         ) : null}
         <Box marginTop={1}>
-          <Text>
-            <Text color="ansi:green">{'● '}</Text>
-            <Text bold>ExitPlanMode</Text>
-            <Text dimColor> plan approved</Text>
-          </Text>
-          {planFile ? (
-            <Box paddingLeft={3}>
-              <Text dimColor>{'⏿'} Saved to {planFile}</Text>
+          {isRevision ? (
+            <Box flexDirection="column">
+              <Text>
+                <Text color="ansi:yellow">{'● '}</Text>
+                <Text bold>ExitPlanMode</Text>
+                <Text dimColor> plan needs revision</Text>
+              </Text>
+              {planFile ? (
+                <Box paddingLeft={3}>
+                  <Text dimColor>{'⏿'} Plan saved to {planFile}</Text>
+                </Box>
+              ) : null}
             </Box>
-          ) : null}
+          ) : (
+            <Box flexDirection="column">
+              <Text>
+                <Text color="ansi:green">{'● '}</Text>
+                <Text bold>ExitPlanMode</Text>
+                <Text dimColor> plan approved</Text>
+              </Text>
+              {planFile ? (
+                <Box paddingLeft={3}>
+                  <Text dimColor>{'⏿'} Saved to {planFile}</Text>
+                </Box>
+              ) : null}
+            </Box>
+          )}
         </Box>
       </Box>
     );
