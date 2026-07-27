@@ -193,16 +193,25 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
                 // Inject results into tool_use blocks for inline display
                 for (const block of blocks) {
                   if (block.type === 'tool_result' && block.toolId) {
-                    dispatch({
-                      type: 'SET_TOOL_USE_RESULT',
-                      toolId: block.toolId,
-                      duration: block.duration,
-                      result: {
-                        content: block.content,
-                        isError: block.isError,
-                        metadata: block.metadata,
-                      },
-                    });
+                    const isBashBackground = block.toolName === 'bash' && block.metadata?.background === true;
+                    if (isBashBackground) {
+                      dispatch({
+                        type: 'UPDATE_BLOCK_STATE',
+                        toolId: block.toolId,
+                        state: 'done',
+                      });
+                    } else {
+                      dispatch({
+                        type: 'SET_TOOL_USE_RESULT',
+                        toolId: block.toolId,
+                        duration: block.duration,
+                        result: {
+                          content: block.content,
+                          isError: block.isError,
+                          metadata: block.metadata,
+                        },
+                      });
+                    }
                   }
                 }
 

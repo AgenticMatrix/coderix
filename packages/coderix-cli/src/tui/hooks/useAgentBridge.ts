@@ -336,16 +336,25 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                 const applyResults = () => {
                   for (const block of blocks) {
                     if (block.type === 'tool_result' && block.toolId) {
-                      routeDispatch({
-                        type: 'SET_TOOL_USE_RESULT',
-                        toolId: block.toolId,
-                        duration: block.duration,
-                        result: {
-                          content: block.content,
-                          isError: block.isError,
-                          metadata: block.metadata,
-                        },
-                      });
+                      const isBashBackground = block.toolName === 'bash' && block.metadata?.background === true;
+                      if (isBashBackground) {
+                        routeDispatch({
+                          type: 'UPDATE_BLOCK_STATE',
+                          toolId: block.toolId,
+                          state: 'done',
+                        });
+                      } else {
+                        routeDispatch({
+                          type: 'SET_TOOL_USE_RESULT',
+                          toolId: block.toolId,
+                          duration: block.duration,
+                          result: {
+                            content: block.content,
+                            isError: block.isError,
+                            metadata: block.metadata,
+                          },
+                        });
+                      }
                     }
                   }
                 };
@@ -415,16 +424,26 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   const isError = completed.isError ?? false;
                   const cMetadata = completed.metadata;
                   const applyCompleted = () => {
-                    routeDispatch({
-                      type: 'SET_TOOL_USE_RESULT',
-                      toolId,
-                      duration,
-                      result: {
-                        content,
-                        isError,
-                        metadata: cMetadata,
-                      },
-                    });
+                    const toolName = toolNameMapRef.current.get(toolId);
+                    const isBashBackground = toolName === 'bash' && cMetadata?.background === true;
+                    if (isBashBackground) {
+                      routeDispatch({
+                        type: 'UPDATE_BLOCK_STATE',
+                        toolId,
+                        state: 'done',
+                      });
+                    } else {
+                      routeDispatch({
+                        type: 'SET_TOOL_USE_RESULT',
+                        toolId,
+                        duration,
+                        result: {
+                          content,
+                          isError,
+                          metadata: cMetadata,
+                        },
+                      });
+                    }
                   };
                   if (batchedUpdates) {
                     batchedUpdates(applyCompleted);

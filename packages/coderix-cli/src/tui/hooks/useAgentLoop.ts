@@ -173,12 +173,21 @@ export function useAgentLoop({ config, getMessagesSnapshot, dispatch }: AgentLoo
           toolResultBlocks.push(tr);
 
           // Inject result into the tool_use block for inline display
-          dispatch({
-            type: 'SET_TOOL_USE_RESULT',
-            toolId: tu.toolId,
-            duration: result.duration,
-            result: { content: result.content, isError: result.isError, metadata: result.metadata },
-          });
+          const isBashBackground = tu.toolName === 'bash' && result.metadata?.background === true;
+          if (isBashBackground) {
+            dispatch({
+              type: 'UPDATE_BLOCK_STATE',
+              toolId: tu.toolId,
+              state: 'done',
+            });
+          } else {
+            dispatch({
+              type: 'SET_TOOL_USE_RESULT',
+              toolId: tu.toolId,
+              duration: result.duration,
+              result: { content: result.content, isError: result.isError, metadata: result.metadata },
+            });
+          }
         }
 
         if (toolResultBlocks.length > 0) {
