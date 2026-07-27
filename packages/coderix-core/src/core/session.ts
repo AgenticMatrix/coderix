@@ -68,9 +68,11 @@ export class SessionManager {
   private sessions: Map<string, Session> = new Map();
   private pendingWrites = new Set<Promise<void>>();
   private exitHandlerRegistered = false;
+  private readonly diskless: boolean;
 
-  constructor() {
-    if (!existsSync(SESSIONS_DIR)) {
+  constructor(diskless: boolean = false) {
+    this.diskless = diskless;
+    if (!diskless && !existsSync(SESSIONS_DIR)) {
       mkdirSync(SESSIONS_DIR, { recursive: true });
     }
   }
@@ -303,14 +305,8 @@ export class SessionManager {
       });
     }
 
-    // Append to JSONL asynchronously (fire-and-forget with throttling)
-    const dir = getSessionDir(session.id);
-    const jsonlPath = sessionJsonlPath(dir);
-
-    // Bootstrap the session on first message: init entry count, write parent metadata
+    // Update in-memory title from the first user message (always)
     if (((session as any)._entryCount as number ?? 0) === 0) {
-      // Update in-memory title from the first user message
-      // (actual persistence happens in the CLI layer via LLM)
       if (message.role === 'user') {
         const text = extractMessageText(message);
         if (text) {
@@ -318,33 +314,40 @@ export class SessionManager {
         }
       }
       (session as any)._entryCount = 1;
+    }
 
-      if (session.parentSessionId) {
+    (session as any)._entryCount = ((session as any)._entryCount as number) + 1;
+
+    // Append to JSONL asynchronously (fire-and-forget with throttling).
+    // Skip when diskless — sub-agent sessions are in-memory only.
+    if (!this.diskless) {
+      const dir = getSessionDir(session.id);
+      const jsonlPath = sessionJsonlPath(dir);
+
+      // Bootstrap the session on first message: write parent metadata
+      if (((session as any)._entryCount as number) <= 2 && session.parentSessionId) {
         const parentEntry: SessionEntry = {
           type: 'parent-session',
           parentSessionId: session.parentSessionId,
         } as SessionEntry;
         appendEntry(jsonlPath, parentEntry).catch(() => {});
-        (session as any)._entryCount = 2;
       }
-    }
 
-    (session as any)._entryCount = ((session as any)._entryCount as number) + 1;
-
-    // Throttle: small sessions flush every 5 messages,
-    // large sessions (>200) every 20 messages
-    const skip = session.messages.length > 200 ? 20 : 5;
-    if (session.messages.length % skip === 0) {
-      // Flush with pending write tracking
-      const writePromise = appendEntry(jsonlPath, entry)
-        .catch(() => {})
-        .finally(() => {
-          this.pendingWrites.delete(writePromise);
-        });
-      this.pendingWrites.add(writePromise);
-    } else {
-      // Fire-and-forget
-      appendEntry(jsonlPath, entry).catch(() => {});
+      // Throttle: small sessions flush every 5 messages,
+      // large sessions (>200) every 20 messages
+      const skip = session.messages.length > 200 ? 20 : 5;
+      if (session.messages.length % skip === 0) {
+        // Flush with pending write tracking
+        const writePromise = appendEntry(jsonlPath, entry)
+          .catch(() => {})
+          .finally(() => {
+            this.pendingWrites.delete(writePromise);
+          });
+        this.pendingWrites.add(writePromise);
+      } else {
+        // Fire-and-forget
+        appendEntry(jsonlPath, entry).catch(() => {});
+      }
     }
   }
 

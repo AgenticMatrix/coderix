@@ -30,7 +30,7 @@ export const generalPurposeAgent: BuiltInAgentDefinition = {
     '- Relevant file paths (absolute) and code snippets.',
     '- Any issues, limitations, or follow-ups needed.',
     '',
-    'You CANNOT spawn additional sub-agents.',
+    'Agent and TeamAgent tools are not available — you cannot spawn additional sub-agents or create teams.',
     'Do not ask the user questions — you are operating autonomously.',
   ].join('\n'),
 };

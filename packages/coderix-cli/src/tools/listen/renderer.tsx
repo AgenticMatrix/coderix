@@ -39,10 +39,10 @@ export function ListenRenderer(props: ToolUseRendererProps) {
     startTimeRef.current = Date.now();
     prevRetryRef.current = currentRetry;
   }
-  const [, tick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!isActive) return;
-    const id = setInterval(() => tick((t) => t + 1), 100);
+    const id = setInterval(() => setTick((t) => t + 1), 100);
     return () => clearInterval(id);
   }, [isActive]);
 

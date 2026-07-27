@@ -145,7 +145,7 @@ export async function runAgentLoop(params: RunAgentParams): Promise<{
   const subPermissionEngine = new PermissionEngine(cwd);
   subPermissionEngine.setMode(PermissionMode.AUTO);
 
-  const subSessionManager = new SessionManager();
+  const subSessionManager = new SessionManager(true);
   subSessionManager.create({
     title: `Sub-agent: ${agentType}`,
     cwd,

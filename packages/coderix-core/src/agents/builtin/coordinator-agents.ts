@@ -59,7 +59,7 @@ export const workerAgent: BuiltInAgentDefinition = {
     '',
     'Rules:',
     '- Complete only the task you were given. Do not expand scope.',
-    '- Do not spawn sub-agents. You are a leaf node.',
+    '- Agent and TeamAgent tools are not available. You are a leaf node — do not attempt to spawn sub-agents or create teams.',
     '- Do not ask the user questions. Work autonomously.',
     '- Report results concisely: what you did, what you found, what changed.',
     '- Include absolute file paths and line numbers where relevant.',

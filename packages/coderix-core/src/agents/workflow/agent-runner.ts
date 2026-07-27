@@ -256,7 +256,7 @@ async function runAgentLoop(params: RunAgentLoopParams): Promise<{
   const subPermissionEngine = new PermissionEngine(effectiveCwd);
   subPermissionEngine.setMode(PermissionMode.AUTO);
 
-  const subSessionManager = new SessionManager();
+  const subSessionManager = new SessionManager(true);
   subSessionManager.create({
     title: `Workflow: ${agentType}`,
     cwd: effectiveCwd,

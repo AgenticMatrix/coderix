@@ -182,7 +182,7 @@ async function resumeAgent(
   const subPermissionEngine = new PermissionEngine(process.cwd());
   subPermissionEngine.setMode(PermissionMode.AUTO);
 
-  const subSessionManager = new SessionManager();
+  const subSessionManager = new SessionManager(true);
   const subSession = subSessionManager.create({
     title: `Sub-agent: ${agentType} (resumed)`,
     cwd: process.cwd(),

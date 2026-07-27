@@ -77,7 +77,7 @@ function buildForkChildMessage(prompt: string): string {
     'You are a fork of the parent agent with full context and tools.',
     '',
     'Non-negotiable rules:',
-    '1. Do NOT spawn sub-agents or teammates — you are the worker',
+    '1. Agent and TeamAgent tools are not available — you work independently',
     '2. Do NOT have a conversation — just complete the task',
     '3. Use tools directly, do not ask for clarification',
     '4. Commit any code changes before reporting back',
@@ -563,7 +563,7 @@ async function executeFork(
   const subAbortController = new AbortController();
   const isBackground = background ?? false;
 
-  // ── Recursion guard ──────────────────────────────────────────────────
+  // ── Recursion guard (defense-in-depth; primary defense is tool filtering) ──
   const parentSession = agentSpawn.sessionManager.getActive();
   const parentMessages: Message[] = parentSession?.messages ?? [];
   if (isInForkChild(parentMessages)) {
@@ -596,12 +596,13 @@ async function executeFork(
     }
   }
 
-  // Inherit parent tools exactly — no filtering for fork. Byte-identical
-  // tool definitions preserve the API request prefix for prompt cache hits.
-  // Recursion is prevented by the isInForkChild() guard above.
+  // Inherit parent tools but filter globally disallowed tools (Agent,
+  // TeamAgent, TeamCreate, etc.) to prevent sub-agent spawning chains.
+  // The isInForkChild() guard below adds defense-in-depth for fork-of-fork.
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
   const subToolRegistry = new ToolRegistry();
   for (const def of parentDefs) {
+    if (GLOBAL_DISALLOWED_FOR_SUBAGENTS.has(def.name)) continue;
     const registration = agentSpawn.toolRegistry.get(def.name);
     if (registration) {
       subToolRegistry.register(def, registration.execute);
