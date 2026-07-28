@@ -215,11 +215,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 if (Array.isArray(content)) {
                   for (const block of content) {
                     if (block && (block as any).type === 'tool_result') {
-                      const tr = block as { type: 'tool_result'; tool_use_id: string; content: unknown };
+                      const tr = block as { type: 'tool_result'; tool_use_id: string; content: unknown; metadata?: Record<string, unknown> };
                       mainWindow.webContents.send(IPC_CHANNELS.STREAM_TOOL_RESULT, {
                         toolUseId: tr.tool_use_id,
                         toolName: '',
                         result: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+                        metadata: tr.metadata,
                       });
                     }
                   }

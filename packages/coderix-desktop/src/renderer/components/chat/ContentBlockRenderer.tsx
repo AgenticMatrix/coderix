@@ -178,6 +178,7 @@ export function ContentBlockRenderer({
           state={block.state}
           toolId={block.toolId}
           toolResult={block.toolResult}
+          toolMetadata={block.toolMetadata}
         />
       );
 

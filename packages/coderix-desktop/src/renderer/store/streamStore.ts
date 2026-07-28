@@ -96,6 +96,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
             updatedBlocks[toolUseIdx] = {
               ...updatedBlocks[toolUseIdx],
               toolResult: block.content,
+              toolMetadata: block.toolMetadata,
             };
             useChatStore.setState((s) => ({
               messages: s.messages.map((m) =>
@@ -142,6 +143,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
         if (block.type === 'tool_result' && existing.type === 'tool_use') {
           existing.toolResult = block.content;
+          existing.toolMetadata = block.toolMetadata;
           updated[existingIdx] = existing;
           msg = { ...msg, blocks: updated };
         } else {
@@ -171,6 +173,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
             updatedBlocks[toolUseIdx] = {
               ...updatedBlocks[toolUseIdx],
               toolResult: block.content,
+              toolMetadata: block.toolMetadata,
             };
             useChatStore.setState((s) => ({
               messages: s.messages.map((m) =>

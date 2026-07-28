@@ -204,6 +204,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
               ? event.result
               : JSON.stringify(event.result),
           state: 'done',
+          toolMetadata: (event as any).metadata as Record<string, unknown> | undefined,
         };
         callback(resultBlock);
         break;

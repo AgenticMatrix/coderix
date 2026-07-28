@@ -22,14 +22,14 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
     icon: <FileText size={13} />,
     label: (input) => {
       const fp = input.file_path as string ?? '';
-      return `Read ${truncatePath(fp)}`;
+      return fp ? `Read (${fp})` : 'Read';
     },
   },
   write: {
     icon: <FilePlus size={13} />,
     label: (input) => {
       const fp = input.file_path as string ?? '';
-      return `Write ${truncatePath(fp)}`;
+      return `Write(${fp})`;
     },
   },
   update: {
@@ -44,14 +44,20 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
     label: (input) => {
       const desc = input.description as string ?? '';
       const cmd = input.command as string ?? '';
-      return desc || cmd ? `Bash ${truncateText(desc || cmd, 60)}` : 'Bash';
+      if (desc && cmd) return `Bash (${desc}, ${cmd})`;
+      if (desc) return `Bash (${desc})`;
+      if (cmd) return `Bash ${truncateText(cmd, 60)}`;
+      return 'Bash';
     },
   },
   glob: {
     icon: <FolderSearch size={13} />,
     label: (input) => {
-      const p = input.pattern as string ?? '';
-      return `Glob ${truncateText(p, 60)}`;
+      const path = input.path as string ?? '';
+      const pattern = input.pattern as string ?? '';
+      if (path && pattern) return `Glob (${path}, ${pattern})`;
+      if (pattern) return `Glob (${pattern})`;
+      return 'Glob';
     },
   },
   grep: {
@@ -61,60 +67,64 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
       return `Grep ${truncateText(p, 60)}`;
     },
   },
-  WebFetch: {
+  webfetch: {
     icon: <Globe size={13} />,
     label: (input) => {
       const url = input.url as string ?? '';
       return `WebFetch ${truncateText(url, 50)}`;
     },
   },
-  WebSearch: {
+  websearch: {
     icon: <ExternalLink size={13} />,
     label: (input) => {
       const q = input.query as string ?? '';
       return `WebSearch "${truncateText(q, 40)}"`;
     },
   },
-  TaskCreate: {
+  taskcreate: {
     icon: <CheckSquare size={13} />,
     label: (input) => {
-      const s = input.subject as string ?? input.description as string ?? '';
-      return `TaskCreate ${truncateText(s, 60)}`;
+      const af = input.activeForm as string ?? '';
+      const desc = input.description as string ?? '';
+      if (af && desc) return `TaskCreate (${af}: ${desc})`;
+      if (af) return `TaskCreate (${af})`;
+      if (desc) return `TaskCreate (${desc})`;
+      return 'TaskCreate';
     },
   },
-  TaskUpdate: {
+  taskupdate: {
     icon: <CheckSquare size={13} />,
     label: (input) => {
       const id = input.taskId as string ?? '';
       return `TaskUpdate ${id}`;
     },
   },
-  TaskList: {
+  tasklist: {
     icon: <CheckSquare size={13} />,
     label: () => 'TaskList',
   },
-  TaskGet: {
+  taskget: {
     icon: <CheckSquare size={13} />,
     label: (input) => {
       const id = input.taskId as string ?? '';
       return `TaskGet ${id}`;
     },
   },
-  TaskOutput: {
+  taskoutput: {
     icon: <CheckSquare size={13} />,
     label: (input) => {
       const id = input.task_id as string ?? '';
       return `TaskOutput ${id}`;
     },
   },
-  TaskStop: {
+  taskstop: {
     icon: <CheckSquare size={13} />,
     label: (input) => {
       const id = input.task_id as string ?? '';
       return `TaskStop ${id}`;
     },
   },
-  TodoWrite: {
+  todowrite: {
     icon: <CheckSquare size={13} />,
     label: () => 'TodoWrite',
   },
@@ -125,7 +135,7 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
       return `Skill ${s}`;
     },
   },
-  AskUserQuestion: {
+  askuserquestion: {
     icon: <MessageSquare size={13} />,
     label: (input) => {
       const questions = input.questions as Array<{ question: string }> ?? [];
@@ -133,64 +143,64 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
       return `Ask ${truncateText(q, 50)}`;
     },
   },
-  EnterPlanMode: {
+  enterplanmode: {
     icon: <Brain size={13} />,
     label: () => 'Enter Plan Mode',
   },
-  ExitPlanMode: {
+  exitplanmode: {
     icon: <Brain size={13} />,
     label: () => 'Exit Plan Mode',
   },
-  NotebookEdit: {
+  notebookedit: {
     icon: <FileCode size={13} />,
     label: (input) => {
       const fp = input.notebook_path as string ?? '';
       return `NotebookEdit ${truncatePath(fp)}`;
     },
   },
-  Agent: {
+  agent: {
     icon: <Network size={13} />,
     label: (input) => {
       const desc = input.description as string ?? input.prompt as string ?? '';
       return `Agent ${truncateText(desc, 50)}`;
     },
   },
-  SendMessage: {
+  sendmessage: {
     icon: <Users size={13} />,
     label: (input) => {
       const agentName = input.agent_name as string ?? '';
       return `SendMessage → ${agentName}`;
     },
   },
-  TeamCreate: {
+  teamcreate: {
     icon: <UserPlus size={13} />,
     label: (input) => {
       const name = input.name as string ?? '';
       return `TeamCreate ${name}`;
     },
   },
-  TeamDelete: {
+  teamdelete: {
     icon: <UserMinus size={13} />,
     label: (input) => {
       const name = input.name as string ?? '';
       return `TeamDelete ${name}`;
     },
   },
-  Listen: {
+  listen: {
     icon: <Clock size={13} />,
     label: (input) => {
       const d = input.duration as string ?? '';
       return `Listen ${d}`;
     },
   },
-  EnterWorktree: {
+  enterworktree: {
     icon: <GitBranch size={13} />,
     label: (input) => {
       const name = input.name as string ?? input.path as string ?? '';
       return name ? `EnterWorktree ${name}` : 'EnterWorktree';
     },
   },
-  ExitWorktree: {
+  exitworktree: {
     icon: <FolderSync size={13} />,
     label: (input) => {
       const action = input.action as string ?? '';
@@ -254,6 +264,7 @@ export interface ToolRendererProps {
   state?: StreamBlock['state'];
   toolId?: string;
   toolResult?: string;
+  toolMetadata?: Record<string, unknown>;
 }
 
 export function ToolRenderer({
@@ -262,10 +273,15 @@ export function ToolRenderer({
   state = 'executing',
   toolId,
   toolResult,
+  toolMetadata,
 }: ToolRendererProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const config = getToolConfig(toolName);
   const sc = stateColors[state] ?? stateColors.pending;
+  const isWrite = toolName.toLowerCase() === 'write';
+  const writeStats = isWrite && toolMetadata
+    ? `${toolMetadata.addedLines ?? 0} added, ${toolMetadata.removedLines ?? 0} removed`
+    : undefined;
 
   return (
     <motion.div
@@ -304,8 +320,8 @@ export function ToolRenderer({
             className="overflow-hidden"
           >
             <div className="pl-7 pb-2 space-y-1.5">
-              {/* Tool input parameters */}
-              {Object.keys(toolInput).length > 0 && (
+              {/* Tool input parameters (hidden for some tools — info is in the header) */}
+              {toolName.toLowerCase() !== 'bash' && toolName.toLowerCase() !== 'glob' && toolName.toLowerCase() !== 'read' && toolName.toLowerCase() !== 'write' && toolName.toLowerCase() !== 'taskcreate' && Object.keys(toolInput).length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
                     Input
@@ -324,7 +340,21 @@ export function ToolRenderer({
               )}
 
               {/* Tool output */}
-              {toolResult && (
+              {isWrite && toolResult && (
+                <div>
+                  {writeStats && (
+                    <div className="text-xs text-[var(--color-text-secondary)] mb-1">
+                      {writeStats}
+                    </div>
+                  )}
+                  {toolInput.content && (
+                    <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                      {toolInput.content as string}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!isWrite && toolResult && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
                     Output

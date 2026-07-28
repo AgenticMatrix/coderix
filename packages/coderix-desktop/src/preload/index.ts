@@ -90,6 +90,7 @@ interface StreamToolResult {
   type: 'toolResult';
   toolUseId: string;
   result: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 interface StreamDone {

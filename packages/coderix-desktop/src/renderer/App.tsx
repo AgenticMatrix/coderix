@@ -245,6 +245,7 @@ export function App(): React.ReactElement {
                   ...(b.id ? { toolId: b.id } : {}),
                   ...(b.name ? { toolName: b.name } : {}),
                   ...(b.input ? { toolInput: b.input } : {}),
+                  ...(b.metadata ? { toolMetadata: b.metadata } : {}),
                 }));
               }
               return {
@@ -282,7 +283,7 @@ export function App(): React.ReactElement {
                     (b: { type: string; toolId?: string }) => b.type === 'tool_use' && b.toolId === tr.toolId,
                   );
                   if (idx >= 0) {
-                    prev.blocks[idx] = { ...prev.blocks[idx], toolResult: tr.content };
+                    prev.blocks[idx] = { ...prev.blocks[idx], toolResult: tr.content, toolMetadata: tr.toolMetadata };
                     attached = true;
                     break;
                   }
