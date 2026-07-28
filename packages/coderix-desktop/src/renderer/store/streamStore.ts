@@ -81,6 +81,40 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       const state = get();
       let msg = state.currentMessage;
 
+      // Tool_result arriving outside active streaming — attach directly
+      // to the matching tool_use in already-committed messages.
+      if (block.type === 'tool_result' && block.toolId && !msg) {
+        const chatMessages = useChatStore.getState().messages;
+        for (let i = chatMessages.length - 1; i >= 0; i--) {
+          const chatMsg = chatMessages[i];
+          if (chatMsg.role !== 'assistant') continue;
+          const toolUseIdx = chatMsg.blocks.findIndex(
+            (b) => b.type === 'tool_use' && b.toolId === block.toolId,
+          );
+          if (toolUseIdx >= 0) {
+            const updatedBlocks = [...chatMsg.blocks];
+            updatedBlocks[toolUseIdx] = {
+              ...updatedBlocks[toolUseIdx],
+              toolResult: block.content,
+            };
+            useChatStore.setState((s) => ({
+              messages: s.messages.map((m) =>
+                m.id === chatMsg.id ? { ...m, blocks: updatedBlocks } : m,
+              ),
+            }));
+            return;
+          }
+        }
+        // Couldn't attach — create a minimal standalone message
+        msg = {
+          id: createId(),
+          blocks: [{ ...block }],
+          content: '',
+        };
+        set({ currentMessage: msg });
+        return;
+      }
+
       // Create message on first block
       if (!msg) {
         msg = {
@@ -91,8 +125,6 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       }
 
       // Upsert block: find by toolId for tool blocks, or by type for text/thinking/system
-      // Special handling: tool_result blocks get attached to their matching tool_use
-      // instead of being added as separate blocks, so output renders below input.
       const existingIdx = msg.blocks.findIndex((b) => {
         if (block.toolId && b.toolId) return b.toolId === block.toolId;
         if (block.type === 'tool_use') {
@@ -105,17 +137,14 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       });
 
       if (existingIdx >= 0) {
-        // Update existing block (delta or stop)
         const updated = [...msg.blocks];
         const existing = { ...updated[existingIdx] };
 
-        // Attach tool_result content to the matching tool_use block
         if (block.type === 'tool_result' && existing.type === 'tool_use') {
           existing.toolResult = block.content;
           updated[existingIdx] = existing;
           msg = { ...msg, blocks: updated };
         } else {
-          // Replace content — ipc-client already accumulates deltas
           if (block.content !== undefined) {
             existing.content = block.content;
           }
@@ -127,8 +156,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
           msg = { ...msg, blocks: updated };
         }
       } else if (block.type === 'tool_result' && block.toolId) {
-        // Tool_result arrived after the previous turn was committed to chatStore.
-        // Search the last assistant message in chatStore for the matching tool_use.
+        // Tool_result arrived during active streaming — search committed
+        // messages for the matching tool_use (may be from a prior turn).
         const chatMessages = useChatStore.getState().messages;
         let attached = false;
         for (let i = chatMessages.length - 1; i >= 0; i--) {
@@ -143,8 +172,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
               ...updatedBlocks[toolUseIdx],
               toolResult: block.content,
             };
-            useChatStore.setState((state) => ({
-              messages: state.messages.map((m) =>
+            useChatStore.setState((s) => ({
+              messages: s.messages.map((m) =>
                 m.id === chatMsg.id ? { ...m, blocks: updatedBlocks } : m,
               ),
             }));
@@ -152,16 +181,13 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
             break;
           }
         }
-        // Only add as standalone if we couldn't attach it anywhere
         if (!attached) {
           msg = { ...msg, blocks: [...msg.blocks, { ...block }] };
         }
       } else {
-        // New block (text, thinking, system, etc.)
         msg = { ...msg, blocks: [...msg.blocks, { ...block }] };
       }
 
-      // Set message content from latest text block (ipc-client already accumulates)
       if (block.content !== undefined && (block.type === 'text' || block.type === 'thinking')) {
         msg = { ...msg, content: block.content };
       }
@@ -174,7 +200,6 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     const unsubDone = onStreamDone(() => {
       const { currentMessage } = get();
       if (currentMessage) {
-        // Commit the message to the chat store
         const chatMsg: ChatMessage = {
           id: currentMessage.id,
           role: 'assistant',
