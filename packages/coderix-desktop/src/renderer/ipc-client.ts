@@ -98,6 +98,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
           name?: string;
           id?: string;
           tool_use_id?: string;
+          input?: Record<string, unknown>;
         };
         const rendererType = mapBlockType(cb.type);
 
@@ -109,6 +110,9 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         if (cb.type === 'tool_use') {
           block.toolName = cb.name;
           block.toolId = cb.id;
+          if (cb.input && Object.keys(cb.input).length > 0) {
+            block.toolInput = cb.input;
+          }
         } else if (cb.type === 'tool_result') {
           block.toolId = cb.tool_use_id;
         }
@@ -151,6 +155,19 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         if (!existing) break;
 
         existing.state = 'done';
+
+        // Parse accumulated input_json_delta into the real tool input object
+        if (existing.type === 'tool_use') {
+          const raw = (existing.toolInput as { __raw?: string } | undefined)?.__raw;
+          if (raw) {
+            try {
+              existing.toolInput = JSON.parse(raw);
+            } catch {
+              // Malformed JSON — keep as-is
+            }
+          }
+        }
+
         callback({ ...existing });
         blockMap.delete(event.index);
         break;

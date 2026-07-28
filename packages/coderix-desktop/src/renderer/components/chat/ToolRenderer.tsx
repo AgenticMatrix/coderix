@@ -207,7 +207,7 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
 };
 
 function getToolConfig(toolName: string): ToolDisplayConfig {
-  return toolConfigs[toolName] ?? {
+  return toolConfigs[toolName.toLowerCase()] ?? {
     icon: <Wrench size={13} />,
     label: () => toolName,
   };

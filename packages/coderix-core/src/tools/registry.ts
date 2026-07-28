@@ -71,27 +71,27 @@ export const plugins: ToolPlugin[] = [
 // ── Backward-compatible aliases ───────────────────────────────────────
 
 const TOOL_ALIASES: Record<string, string> = {
-  'team-create': 'TeamCreate',
-  'team-message': 'SendMessage',
-  'team-dispatch': '',
-  'team-status': '',
-  'Task': 'Agent',
+  'team-create': 'teamcreate',
+  'team-message': 'sendmessage',
+  'Task': 'agent',
   'edit': 'update',
 };
 
 function resolveName(name: string): string {
-  return TOOL_ALIASES[name] ?? name;
+  const lower = name.toLowerCase();
+  return TOOL_ALIASES[lower] ?? lower;
 }
 
-// Build lookup tables
+// Build lookup tables (keys are lowercased for case-insensitive matching)
 const schemaByName = new Map<string, ToolPlugin['schema']>();
 const executorByName = new Map<string, ToolExecutor>();
 const isEnabledByName = new Map<string, () => boolean>();
 
 for (const p of plugins) {
-  schemaByName.set(p.name, p.schema);
-  executorByName.set(p.name, p.executor);
-  if (p.isEnabled) isEnabledByName.set(p.name, p.isEnabled);
+  const key = p.name.toLowerCase();
+  schemaByName.set(key, p.schema);
+  executorByName.set(key, p.executor);
+  if (p.isEnabled) isEnabledByName.set(key, p.isEnabled);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
@@ -109,9 +109,9 @@ export function getAnthropicTools(): Anthropic.Tool[] {
     });
 }
 
-/** Get tool metadata by name. */
+/** Get tool metadata by name (case-insensitive). */
 export function getToolMeta(toolName: string): ToolMeta | undefined {
-  return schemaByName.get(toolName)?._meta;
+  return schemaByName.get(toolName.toLowerCase())?._meta;
 }
 
 /** Get risk level for a tool by name, optionally considering command content. */
