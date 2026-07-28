@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText, FileEdit, FilePlus, Terminal, Search, Globe,
-  FolderSearch, CheckSquare, Clock, AlertTriangle, Brain,
+  FolderSearch, CheckSquare, Clock, Brain,
   Network, Users, UserPlus, UserMinus, BookOpen, MessageSquare,
-  GitBranch, FileCode, Play, Wrench, ChevronRight, CheckCircle2,
-  XCircle, Loader2, ExternalLink, FolderSync,
+  GitBranch, FileCode, Play, Wrench, ChevronRight,
+  ExternalLink, FolderSync,
 } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 
@@ -239,16 +239,11 @@ function formatTime(ms: number): string {
 
 // ── State Config ───────────────────────────────────────────
 
-interface StateConfig {
-  icon: React.ReactNode;
-  color: string;
-}
-
-const stateConfigs: Record<string, StateConfig> = {
-  pending: { icon: <Clock size={12} />, color: 'var(--color-text-tertiary)' },
-  executing: { icon: <Loader2 size={12} className="animate-spin" />, color: 'var(--color-info)' },
-  done: { icon: <CheckCircle2 size={12} />, color: 'var(--color-success)' },
-  error: { icon: <XCircle size={12} />, color: 'var(--color-danger)' },
+const stateColors: Record<string, string> = {
+  pending: 'var(--color-text-tertiary)',
+  executing: 'var(--color-info)',
+  done: 'var(--color-success)',
+  error: 'var(--color-danger)',
 };
 
 // ── Component ──────────────────────────────────────────────
@@ -270,7 +265,7 @@ export function ToolRenderer({
 }: ToolRendererProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const config = getToolConfig(toolName);
-  const sc = stateConfigs[state] ?? stateConfigs.pending;
+  const sc = stateColors[state] ?? stateColors.pending;
 
   return (
     <motion.div
@@ -290,10 +285,7 @@ export function ToolRenderer({
         >
           <ChevronRight size={10} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
         </motion.span>
-        <span style={{ color: sc.color }} className="flex-shrink-0">
-          {sc.icon}
-        </span>
-        <span className="flex-shrink-0" style={{ color: sc.color }}>
+        <span className="flex-shrink-0" style={{ color: sc }}>
           {config.icon}
         </span>
         <span className="font-medium text-[var(--color-text-primary)]">

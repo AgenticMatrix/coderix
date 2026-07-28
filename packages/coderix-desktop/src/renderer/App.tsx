@@ -254,6 +254,53 @@ export function App(): React.ReactElement {
                 timestamp: m.timestamp || Date.now(),
               };
             });
+
+            // Pair tool_result blocks with their matching tool_use blocks.
+            // Tool results live in user messages but should render inside the
+            // preceding assistant message's tool card.
+            for (let i = chatMsgs.length - 1; i >= 0; i--) {
+              const msg = chatMsgs[i];
+              if (!msg || msg.role !== 'user') continue;
+
+              const toolResults: typeof msg.blocks = [];
+              const others: typeof msg.blocks = [];
+              for (const b of msg.blocks) {
+                if (b.type === 'tool_result' && b.toolId) {
+                  toolResults.push(b);
+                } else {
+                  others.push(b);
+                }
+              }
+
+              // Attach each tool_result to its matching tool_use
+              for (const tr of toolResults) {
+                let attached = false;
+                for (let j = i - 1; j >= 0; j--) {
+                  const prev = chatMsgs[j];
+                  if (!prev || prev.role !== 'assistant') continue;
+                  const idx = prev.blocks.findIndex(
+                    (b: { type: string; toolId?: string }) => b.type === 'tool_use' && b.toolId === tr.toolId,
+                  );
+                  if (idx >= 0) {
+                    prev.blocks[idx] = { ...prev.blocks[idx], toolResult: tr.content };
+                    attached = true;
+                    break;
+                  }
+                }
+                // If unmatched, keep as standalone in its current message
+                if (!attached) {
+                  others.push(tr);
+                }
+              }
+
+              // Remove messages that are now empty (all tool_results were paired)
+              if (others.length === 0) {
+                chatMsgs.splice(i, 1);
+              } else if (others.length !== msg.blocks.length) {
+                chatMsgs[i] = { ...msg, blocks: others };
+              }
+            }
+
             useChatStore.setState({ messages: chatMsgs, isStreaming: false });
           }
         }
