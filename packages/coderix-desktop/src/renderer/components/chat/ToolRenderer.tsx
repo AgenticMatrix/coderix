@@ -258,6 +258,7 @@ export interface ToolRendererProps {
   toolInput?: Record<string, unknown>;
   state?: StreamBlock['state'];
   toolId?: string;
+  toolResult?: string;
 }
 
 export function ToolRenderer({
@@ -265,6 +266,7 @@ export function ToolRenderer({
   toolInput = {},
   state = 'executing',
   toolId,
+  toolResult,
 }: ToolRendererProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const config = getToolConfig(toolName);
@@ -325,6 +327,18 @@ export function ToolRenderer({
                         </span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tool output */}
+              {toolResult && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
+                    Output
+                  </div>
+                  <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                    {toolResult}
                   </div>
                 </div>
               )}

@@ -22,6 +22,8 @@ export interface StreamBlock {
   toolInput?: Record<string, unknown>;
   /** Execution state for tool_use blocks */
   state?: 'pending' | 'executing' | 'done' | 'error';
+  /** Tool result content — attached to tool_use when the matching tool_result arrives */
+  toolResult?: string;
 }
 
 // ── Token / Cost Types ────────────────────────────────────

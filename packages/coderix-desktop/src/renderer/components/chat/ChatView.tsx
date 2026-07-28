@@ -46,10 +46,16 @@ interface MessageBubbleContentProps {
 
 const MessageBubbleContent = React.memo(
   function MessageBubbleContent({ message, isStreamingMsg, isAssistant }: MessageBubbleContentProps) {
+    // Tool_result blocks belong to assistant-side rendering even when stored
+    // in user-role messages (tool execution results are user messages in the API).
+    const hasToolResult = message.blocks.some((b) => b.type === 'tool_result');
+    const displayRole = hasToolResult && message.role === 'user' ? 'assistant' : message.role;
+    const displayAsAssistant = isAssistant || (hasToolResult && message.role === 'user');
+
     return (
       <>
         <div
-          className={`message-bubble ${message.role} ${isStreamingMsg ? 'streaming' : ''}`}
+          className={`message-bubble ${displayRole} ${isStreamingMsg ? 'streaming' : ''}`}
         >
           {message.blocks.map((block, blockIdx) => (
             <ContentBlockRenderer
@@ -63,7 +69,7 @@ const MessageBubbleContent = React.memo(
           ))}
 
           {/* User message timestamp — inline at bottom-right */}
-          {!isAssistant && message.timestamp && !isStreamingMsg && (
+          {!displayAsAssistant && message.timestamp && !isStreamingMsg && (
             <span className="message-time-inline">
               {formatMessageTime(message.timestamp)}
             </span>
@@ -72,7 +78,7 @@ const MessageBubbleContent = React.memo(
         </div>
 
         {/* Assistant message model badge */}
-        {isAssistant && message.model && !isStreamingMsg && (
+        {displayAsAssistant && message.model && !isStreamingMsg && (
           <div className="message-meta">
             <span className="model-badge">
               <Zap size={10} />

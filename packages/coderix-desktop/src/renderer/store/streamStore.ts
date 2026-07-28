@@ -91,10 +91,15 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       }
 
       // Upsert block: find by toolId for tool blocks, or by type for text/thinking/system
+      // Special handling: tool_result blocks get attached to their matching tool_use
+      // instead of being added as separate blocks, so output renders below input.
       const existingIdx = msg.blocks.findIndex((b) => {
         if (block.toolId && b.toolId) return b.toolId === block.toolId;
-        if (block.type === 'tool_use' || block.type === 'tool_result') {
-          return b.type === block.type && b.toolId === block.toolId;
+        if (block.type === 'tool_use') {
+          return b.type === 'tool_use' && b.toolId === block.toolId;
+        }
+        if (block.type === 'tool_result') {
+          return b.type === 'tool_use' && b.toolId === block.toolId;
         }
         return b.type === block.type;
       });
@@ -104,18 +109,55 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         const updated = [...msg.blocks];
         const existing = { ...updated[existingIdx] };
 
-        // Replace content — ipc-client already accumulates deltas
-        if (block.content !== undefined) {
-          existing.content = block.content;
-        }
-        if (block.state) existing.state = block.state;
-        if (block.toolInput) existing.toolInput = { ...existing.toolInput, ...block.toolInput };
-        if (block.toolName) existing.toolName = block.toolName;
+        // Attach tool_result content to the matching tool_use block
+        if (block.type === 'tool_result' && existing.type === 'tool_use') {
+          existing.toolResult = block.content;
+          updated[existingIdx] = existing;
+          msg = { ...msg, blocks: updated };
+        } else {
+          // Replace content — ipc-client already accumulates deltas
+          if (block.content !== undefined) {
+            existing.content = block.content;
+          }
+          if (block.state) existing.state = block.state;
+          if (block.toolInput) existing.toolInput = { ...existing.toolInput, ...block.toolInput };
+          if (block.toolName) existing.toolName = block.toolName;
 
-        updated[existingIdx] = existing;
-        msg = { ...msg, blocks: updated };
+          updated[existingIdx] = existing;
+          msg = { ...msg, blocks: updated };
+        }
+      } else if (block.type === 'tool_result' && block.toolId) {
+        // Tool_result arrived after the previous turn was committed to chatStore.
+        // Search the last assistant message in chatStore for the matching tool_use.
+        const chatMessages = useChatStore.getState().messages;
+        let attached = false;
+        for (let i = chatMessages.length - 1; i >= 0; i--) {
+          const chatMsg = chatMessages[i];
+          if (chatMsg.role !== 'assistant') continue;
+          const toolUseIdx = chatMsg.blocks.findIndex(
+            (b) => b.type === 'tool_use' && b.toolId === block.toolId,
+          );
+          if (toolUseIdx >= 0) {
+            const updatedBlocks = [...chatMsg.blocks];
+            updatedBlocks[toolUseIdx] = {
+              ...updatedBlocks[toolUseIdx],
+              toolResult: block.content,
+            };
+            useChatStore.setState((state) => ({
+              messages: state.messages.map((m) =>
+                m.id === chatMsg.id ? { ...m, blocks: updatedBlocks } : m,
+              ),
+            }));
+            attached = true;
+            break;
+          }
+        }
+        // Only add as standalone if we couldn't attach it anywhere
+        if (!attached) {
+          msg = { ...msg, blocks: [...msg.blocks, { ...block }] };
+        }
       } else {
-        // New block
+        // New block (text, thinking, system, etc.)
         msg = { ...msg, blocks: [...msg.blocks, { ...block }] };
       }
 

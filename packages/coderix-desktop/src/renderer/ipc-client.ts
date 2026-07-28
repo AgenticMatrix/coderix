@@ -97,6 +97,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
           type?: string;
           name?: string;
           id?: string;
+          tool_use_id?: string;
         };
         const rendererType = mapBlockType(cb.type);
 
@@ -108,6 +109,8 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         if (cb.type === 'tool_use') {
           block.toolName = cb.name;
           block.toolId = cb.id;
+        } else if (cb.type === 'tool_result') {
+          block.toolId = cb.tool_use_id;
         }
 
         blockMap.set(event.index, block);

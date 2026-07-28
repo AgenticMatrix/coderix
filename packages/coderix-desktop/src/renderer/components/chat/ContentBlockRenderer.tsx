@@ -177,6 +177,7 @@ export function ContentBlockRenderer({
           toolInput={block.toolInput}
           state={block.state}
           toolId={block.toolId}
+          toolResult={block.toolResult}
         />
       );
 
@@ -191,8 +192,13 @@ export function ContentBlockRenderer({
 
     case 'tool_result':
       return (
-        <div className="my-1 px-2 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--color-bg-secondary)]/50 text-[var(--color-text-tertiary)] font-mono border border-[var(--color-separator)]">
-          <span className="text-[var(--color-success)]">→</span> {block.toolName}: {truncateText(block.content ?? '', 120)}
+        <div className="my-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
+            Output
+          </div>
+          <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+            {block.content ?? ''}
+          </div>
         </div>
       );
 
@@ -213,8 +219,3 @@ export function ContentBlockRenderer({
 }
 
 ContentBlockRenderer.displayName = 'ContentBlockRenderer';
-
-function truncateText(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + '…';
-}

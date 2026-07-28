@@ -89,13 +89,18 @@ async function bootstrap(): Promise<void> {
     // Step 1: Create window manager
     windowManager = createWindowManager();
 
-    // Step 2: Create IPC bridge BEFORE window (renderer calls IPC on load)
+    // Step 2: Create SessionManager early so session IPC handlers work
+    // before QueryEngine is initialized (renderer calls session:create on load)
+    const sessionManager = new SessionManager();
+
+    // Step 3: Create IPC bridge BEFORE window (renderer calls IPC on load)
     fileWatcher = createFileWatcherManager();
     terminalManager = createTerminalManager();
     ipcBridge = createIpcBridge({
       windowManager,
       fileWatcher,
       terminalManager,
+      sessionManager,
       reloadQueryEngine: () => initQueryEngine(),
     });
 
@@ -229,8 +234,7 @@ async function initQueryEngine(): Promise<void> {
     cwd: process.cwd(),
     model,
     customSystemPrompt: undefined,
-    // sessionManager/toolRegistry: initEngine preserves existing ones on reload
-    sessionManager: isReload ? undefined! : new SessionManager(),
+    // sessionManager is already set in the IPC bridge from bootstrap()
     toolRegistry: isReload ? undefined! : toolRegistry,
     callModel,
   };

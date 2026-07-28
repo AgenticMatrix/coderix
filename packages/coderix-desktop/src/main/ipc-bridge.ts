@@ -44,6 +44,7 @@ export interface IpcBridgeConfig {
   windowManager: WindowManager;
   fileWatcher: FileWatcherManager;
   terminalManager: TerminalManager;
+  sessionManager: SessionManager;
   reloadQueryEngine?: () => Promise<void>;
 }
 
@@ -115,11 +116,11 @@ function getMainWindow(windowManager: WindowManager): BrowserWindow | null {
 // ---------------------------------------------------------------------------
 
 export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
-  const { windowManager, fileWatcher, terminalManager } = config;
+  const { windowManager, fileWatcher, terminalManager, sessionManager: initialSessionManager } = config;
 
   // Internal state
   let queryEngine: QueryEngine | null = null;
-  let sessionManager: SessionManager | null = null;
+  let sessionManager: SessionManager | null = initialSessionManager;
   let toolRegistry: ToolRegistry | null = null;
   let activeAbortController: AbortController | null = null;
   let pendingPermission: DeferredPermission | null = null;
@@ -208,6 +209,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   usage: msg.message.usage,
                   model: msg.message.model,
                 });
+              } else if (msg.type === 'user' && msg.message) {
+                // Forward tool_result blocks so the renderer can show output below each tool
+                const content = msg.message.content;
+                if (Array.isArray(content)) {
+                  for (const block of content) {
+                    if (block && (block as any).type === 'tool_result') {
+                      const tr = block as { type: 'tool_result'; tool_use_id: string; content: unknown };
+                      mainWindow.webContents.send(IPC_CHANNELS.STREAM_TOOL_RESULT, {
+                        toolUseId: tr.tool_use_id,
+                        toolName: '',
+                        result: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+                      });
+                    }
+                  }
+                }
               }
               break;
             }
@@ -721,9 +737,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     async initEngine(config: QueryEngineConfig): Promise<void> {
       const isReload = queryEngine !== null;
 
-      // Preserve existing session manager and tool registry on reload
-      if (!isReload || !sessionManager) {
-        sessionManager = config.sessionManager ?? new SessionManager();
+      // sessionManager is already set from IpcBridgeConfig; only update on explicit override
+      if (config.sessionManager) {
+        sessionManager = config.sessionManager;
       }
       if (!isReload || !toolRegistry) {
         toolRegistry = config.toolRegistry ?? new ToolRegistry();
