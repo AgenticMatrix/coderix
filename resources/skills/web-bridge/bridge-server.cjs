@@ -278,7 +278,7 @@ function fillExpression(elRef, valueJson) {
         || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value')?.set;
       if (ns) { ns.call(t, ${valueJson}); }
       else { t.value = ${valueJson}; }
-      t.dispatchEvent(new Event('input', {bubbles:true}));
+      t.dispatchEvent(new InputEvent('input', {inputType:'insertText',data:${valueJson},bubbles:true}));
       t.dispatchEvent(new Event('change', {bubbles:true}));
       return JSON.stringify({filled:true, mode:'value'});
     })()
@@ -555,37 +555,34 @@ async function executeDirectCdp(action, params, cdpPort) {
       }
 
       // ===================================================================
-      // FILL — <input>/<textarea>/[contenteditable] with clear-and-insert
+      // FILL — focus + select all + Input.insertText (bypasses JS framework guards)
       // ===================================================================
       case 'fill': {
         if (params.value == null) throw new Error('value required');
         if (!params.selector) throw new Error('selector required');
-        const valueJson = JSON.stringify(params.value);
 
+        // Step 1: Focus the element and select all existing text
         if (isRef(params.selector)) {
           const ref = getRef(params.selector);
           if (!ref) throw new Error(`Unknown ref: ${params.selector}`);
           await client.DOM.enable();
           const { object } = await client.DOM.resolveNode({ backendNodeId: ref.backendNodeId });
           if (!object?.objectId) throw new Error('Could not resolve element ref');
-          const r = await client.Runtime.callFunctionOn({
+          await client.Runtime.callFunctionOn({
             objectId: object.objectId,
-            functionDeclaration: fillExpression('this', valueJson),
+            functionDeclaration: 'function(){this.focus();this.select();}',
+          });
+        } else {
+          const esc = params.selector.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          await client.Runtime.evaluate({
+            expression: `(function(){var e=document.querySelector('${esc}');if(!e)throw new Error('Element not found');e.focus();e.select();})()`,
             returnByValue: true,
           });
-          const v = r.result?.value;
-          if (v) { const p = JSON.parse(v); if (p.error) throw new Error(p.error); return p; }
-          return { filled: true };
         }
 
-        const esc = params.selector.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const r = await client.Runtime.evaluate({
-          expression: fillExpression(`document.querySelector('${esc}')`, valueJson),
-          returnByValue: true,
-        });
-        const v = r.result?.value;
-        if (v) { const p = JSON.parse(v); if (p.error) throw new Error(p.error); return p; }
-        return { filled: true };
+        // Step 2: Insert text at CDP level — browser processes as real input, frameworks can't block
+        await client.Input.insertText({ text: String(params.value) });
+        return { filled: true, length: String(params.value).length };
       }
 
       // ===================================================================
