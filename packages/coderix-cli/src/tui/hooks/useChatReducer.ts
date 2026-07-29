@@ -22,13 +22,7 @@ const MAX_CACHED_AGENTS = 10;
 
 function trimMessages(messages: Message[]): Message[] {
   if (messages.length <= MAX_TUI_MESSAGES) return messages;
-  const excess = messages.length - MAX_TUI_MESSAGES;
-  let startIdx = excess;
-  const firstUserIdx = messages.findIndex(m => m.role === 'user');
-  if (firstUserIdx >= 0 && firstUserIdx < excess) {
-    startIdx = firstUserIdx;
-  }
-  return messages.slice(startIdx);
+  return messages.slice(-100);
 }
 
 /**
@@ -747,7 +741,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
       return {
         ...state,
-        messages: action.messages,
+        messages: trimMessages(action.messages),
         subAgentMessageCache: updatedCache,
       };
     }
