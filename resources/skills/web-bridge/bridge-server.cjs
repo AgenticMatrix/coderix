@@ -845,6 +845,42 @@ async function isCdpAvailable(port) {
   } catch { return false; }
 }
 
+/**
+ * Check if the browser on the given CDP port is running in headless mode.
+ * Returns true if a Chrome/Edge process with --headless is found on this port.
+ */
+function isExistingBrowserHeadless(port) {
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync(
+      `ps aux | grep -E "(chrome|chromium|edge)" | grep "remote-debugging-port=${port}" | grep -v grep`,
+      { encoding: 'utf-8', timeout: 3000 },
+    ).trim();
+    return out.includes('--headless');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Kill the existing headless browser process on the given CDP port.
+ */
+function killExistingBrowser(port) {
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync(
+      `ps aux | grep -E "(chrome|chromium|edge)" | grep "remote-debugging-port=${port}" | grep -v grep | awk '{print $2}'`,
+      { encoding: 'utf-8', timeout: 3000 },
+    ).trim();
+    if (!out) return;
+    const pids = out.split('\n');
+    for (const pid of pids) {
+      try { process.kill(parseInt(pid, 10), 'SIGTERM'); } catch {}
+    }
+    console.log(`[bridge] Killed existing headless browser on port ${port} (PIDs: ${pids.join(', ')})`);
+  } catch { /* nothing to kill */ }
+}
+
 async function launchBrowser(port) {
   const browserPath = BROWSER_PATH || findBrowserPath();
   if (!browserPath) {
@@ -1019,7 +1055,16 @@ server.listen(PORT, '127.0.0.1', async () => {
 
   if (!NO_AUTO_LAUNCH) {
     const available = await isCdpAvailable(CDP_PORT);
-    if (!available) {
+    if (available && isExistingBrowserHeadless(CDP_PORT)) {
+      console.log(`[bridge] Existing browser on port ${CDP_PORT} is headless — restarting in visible mode...`);
+      killExistingBrowser(CDP_PORT);
+      // Wait for the old process to release the port
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        if (!(await isCdpAvailable(CDP_PORT))) break;
+      }
+      await launchBrowser(CDP_PORT);
+    } else if (!available) {
       console.log(`[bridge] No browser on port ${CDP_PORT}, attempting auto-launch...`);
       await launchBrowser(CDP_PORT);
     }

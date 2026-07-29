@@ -16,7 +16,7 @@ export function SkillRenderer(props: ToolUseRendererProps): React.ReactNode {
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column">
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>Skill</Text>
@@ -31,7 +31,7 @@ export function SkillRenderer(props: ToolUseRendererProps): React.ReactNode {
     const meta = props.result?.metadata;
     const activatedTools = meta?.activatedTools as string[] | undefined;
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column">
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>Skill</Text>
@@ -51,7 +51,7 @@ export function SkillRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column">
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>Skill</Text>
