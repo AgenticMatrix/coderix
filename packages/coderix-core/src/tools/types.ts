@@ -37,6 +37,8 @@ export interface ToolResult {
   duration?: number;
   /** Tool-specific structured metadata (e.g. stderr, exitCode, filePath). */
   metadata?: Record<string, unknown>;
+  /** Image data when reading an image file (base64 + media type). */
+  image?: { data: string; media_type: string };
 }
 
 export interface ExecutorOptions {

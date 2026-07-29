@@ -169,6 +169,7 @@ export function useAgentLoop({ config, getMessagesSnapshot, dispatch }: AgentLoo
             isError: result.isError,
             duration: result.duration,
             metadata: result.metadata,
+            image: result.image,
           };
           toolResultBlocks.push(tr);
 

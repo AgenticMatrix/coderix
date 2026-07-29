@@ -53,6 +53,8 @@ export interface ToolResultBlock {
   duration?: number;
   /** Tool-specific structured metadata from the executor. */
   metadata?: Record<string, unknown>;
+  /** Image data when reading an image file (base64 + media type). */
+  image?: { data: string; media_type: string };
 }
 
 export interface TodoItem {

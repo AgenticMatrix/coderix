@@ -81,12 +81,32 @@ export function toAnthropicMessages(
             input: block.input as Record<string, unknown>,
           } as Anthropic.ToolUseBlockParam);
         } else if (block.type === 'tool_result') {
-          content.push({
-            type: 'tool_result',
-            tool_use_id: block.toolId,
-            content: block.content,
-            is_error: block.isError,
-          } as Anthropic.ToolResultBlockParam);
+          // Image results: send as proper image content block (not garbled UTF-8 text)
+          if (block.image && block.image.data) {
+            content.push({
+              type: 'tool_result',
+              tool_use_id: block.toolId,
+              content: [
+                { type: 'text' as const, text: block.content || '[Image]' },
+                {
+                  type: 'image' as const,
+                  source: {
+                    type: 'base64' as const,
+                    media_type: block.image.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                    data: block.image.data,
+                  },
+                },
+              ],
+              is_error: block.isError,
+            } as Anthropic.ToolResultBlockParam);
+          } else {
+            content.push({
+              type: 'tool_result',
+              tool_use_id: block.toolId,
+              content: block.content,
+              is_error: block.isError,
+            } as Anthropic.ToolResultBlockParam);
+          }
         }
         // Skip non-API blocks (boundaries, todos, subagents, etc.)
       }

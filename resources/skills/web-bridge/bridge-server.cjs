@@ -958,6 +958,18 @@ const server = http.createServer(async (req, res) => {
         extWs.send(JSON.stringify({ id, action: msg.action, params: relayParams }));
         try {
           const result = await promise;
+          // Screenshot / save_as_pdf from extension come as base64 data —
+          // write to file so the model never sees raw binary in its context.
+          if (result && result.data && (msg.action === 'screenshot' || msg.action === 'save_as_pdf')) {
+            const format = msg.action === 'save_as_pdf' ? 'pdf' : (result.format || 'png');
+            const ext = format === 'jpeg' ? 'jpg' : format;
+            const subdir = msg.action === 'save_as_pdf' ? 'pdfs' : 'screenshots';
+            const outDir = join(homedir(), '.coderix', subdir);
+            mkdirSync(outDir, { recursive: true });
+            const filePath = join(outDir, `${msg.action}-${Date.now()}.${ext}`);
+            writeFileSync(filePath, Buffer.from(result.data, 'base64'));
+            result = { path: filePath, format, sizeBytes: Buffer.byteLength(result.data, 'base64'), mimeType: result.mimeType || `image/${format}` };
+          }
           res.writeHead(200); res.end(JSON.stringify({ result }));
         } catch (e) {
           res.writeHead(500); res.end(JSON.stringify({ error: e.message }));

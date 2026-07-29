@@ -424,15 +424,11 @@ async function main() {
         format: 'png',
         ...(fullPage ? { captureBeyondViewport: true } : {}),
       });
-      // Output base64 data to stdout (with marker for parsing)
-      console.log('SCREENSHOT_DATA_START');
-      console.log(result.data);
-      console.log('SCREENSHOT_DATA_END');
-      // Also output to a temp file for convenience
+      // Write to file only — never output base64 to stdout (wastes model tokens)
       const tempPath = '/tmp/web-bridge-screenshot.png';
       const { writeFileSync } = require('node:fs');
       writeFileSync(tempPath, Buffer.from(result.data, 'base64'));
-      console.log(`Screenshot saved to ${tempPath}`);
+      console.log(JSON.stringify({ path: tempPath, format: 'png' }));
       return;
     }
 

@@ -79,12 +79,30 @@ function toAnthropicMessages(
           break;
         case 'tool_result':
           if (block.tool_use_id) {
+            let resultContent: string | Anthropic.ContentBlockParam[];
+            if (typeof block.content === 'string') {
+              resultContent = block.content;
+            } else if (Array.isArray(block.content)) {
+              resultContent = block.content.map((sub: ContentBlock) => {
+                if (sub.type === 'image' && sub.source) {
+                  return {
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type: sub.source.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                      data: sub.source.data,
+                    },
+                  } as Anthropic.ImageBlockParam;
+                }
+                return { type: 'text', text: sub.text || '' } as Anthropic.TextBlockParam;
+              });
+            } else {
+              resultContent = JSON.stringify(block.content);
+            }
             content.push({
               type: 'tool_result',
               tool_use_id: block.tool_use_id,
-              content: typeof block.content === 'string'
-                ? block.content
-                : JSON.stringify(block.content),
+              content: resultContent,
               is_error: block.is_error,
             } as Anthropic.ToolResultBlockParam);
           }
