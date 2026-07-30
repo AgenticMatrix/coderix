@@ -4,7 +4,7 @@ import type { ScrollBoxHandle } from '@coderix/ink';
 import { useTerminalSize } from '@coderix/ink';
 
 import type { QueryEngine } from '@coderix/core';
-import type { AppConfig, Message, ContentBlock, ThinkingBlock } from '../../types.js';
+import type { AppConfig, Message, ContentBlock, ThinkingBlock, TokenUsage } from '../../types.js';
 import { getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, writeSessionMeta } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
@@ -44,6 +44,8 @@ interface AppProps {
   sessionManager: SessionManager;
   /** Pre-loaded messages from a resumed session (--resume / --continue). */
   initialMessages?: Message[] | null;
+  /** Pre-loaded token usage from a resumed session (--resume / --continue). */
+  initialTokenUsage?: TokenUsage;
   /** When true, show the session picker on mount (--resume with no value). */
   showSessionPicker?: boolean;
   /** Called when the user exits (double Ctrl+C). Uses Ink unmount for clean teardown. */
@@ -130,7 +132,7 @@ async function restoreSessionAgents(sessionManager: SessionManager): Promise<voi
   }
 }
 
-export function App({ config, engine, store, sessionManager, initialMessages, showSessionPicker, onExit: onExitProp }: AppProps) {
+export function App({ config, engine, store, sessionManager, initialMessages, initialTokenUsage, showSessionPicker, onExit: onExitProp }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
@@ -169,7 +171,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0 && !hasLoadedInitialRef.current) {
       hasLoadedInitialRef.current = true;
-      dispatch({ type: 'LOAD_CHAT', messages: initialMessages, turns: [], isStreaming: false });
+      dispatch({ type: 'LOAD_CHAT', messages: initialMessages, turns: [], isStreaming: false, tokenUsage: initialTokenUsage });
     }
   }, [initialMessages]);
 
@@ -711,7 +713,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
           }],
           timestamp: base + msgs.length,
         });
-        dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false });
+        dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false, tokenUsage: {
+          inputTokens: session.tokenUsage.inputTokens,
+          outputTokens: session.tokenUsage.outputTokens,
+          cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
+          cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+        } });
       },
     }),
   });
@@ -1128,7 +1135,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
                 await restoreSessionAgents(sessionManager);
                 if (session && session.messages.length > 0) {
                   const msgs = convertTranscriptToMessages(session.messages);
-                  dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false });
+                  dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false, tokenUsage: {
+                    inputTokens: session.tokenUsage.inputTokens,
+                    outputTokens: session.tokenUsage.outputTokens,
+                    cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
+                    cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+                  } });
                 }
               }}
               onCancel={() => dispatch({ type: 'HIDE_SESSION_PICKER' })}

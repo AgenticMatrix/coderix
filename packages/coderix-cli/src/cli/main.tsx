@@ -360,6 +360,7 @@ async function main(): Promise<void> {
   const { SessionManager } = await import('@coderix/core');
   const sm = new SessionManager();
   let initialMessages: any[] | null = null;
+  let initialTokenUsage: any = undefined;
   let showSessionPicker = false;
   let hasPreloadedSession = false;
 
@@ -376,6 +377,12 @@ async function main(): Promise<void> {
         if (session && session.messages.length > 0) {
           const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
           initialMessages = convert(session.messages);
+          initialTokenUsage = {
+            inputTokens: session.tokenUsage.inputTokens,
+            outputTokens: session.tokenUsage.outputTokens,
+            cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
+            cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+          };
           hasPreloadedSession = true;
         }
       } catch { /* no sessions exist, fall through to create new */ }
@@ -396,6 +403,12 @@ async function main(): Promise<void> {
           if (session.messages.length > 0) {
             const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
             initialMessages = convert(session.messages);
+            initialTokenUsage = {
+            inputTokens: session.tokenUsage.inputTokens,
+            outputTokens: session.tokenUsage.outputTokens,
+            cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
+            cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+          };
             hasPreloadedSession = true;
           }
         }
@@ -407,6 +420,12 @@ async function main(): Promise<void> {
         if (session.messages.length > 0) {
           const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
           initialMessages = convert(session.messages);
+          initialTokenUsage = {
+            inputTokens: session.tokenUsage.inputTokens,
+            outputTokens: session.tokenUsage.outputTokens,
+            cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
+            cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+          };
           hasPreloadedSession = true;
         }
       } catch (e) {
@@ -525,7 +544,7 @@ async function main(): Promise<void> {
   const { AppStateProvider } = await import('../state/AppStateContext.js');
   const { waitUntilExit, unmount } = renderSync(
     <AppStateProvider store={appStore}>
-      <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} showSessionPicker={showSessionPicker} onExit={() => unmount()} />
+      <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} initialTokenUsage={initialTokenUsage} showSessionPicker={showSessionPicker} onExit={() => unmount()} />
     </AppStateProvider>,
     { exitOnCtrlC: false, patchConsole: true },
   );

@@ -776,12 +776,12 @@ export class SessionManager {
       }
 
       // Fall back to meta.json title (LLM-summarized titles are stored there)
-      if (!title) {
-        const meta = readSessionMeta(dir);
-        if (meta?.title) {
-          title = meta.title;
-        }
+      const meta = readSessionMeta(dir);
+      if (!title && meta?.title) {
+        title = meta.title;
       }
+
+      const persistedContextLength = meta?.contextLength ?? 0;
 
       const now = new Date();
 
@@ -808,11 +808,11 @@ export class SessionManager {
         model: 'unknown',
         provider: 'anthropic',
         tokenUsage: {
-          inputTokens: 0,
+          inputTokens: persistedContextLength,
           outputTokens: 0,
           cacheCreationInputTokens: 0,
           cacheReadInputTokens: 0,
-          totalTokens: 0,
+          totalTokens: persistedContextLength,
         },
         metadata: {
           filesModified,

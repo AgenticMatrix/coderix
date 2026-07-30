@@ -353,6 +353,9 @@ export function readTailMetadata(filePath: string): {
 
 export interface SessionMeta {
   title?: string;
+  /** Last known context token count (input + cache_read) before the most recent LLM call.
+   *  Persisted so session resume can pre-populate the context bar instead of showing 0. */
+  contextLength?: number;
 }
 
 /**
@@ -371,7 +374,7 @@ export function readSessionMeta(sessionDir: string): SessionMeta | null {
 }
 
 /**
- * Write session metadata to meta.json.
+ * Write session metadata to meta.json, merging with existing data.
  * Creates the session directory if it doesn't exist.
  */
 export async function writeSessionMeta(
@@ -380,8 +383,14 @@ export async function writeSessionMeta(
 ): Promise<void> {
   const metaPath = sessionMetaPath(sessionDir);
   const { mkdir, writeFile } = await import('node:fs/promises');
+
+  // Merge with existing meta so partial writes (e.g. title-only)
+  // don't clobber other fields like contextLength.
+  const existing = readSessionMeta(sessionDir);
+  const merged = { ...existing, ...meta };
+
   await mkdir(sessionDir, { recursive: true, mode: 0o700 });
-  await writeFile(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+  await writeFile(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
 }
 
 // ---------------------------------------------------------------------------

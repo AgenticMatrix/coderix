@@ -850,6 +850,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: trimMessages(action.messages),
         turns: action.turns,
         isStreaming: action.isStreaming ?? false,
+        tokenUsage: action.tokenUsage ?? state.tokenUsage,
       };
 
     case 'SHOW_APPROVAL':

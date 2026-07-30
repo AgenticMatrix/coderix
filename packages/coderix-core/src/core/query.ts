@@ -41,7 +41,7 @@ import type { AgentRegistry } from './agent-registry.js';
 import { estimateTokens, tokenCountWithEstimation } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
-import { sessionDir } from './session-store.js';
+import { sessionDir, writeSessionMeta } from './session-store.js';
 import type { CoreState } from '../state/core-state.js';
 import type { ToolRequestEvent } from '../state/observable.js';
 import { applyToolResultLimits } from './tool-result-limiter.js';
@@ -687,6 +687,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           systemText = `${preMessageResult.injectContext}\n\n${systemText}`;
         }
       }
+
+      // Persist current context length so session resume can pre-populate
+      // the context bar instead of showing 0 after reload.
+      const preCallTokens = tokenCountWithEstimation(messages);
+      const dir = sessionDir(config.sessionId);
+      writeSessionMeta(dir, { contextLength: preCallTokens }).catch(() => {});
 
       for await (const event of callModel({
         system: systemText,
