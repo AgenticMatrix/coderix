@@ -404,6 +404,7 @@ export async function startDesktopGateway(
                 send: (promptText: string) => {
                   sendMsg = promptText;
                 },
+                compact: () => {},
                 sys: (msg: string) => {
                   sysMsg = msg;
                 },

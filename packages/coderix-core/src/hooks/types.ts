@@ -164,7 +164,8 @@ export interface PreCompactContext extends BaseHookContext {
   messageCount: number;
   currentTokens: number;
   maxTokens: number;
-  strategy: string;
+  /** Compaction trigger: 'auto' (threshold exceeded) or 'manual' (/compact command). */
+  strategy: 'auto' | 'manual';
 }
 
 export interface PostCompactContext extends BaseHookContext {
@@ -172,6 +173,12 @@ export interface PostCompactContext extends BaseHookContext {
   messageCountBefore: number;
   messageCountAfter: number;
   tokensSaved: number;
+  /** The compaction strategy that was applied. */
+  strategy: string;
+  /** Token count before compaction. */
+  preCompactTokens: number;
+  /** Token count after compaction. */
+  postCompactTokens: number;
 }
 
 export interface NotificationContext extends BaseHookContext {

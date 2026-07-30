@@ -196,6 +196,7 @@ export interface CompactMetadata {
   beforeTokens: number;
   afterTokens: number;
   strategy: 'none' | 'snip' | 'auto' | 'summarize' | 'time_based' | 'cache_edit' | 'token_snip';
+  summaryText?: string;
 }
 
 export class AgentError extends Error {
@@ -215,6 +216,7 @@ export type QueryMessage =
   | { type: 'assistant'; message: AssistantMessage }
   | { type: 'user'; message: UserMessage }
   | { type: 'system'; subtype: 'compact_boundary'; compactMetadata: CompactMetadata }
+  | { type: 'system'; subtype: 'compact_progress'; data: { status: 'started' | 'streaming' | 'completed'; message?: string; textDelta?: string; step: 'micro' | 'session_memory' | 'llm_summarize' } }
   | { type: 'system'; subtype: 'error'; error: AgentError }
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
   | { type: 'system'; subtype: 'tool_completed'; data: { toolUseId: string; duration?: number; content: string | TextBlock[]; isError?: boolean; metadata?: Record<string, unknown> } }

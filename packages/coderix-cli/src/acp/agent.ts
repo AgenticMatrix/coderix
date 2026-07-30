@@ -297,6 +297,7 @@ export function createAcpAgent(app: AgentApp, _appConfig: AppConfig): void {
           arg: parsed.arg,
           dispatch: (() => {}) as any,
           send: (text: string) => { sendText = text; },
+          compact: () => {},
           sys: (msg: string) => { sysText = msg; },
           exit: () => {},
           model: 'unknown',

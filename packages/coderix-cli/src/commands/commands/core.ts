@@ -1,6 +1,6 @@
 import type { SlashCommand } from '../types.js';
 import { findSlashCommand, listCommandNames } from '../registry.js';
-import { requestManualCompact, requestSnip } from '@coderix/core';
+import { requestSnip } from '@coderix/core';
 
 export const coreCommands: SlashCommand[] = [
   {
@@ -83,8 +83,8 @@ export const coreCommands: SlashCommand[] = [
     help: 'compact the conversation context',
     name: 'compact',
     run: (_arg, ctx) => {
-      requestManualCompact();
-      ctx.sys('Compacting conversation context — LLM summarization will run on the next turn.');
+      ctx.sys('Compacting conversation context...');
+      ctx.compact();
     },
   },
 

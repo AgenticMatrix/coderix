@@ -22,6 +22,8 @@ export interface SlashRunContext {
   dispatch: (action: ChatAction) => void;
   /** Send a user message (text) directly to the agent */
   send: (text: string) => void;
+  /** Run context compaction immediately */
+  compact: () => void;
   /** Post a system message to the transcript */
   sys: (message: string) => void;
   /** Exit the process immediately */

@@ -36,6 +36,7 @@ export function isSlashCommand(input: string): boolean {
 export interface SlashHandlerDeps {
   dispatch: (action: ChatAction) => void;
   send: (text: string) => void;
+  compact: () => void;
   model: string;
   isStreaming: boolean;
   inputText: string;
@@ -50,7 +51,7 @@ export interface SlashHandlerDeps {
  * Returns true if the input was handled as a slash command, false otherwise.
  */
 export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => boolean {
-  const { dispatch, send, model, isStreaming, inputText, onExit, listSessions, resumeSession } = deps;
+  const { dispatch, send, compact, model, isStreaming, inputText, onExit, listSessions, resumeSession } = deps;
 
   return (input: string): boolean => {
     const parsed = parseSlashCommand(input);
@@ -66,6 +67,7 @@ export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => b
       arg: parsed.arg,
       dispatch,
       send,
+      compact,
       sys: (message: string) => {
         dispatch({
           type: 'ADD_USER_MESSAGE',

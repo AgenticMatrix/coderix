@@ -18,6 +18,7 @@ import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
 import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
 import { collapseToolGroups } from './collapseToolGroups.js';
+import { CompactSummary } from '../../components/CompactSummary.js';
 import { CollapsedGroupRenderer } from './CollapsedGroupRenderer.js';
 import type { CollapsedGroup } from './collapseToolGroups.js';
 
@@ -163,6 +164,18 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
   }
 
   // ── User ──────────────────────────────────────────────────
+
+  // Compact summary user message: render with CompactSummary component
+  if (role === 'user' && message.isCompactSummary) {
+    return (
+      <Box flexDirection="row">
+        <Box width={2} flexShrink={0} />
+        <Box flexGrow={1}>
+          <CompactSummary content={displayContent} />
+        </Box>
+      </Box>
+    );
+  }
 
   // Tool-result-only user messages: display inline without "You:" prefix
   const isToolResultOnly =
@@ -337,6 +350,8 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
             <CompactionBoundaryRenderer
               removedCount={cb.removedCount}
               reason={cb.reason}
+              beforeTokens={cb.beforeTokens}
+              afterTokens={cb.afterTokens}
             />
           </Box>
         </Box>

@@ -10,6 +10,7 @@
 import type {
   Session,
   AssistantMessage,
+  Message,
   UserMessage,
   QueryMessage,
   StreamEvent,
@@ -18,7 +19,7 @@ import type {
 } from './types.js';
 import type { DeferredQuestion } from './types.js';
 import { PermissionMode, AgentError } from './types.js';
-import { query, type QueryConfig, type CallModelParams } from './query.js';
+import { query, runCompaction, type QueryConfig, type CallModelParams } from './query.js';
 import { ToolRegistry } from './tool-registry.js';
 import { PermissionEngine, extractRuleContent } from './permission.js';
 import type { PermissionRule, PermissionRuleSource } from './permission-rules.js';
@@ -37,7 +38,7 @@ import {
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../agents/agent-persistence.js';
-import { sessionDir as getSessionDir } from './session-store.js';
+import { sessionDir as getSessionDir, sessionJsonlPath } from './session-store.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../config.js';
 import { loadSettings, saveSettings } from '../config.js';
 import type { ToolResult } from '../tools/types.js';
@@ -47,6 +48,7 @@ import {
   loadMemoryConfig,
 } from '../memory/config.js';
 import { truncateToTokenLimit, countTokens } from './token-counter.js';
+import { tokenCountWithEstimation } from './token-budget.js';
 import type { MemoryConfig } from '../memory/types.js';
 import {
   executeExtractMemories,
@@ -102,7 +104,7 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'done' | 'permission_required' | 'question_required' | 'queued';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued';
   data?: unknown;
   deferred?: DeferredPermission | DeferredQuestion;
 }
@@ -546,6 +548,10 @@ export class QueryEngine {
               const event = { type: 'compact' as const, data: msg.compactMetadata };
               emit(event);
               yield event;
+            } else if (msg.subtype === 'compact_progress') {
+              const event = { type: 'compact_progress' as const, data: msg.data };
+              emit(event);
+              yield event;
             } else if (msg.subtype === 'error') {
               const event = { type: 'error' as const, data: msg.error };
               emit(event);
@@ -595,6 +601,114 @@ export class QueryEngine {
   interrupt(): void {
     if (this.abortController) {
       this.abortController.abort();
+    }
+  }
+
+  /**
+   * Run context compaction immediately without adding a user message.
+   * Yields compact-boundary events through the AsyncGenerator for
+   * direct consumption by the TUI bridge.
+   *
+   * Sets runningToolCount=1 to block concurrent submitMessage calls
+   * while compaction is in progress (they will be enqueued).
+   *
+   * Used by the /compact slash command for on-demand compaction.
+   */
+  async *compact(): AsyncGenerator<QueryEngineEvent> {
+    const session = this.config.sessionManager.getActive();
+    if (!session || session.messages.length === 0) {
+      yield { type: 'error', data: { message: 'No active session or session has no messages to compact.' } };
+      return;
+    }
+
+    if (!this.systemPrompt) {
+      await this.init();
+    }
+
+    if (this.isActive) {
+      // Interrupt any active turn so we can compact cleanly
+      this.interrupt();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    // Block new submissions while compaction runs
+    this.isActive = true;
+    this.runningToolCount = 1;
+
+    // Trim session messages before compacting (same as submitMessage)
+    const trimBudget = this.config.contextBudget ?? 180_000;
+    this.config.sessionManager.trimMessages(trimBudget);
+
+    const messages = [...session.messages];
+    const currentTokens = tokenCountWithEstimation(messages);
+
+    // Pre-compute the transcript archive path for the compact summary
+    const sessionDir = getSessionDir(session.id);
+    const transcriptPath = `${sessionDir}/history_transcript/transcript-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`;
+
+    const abortController = new AbortController();
+
+    try {
+      const gen = runCompaction(
+        messages,
+        currentTokens,
+        this.config.contextBudget!,
+        {
+          sessionId: session.id,
+          cwd: this.config.cwd,
+          hookManager: this.config.hookManager,
+          callModel: this.config.callModel,
+          systemPrompt: this.systemPrompt!,
+          permissionMode: this.permissionEngine.getMode(),
+          planModeState: null,
+          readFileTracker: this.readFileTracker,
+          clearCaches: () => this.clearCaches(),
+          transcriptPath,
+        },
+        abortController.signal,
+        { count: 0 },
+        'manual',
+      );
+
+      let compactMeta: { beforeTokens: number; afterTokens: number; strategy: string; summaryText?: string } | null = null;
+
+      let result = await gen.next();
+      while (!result.done) {
+        const msg = result.value;
+        if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
+          compactMeta = msg.compactMetadata as { beforeTokens: number; afterTokens: number; strategy: string; summaryText?: string };
+          yield { type: 'compact_boundary', data: compactMeta };
+        } else if (msg.type === 'system' && msg.subtype === 'compact_progress') {
+          yield { type: 'compact_progress', data: msg.data };
+        } else if (msg.type === 'system' && msg.subtype === 'error') {
+          yield { type: 'error', data: { message: msg.error.message } };
+        } else if (msg.type === 'user') {
+          this.config.sessionManager.addMessage(msg.message);
+        } else if (msg.type === 'assistant') {
+          this.config.sessionManager.addMessage(msg.message);
+        }
+        result = await gen.next();
+      }
+
+      // The return value is the compacted messages array
+      const compactedMessages: Message[] = result.value;
+      // Replace session messages with compacted result
+      this.config.sessionManager.replaceMessages(compactedMessages);
+
+      if (compactMeta?.summaryText) {
+        yield { type: 'compact_summary', data: { content: compactMeta.summaryText } };
+      }
+
+      this.clearCaches();
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      yield { type: 'error', data: { message: `Compaction failed: ${errMsg}` } };
+    } finally {
+      this.runningToolCount = 0;
+      this.isActive = false;
+      this.config.sessionManager.saveSession(session);
+      // Drain any messages queued during compaction
+      this.messageQueue.drainNext();
     }
   }
 

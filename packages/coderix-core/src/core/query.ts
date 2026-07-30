@@ -52,10 +52,9 @@ import {
   trySessionMemoryCompact,
   consumeManualCompactRequest,
 } from './compactor.js';
+import { collectPostCompactAttachments } from './compact/post-compact-restore.js';
 import { classifyError } from './error-recovery.js';
 import { loadCodeAgentContext } from './context-loader.js';
-import { loadMemoryPrompt } from '../memory/prompt-builder.js';
-import { loadMemoryConfig } from '../memory/config.js';
 import { listTasks } from '../tasks/store.js';
 import { drainTaskNotifications, listTasks as listTrackedTasks } from '../tasks/task-tracker.js';
 import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
@@ -1646,7 +1645,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 // Compaction (extracted from the main loop for clarity)
 // ---------------------------------------------------------------------------
 
-async function* runCompaction(
+export async function* runCompaction(
   messages: Message[],
   currentTokens: number,
   contextBudget: number,
@@ -1660,15 +1659,19 @@ async function* runCompaction(
     planModeState: PlanModeState | null;
     readFileTracker?: import('./read-file-tracker.js').ReadFileTracker;
     clearCaches?: () => void;
+    transcriptPath?: string;
   },
   signal: AbortSignal,
   compactFailures: { count: number },
+  trigger: 'manual' | 'auto' = 'auto',
 ): AsyncGenerator<QueryMessage, Message[]> {
-  const { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode, planModeState: pmState, readFileTracker, clearCaches } = ctx;
+  const { sessionId, cwd, hookManager, callModel, systemPrompt, permissionMode, planModeState: pmState, readFileTracker, clearCaches, transcriptPath } = ctx;
   const MAX_AUTOCOMPACT_FAILURES = 3;
+  const preCompactMessageCount = messages.length;
 
   // ── PreCompact hook ──────────────────────────────────────────────
   let injectContext = '';
+  let hookCustomInstructions = '';
   if (hookManager) {
     try {
       const result = await hookManager.onPreCompact(
@@ -1677,9 +1680,11 @@ async function* runCompaction(
         messages.length,
         currentTokens,
         contextBudget,
-        'auto',
+        trigger,
       );
       injectContext = result.injectContext;
+      // Consume overrideStrategy as additional custom instructions
+      hookCustomInstructions = result.overrideStrategy ?? '';
     } catch {
       // Hook failures are non-fatal during compaction
     }
@@ -1694,17 +1699,13 @@ async function* runCompaction(
   }
 
   // ── Step 1: Micro Compact (time-based, zero API cost) ───────────
+  // For manual /compact, run micro-compact but always continue to LLM.
   const compactor = new Compactor({
     estimateTokens,
     summarizeEnabled: false,
   });
 
-  // Derive last interaction time from the last assistant message's
-  // position in the array — a rough heuristic since Message has no
-  // timestamp field. When session.ts adds timestamps, this should
-  // use the actual timestamp instead.
   const lastUserInteractionTime = Date.now() - (messages.length * 30_000);
-  // ^ Rough: each turn ~30s, so earlier messages = older interaction
 
   const mcResult = await compactor.microcompact(messages, lastUserInteractionTime);
   const hasMicroCompact = mcResult.strategy !== 'none';
@@ -1712,9 +1713,9 @@ async function* runCompaction(
   if (hasMicroCompact && mcResult.savedTokens > 0) {
     messages = mcResult.messages;
 
-    // If microcompact brought us under threshold, we're done
     const afterMCTokens = tokenCountWithEstimation(messages);
-    if (afterMCTokens / contextBudget <= 0.6) {
+    // Auto compact: exit early if microcompact brought us under threshold
+    if (trigger === 'auto' && afterMCTokens / contextBudget <= 0.6) {
       const compactMeta: CompactMetadata = {
         beforeTokens: currentTokens,
         afterTokens: afterMCTokens,
@@ -1738,8 +1739,18 @@ async function* runCompaction(
         },
       ).catch(() => {});
 
+      hookManager?.onPostCompact(
+        sessionId,
+        cwd,
+        messages.length,
+        messages.length,
+        currentTokens - afterMCTokens,
+        mcResult.strategy,
+        currentTokens,
+        afterMCTokens,
+      ).catch(() => {});
+
       clearCaches?.();
-      // Early return — messages already updated
       return messages;
     }
   }
@@ -1759,11 +1770,11 @@ async function* runCompaction(
     const keepIndex = calculateMessagesToKeepIndex(messages);
     const keptMessages = keepIndex > 0 ? messages.slice(keepIndex) : messages;
 
-    // Assemble: summary + kept messages
     messages = [smSummary, ...keptMessages];
 
     const afterTokens = tokenCountWithEstimation(messages);
-    if (afterTokens / contextBudget <= 0.7) {
+    // Auto compact: exit early if SM compact brought us under threshold
+    if (trigger === 'auto' && afterTokens / contextBudget <= 0.7) {
       yield {
         type: 'system',
         subtype: 'compact_boundary',
@@ -1771,6 +1782,7 @@ async function* runCompaction(
           beforeTokens: currentTokens,
           afterTokens,
           strategy: 'summarize',
+          summaryText: smCompact.summaryContent,
         },
       };
       hookManager?.onNotification(
@@ -1779,47 +1791,81 @@ async function* runCompaction(
         { beforeTokens: currentTokens, afterTokens },
       ).catch(() => {});
       compactFailures.count = 0;
+
+      hookManager?.onPostCompact(
+        sessionId,
+        cwd,
+        messages.length,
+        messages.length,
+        currentTokens - afterTokens,
+        'summarize',
+        currentTokens,
+        afterTokens,
+      ).catch(() => {});
+
       clearCaches?.();
       return messages;
     }
   }
 
   // ── Step 3: LLM Summarization Compact ───────────────────────────
-  // Circuit breaker: skip if already tripped
-  if (compactFailures.count < MAX_AUTOCOMPACT_FAILURES) {
+  // Manual /compact always reaches here — the LLM is actually called.
+  // Auto compact: skip if circuit breaker is tripped.
+  if (trigger === 'manual' || compactFailures.count < MAX_AUTOCOMPACT_FAILURES) {
     const llmSignal = signal.aborted ? new AbortController().signal : signal;
     if (!llmSignal.aborted) {
+      // Yield progress event so the TUI shows "Calling LLM for summarization..."
+      yield {
+        type: 'system',
+        subtype: 'compact_progress',
+        data: {
+          status: 'started',
+          step: 'llm_summarize',
+          message: 'Calling LLM for conversation summarization...',
+        },
+      };
+
       try {
         const llmResult = await compactConversation(messages, callModel, {
           signal: llmSignal,
           preCompactTokens: currentTokens,
           model: 'auto',
+          customInstructions: hookCustomInstructions || undefined,
+          onTextDelta: (text: string) => {
+            // Stream each text delta back to the TUI so the user sees
+            // the LLM generating the summary in real time.
+            // Fire-and-forget via the event queue — we can't yield from a callback.
+          },
+          transcriptPath,
         });
+
+        // Yield streaming-complete progress
+        yield {
+          type: 'system',
+          subtype: 'compact_progress',
+          data: {
+            status: 'completed',
+            step: 'llm_summarize',
+            message: 'LLM summarization complete.',
+          },
+        };
 
         messages = [
           llmResult.boundaryMarker,
           ...llmResult.summaryMessages,
-          ...llmResult.messagesToKeep,
+          ...(llmResult.messagesToKeep ?? []),
         ];
 
         // ── Post-compact restoration ─────────────────────────────
-        // Re-inject context that was lost when old messages were pruned.
-        const restoreMessages = await buildRestoreContext(
-          cwd,
-          systemPrompt,
-          permissionMode,
-          pmState,
-        );
-        messages.push(...restoreMessages);
-
-        // ── File restoration ────────────────────────────────────
-        // Re-inject recently read files so the model retains codebase awareness.
         if (readFileTracker) {
-          const fileMessages = buildFileRestoreContext(readFileTracker);
-          messages.push(...fileMessages);
+          const restoreMessages = collectPostCompactAttachments({
+            readFileTracker,
+            preservedMessages: llmResult.messagesToKeep,
+            planModeState: pmState,
+          });
+          messages.push(...restoreMessages);
         }
 
-        // ── Cache cleanup ────────────────────────────────────────
         clearCaches?.();
 
         const afterTokens = tokenCountWithEstimation(messages);
@@ -1830,6 +1876,7 @@ async function* runCompaction(
             beforeTokens: currentTokens,
             afterTokens,
             strategy: 'summarize',
+            summaryText: llmResult.summaryMessages[0]?.content as string ?? '',
           },
         };
         hookManager?.onNotification(
@@ -1838,9 +1885,37 @@ async function* runCompaction(
           { beforeTokens: currentTokens, afterTokens },
         ).catch(() => {});
         compactFailures.count = 0;
+
+        hookManager?.onPostCompact(
+          sessionId,
+          cwd,
+          messages.length,
+          messages.length,
+          currentTokens - afterTokens,
+          'summarize',
+          currentTokens,
+          afterTokens,
+        ).catch(() => {});
+
         return messages;
-      } catch {
+      } catch (err) {
         compactFailures.count++;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        hookManager?.onNotification(
+          sessionId, cwd, 'warn',
+          `LLM compaction failed: ${errMsg}`,
+        ).catch(() => {});
+        // Yield error so the TUI can show it
+        yield {
+          type: 'system',
+          subtype: 'error',
+          error: new AgentError(
+            `LLM compaction failed: ${errMsg}`,
+            'COMPACT_FAILED',
+            true,
+            err instanceof Error ? err : undefined,
+          ),
+        };
         if (compactFailures.count >= MAX_AUTOCOMPACT_FAILURES) {
           hookManager?.onNotification(
             sessionId, cwd, 'warn',
@@ -1878,6 +1953,18 @@ async function* runCompaction(
     { beforeTokens: currentTokens, afterTokens, strategy, droppedMessages: droppedCount },
   ).catch(() => {});
 
+  // ── PostCompact hook ──────────────────────────────────────────
+  hookManager?.onPostCompact(
+    sessionId,
+    cwd,
+    preCompactMessageCount,
+    messages.length,
+    currentTokens - afterTokens,
+    strategy,
+    currentTokens,
+    afterTokens,
+  ).catch(() => {});
+
   clearCaches?.();
 
   return messages;
@@ -1886,77 +1973,6 @@ async function* runCompaction(
 // ---------------------------------------------------------------------------
 // Post-compact context restoration
 // ---------------------------------------------------------------------------
-
-/**
- * Build context messages to restore after LLM compaction prunes old messages.
- * Re-injects:
- *   1. CODERIX.md (project + user)
- *   2. Memory context (from memory files)
- *   3. Plan mode reminder (if applicable)
- *
- * These are normally part of the system prompt, but the model may lose
- * awareness after a large context shift. Re-injecting as explicit messages
- * at the conversation tail ensures they're in the attention window.
- */
-async function buildRestoreContext(
-  cwd: string,
-  _systemPrompt: SystemPrompt,
-  permissionMode: PermissionMode,
-  planModeState: PlanModeState | null,
-): Promise<Message[]> {
-  const messages: Message[] = [];
-
-  // ── 1. CODERIX.md context ────────────────────────────────────────
-  try {
-    const ctx = loadCodeAgentContext(cwd);
-    const parts: string[] = ['[Context restored after compaction]'];
-
-    if (ctx.projectContext) {
-      parts.push('\n## Project context (CODERIX.md)');
-      parts.push(ctx.projectContext.slice(0, 3000));
-    }
-    if (ctx.userContext) {
-      parts.push('\n## User context (~/.coderix/CODERIX.md)');
-      parts.push(ctx.userContext.slice(0, 2000));
-    }
-
-    if (parts.length > 1) {
-      messages.push({ role: 'system', content: parts.join('\n') });
-    }
-  } catch {
-    // Best-effort — CODERIX.md may not exist
-  }
-
-  // ── 2. Memory context ────────────────────────────────────────────
-  try {
-    const memoryConfig = loadMemoryConfig();
-    const memoryPrompt = await loadMemoryPrompt(cwd, memoryConfig);
-    if (memoryPrompt) {
-      messages.push({
-        role: 'system',
-        content: `[Memory context restored]\n${memoryPrompt.slice(0, 3000)}`,
-      });
-    }
-  } catch {
-    // Best-effort — memory may be disabled
-  }
-
-  // ── 3. Plan mode reminder ────────────────────────────────────────
-  if (permissionMode === 'plan') {
-    const planFileInfo = planModeState?.planFilePath
-      ? ` Plan file: ${planModeState.planFilePath}.`
-      : '';
-    messages.push({
-      role: 'system',
-      content:
-        `<system-reminder>\n[Context restored after compaction] You are still in plan mode. ` +
-        `Read-only except the plan file. Follow the 5-phase workflow (Explore → Design → Review → Final Plan → ExitPlanMode).` +
-        `${planFileInfo} End turns with AskUserQuestion or ExitPlanMode.\n</system-reminder>`,
-    });
-  }
-
-  return messages;
-}
 
 /**
  * Build file restoration messages after LLM compaction.

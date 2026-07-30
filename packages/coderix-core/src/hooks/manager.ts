@@ -454,6 +454,9 @@ export class HookManager {
       messageCountBefore: Number(_args[2]) || 0,
       messageCountAfter: Number(_args[3]) || 0,
       tokensSaved: Number(_args[4]) || 0,
+      strategy: String(_args[5] ?? ''),
+      preCompactTokens: Number(_args[6]) || 0,
+      postCompactTokens: Number(_args[7]) || 0,
     } as PostCompactContext;
 
     for (const hook of hooks) {

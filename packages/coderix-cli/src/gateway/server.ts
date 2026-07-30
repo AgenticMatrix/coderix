@@ -215,6 +215,7 @@ export async function startGateway(): Promise<void> {
               arg: parsed.arg,
               dispatch: () => {},
               send: (promptText: string) => { sendMsg = promptText; },
+              compact: () => {},
               sys: (msg: string) => { sysMsg = msg; },
               exit: () => {},
               model: config.model,

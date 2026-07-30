@@ -12,7 +12,7 @@
  *       agent-<id>.jsonl       # Per-sub-agent sidechain transcript
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { IS_WINDOWS } from '../utils/platform.js';
@@ -250,13 +250,36 @@ export class SessionManager {
 
   /**
    * Replace the active session's messages with a compacted set.
+   * Archives the old transcript to history_transcript/ before rewriting.
+   * Returns the archive path for inclusion in the compact summary.
    */
-  replaceMessages(messages: Message[]): void {
+  replaceMessages(messages: Message[]): string | undefined {
     const session = this.getActive();
     session.messages = [...messages];
     session.updatedAt = new Date();
+    // Archive old JSONL before rebuilding
+    const archivePath = this.archiveTranscript(session);
     // Rebuild JSONL from compacted messages
     this.rebuildJsonlFromSession(session);
+    return archivePath;
+  }
+
+  /**
+   * Archive the current session.jsonl to history_transcript/transcript-{ts}.jsonl.
+   * Returns the archive path or undefined if the source file doesn't exist.
+   */
+  private archiveTranscript(session: Session): string | undefined {
+    const dir = getSessionDir(session.id);
+    const jsonlPath = sessionJsonlPath(dir);
+    if (!existsSync(jsonlPath)) return undefined;
+
+    const historyDir = `${dir}/history_transcript`;
+    mkdirSync(historyDir, { recursive: true, mode: 0o700 });
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const archivePath = `${historyDir}/transcript-${ts}.jsonl`;
+    copyFileSync(jsonlPath, archivePath);
+    return archivePath;
   }
 
   // Hard cap on in-memory messages to prevent unbounded heap growth.

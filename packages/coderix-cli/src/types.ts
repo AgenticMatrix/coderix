@@ -100,6 +100,10 @@ export interface CompactionBoundary {
   type: 'compaction';
   removedCount: number;
   reason: string;
+  /** Number of tokens before compaction. */
+  beforeTokens?: number;
+  /** Number of tokens after compaction. */
+  afterTokens?: number;
 }
 
 export type SpeculationState = 'predicting' | 'used' | 'discarded';
@@ -156,6 +160,8 @@ export interface Message {
   thinkingDuration?: number;
   /** Estimated token count of the thinking content. */
   thinkingTokens?: number;
+  /** True when this user message is a compaction summary. */
+  isCompactSummary?: boolean;
 }
 
 // ── App config ──────────────────────────────────────────────────────

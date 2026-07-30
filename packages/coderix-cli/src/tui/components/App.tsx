@@ -347,7 +347,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   const subAgentViewRef = useRef(state.subAgentView);
   subAgentViewRef.current = state.subAgentView;
 
-  const { runAgentTurn } = useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef });
+  const { runAgentTurn, runCompact } = useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef });
   const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
 
   // ── Title generation for the first user message ─────────────────
@@ -594,6 +594,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     onSlashCommand: createSlashHandler({
       dispatch,
       send: handleSend,
+      compact: () => { runCompact().catch(() => {}); },
       model: config.model,
       isStreaming: state.isStreaming,
       inputText: state.inputText,

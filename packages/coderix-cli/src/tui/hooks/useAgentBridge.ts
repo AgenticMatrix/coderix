@@ -548,6 +548,105 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
   const runAgentTurnRef = useRef(runAgentTurn);
   runAgentTurnRef.current = runAgentTurn;
 
+  /**
+   * Run context compaction immediately (triggered by /compact).
+   * Iterates engine.compact() and dispatches compact-boundary and
+   * compact-summary messages to the TUI for rendering.
+   */
+  const runCompact = useCallback(async () => {
+    try {
+      for await (const event of engine.compact()) {
+        switch (event.type) {
+          case 'compact_boundary': {
+            const meta = event.data as { beforeTokens: number; afterTokens: number; strategy: string } | undefined;
+            const strategyLabel = meta?.strategy === 'time_based'
+              ? 'micro-compact'
+              : meta?.strategy === 'summarize'
+                ? 'LLM summary'
+                : meta?.strategy === 'token_snip'
+                  ? 'truncation'
+                  : meta?.strategy ?? 'summarize';
+            const compactMsg: Message = {
+              id: nextMessageId(),
+              role: 'system',
+              content: '',
+              blocks: [{
+                type: 'compaction',
+                removedCount: 0,
+                reason: strategyLabel,
+                beforeTokens: meta?.beforeTokens,
+                afterTokens: meta?.afterTokens,
+              }],
+              timestamp: Date.now(),
+            };
+            routeDispatch({ type: 'ADD_USER_MESSAGE', message: compactMsg });
+            break;
+          }
+          case 'compact_summary': {
+            const data = event.data as { content: string };
+            const summaryMsg: Message = {
+              id: nextMessageId(),
+              role: 'user',
+              content: data.content,
+              blocks: [{ type: 'text', content: data.content }],
+              isCompactSummary: true,
+              timestamp: Date.now(),
+            };
+            routeDispatch({ type: 'ADD_USER_MESSAGE', message: summaryMsg });
+            break;
+          }
+          case 'compact': {
+            // Legacy compact event (from normal submitMessage turns)
+            const meta = event.data as { beforeTokens: number; afterTokens: number; strategy: string };
+            const strategyLabel = meta.strategy === 'time_based'
+              ? 'micro-compact'
+              : meta.strategy === 'summarize'
+                ? 'LLM summary'
+                : meta.strategy === 'token_snip'
+                  ? 'truncation'
+                  : meta.strategy;
+            const compactMsg: Message = {
+              id: nextMessageId(),
+              role: 'system',
+              content: '',
+              blocks: [{
+                type: 'compaction',
+                removedCount: 0,
+                reason: strategyLabel,
+                beforeTokens: meta.beforeTokens,
+                afterTokens: meta.afterTokens,
+              }],
+              timestamp: Date.now(),
+            };
+            routeDispatch({ type: 'ADD_USER_MESSAGE', message: compactMsg });
+            break;
+          }
+          case 'compact_progress': {
+            const prog = event.data as { status: string; step: string; message?: string };
+            if (prog.status === 'started') {
+              const progressMsg: Message = {
+                id: nextMessageId(),
+                role: 'system',
+                content: prog.message ?? 'Running LLM summarization...',
+                blocks: [],
+                timestamp: Date.now(),
+              };
+              routeDispatch({ type: 'ADD_USER_MESSAGE', message: progressMsg });
+            }
+            break;
+          }
+          case 'error': {
+            const errData = event.data as { message?: string };
+            routeDispatch({ type: 'SET_ERROR', error: errData?.message ?? 'Compaction failed' });
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      routeDispatch({ type: 'SET_ERROR', error: (err as Error).message });
+    }
+  }, [engine, routeDispatch]);
+
   // Subscribe to queue drain events so queued messages auto-process
   useEffect(() => {
     const unsub = engine.onQueueDrain((message) => {
@@ -556,5 +655,5 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
     return unsub;
   }, [engine]);
 
-  return { runAgentTurn };
+  return { runAgentTurn, runCompact };
 }
