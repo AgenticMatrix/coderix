@@ -15,17 +15,24 @@ interface CompactSummaryProps {
   collapsed?: boolean;
   /** Maximum visible lines when collapsed. */
   maxCollapsedLines?: number;
+  /** Global content-expand toggle (Ctrl+O). When true, force-expand all content. */
+  contentExpanded?: boolean;
 }
 
 export function CompactSummary({
   content,
   collapsed: initialCollapsed = true,
   maxCollapsedLines = 8,
+  contentExpanded = false,
 }: CompactSummaryProps) {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
+
+  // Ctrl+O toggles all content — use contentExpanded to override local state
+  const effectiveCollapsed = contentExpanded ? false : isCollapsed;
+
   const lines = content.split('\n');
 
-  const displayLines = isCollapsed
+  const displayLines = effectiveCollapsed
     ? lines.slice(0, maxCollapsedLines)
     : lines;
 
@@ -44,8 +51,8 @@ export function CompactSummary({
 
         {lines.length > maxCollapsedLines && (
           <Text dimColor>
-            {isCollapsed
-              ? `... ${lines.length - maxCollapsedLines} more lines`
+            {effectiveCollapsed
+              ? `... ${lines.length - maxCollapsedLines} more lines (Ctrl+O to expand)`
               : `(${lines.length} lines total)`}
           </Text>
         )}

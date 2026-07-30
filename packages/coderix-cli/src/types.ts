@@ -281,6 +281,10 @@ export interface ChatState extends CoreState {
   queuedCount: number;
   /** When true, the current turn was interrupted via Ctrl+C. */
   interrupted: boolean;
+  /** When true, /compact is actively running — used to show progress in ActivityLine. */
+  isCompacting: boolean;
+  /** Accumulated text from compact LLM summarization streaming. */
+  compactProgressText: string;
   /** Team context — set when running in team/worker mode. */
   teamContext?: TeamContextState;
 }
@@ -360,7 +364,9 @@ export type ChatAction =
   | { type: 'ROUTE_TO_SAVED_MAIN'; action: ChatAction }
   // Message queue
   | { type: 'QUEUED_MESSAGE' }
-  | { type: 'DEQUEUED_MESSAGE' };
+  | { type: 'DEQUEUED_MESSAGE' }
+  // Compaction progress
+  | { type: 'SET_COMPACTING'; isCompacting: boolean; progressText?: string };
 
 // ── Streaming callbacks (API client → App) ──────────────────────────
 

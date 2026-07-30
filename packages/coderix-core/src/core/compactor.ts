@@ -380,6 +380,174 @@ export function adjustIndexToPreservePairs(
 // LLM Summarization helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Progress event yielded during LLM summarization streaming.
+ */
+export interface CompactStreamEvent {
+  type: 'text_delta';
+  /** The incremental text chunk from the LLM. */
+  text: string;
+}
+
+async function* callSummaryModelStream(
+  callModel: CompactModelFn,
+  systemPrompt: string,
+  messages: Message[],
+  signal: AbortSignal,
+): AsyncGenerator<CompactStreamEvent, { text: string | null; error: Error | null }> {
+  try {
+    const contextText = buildCompactContext(messages);
+
+    const gen = callModel({
+      system: systemPrompt,
+      messages: [{ role: 'user' as const, content: contextText }],
+      tools: [],
+      signal,
+    });
+
+    let fullText = '';
+    for await (const event of gen) {
+      // Handle AssistantMessage directly
+      if ('role' in event && event.role === 'assistant') {
+        const assistantEvent = event as AssistantMessage;
+        if (Array.isArray(assistantEvent.content)) {
+          for (const block of assistantEvent.content) {
+            if (block.type === 'text') {
+              const text = block.text ?? '';
+              fullText += text;
+              yield { type: 'text_delta', text };
+            }
+          }
+        } else if (typeof assistantEvent.content === 'string') {
+          fullText += assistantEvent.content;
+          yield { type: 'text_delta', text: assistantEvent.content };
+        }
+        continue;
+      }
+
+      // Handle stream events
+      const streamEvent = event as StreamEvent;
+      if (
+        streamEvent.type === 'content_block_delta' &&
+        streamEvent.delta?.type === 'text_delta'
+      ) {
+        const text = (streamEvent.delta as { text: string }).text ?? '';
+        fullText += text;
+        yield { type: 'text_delta', text };
+      }
+    }
+
+    return { text: fullText || null, error: null };
+  } catch (error) {
+    return { text: null, error: error as Error };
+  }
+}
+
+/**
+ * Stream-based version of compactConversation that yields text deltas
+ * during LLM summarization so the caller can show real-time progress.
+ *
+ * Yields CompactStreamEvent for each text chunk, then returns CompactionResult.
+ */
+export async function* streamCompactConversation(
+  messages: Message[],
+  callModel: CompactModelFn,
+  options: {
+    signal: AbortSignal;
+    preCompactTokens: number;
+    model: string;
+    customInstructions?: string;
+    transcriptPath?: string;
+  },
+): AsyncGenerator<CompactStreamEvent, CompactionResult> {
+  let messagesToSummarize = stripImagesFromMessages(messages);
+  const preCompactTokens = options.preCompactTokens;
+
+  const summaryPrompt = getCompactPrompt(options.customInstructions);
+
+  // PTL retry loop
+  const MAX_PTL_RETRIES = 3;
+  let ptlAttempts = 0;
+
+  for (;;) {
+    const streamGen = callSummaryModelStream(
+      callModel,
+      summaryPrompt,
+      messagesToSummarize,
+      options.signal,
+    );
+
+    let streamResult = await streamGen.next();
+    while (!streamResult.done) {
+      yield streamResult.value;
+      streamResult = await streamGen.next();
+    }
+
+    const result = streamResult.value;
+    const isPTL = result.error ? isPromptTooLongError(result.error) : false;
+    if (!isPTL) {
+      if (!result.text) {
+        throw new Error(
+          'Failed to generate conversation summary — empty response',
+        );
+      }
+
+      // Format the summary
+      const summaryText = formatCompactSummary(result.text);
+      const summaryContent = getCompactUserSummaryMessage(
+        summaryText,
+        true, // suppressFollowUpQuestions
+        options.transcriptPath,
+      );
+
+      // Full compact: do NOT keep any old messages.
+      const keptMessages: Message[] = [];
+
+      // Build boundary marker
+      const boundaryMarker = createCompactBoundaryMessage(
+        'auto',
+        preCompactTokens,
+        messages.length,
+      );
+
+      // Build summary messages
+      const summaryMessages: UserMessage[] = [
+        { role: 'user', content: summaryContent },
+      ];
+
+      // Calculate post-compact tokens
+      const postCompactTokens =
+        estimateMessageTokens({ role: 'user', content: summaryContent });
+
+      return {
+        boundaryMarker,
+        summaryMessages,
+        attachments: [],
+        hookResults: [],
+        messagesToKeep: keptMessages,
+        preCompactTokenCount: preCompactTokens,
+        postCompactTokenCount: postCompactTokens,
+      };
+    }
+
+    // PTL: drop oldest message groups
+    ptlAttempts++;
+    if (ptlAttempts > MAX_PTL_RETRIES) {
+      throw new Error(
+        'Compaction failed — summarization request too large after retries',
+      );
+    }
+
+    const truncated = dropOldestMessageGroups(messagesToSummarize);
+    if (!truncated) {
+      throw new Error(
+        'Compaction failed — cannot reduce summarization input further',
+      );
+    }
+    messagesToSummarize = truncated;
+  }
+}
+
 async function callSummaryModel(
   callModel: CompactModelFn,
   systemPrompt: string,

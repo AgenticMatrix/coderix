@@ -151,6 +151,25 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
 
   // ── System ────────────────────────────────────────────────
   if (role === 'system') {
+    // Compaction boundary — render with the compaction block renderer
+    const compactionBlock = hasBlocks ? message.blocks.find((b) => b.type === 'compaction') : undefined;
+    if (compactionBlock) {
+      const cb = compactionBlock as CompactionBoundary;
+      return (
+        <Box flexDirection="row" marginBottom={1}>
+          <Box width={2} flexShrink={0} />
+          <Box flexGrow={1}>
+            <CompactionBoundaryRenderer
+              removedCount={cb.removedCount}
+              reason={cb.reason}
+              beforeTokens={cb.beforeTokens}
+              afterTokens={cb.afterTokens}
+            />
+          </Box>
+        </Box>
+      );
+    }
+
     return (
       <Box flexDirection="row" marginBottom={1}>
         <Box width={2} flexShrink={0} />
@@ -171,7 +190,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
       <Box flexDirection="row">
         <Box width={2} flexShrink={0} />
         <Box flexGrow={1}>
-          <CompactSummary content={displayContent} />
+          <CompactSummary content={displayContent} contentExpanded={contentExpanded} />
         </Box>
       </Box>
     );

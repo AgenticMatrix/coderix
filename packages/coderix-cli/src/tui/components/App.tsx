@@ -549,6 +549,8 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // idle: nothing active
   const statusPhase = useMemo<'busy' | 'wait' | 'idle'>(() => {
     if (state.error) return 'idle';
+    // Busy: compacting is always busy
+    if (state.isCompacting) return 'busy';
     // Busy: ONLY when main agent API is actively streaming.
     // Use mainStreaming when in sub-agent view (isStreaming conflates both agents).
     const mainActive = state.subAgentView ? state.mainStreaming : state.isStreaming;
@@ -565,7 +567,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
       if (agent.status === 'running') return 'wait';
     }
     return 'idle';
-  }, [state.error, state.isStreaming, state.mainStreaming, mainMessages, agentTick]);
+  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -824,6 +826,13 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
   // causing a layout jump.
   const activitySnapshotRef = useRef<React.ReactNode>(null);
 
+  // Clear activity snapshot when compacting ends to prevent stale progress bar
+  useEffect(() => {
+    if (!state.isCompacting) {
+      activitySnapshotRef.current = null;
+    }
+  }, [state.isCompacting]);
+
   // ── Turn-level phase detection ────────────────────────────────
   // thinking: latest thinking block is still in progress (no duration)
   // executing: last message has active tools or running sub-agents
@@ -833,6 +842,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
 
   const currentPhase = useMemo<ActivityPhase>(() => {
     if (state.error) return 'idle';
+    if (state.isCompacting) return 'compacting';
     // Only treat an unfinished thinking block as active thinking when the
     // stream is still in progress.  If isStreaming is false the block is
     // stale and we fall through so the ActivityLine can show Done/Interrupted.
@@ -848,7 +858,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
     }
     if (state.isStreaming) return 'streaming';
     return 'idle';
-  }, [state.error, latestThinking, state.messages, state.isStreaming, agentTick]);
+  }, [state.error, state.isCompacting, latestThinking, state.messages, state.isStreaming, agentTick]);
 
   // Turn elapsed timer — starts on new user message, runs continuously until next user message
   // Uses mainMessages (not state.messages) so the timer doesn't reset when
@@ -1044,6 +1054,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, sh
                 turnOutputTokens={state.turnOutputTokens}
                 completed={completedTurn}
                 interrupted={state.interrupted}
+                compactProgressText={state.compactProgressText}
               />
             ) : null;
             if (activityElement !== null) {

@@ -622,16 +622,13 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
             break;
           }
           case 'compact_progress': {
-            const prog = event.data as { status: string; step: string; message?: string };
+            const prog = event.data as { status: string; step: string; message?: string; textDelta?: string };
             if (prog.status === 'started') {
-              const progressMsg: Message = {
-                id: nextMessageId(),
-                role: 'system',
-                content: prog.message ?? 'Running LLM summarization...',
-                blocks: [],
-                timestamp: Date.now(),
-              };
-              routeDispatch({ type: 'ADD_USER_MESSAGE', message: progressMsg });
+              routeDispatch({ type: 'SET_COMPACTING', isCompacting: true, progressText: prog.message });
+            } else if (prog.status === 'streaming' && prog.textDelta) {
+              routeDispatch({ type: 'SET_COMPACTING', isCompacting: true, progressText: prog.textDelta });
+            } else if (prog.status === 'completed') {
+              routeDispatch({ type: 'SET_COMPACTING', isCompacting: false });
             }
             break;
           }

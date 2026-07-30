@@ -45,10 +45,12 @@ import { sessionDir } from './session-store.js';
 import type { CoreState } from '../state/core-state.js';
 import type { ToolRequestEvent } from '../state/observable.js';
 import { applyToolResultLimits } from './tool-result-limiter.js';
+import type { CompactionResult } from './compact/compact-types.js';
 import {
   Compactor,
   calculateMessagesToKeepIndex,
   compactConversation,
+  streamCompactConversation,
   trySessionMemoryCompact,
   consumeManualCompactRequest,
 } from './compactor.js';
@@ -1814,30 +1816,44 @@ export async function* runCompaction(
   if (trigger === 'manual' || compactFailures.count < MAX_AUTOCOMPACT_FAILURES) {
     const llmSignal = signal.aborted ? new AbortController().signal : signal;
     if (!llmSignal.aborted) {
-      // Yield progress event so the TUI shows "Calling LLM for summarization..."
+      // Yield progress event so the TUI shows "Compacting conversation..."
       yield {
         type: 'system',
         subtype: 'compact_progress',
         data: {
           status: 'started',
           step: 'llm_summarize',
-          message: 'Calling LLM for conversation summarization...',
+          message: 'Compacting conversation…',
         },
       };
 
       try {
-        const llmResult = await compactConversation(messages, callModel, {
+        // Use streaming version so we can yield real-time text deltas
+        const streamGen = streamCompactConversation(messages, callModel, {
           signal: llmSignal,
           preCompactTokens: currentTokens,
           model: 'auto',
           customInstructions: hookCustomInstructions || undefined,
-          onTextDelta: (text: string) => {
-            // Stream each text delta back to the TUI so the user sees
-            // the LLM generating the summary in real time.
-            // Fire-and-forget via the event queue — we can't yield from a callback.
-          },
           transcriptPath,
         });
+
+        let accumulatedText = '';
+        let streamResult = await streamGen.next();
+        while (!streamResult.done) {
+          accumulatedText += streamResult.value.text;
+          yield {
+            type: 'system',
+            subtype: 'compact_progress',
+            data: {
+              status: 'streaming',
+              step: 'llm_summarize',
+              textDelta: accumulatedText,
+            },
+          };
+          streamResult = await streamGen.next();
+        }
+
+        const llmResult: CompactionResult = streamResult.value;
 
         // Yield streaming-complete progress
         yield {
@@ -1846,7 +1862,7 @@ export async function* runCompaction(
           data: {
             status: 'completed',
             step: 'llm_summarize',
-            message: 'LLM summarization complete.',
+            message: 'Summarization complete.',
           },
         };
 

@@ -977,6 +977,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'DEQUEUED_MESSAGE':
       return { ...state, queuedCount: Math.max(0, state.queuedCount - 1) };
 
+    case 'SET_COMPACTING':
+      return {
+        ...state,
+        isCompacting: action.isCompacting,
+        compactProgressText: action.isCompacting
+          ? (action.progressText ?? '')
+          : '',
+      };
+
     default:
       return state;
   }
@@ -1044,6 +1053,8 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     turnStartedAt: 0,
     queuedCount: 0,
     interrupted: false,
+    isCompacting: false,
+    compactProgressText: '',
   };
 }
 

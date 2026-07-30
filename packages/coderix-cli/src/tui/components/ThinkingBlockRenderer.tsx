@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 
 const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
 
-export type ActivityPhase = 'idle' | 'thinking' | 'executing' | 'streaming';
+export type ActivityPhase = 'idle' | 'thinking' | 'executing' | 'streaming' | 'compacting';
 
 function SpinnerGlyph({ active }: { active: boolean }) {
   const [frame, setFrame] = useState(0);
@@ -70,6 +70,7 @@ const PHASE_NAMES: Record<ActivityPhase, string> = {
   thinking: 'Thinking',
   executing: 'Executing',
   streaming: 'Streaming',
+  compacting: 'Compacting conversation',
 };
 
 export interface ActivityLineProps {
@@ -82,6 +83,34 @@ export interface ActivityLineProps {
   completed?: { elapsed: number; tokens: number } | null;
   /** When true, the turn was interrupted via Ctrl+C. Shows "Interrupted" instead of "Done". */
   interrupted?: boolean;
+  /** Accumulated progress text during compaction (used for progress bar). */
+  compactProgressText?: string;
+}
+
+/** Estimated max characters for compaction output (20k tokens * ~4 chars/token). */
+const COMPACT_MAX_CHARS = 80_000;
+/** Width of the progress bar in characters. */
+const PROGRESS_BAR_WIDTH = 40;
+
+function ProgressBar({ progressText }: { progressText: string }) {
+  // Logarithmic curve: starts fast, slows down, asymptotically approaches 95%.
+  // Never reaches 100% until the actual completion event fires.
+  const linearPct = progressText.length / COMPACT_MAX_CHARS;
+  const curvedPct = Math.min(0.95, 1 - Math.exp(-6 * linearPct));
+  const filled = Math.max(1, Math.floor(curvedPct * PROGRESS_BAR_WIDTH));
+  const empty = PROGRESS_BAR_WIDTH - filled;
+  const pctDisplay = Math.floor(curvedPct * 100);
+
+  return (
+    <Box flexDirection="row">
+      <Box width={2} flexShrink={0} />
+      <Text dimColor>
+        <Text color="#A855F7">{'▰'.repeat(filled)}</Text>
+        <Text dimColor>{'▱'.repeat(empty)}</Text>
+        <Text> {pctDisplay}%</Text>
+      </Text>
+    </Box>
+  );
 }
 
 /**
@@ -92,7 +121,7 @@ export interface ActivityLineProps {
  *   ✦ Interrupted… (↓ 2.2k tokens, 2m 10s)   ← yellow, after Ctrl+C
  *   ● Done… (↓ 2.2k tokens, 2m 10s since last input)   ← gray, stays after completion
  */
-export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, interrupted }: ActivityLineProps) {
+export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, interrupted, compactProgressText }: ActivityLineProps) {
   if (phase === 'idle') {
     if (interrupted && completed) {
       const timeStr = formatTime(completed.elapsed);
@@ -123,6 +152,25 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
             Done… (↓ {tokenStr} tokens, {timeStr} since last input)
           </Text>
         </Box>
+      </Box>
+    );
+  }
+
+  // ── Compacting phase — spinner + progress bar ──────────────────
+  if (phase === 'compacting') {
+    const timeStr = formatTime(turnElapsed);
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <Box flexDirection="row">
+          <SpinnerGlyph active={true} />
+          <Box flexDirection="column" flexGrow={1}>
+            <Text>
+              <Text color="#A855F7">{PHASE_NAMES[phase]}…</Text>
+              <Text dimColor> ({timeStr})</Text>
+            </Text>
+          </Box>
+        </Box>
+        <ProgressBar progressText={compactProgressText ?? ''} />
       </Box>
     );
   }

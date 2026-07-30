@@ -83,7 +83,6 @@ export const coreCommands: SlashCommand[] = [
     help: 'compact the conversation context',
     name: 'compact',
     run: (_arg, ctx) => {
-      ctx.sys('Compacting conversation context...');
       ctx.compact();
     },
   },
