@@ -534,6 +534,44 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
             case 'queued':
               routeDispatch({ type: 'QUEUED_MESSAGE' });
               break;
+            case 'compact': {
+              // Auto-compact boundary (during normal turn)
+              const meta = event.data as { beforeTokens: number; afterTokens: number; strategy: string };
+              const strategyLabel = meta.strategy === 'time_based'
+                ? 'micro-compact'
+                : meta.strategy === 'summarize'
+                  ? 'LLM summary'
+                  : meta.strategy === 'token_snip'
+                    ? 'truncation'
+                    : meta.strategy;
+              const compactMsg: Message = {
+                id: nextMessageId(),
+                role: 'system',
+                content: '',
+                blocks: [{
+                  type: 'compaction',
+                  removedCount: 0,
+                  reason: strategyLabel,
+                  beforeTokens: meta.beforeTokens,
+                  afterTokens: meta.afterTokens,
+                }],
+                timestamp: Date.now(),
+              };
+              routeDispatch({ type: 'ADD_USER_MESSAGE', message: compactMsg });
+              break;
+            }
+            case 'compact_progress': {
+              // Auto-compact progress (during normal turn)
+              const prog = event.data as { status: string; step: string; message?: string; textDelta?: string };
+              if (prog.status === 'started') {
+                routeDispatch({ type: 'SET_COMPACTING', isCompacting: true, progressText: prog.message });
+              } else if (prog.status === 'streaming' && prog.textDelta) {
+                routeDispatch({ type: 'SET_COMPACTING', isCompacting: true, progressText: prog.textDelta });
+              } else if (prog.status === 'completed') {
+                routeDispatch({ type: 'SET_COMPACTING', isCompacting: false });
+              }
+              break;
+            }
           }
         }
       } catch (err) {

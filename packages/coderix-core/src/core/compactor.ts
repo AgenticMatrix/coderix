@@ -169,6 +169,9 @@ export async function compactConversation(
 
     const isPTL = result.error ? isPromptTooLongError(result.error) : false;
     if (!isPTL) {
+      if (result.error) {
+        throw result.error;
+      }
       if (!result.text) {
         throw new Error(
           'Failed to generate conversation summary — empty response',
@@ -486,6 +489,9 @@ export async function* streamCompactConversation(
     const result = streamResult.value;
     const isPTL = result.error ? isPromptTooLongError(result.error) : false;
     if (!isPTL) {
+      if (result.error) {
+        throw result.error;
+      }
       if (!result.text) {
         throw new Error(
           'Failed to generate conversation summary — empty response',

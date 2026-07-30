@@ -74,6 +74,8 @@ export interface QueryEngineConfig {
   maxTurns?: number;
   maxBudgetUsd?: number;
   contextBudget?: number;
+  /** User-configured max context window (effective budget). Takes priority over model-derived budget. */
+  maxContext?: number;
   compactThreshold?: number;
   customSystemPrompt?: string;
   appendSystemPrompt?: string;
@@ -150,6 +152,12 @@ export class QueryEngine {
       if (budget) {
         this.config.contextBudget = budget;
       }
+    }
+
+    // If a user-configured maxContext is set, use it as the context budget
+    // (it represents the effective context window the model actually uses).
+    if (config.maxContext && config.maxContext > 0) {
+      this.config.contextBudget = config.maxContext;
     }
 
     // Load permission rules from settings
