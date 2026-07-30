@@ -126,9 +126,6 @@ export class SessionManager {
     // This prevents empty sessions from leaving directories on disk.
     (session as any)._entryCount = 0;
 
-    // Persist workDir early so session listing can show it.
-    this.appendMetadata(session);
-
     return session;
   }
 
@@ -350,13 +347,17 @@ export class SessionManager {
       const dir = getSessionDir(session.id);
       const jsonlPath = sessionJsonlPath(dir);
 
-      // Bootstrap the session on first message: write parent metadata
-      if (((session as any)._entryCount as number) <= 2 && session.parentSessionId) {
-        const parentEntry: SessionEntry = {
-          type: 'parent-session',
-          parentSessionId: session.parentSessionId,
-        } as SessionEntry;
-        appendEntry(jsonlPath, parentEntry).catch(() => {});
+      // Bootstrap the session on first message: write parent metadata and workDir
+      if (((session as any)._entryCount as number) <= 2) {
+        if (session.parentSessionId) {
+          const parentEntry: SessionEntry = {
+            type: 'parent-session',
+            parentSessionId: session.parentSessionId,
+          } as SessionEntry;
+          appendEntry(jsonlPath, parentEntry).catch(() => {});
+        }
+        // Persist workDir on first write so session listing can show it.
+        writeSessionMeta(dir, { workDir: session.cwd }).catch(() => {});
       }
 
       // Throttle: small sessions flush every 5 messages,
@@ -660,11 +661,12 @@ export class SessionManager {
 
   /**
    * Write the system prompt to the active session's directory as system_prompt.md.
-   * No-op if there is no active session.
+   * No-op if there is no active session or the session has no messages yet
+   * (avoids creating empty directories for placeholder sessions).
    */
   writeSystemPrompt(text: string): void {
     const session = this.activeSession;
-    if (!session) return;
+    if (!session || session.messages.length === 0) return;
     const dir = getSessionDir(session.id);
     try {
       mkdirSync(dir, { recursive: true });
