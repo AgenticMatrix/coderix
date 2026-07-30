@@ -10,6 +10,7 @@ interface SessionSummary {
   updatedAt: Date;
   lastUserPreview?: string;
   displayTitle?: string;
+  workDir?: string;
 }
 
 interface SessionPickerProps {
@@ -29,13 +30,40 @@ function formatRelativeTime(date: Date): string {
   return `${days}d ago`;
 }
 
+function shortWorkDir(workDir?: string): string {
+  if (!workDir) return '--';
+  const home = process.env.HOME ?? '';
+  let shortened = workDir;
+  if (home && workDir.startsWith(home)) {
+    shortened = '~' + workDir.slice(home.length);
+  }
+  if (shortened.length <= 50) return shortened;
+  return '...' + shortened.slice(-47);
+}
+
 function sessionLabel(s: SessionSummary): string {
-  if (s.displayTitle) return s.displayTitle;
+  if (s.displayTitle) return truncateDisplay(s.displayTitle, 36);
   const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
   if (!isAuto && s.title.length > 0) {
-    return s.title.length > 56 ? s.title.slice(0, 56) + '...' : s.title;
+    return truncateDisplay(s.title, 36);
   }
   return '--';
+}
+
+function truncateDisplay(str: string, maxWidth: number): string {
+  if (displayWidth(str) <= maxWidth) return str;
+  // Binary search for the right cut point
+  let lo = 0;
+  let hi = str.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (displayWidth(str.slice(0, mid) + '...') <= maxWidth) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return str.slice(0, lo) + '...';
 }
 
 function padDisplayEnd(str: string, targetWidth: number): string {
@@ -148,7 +176,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
               inverse={isSelected}
             >
               {isSelected ? '> ' : '  '}
-              {String(actualIndex + 1).padEnd(3)} {padDisplayEnd(label, 40)}  {turns.padEnd(10)} {time.padEnd(14)} {s.id.slice(0, 8)}
+              {String(actualIndex + 1).padEnd(3)} {padDisplayEnd(label, 36)}  {turns.padEnd(10)} {time.padEnd(14)} {s.id.slice(0, 8)}     {shortWorkDir(s.workDir)}
             </Text>
           </Text>
         );

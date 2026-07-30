@@ -211,7 +211,22 @@ function padDisplayEnd(str: string, targetWidth: number): string {
   return str + ' '.repeat(targetWidth - dw);
 }
 
-function printSessionTable(sessions: Array<{ id: string; title: string; turnCount: number; model: string; updatedAt: Date; lastUserPreview?: string }>): void {
+function truncateDisplay(str: string, maxWidth: number): string {
+  if (displayWidth(str) <= maxWidth) return str;
+  let lo = 0;
+  let hi = str.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (displayWidth(str.slice(0, mid) + '...') <= maxWidth) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return str.slice(0, lo) + '...';
+}
+
+function printSessionTable(sessions: Array<{ id: string; title: string; turnCount: number; model: string; updatedAt: Date; lastUserPreview?: string; workDir?: string }>): void {
   if (sessions.length === 0) {
     console.log('No previous sessions found.');
     return;
@@ -222,16 +237,28 @@ function printSessionTable(sessions: Array<{ id: string; title: string; turnCoun
     const isAuto = /^Session [0-9a-f]{8}$/.test(s.title);
     const title = isAuto
       ? (s.lastUserPreview ?? '--')
-      : (s.title.length > 48 ? s.title.slice(0, 48) + '...' : s.title);
+      : truncateDisplay(s.title, 36);
     const empty = s.turnCount === 0 ? ' (empty)' : '';
     const turns = s.turnCount > 0 ? `${s.turnCount} turns` : '';
     const time = formatRelativeTime(s.updatedAt);
+    const wd = shortWorkDir(s.workDir);
     console.log(
-      `  ${String(i + 1).padEnd(3)} ${padDisplayEnd(title + empty, 40)}  ${turns.padEnd(10)} ${time.padEnd(14)} ${s.id.slice(0, 8)}`,
+      `  ${String(i + 1).padEnd(3)} ${padDisplayEnd(title + empty, 36)}  ${turns.padEnd(10)} ${time.padEnd(14)} ${s.id.slice(0, 8)}     ${wd}`,
     );
   }
   console.log('\n  --resume <id>  resume a session');
   console.log('  --resume last  resume the most recent session\n');
+}
+
+function shortWorkDir(workDir?: string): string {
+  if (!workDir) return '--';
+  const home = process.env.HOME ?? '';
+  let shortened = workDir;
+  if (home && workDir.startsWith(home)) {
+    shortened = '~' + workDir.slice(home.length);
+  }
+  if (shortened.length <= 50) return shortened;
+  return '...' + shortened.slice(-47);
 }
 
 // ── Sub-agent restore ────────────────────────────────────────────────

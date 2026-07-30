@@ -1128,6 +1128,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
                 updatedAt: s.updatedAt,
                 lastUserPreview: s.lastUserPreview,
                 displayTitle: refinedTitles.get(s.id) ?? s.displayTitle,
+                workDir: s.workDir,
               }))}
               onSelect={async (sessionId) => {
                 dispatch({ type: 'HIDE_SESSION_PICKER' });

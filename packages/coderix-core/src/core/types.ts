@@ -475,6 +475,8 @@ export interface SessionSummary {
   displayTitle?: string;
   /** Full text of the first user message (for LLM title summarization). */
   firstUserText?: string;
+  /** Working directory of the session (from meta.json). */
+  workDir?: string;
 }
 
 export interface Session {

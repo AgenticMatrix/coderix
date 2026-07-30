@@ -356,6 +356,8 @@ export interface SessionMeta {
   /** Last known context token count (input + cache_read) before the most recent LLM call.
    *  Persisted so session resume can pre-populate the context bar instead of showing 0. */
   contextLength?: number;
+  /** Working directory when the session was created or last resumed. */
+  workDir?: string;
 }
 
 /**

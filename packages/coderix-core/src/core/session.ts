@@ -126,6 +126,9 @@ export class SessionManager {
     // This prevents empty sessions from leaving directories on disk.
     (session as any)._entryCount = 0;
 
+    // Persist workDir early so session listing can show it.
+    this.appendMetadata(session);
+
     return session;
   }
 
@@ -500,7 +503,7 @@ export class SessionManager {
    */
   private appendMetadata(session: Session): void {
     const dir = getSessionDir(session.id);
-    writeSessionMeta(dir, { title: session.title }).catch(() => {});
+    writeSessionMeta(dir, { title: session.title, workDir: session.cwd }).catch(() => {});
   }
 
   /**
@@ -624,6 +627,7 @@ export class SessionManager {
         lastUserPreview: lastUserPreview ?? undefined,
         displayTitle,
         firstUserText: firstUserText ?? undefined,
+        workDir: meta?.workDir,
       });
     }
 
@@ -804,7 +808,7 @@ export class SessionManager {
         totalCost: 0,
         createdAt: now,
         updatedAt: now,
-        cwd: process.cwd(),
+        cwd: meta?.workDir ?? process.cwd(),
         model: 'unknown',
         provider: 'anthropic',
         tokenUsage: {
