@@ -117,6 +117,7 @@ export function ChatView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const prevMessageCountRef = useRef(messages.length);
+  const rafIdRef = useRef<number | null>(null);
 
   // Use a ref for isNearBottom so the scroll effect always reads the
   // latest value synchronously — avoids TOCTOU races with IPC-driven
@@ -124,16 +125,33 @@ export function ChatView({
   const isNearBottomRef = useRef(true);
 
   // Auto-scroll when new content arrives (if user is near the bottom).
-  // Never use smooth behavior during streaming — only for explicit user actions.
   const scrollToBottom = useCallback(
     (smooth = true) => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: smooth ? 'smooth' : 'auto',
-        block: 'end',
-      });
+      const container = containerRef.current;
+      if (!container) return;
+
+      if (smooth) {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'end',
+        });
+      } else {
+        // Use direct scrollTop for instant, jank-free scroll during streaming
+        container.scrollTop = container.scrollHeight;
+      }
     },
     [],
   );
+
+  // Streaming auto-follow: uses requestAnimationFrame to throttle scrolls
+  // and direct scrollTop assignment to avoid scrollIntoView jitter.
+  const streamScrollRef = useRef<() => void>(() => {});
+  streamScrollRef.current = () => {
+    if (!isNearBottomRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  };
 
   // Track whether user has scrolled up (updates ref synchronously for
   // streaming, plus state for the scroll-to-bottom button).
@@ -148,18 +166,23 @@ export function ChatView({
     setShowScrollBtn(distanceFromBottom > 200);
   }, []);
 
-  // Auto-scroll on new messages.
-  // During streaming deltas, do NOT force scroll — browser scroll anchoring
-  // naturally keeps the view stable without fighting the user's mouse input.
+  // Auto-scroll on new messages and streaming deltas.
   useEffect(() => {
-    if (!isNearBottomRef.current) return;
-
     const hasNewMessage = messages.length !== prevMessageCountRef.current;
     prevMessageCountRef.current = messages.length;
 
-    // Only scroll for actual new messages (not streaming deltas)
+    if (!isNearBottomRef.current) return;
+
     if (hasNewMessage) {
+      // New message arrived — smooth scroll
       scrollToBottom(!isStreaming);
+    } else if (isStreaming) {
+      // Streaming deltas — instant follow via rAF, throttled to one per frame
+      if (rafIdRef.current !== null) return;
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        streamScrollRef.current();
+      });
     }
   }, [messages, isStreaming, scrollToBottom]);
 
