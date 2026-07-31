@@ -23,6 +23,8 @@ const CH = {
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
   PERMISSION_APPROVE: 'permission:approve',
+  PERMISSION_APPROVE_SESSION: 'permission:approveSession',
+  PERMISSION_APPROVE_ALWAYS: 'permission:approveAlways',
   PERMISSION_DENY: 'permission:deny',
   PERMISSION_SET_MODE: 'permission:setMode',
   FS_READ_FILE: 'fs:readFile',
@@ -272,9 +274,19 @@ const coderixAPI = {
   // ── Permission ───────────────────────────────────────────────────────
 
   permission: {
-    /** Approve a permission request. */
+    /** Approve a permission request once. */
     approve(toolUseId: string): Promise<{ status: string }> {
       return ipcRenderer.invoke(CH.PERMISSION_APPROVE, toolUseId);
+    },
+
+    /** Approve for the current session. */
+    approveSession(toolUseId: string): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.PERMISSION_APPROVE_SESSION, toolUseId);
+    },
+
+    /** Approve and persist (always allow). */
+    approveAlways(toolUseId: string): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.PERMISSION_APPROVE_ALWAYS, toolUseId);
     },
 
     /** Deny a permission request. */

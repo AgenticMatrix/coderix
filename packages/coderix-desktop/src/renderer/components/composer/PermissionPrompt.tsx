@@ -1,117 +1,192 @@
-import React, { useState, useCallback } from 'react';
-import { ShieldAlert, X, Check, Wrench, Terminal } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
 import type { PermissionRequest } from '../../types';
-import { approvePermission, denyPermission } from '../../ipc-client';
+import {
+  approvePermission,
+  approvePermissionSession,
+  approvePermissionAlways,
+  denyPermission,
+} from '../../ipc-client';
 
 export interface PermissionPromptProps {
   request: PermissionRequest;
   onResolved: () => void;
 }
 
-/**
- * PermissionPrompt — inline permission card rendered above the composer,
- * styled like Claude Code's inline tool confirmation.
- *
- * Compact, non-blocking: the user can still see the chat while deciding.
- */
+const OPTIONS = ['once', 'session', 'always', 'deny'] as const;
+
 export function PermissionPrompt({
   request,
   onResolved,
 }: PermissionPromptProps): React.ReactElement {
-  const [approving, setApproving] = useState(false);
-  const [denying, setDenying] = useState(false);
+  const [processing, setProcessing] = useState<string | null>(null);
+  const [focusIndex, setFocusIndex] = useState(0);
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const handleApprove = useCallback(async () => {
-    setApproving(true);
-    try {
-      await approvePermission(request.id);
-    } catch (err) {
-      console.error('[PermissionPrompt] Failed to approve:', err);
-    } finally {
-      setApproving(false);
-      onResolved();
+  const handleChoice = useCallback(
+    async (key: string) => {
+      setProcessing(key);
+      try {
+        switch (key) {
+          case 'once':
+            await approvePermission(request.id);
+            break;
+          case 'session':
+            await approvePermissionSession(request.id);
+            break;
+          case 'always':
+            await approvePermissionAlways(request.id);
+            break;
+          case 'deny':
+            await denyPermission(request.id);
+            break;
+        }
+      } catch (err) {
+        console.error('[PermissionPrompt] Failed:', err);
+      } finally {
+        setProcessing(null);
+        onResolved();
+      }
+    },
+    [request.id, onResolved],
+  );
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (processing) return;
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setFocusIndex((prev) => (prev + 1) % OPTIONS.length);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setFocusIndex((prev) => (prev - 1 + OPTIONS.length) % OPTIONS.length);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          handleChoice(OPTIONS[focusIndex]);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          handleChoice('deny');
+          break;
+      }
     }
-  }, [request.id, onResolved]);
 
-  const handleDeny = useCallback(async () => {
-    setDenying(true);
-    try {
-      await denyPermission(request.id);
-    } catch (err) {
-      console.error('[PermissionPrompt] Failed to deny:', err);
-    } finally {
-      setDenying(false);
-      onResolved();
-    }
-  }, [request.id, onResolved]);
-
-  // Build a short description from request fields
-  const description = request.message
-    || `${request.toolName} needs permission`;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [focusIndex, processing, handleChoice]);
 
   return (
     <div
-      className="mx-3 mb-2 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/5 overflow-hidden animate-in fade-in slide-in-from-bottom-2"
-      style={{ animationDuration: '150ms' }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        paddingBottom: 100,
+        background: 'rgba(0,0,0,0.4)',
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-warning)]/15">
-        <ShieldAlert size={13} className="text-[var(--color-warning)] flex-shrink-0" />
-        <span className="text-xs font-semibold text-[var(--color-warning)] tracking-wide uppercase">
-          Permission Required
-        </span>
-        <div className="flex-1" />
-        <button
-          onClick={handleDeny}
-          disabled={denying || approving}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+      <div
+        style={{
+          background: 'var(--color-bg-primary)',
+          borderRadius: 12,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          width: 380,
+          maxWidth: '90vw',
+          overflow: 'hidden',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            padding: '20px 24px 0',
+          }}
         >
-          <X size={12} />
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="px-3 py-2.5 space-y-2">
-        {/* Tool name & description */}
-        <div className="flex items-start gap-2">
-          <Terminal size={13} className="text-[var(--color-text-tertiary)] flex-shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <span className="text-xs font-mono font-semibold text-[var(--color-text-primary)]">
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              Permission Required
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
               {request.toolName}
-            </span>
-            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed line-clamp-3">
-              {description}
-            </p>
-          </div>
-        </div>
-
-        {/* Tool input preview (collapsed) */}
-        {request.toolInput && Object.keys(request.toolInput).length > 0 && (
-          <div className="pl-5">
-            <div className="p-2 rounded-md bg-[var(--color-bg-secondary)]/60 border border-[var(--color-separator)] text-[11px] font-mono text-[var(--color-text-tertiary)] whitespace-pre-wrap break-all max-h-20 overflow-y-auto">
-              {JSON.stringify(request.toolInput, null, 2)}
+              {request.message ? ` — ${request.message}` : ' needs permission'}
             </div>
           </div>
-        )}
-      </div>
+          <button
+            onClick={() => handleChoice('deny')}
+            disabled={processing !== null}
+            style={{
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 6,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-text-tertiary)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              marginLeft: 12,
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 px-3 pb-2.5 pt-0.5">
-        <button
-          onClick={handleDeny}
-          disabled={denying || approving}
-          className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] disabled:opacity-40 transition-colors"
-        >
-          Deny
-        </button>
-        <button
-          onClick={handleApprove}
-          disabled={approving || denying}
-          className="flex-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-[var(--color-brand)] text-white hover:brightness-110 disabled:opacity-40 transition-all flex items-center justify-center gap-1.5"
-        >
-          <Check size={12} />
-          {approving ? 'Approving…' : 'Approve'}
-        </button>
+        {/* Options */}
+        <div style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {OPTIONS.map((key, i) => {
+            const isFocused = i === focusIndex;
+
+            let label: string;
+            switch (key) {
+              case 'once': label = 'Allow once'; break;
+              case 'session': label = 'Allow this session'; break;
+              case 'always': label = 'Always allow'; break;
+              case 'deny': label = 'Deny'; break;
+            }
+
+            return (
+              <button
+                key={key}
+                ref={(el) => { btnRefs.current[i] = el; }}
+                onClick={() => handleChoice(key)}
+                onMouseEnter={() => setFocusIndex(i)}
+                disabled={processing !== null}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 8,
+                  background: isFocused
+                    ? 'rgba(217, 119, 87, 0.15)'
+                    : 'var(--color-bg-secondary)',
+                  color: 'var(--color-text-primary)',
+                  fontSize: 14,
+                  fontWeight: isFocused ? 600 : 500,
+                  cursor: 'pointer',
+                  opacity: processing ? 0.4 : 1,
+                  outline: 'none',
+                  border: isFocused
+                    ? '1.5px solid rgba(217, 119, 87, 0.4)'
+                    : '1.5px solid transparent',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+              >
+                {processing === key ? 'Processing…' : label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

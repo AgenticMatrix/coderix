@@ -67,6 +67,8 @@ export const IPC_CHANNELS = {
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
   PERMISSION_APPROVE: 'permission:approve',
+  PERMISSION_APPROVE_SESSION: 'permission:approveSession',
+  PERMISSION_APPROVE_ALWAYS: 'permission:approveAlways',
   PERMISSION_DENY: 'permission:deny',
   PERMISSION_SET_MODE: 'permission:setMode',
   FS_READ_FILE: 'fs:readFile',
@@ -124,6 +126,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   let toolRegistry: ToolRegistry | null = null;
   let activeAbortController: AbortController | null = null;
   let pendingPermission: DeferredPermission | null = null;
+  let pendingToolName: string | null = null;
   let pendingQuestion: DeferredQuestion | null = null;
   let permissionsState: {
     resolve: ((value: boolean) => void) | null;
@@ -231,6 +234,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             case 'permission_required': {
               const deferred = event.deferred as DeferredPermission;
               pendingPermission = deferred;
+              pendingToolName = deferred.toolName;
               mainWindow.webContents.send(IPC_CHANNELS.STATE_PERMISSION_REQ, {
                 toolUseId: deferred.toolUseId,
                 toolName: deferred.toolName,
@@ -352,14 +356,42 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
       pendingPermission.resolve(true);
       pendingPermission = null;
+      pendingToolName = null;
     }
     return { status: 'approved' };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE_SESSION, async (_event, toolUseId: string) => {
+    if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
+      const toolName = pendingToolName;
+      pendingPermission.resolve(true);
+      pendingPermission = null;
+      pendingToolName = null;
+      if (toolName && queryEngine) {
+        queryEngine.addPermissionRule(toolName, undefined, 'allow');
+      }
+    }
+    return { status: 'approved_session' };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE_ALWAYS, async (_event, toolUseId: string) => {
+    if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
+      const toolName = pendingToolName;
+      pendingPermission.resolve(true);
+      pendingPermission = null;
+      pendingToolName = null;
+      if (toolName && queryEngine) {
+        queryEngine.persistPermissionRule(toolName, undefined, 'allow');
+      }
+    }
+    return { status: 'approved_always' };
   });
 
   ipcMain.handle(IPC_CHANNELS.PERMISSION_DENY, async (_event, toolUseId: string) => {
     if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
       pendingPermission.resolve(false);
       pendingPermission = null;
+      pendingToolName = null;
     }
     return { status: 'denied' };
   });
@@ -771,6 +803,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_FORK);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_DELETE);
       ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_APPROVE);
+      ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_APPROVE_SESSION);
+      ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_APPROVE_ALWAYS);
       ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_DENY);
       ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_SET_MODE);
       ipcMain.removeHandler(IPC_CHANNELS.FS_READ_FILE);

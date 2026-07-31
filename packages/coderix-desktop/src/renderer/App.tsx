@@ -480,7 +480,7 @@ export function App(): React.ReactElement {
           {/* Composer — fixed at bottom of chat */}
           <Composer
             onSubmit={handleComposerSubmit}
-            disabled={isStreaming || !!pendingPermission}
+            disabled={isStreaming}
             model="DeepSeek V4 Pro"
           />
 

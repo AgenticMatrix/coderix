@@ -305,12 +305,32 @@ export async function deleteSession(id: string): Promise<unknown> {
 // ===========================================================================
 
 /**
- * Approve a pending permission request.
+ * Approve a pending permission request (one-time).
  * @param toolUseId — matches the `toolUseId` field from the permission request event
  */
 export async function approvePermission(toolUseId: string): Promise<unknown> {
   return invokeWithTimeout('permission:approve', () =>
     getAPI().permission.approve(toolUseId),
+  );
+}
+
+/**
+ * Approve a pending permission request for the current session.
+ * @param toolUseId — matches the `toolUseId` field from the permission request event
+ */
+export async function approvePermissionSession(toolUseId: string): Promise<unknown> {
+  return invokeWithTimeout('permission:approveSession', () =>
+    getAPI().permission.approveSession(toolUseId),
+  );
+}
+
+/**
+ * Approve a pending permission request and persist it (always allow).
+ * @param toolUseId — matches the `toolUseId` field from the permission request event
+ */
+export async function approvePermissionAlways(toolUseId: string): Promise<unknown> {
+  return invokeWithTimeout('permission:approveAlways', () =>
+    getAPI().permission.approveAlways(toolUseId),
   );
 }
 
