@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import React from 'react';
 import { Box, Text } from '@coderix/ink';
+import { MarkdownRenderer } from '../../tui/components/MarkdownRenderer.js';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
@@ -62,7 +63,7 @@ export function ExitPlanModeRenderer(
             <Text dimColor>{SEP}</Text>
             <Text bold> Here is Coderix's plan:</Text>
             <Text dimColor>{SEP}</Text>
-            <Text>{plan}</Text>
+            <MarkdownRenderer content={plan} theme={props.theme} />
             <Text dimColor>{SEP}</Text>
           </Box>
         ) : null}
@@ -109,7 +110,7 @@ export function ExitPlanModeRenderer(
           <Text dimColor>{SEP}</Text>
           <Text bold> Here is Coderix's plan:</Text>
           <Text dimColor>{SEP}</Text>
-          <Text>{diskPlan}</Text>
+          <MarkdownRenderer content={diskPlan} theme={props.theme} />
           <Text dimColor>{SEP}</Text>
         </Box>
         <Box marginTop={1}>

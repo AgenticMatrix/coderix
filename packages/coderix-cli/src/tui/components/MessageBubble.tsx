@@ -283,6 +283,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
           result={tu.result}
           contentExpanded={contentExpanded}
           termWidth={termWidth}
+          theme={theme}
         />
       );
     }

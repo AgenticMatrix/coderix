@@ -29,6 +29,7 @@ export interface ToolUseRendererProps {
   };
   contentExpanded?: boolean;
   termWidth?: number;
+  theme?: string;
 }
 
 export interface ToolResultRendererProps {
