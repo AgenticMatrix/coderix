@@ -21,11 +21,18 @@ When NOT to use the Agent tool:
 
 Usage notes:
 - Always include a short description (3-5 words) summarizing what the agent will do.
-- Launch multiple independent agents in parallel by sending a single message with multiple Agent tool calls — this maximizes throughput.
-- When the agent finishes, it returns one message back to you. The result is not visible to the user — relay a concise summary to the user.
-- You can run agents in the background using the background parameter. Results will be delivered automatically when complete — do not poll.
-- Use foreground (the default) when you need the agent's results before you can proceed. Use background when you have genuinely independent work to do in parallel.
-- To continue a previously spawned agent, use agent_id + resume: true. This restores the agent's full transcript and is preferred over spawning a new one for follow-up work.
+- Launch multiple agents in parallel ONLY when tasks are truly independent and touch different
+  files. For related work, use a single agent with a broader prompt — one capable agent
+  outperforms several narrow ones. Default to 1 agent unless there is a clear reason to split.
+- To continue an existing agent for follow-up work, use agent_id + resume: true. This is
+  strongly preferred over spawning a new agent — the resumed agent keeps its full transcript,
+  file context, and tool outputs, so it completes follow-ups faster and with better awareness.
+- When the agent finishes, it returns one message back to you. The result is not visible to
+  the user — relay a concise summary to the user.
+- You can run agents in the background using the background parameter. Results will be
+  delivered automatically when complete — do not poll.
+- Use foreground (the default) when you need the agent's results before you can proceed.
+  Use background when you have genuinely independent work to do in parallel.
 - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.).
 - If the agent description mentions it should be used proactively, try to use it without the user asking first.
 - If the user specifies "in parallel", you MUST send a single message with multiple Agent tool use content blocks.

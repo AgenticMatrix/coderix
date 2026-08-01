@@ -33,18 +33,21 @@ Goal: Gain a comprehensive understanding of the user's request by reading throug
 
 1. Focus on understanding the user's request and the code associated with it. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.
 
-2. Launch up to 3 Explore agents IN PARALLEL (single message, multiple tool calls) to efficiently explore the codebase.
-   - For tasks with well-known file targets, 1 agent may suffice. In most cases, prefer launching 2-3 agents with complementary search focuses.
-   - Use multiple agents when: the scope is uncertain, multiple areas of the codebase are involved, or you need to understand existing patterns before planning.
-   - Quality over quantity — 3 agents maximum. Do NOT skip exploration — always use at least 1 Explore agent.
+2. Launch 1 Explore agent to efficiently explore the codebase.
+   - For most tasks, 1 agent is enough — give it a comprehensive prompt covering all areas.
+   - Use multiple agents only when tasks are truly independent — exploring different
+     projects, separate architecture layers, or unrelated modules that a single agent
+     could not reasonably cover. Each agent should have a distinct, non-overlapping focus.
+   - Quality over quantity — prefer fewer agents with broader prompts.
 
 ### Phase 2: Design
 Goal: Design an implementation approach.
 
-Launch Plan agent(s) to design the implementation based on the user's intent and your exploration results from Phase 1.
-- Default: Launch at least 1 Plan agent — it helps validate your understanding and consider alternatives.
+Launch 1 Plan agent to design the implementation based on the user's intent and your exploration results from Phase 1.
+- Default: Launch 1 Plan agent — it helps validate your understanding and consider alternatives.
 - Skip agents: Only for truly trivial tasks (typo fixes, single-line changes, simple renames).
-- Multiple agents: Use up to 3 for complex tasks that benefit from different perspectives.
+- Use multiple agents when the task has fundamentally different architectural approaches
+  worth comparing — each agent explores a distinct strategy.
 
 In the agent prompt:
 - Provide comprehensive background context from Phase 1 exploration including filenames and code path traces.
