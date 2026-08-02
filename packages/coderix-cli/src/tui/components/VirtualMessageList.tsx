@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, memo } from 'react';
 import { Box } from '@coderix/ink';
 import type { DOMElement } from '@coderix/ink';
 import type { ScrollBoxHandle } from '@coderix/ink';
@@ -34,7 +34,7 @@ export interface VirtualMessageListProps {
  * Integrates with @coderix/ink's ScrollBox — attach `scrollRef` to the
  * parent ScrollBox via its imperative handle ref.
  */
-export function VirtualMessageList({
+export const VirtualMessageList = memo(function VirtualMessageList({
   messages,
   scrollRef,
   columns,
@@ -97,4 +97,4 @@ export function VirtualMessageList({
       {bottomSpacer > 0 && <Box height={bottomSpacer} flexShrink={0} />}
     </>
   );
-}
+});

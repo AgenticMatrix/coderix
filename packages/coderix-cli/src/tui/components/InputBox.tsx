@@ -1,4 +1,5 @@
 import { Box, Text } from '@coderix/ink';
+import { memo } from 'react';
 
 interface InputBoxProps {
   inputText: string;
@@ -19,7 +20,7 @@ const MAX_PREVIEW_LINES = 8;
  * When pastePreviewVisible, pasted content is shown in a preview panel
  * above the input so the user can review it before sending.
  */
-export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible, theme }: InputBoxProps) {
+export const InputBox = memo(function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible, theme }: InputBoxProps) {
   const PROMPT_COLOR = '#A855F7';
   const CURSOR_COLOR = theme === 'light' ? '#000000' : '#FFFFFF';
   const CURSOR_TEXT_COLOR = theme === 'light' ? '#FFFFFF' : '#000000';
@@ -121,4 +122,4 @@ export function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, 
       </Box>
     </Box>
   );
-}
+});

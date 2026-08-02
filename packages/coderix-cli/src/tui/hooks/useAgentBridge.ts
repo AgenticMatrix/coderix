@@ -189,6 +189,9 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         routeDispatch({ type: 'ADD_USER_MESSAGE', message: userMsg });
       }
 
+      // Clear any stale error before starting a new turn
+      routeDispatch({ type: 'CLEAR_ERROR' });
+
       // ── Agent loop via QueryEngine ──────────────────────────
       try {
         let currentAssistantId: number | null = null;
@@ -592,6 +595,8 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
    * compact-summary messages to the TUI for rendering.
    */
   const runCompact = useCallback(async () => {
+    // Clear any stale error before starting compaction
+    routeDispatch({ type: 'CLEAR_ERROR' });
     try {
       for await (const event of engine.compact()) {
         switch (event.type) {

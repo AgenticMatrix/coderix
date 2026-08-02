@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Zap } from 'lucide-react';
 import type { StreamBlock } from '../../types';
@@ -117,14 +117,8 @@ export function ChatView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const prevMessageCountRef = useRef(messages.length);
-  const rafIdRef = useRef<number | null>(null);
+  const userScrolledUpRef = useRef(false);
 
-  // Use a ref for isNearBottom so the scroll effect always reads the
-  // latest value synchronously — avoids TOCTOU races with IPC-driven
-  // stream updates that arrive between render cycles.
-  const isNearBottomRef = useRef(true);
-
-  // Auto-scroll when new content arrives (if user is near the bottom).
   const scrollToBottom = useCallback(
     (smooth = true) => {
       const container = containerRef.current;
@@ -136,25 +130,13 @@ export function ChatView({
           block: 'end',
         });
       } else {
-        // Use direct scrollTop for instant, jank-free scroll during streaming
         container.scrollTop = container.scrollHeight;
       }
     },
     [],
   );
 
-  // Streaming auto-follow: uses requestAnimationFrame to throttle scrolls
-  // and direct scrollTop assignment to avoid scrollIntoView jitter.
-  const streamScrollRef = useRef<() => void>(() => {});
-  streamScrollRef.current = () => {
-    if (!isNearBottomRef.current) return;
-    const container = containerRef.current;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
-  };
-
-  // Track whether user has scrolled up (updates ref synchronously for
-  // streaming, plus state for the scroll-to-bottom button).
+  // Track whether user has scrolled away from the bottom.
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -162,32 +144,34 @@ export function ChatView({
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    isNearBottomRef.current = distanceFromBottom < 80;
+    userScrolledUpRef.current = distanceFromBottom > 80;
     setShowScrollBtn(distanceFromBottom > 200);
   }, []);
 
-  // Auto-scroll on new messages and streaming deltas.
+  // Auto-scroll on new messages (smooth).
   useEffect(() => {
     const hasNewMessage = messages.length !== prevMessageCountRef.current;
     prevMessageCountRef.current = messages.length;
 
-    if (!isNearBottomRef.current) return;
-
-    if (hasNewMessage) {
-      // New message arrived — smooth scroll
+    if (hasNewMessage && !userScrolledUpRef.current) {
       scrollToBottom(!isStreaming);
-    } else if (isStreaming) {
-      // Streaming deltas — instant follow via rAF, throttled to one per frame
-      if (rafIdRef.current !== null) return;
-      rafIdRef.current = requestAnimationFrame(() => {
-        rafIdRef.current = null;
-        streamScrollRef.current();
-      });
     }
   }, [messages, isStreaming, scrollToBottom]);
 
-  // Initial scroll to bottom
+  // Auto-follow during streaming: useLayoutEffect runs synchronously after
+  // DOM mutations, before paint — sets scrollTop directly for zero jitter.
+  useLayoutEffect(() => {
+    if (!isStreaming || userScrolledUpRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  });
+
+  // Reset scroll state and scroll to bottom when a new stream starts or on mount.
   useEffect(() => {
+    if (isStreaming) {
+      userScrolledUpRef.current = false;
+    }
     scrollToBottom(false);
   }, [scrollToBottom]);
 

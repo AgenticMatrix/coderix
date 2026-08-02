@@ -6,12 +6,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from '@coderix/ink';
 
 export function CompactBoundary() {
-  return (
-    <Box marginY={1}>
-      <Text dimColor>{'✦'} Conversation compacted</Text>
-    </Box>
-  );
+  return null;
 }

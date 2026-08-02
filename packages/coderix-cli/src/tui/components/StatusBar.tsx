@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { Box, Text } from '@coderix/ink';
 
 import type { TokenUsage } from '../../types.js';
@@ -107,7 +107,7 @@ function ContextBar({ used, max }: { used: number; max: number }) {
  * Procs = number of processes in the tree.
  * Timers update every second in real-time.
  */
-export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, exitHint, processMemory, processCount }: StatusBarProps) {
+export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, exitHint, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
@@ -233,4 +233,4 @@ export function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inp
       )}
     </Box>
   );
-}
+});

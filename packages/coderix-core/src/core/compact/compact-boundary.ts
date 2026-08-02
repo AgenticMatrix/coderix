@@ -40,7 +40,7 @@ export function createCompactBoundaryMessage(
 
   return {
     role: 'system',
-    content: 'Conversation compacted',
+    content: '',
     subtype: 'compact_boundary',
     compactMetadata: metadata,
   } as CompactBoundaryMessage;

@@ -160,10 +160,23 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   const rows = termRows ?? process.stdout.rows ?? 24;
   const columns = termCols ?? process.stdout.columns ?? 80;
 
-  // Sync ChatState → AppState.ui so components reading via useAppState see the latest
-  useEffect(() => {
-    store.setState(state);
-  }, [state]);
+  // Sync specific ChatState fields → AppState so components reading via
+  // useAppState (pending approval, questions, team context) see the latest.
+  // Each field has its own effect so keystrokes (which don't change these)
+  // never trigger the store sync or its subscribers.
+  const syncToStore = useCallback(
+    (partial: Partial<AppState>) => store.setState(partial),
+    [store],
+  );
+
+  useEffect(() => { syncToStore({ approvalReq: state.approvalReq }); }, [state.approvalReq, syncToStore]);
+  useEffect(() => { syncToStore({ questionReq: state.questionReq }); }, [state.questionReq, syncToStore]);
+  useEffect(() => { syncToStore({ teamContext: state.teamContext }); }, [state.teamContext, syncToStore]);
+  useEffect(() => { syncToStore({ error: state.error }); }, [state.error, syncToStore]);
+  useEffect(() => { syncToStore({ isStreaming: state.isStreaming }); }, [state.isStreaming, syncToStore]);
+  useEffect(() => { syncToStore({ isCompacting: state.isCompacting }); }, [state.isCompacting, syncToStore]);
+  useEffect(() => { syncToStore({ mode: state.mode }); }, [state.mode, syncToStore]);
+  useEffect(() => { syncToStore({ currentTurnId: state.currentTurnId }); }, [state.currentTurnId, syncToStore]);
 
   // ── Resume: load pre-loaded session messages on mount ──────────
   const hasLoadedInitialRef = useRef(false);
@@ -816,14 +829,17 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // The reducer continues updating state.messages in the background.
   const frozenRef = useRef(state.messages);
   if (!state.isFrozen) frozenRef.current = state.messages;
-  const displayMessages = (state.isFrozen ? frozenRef.current : state.messages)
-    .filter(m => {
-      if (m.content.startsWith('<background-agent-notifications>')) return false;
-      for (const block of m.blocks) {
-        if (block.type === 'text' && block.content.startsWith('<background-agent-notifications>')) return false;
-      }
-      return true;
-    });
+  const displayMessages = useMemo(() =>
+    (state.isFrozen ? frozenRef.current : state.messages)
+      .filter(m => {
+        if (m.content.startsWith('<background-agent-notifications>')) return false;
+        for (const block of m.blocks) {
+          if (block.type === 'text' && block.content.startsWith('<background-agent-notifications>')) return false;
+        }
+        return true;
+      }),
+    [state.messages, state.isFrozen],
+  );
 
   // Cache the last visible ActivityLine element. When the phase transitions
   // to idle but completedTurn hasn't been set yet (one-frame race), showing

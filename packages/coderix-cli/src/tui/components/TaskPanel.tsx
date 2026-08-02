@@ -11,7 +11,7 @@ interface TaskPanelProps {
   interrupted?: boolean;
 }
 
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 3000;
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const SPINNER_INTERVAL_MS = 80;
 
@@ -41,6 +41,7 @@ export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelP
   const prevFingerprint = useRef('');
 
   useEffect(() => {
+    if (dismissed) return;
     let active = true;
 
     async function poll() {

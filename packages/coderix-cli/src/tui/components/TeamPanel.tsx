@@ -94,6 +94,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   }, [hasRunning]);
 
   useEffect(() => {
+    if (dismissed) return;
     let active = true;
 
     async function poll() {

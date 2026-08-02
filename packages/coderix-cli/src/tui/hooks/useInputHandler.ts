@@ -96,6 +96,8 @@ export function useInputHandler({
   slashRef.current = onSlashCommand;
   const inputRef = useRef(inputText);
   inputRef.current = inputText;
+  const cursorRef = useRef(_cp);
+  cursorRef.current = _cp;
   const statusRef = useRef(statusPhase);
   statusRef.current = statusPhase;
   const blockedRef = useRef(blocked);
@@ -446,14 +448,14 @@ export function useInputHandler({
       if (key.leftArrow) {
         dispatch({
           type: 'SET_CURSOR',
-          position: _cp - 1,
+          position: cursorRef.current - 1,
         });
         return;
       }
       if (key.rightArrow) {
         dispatch({
           type: 'SET_CURSOR',
-          position: _cp + 1,
+          position: cursorRef.current + 1,
         });
         return;
       }

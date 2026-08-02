@@ -810,6 +810,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'DELETE_CHAR': {
       const cp = Math.max(0, Math.min(state.cursorPosition, state.inputText.length));
       if (action.position === 'before') {
+        if (cp === 0 && state.inputText.length > 0) {
+          return {
+            ...state,
+            cursorPosition: state.inputText.length,
+          };
+        }
         if (cp === 0) return state;
         const newText =
           state.inputText.slice(0, cp - 1) + state.inputText.slice(cp);

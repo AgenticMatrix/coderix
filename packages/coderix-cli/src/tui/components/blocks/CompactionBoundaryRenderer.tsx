@@ -1,5 +1,4 @@
 import React from 'react';
-import { Box, Text } from '@coderix/ink';
 
 export interface CompactionBoundaryRendererProps {
   removedCount: number;
@@ -20,9 +19,5 @@ export function CompactionBoundaryRenderer({
   beforeTokens: _beforeTokens,
   afterTokens: _afterTokens,
 }: CompactionBoundaryRendererProps) {
-  return (
-    <Box marginBottom={1} marginTop={0}>
-      <Text dimColor>{'✦'} Conversation compacted</Text>
-    </Box>
-  );
+  return null;
 }
