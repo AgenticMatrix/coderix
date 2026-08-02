@@ -36,7 +36,11 @@ export const MAX_MAILBOX_FILE_BYTES = 4 * 1024 * 1024;
 // ---------------------------------------------------------------------------
 
 function sanitizePathComponent(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'unnamed';
+  return name
+    .replace(/[\/\\\0\n\r\t:*?"<>|]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .trim() || 'unnamed';
 }
 
 /** Resolve team name from env or fallback. Lazy-loaded to avoid circular deps. */
@@ -50,6 +54,7 @@ function resolveTeamName(): string {
 
 export interface TeammateMessage {
   from: string;
+  to?: string;
   text: string;
   timestamp: string;
   read: boolean;
@@ -108,7 +113,7 @@ function toMailboxMessage(value: unknown): TeammateMessage {
   if (
     typeof record.from !== 'string' ||
     typeof record.text !== 'string' ||
-    typeof record.timestamp !== 'string' ||
+    (typeof record.timestamp !== 'string' && typeof record.timestamp !== 'number') ||
     typeof record.read !== 'boolean'
   ) {
     throw new Error('Invalid mailbox message shape');
@@ -116,10 +121,13 @@ function toMailboxMessage(value: unknown): TeammateMessage {
   const message: TeammateMessage = {
     from: record.from,
     text: record.text,
-    timestamp: record.timestamp,
+    timestamp: typeof record.timestamp === 'number'
+      ? new Date(record.timestamp).toISOString()
+      : record.timestamp,
     read: record.read,
     ...(typeof record.color === 'string' ? { color: record.color } : {}),
     ...(typeof record.summary === 'string' ? { summary: record.summary } : {}),
+    ...(typeof record.to === 'string' ? { to: record.to } : {}),
   };
   assertMailboxMessageSize(message);
   return message;
