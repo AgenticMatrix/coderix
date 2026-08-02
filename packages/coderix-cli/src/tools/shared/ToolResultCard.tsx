@@ -20,7 +20,6 @@ const TOOL_ICONS: Record<string, string> = {
   grep: '🔎',
   'web-fetch': '🌐',
   'web-search': '🔎',
-  'TodoWrite': '📋',
   default: '🔧',
 };
 

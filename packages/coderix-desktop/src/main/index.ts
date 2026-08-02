@@ -40,8 +40,6 @@ import { schema as webFetchSchema } from '../../../../packages/coderix-core/src/
 import { execute as webFetchExec } from '../../../../packages/coderix-core/src/tools/web-fetch/executor.js';
 import { schema as webSearchSchema } from '../../../../packages/coderix-core/src/tools/web-search/schema.js';
 import { execute as webSearchExec } from '../../../../packages/coderix-core/src/tools/web-search/executor.js';
-import { schema as todoWriteSchema } from '../../../../packages/coderix-core/src/tools/todo-write/schema.js';
-import { execute as todoWriteExec } from '../../../../packages/coderix-core/src/tools/todo-write/executor.js';
 import { schema as notebookEditSchema } from '../../../../packages/coderix-core/src/tools/notebook-edit/schema.js';
 import { execute as notebookEditExec } from '../../../../packages/coderix-core/src/tools/notebook-edit/executor.js';
 import { schema as listenSchema } from '../../../../packages/coderix-core/src/tools/listen/schema.js';
@@ -206,7 +204,6 @@ async function initQueryEngine(): Promise<void> {
     { schema: grepSchema, executor: grepExec },
     { schema: webFetchSchema, executor: webFetchExec },
     { schema: webSearchSchema, executor: webSearchExec },
-    { schema: todoWriteSchema, executor: todoWriteExec },
     { schema: notebookEditSchema, executor: notebookEditExec },
     { schema: listenSchema, executor: listenExec },
     { schema: askUserSchema, executor: askUserExec },

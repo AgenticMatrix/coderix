@@ -11,7 +11,6 @@ import globPlugin from './glob/index.js';
 import grepPlugin from './grep/index.js';
 import webFetchPlugin from './web-fetch/index.js';
 import webSearchPlugin from './web-search/index.js';
-import todoWritePlugin from './todo-write/index.js';
 import taskCreatePlugin from './task-create/index.js';
 import taskUpdatePlugin from './task-update/index.js';
 import taskListPlugin from './task-list/index.js';
@@ -45,7 +44,6 @@ export const plugins: ToolPlugin[] = [
   grepPlugin,
   webFetchPlugin,
   webSearchPlugin,
-  todoWritePlugin,
   taskCreatePlugin,
   taskUpdatePlugin,
   taskListPlugin,

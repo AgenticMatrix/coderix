@@ -124,10 +124,6 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
       return `TaskStop ${id}`;
     },
   },
-  todowrite: {
-    icon: <CheckSquare size={13} />,
-    label: () => 'TodoWrite',
-  },
   skill: {
     icon: <BookOpen size={13} />,
     label: (input) => {

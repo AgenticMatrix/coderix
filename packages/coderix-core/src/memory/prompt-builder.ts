@@ -234,7 +234,7 @@ export async function loadMemoryPrompt(
     'Memory persists across sessions. For information that only matters within the',
     'current conversation, use the appropriate session-scoped tool instead:',
     '- Plans (EnterPlanMode / ExitPlanMode): for design decisions and implementation strategy.',
-    '- Tasks (TodoWrite / TaskCreate): for tracking progress and to-do items in this session.',
+    '- Tasks (TaskCreate / TaskUpdate / TaskList / TaskGet): for tracking progress and to-do items in this session.',
     '',
   ];
 

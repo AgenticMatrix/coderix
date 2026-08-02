@@ -17,7 +17,6 @@ import { QuestionPrompt } from './QuestionPrompt.js';
 import { SubAgentPicker } from './SubAgentPicker.js';
 import { SessionPicker } from './SessionPicker.js';
 import { TaskPanel } from './TaskPanel.js';
-import { TodoPanel } from './TodoPanel.js';
 import { TeamPanel } from './TeamPanel.js';
 import { MemoryPicker } from './MemoryPicker.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
@@ -529,7 +528,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   }, [state.subAgentView?.agentId]);
 
   const handleTaskDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TASK_PANEL' }), [dispatch]);
-  const handleTodoDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TODO_PANEL' }), [dispatch]);
   const handleTeamDismissReset = useCallback(() => dispatch({ type: 'TOGGLE_TEAM_PANEL' }), [dispatch]);
 
   // Load history on mount
@@ -1074,12 +1072,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
         <TaskPanel
           dismissed={state.taskPanelDismissed}
           onDismissReset={handleTaskDismissReset}
-          interrupted={state.interrupted}
-        />
-
-        <TodoPanel
-          dismissed={state.todoPanelDismissed}
-          onDismissReset={handleTodoDismissReset}
           interrupted={state.interrupted}
         />
 

@@ -6,7 +6,7 @@ export const exploreAgent: BuiltInAgentDefinition = {
   baseDir: 'built-in',
   whenToUse:
     'Fast read-only codebase exploration and search. Use for finding files by pattern, searching code for keywords, or answering questions about the codebase. Specify thoroughness: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.',
-  tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
+  tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
   disallowedTools: ['write', 'update', 'NotebookEdit'],
   model: 'haiku',
   maxTurns: 15,

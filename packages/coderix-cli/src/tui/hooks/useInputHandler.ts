@@ -249,10 +249,9 @@ export function useInputHandler({
         return;
       }
 
-      // Ctrl+P toggles task & todo panels
+      // Ctrl+P toggles task panel
       if (key.ctrl && input === 'p') {
         dispatch({ type: 'TOGGLE_TASK_PANEL' });
-        dispatch({ type: 'TOGGLE_TODO_PANEL' });
         return;
       }
 

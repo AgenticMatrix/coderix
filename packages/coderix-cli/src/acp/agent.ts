@@ -372,24 +372,6 @@ export function createAcpAgent(app: AgentApp, _appConfig: AppConfig): void {
                   sessionId: sid,
                   update: { sessionUpdate: 'tool_call' as const, ...tool, title: (tool.title ?? 'tool') },
                 } as any);
-
-                // TodoWrite → plan entries mapping
-                if (cb.name === 'TodoWrite' && cb.input?.todos) {
-                  const entries = (cb.input.todos as Array<{ content: string; status: string; activeForm: string }>).map(
-                    (t, i) => ({
-                      id: `todo-${i + 1}`,
-                      content: t.content,
-                      status: t.status,
-                    }),
-                  );
-                  await client.notify('session/update', {
-                    sessionId: sid,
-                    update: {
-                      sessionUpdate: 'plan' as const,
-                      entries,
-                    },
-                  } as any);
-                }
               } else if (cb?.type === 'thinking' && cb.thinking) {
                 await client.notify('session/update', {
                   sessionId: sid,

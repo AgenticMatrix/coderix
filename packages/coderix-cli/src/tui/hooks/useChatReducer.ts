@@ -755,9 +755,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'TOGGLE_TASK_PANEL':
       return { ...state, taskPanelDismissed: !state.taskPanelDismissed };
 
-    case 'TOGGLE_TODO_PANEL':
-      return { ...state, todoPanelDismissed: !state.todoPanelDismissed };
-
     case 'TOGGLE_TEAM_PANEL':
       return { ...state, teamPanelDismissed: !state.teamPanelDismissed };
 
@@ -945,6 +942,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         (inputTokens / 1_000_000) * state.inputPrice +
         (outputTokens / 1_000_000) * state.outputPrice +
         (cacheReadInputTokens / 1_000_000) * state.cacheReadPrice;
+      // DEBUG: log pricing details to diagnose 0¥ issue
+      if (inputTokens > 0 || outputTokens > 0) {
+        process.stderr.write(
+          `[pricing] inputT=${inputTokens} outT=${outputTokens} cacheReadT=${cacheReadInputTokens} ` +
+          `iPrice=${state.inputPrice} oPrice=${state.outputPrice} crPrice=${state.cacheReadPrice} ` +
+          `turnCost=${turnCost} totalCost=${state.accumulatedCost + turnCost}\n`,
+        );
+      }
       // skipDisplay: sub-agent tokens should accumulate cost without
       // overwriting the main agent's ctx display data
       const tokenUsage = action.skipDisplay
@@ -1036,7 +1041,6 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     agentPicker: false,
     taskPanelDismissed: false,
     thinkingStartedAt: undefined,
-    todoPanelDismissed: false,
     teamPanelDismissed: false,
     commandPickerIndex: -1,
     teamPicker: false,

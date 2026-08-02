@@ -6,7 +6,7 @@ export const planAgent: BuiltInAgentDefinition = {
   baseDir: 'built-in',
   whenToUse:
     'Software architect agent for designing implementation plans. Use when you need to plan the implementation strategy for a task. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs.',
-  tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
+  tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
   disallowedTools: ['write', 'update', 'NotebookEdit'],
   model: 'haiku',
   maxTurns: 20,

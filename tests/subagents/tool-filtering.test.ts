@@ -23,7 +23,7 @@ function agentDef(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
 
 const ALL_TOOLS: ToolDefinition[] = [
   td('bash'), td('read'), td('write'), td('edit'), td('glob'), td('grep'),
-  td('web-fetch'), td('web-search'), td('todo-write'),
+  td('web-fetch'), td('web-search'),
   td('TaskCreate'), td('TaskUpdate'), td('TaskList'), td('TaskGet'),
   td('Agent'), td('SendMessage'), td('TaskStop'),
   td('AskUserQuestion'), td('TaskOutput'), td('ExitPlanMode'),

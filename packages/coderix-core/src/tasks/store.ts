@@ -54,21 +54,6 @@ export function getTaskListId(): string {
 }
 
 // ---------------------------------------------------------------------------
-// V1 / V2 switch
-// ---------------------------------------------------------------------------
-
-/**
- * Whether the V2 task system (TaskCreate/TaskUpdate/TaskList/TaskGet) is active.
- * Defaults to true (V2).
- * Set CODERIX_ENABLE_TASKS=0 to force V1 (todo-write).
- */
-export function isTodoV2Enabled(): boolean {
-  if (process.env.CODERIX_ENABLE_TASKS === '0') return false;
-  if (process.env.CODERIX_ENABLE_TASKS === '1') return true;
-  return true;
-}
-
-// ---------------------------------------------------------------------------
 // High water mark
 // ---------------------------------------------------------------------------
 

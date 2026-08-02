@@ -21,7 +21,7 @@
 | Shell 执行 | Bash | Bash + PowerShell | Bash + PowerShell |
 | 文件搜索 | Glob + Grep | Glob + Grep (条件加载) | Glob + Grep (条件加载) |
 | Web 抓取 / 搜索 | WebFetch + WebSearch | WebFetch + WebSearch + VaultHttpFetch | WebFetch + WebSearch |
-| 任务管理 | TaskCreate/Get/List/Update + TodoWrite | TaskCreate/Get/List/Update + TodoWrite | TaskCreate/Get/List/Update + TodoWrite |
+| 任务管理 | TaskCreate/Get/List/Update | TaskCreate/Get/List/Update | TaskCreate/Get/List/Update |
 | 笔记本编辑 | NotebookEdit | NotebookEdit | NotebookEdit |
 | Agent 工具 | Agent + SendMessage + TaskStop + TaskGet | Agent + SendMessage + TaskStop | Agent + SendMessage + TaskStop |
 | 计划模式 | EnterPlanMode + ExitPlanMode | EnterPlanMode + ExitPlanMode | EnterPlanMode + ExitPlanMode |
