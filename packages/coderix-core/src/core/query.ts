@@ -38,7 +38,7 @@ import type { SystemPromptAssembler } from './system-prompt.js';
 import type { HookManager } from '../hooks/index.js';
 import type { SubAgentRegistry } from './subagent-registry.js';
 import type { AgentRegistry } from './agent-registry.js';
-import { estimateTokens, tokenCountWithEstimation } from './token-budget.js';
+import { estimateTokens, tokenCountWithEstimation, estimateMessageTokens } from './token-budget.js';
 import { ToolExecutionQueue } from './tool-queue.js';
 import { COORDINATOR_ALLOWED_TOOLS } from '../agents/tool-filtering.js';
 import { sessionDir, writeSessionMeta } from './session-store.js';
@@ -364,6 +364,22 @@ async function executeSingleTool(
 // ---------------------------------------------------------------------------
 // query() — Main Agent Loop
 // ---------------------------------------------------------------------------
+
+/**
+ * Return a window of the most recent messages that fit within `maxTokens`.
+ * Walks backward from the end, accumulating estimated per-message tokens.
+ * If the full array fits, it is returned as-is (no copy).
+ */
+function windowMessages(messages: Message[], maxTokens: number): Message[] {
+  let acc = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    acc += estimateMessageTokens(messages[i]!);
+    if (acc > maxTokens) {
+      return messages.slice(i + 1);
+    }
+  }
+  return messages;
+}
 
 export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> {
   const {
@@ -694,9 +710,13 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       const dir = sessionDir(config.sessionId);
       writeSessionMeta(dir, { contextLength: preCallTokens }).catch(() => {});
 
+      // Window messages to the context budget to avoid sending the full
+      // session history over the wire on every API call.
+      const apiMessages = windowMessages(messages, contextBudget);
+
       for await (const event of callModel({
         system: systemText,
-        messages,
+        messages: apiMessages,
         tools: toolDefinitions,
         signal: abortController.signal,
         cacheControl: config.enableCacheControl,

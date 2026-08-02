@@ -283,7 +283,9 @@ export class SessionManager {
   }
 
   // Hard cap on in-memory messages to prevent unbounded heap growth.
-  private static readonly MAX_MESSAGES = 600;
+  // Token-based trimming (contextBudget / 2) is the primary limiter;
+  // this count-based cap is a secondary safety net.
+  private static readonly MAX_MESSAGES = 300;
 
   /**
    * Add a message to the active session.
