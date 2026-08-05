@@ -63,6 +63,9 @@ export function App(): React.ReactElement {
   const toggleTerminal = useUIStore((s) => s.toggleTerminal);
   const setTheme = useUIStore((s) => s.setTheme);
   const setTerminalOpen = useUIStore((s) => s.setTerminalOpen);
+  const gitBranch = useUIStore((s) => s.gitBranch);
+  const gitAhead = useUIStore((s) => s.gitAhead);
+  const gitBehind = useUIStore((s) => s.gitBehind);
 
   // ── Chat State ──────────────────────────────────────────────────────────
   const messages = useChatStore((s) => s.messages);
@@ -443,6 +446,9 @@ export function App(): React.ReactElement {
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
           cost: tokenUsage.totalCost || undefined,
+          gitBranch: gitBranch || undefined,
+          gitAhead: gitAhead || undefined,
+          gitBehind: gitBehind || undefined,
         }}
       >
         {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}

@@ -58,6 +58,29 @@ const CH = {
   FS_FILE_CHANGED: 'fs:fileChanged',
   WINDOW_FOCUS: 'window:focus',
   APP_UPDATE_AVAILABLE: 'app:updateAvailable',
+
+  // Git
+  GIT_STATUS: 'git:status',
+  GIT_DIFF: 'git:diff',
+  GIT_LOG: 'git:log',
+  GIT_SHOW: 'git:show',
+  GIT_STAGE: 'git:stage',
+  GIT_UNSTAGE: 'git:unstage',
+  GIT_COMMIT: 'git:commit',
+  GIT_PUSH: 'git:push',
+  GIT_PULL: 'git:pull',
+  GIT_FETCH: 'git:fetch',
+  GIT_DISCARD: 'git:discard',
+  GIT_BRANCH_LIST: 'git:branch-list',
+  GIT_CHECKOUT: 'git:checkout',
+  GIT_BRANCH_DELETE: 'git:branch-delete',
+  GIT_STASH_LIST: 'git:stash-list',
+  GIT_STASH_SAVE: 'git:stash-save',
+  GIT_STASH_POP: 'git:stash-pop',
+  GIT_STASH_DROP: 'git:stash-drop',
+  GIT_COMMIT_AMEND: 'git:commit-amend',
+  GIT_STAGE_HUNK: 'git:stage-hunk',
+  GIT_REVERT_HUNK: 'git:revert-hunk',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -413,32 +436,88 @@ const coderixAPI = {
 
   git: {
     /** Get git status: branch + changed files + commits with graph. */
-    status(): Promise<{ branch: string; files: Array<{ file: string; type: string; code: string }>; commits: Array<{ hash: string; message: string; graph: string; refs: string }> }> {
-      return ipcRenderer.invoke('git:status');
+    status(): Promise<{ branch: string; files: Array<{ file: string; type: string; code: string }>; commits: Array<{ hash: string; message: string; graph: string; refs: string }>; ahead: number; behind: number }> {
+      return ipcRenderer.invoke(CH.GIT_STATUS);
     },
     /** Get diff for a working-tree or staged file. */
     diff(file: string, staged?: boolean): Promise<{ diff: string; error?: string }> {
-      return ipcRenderer.invoke('git:diff', { file, staged });
+      return ipcRenderer.invoke(CH.GIT_DIFF, { file, staged });
     },
-    /** Get commit history. */
-    log(maxCount?: number): Promise<{ commits: Array<{ hash: string; message: string }> }> {
-      return ipcRenderer.invoke('git:log', { maxCount });
+    /** Get commit history (currently unused in renderer). */
+    log(maxCount?: number): Promise<{ commits: Array<{ hash: string; message: string; graph: string; refs: string }> }> {
+      return ipcRenderer.invoke(CH.GIT_LOG, { maxCount });
     },
     /** Show a commit's details: full diff + changed files. */
     show(hash: string): Promise<{ diff: string; files: Array<{ file: string; type: string }>; error?: string }> {
-      return ipcRenderer.invoke('git:show', { hash });
+      return ipcRenderer.invoke(CH.GIT_SHOW, { hash });
     },
     /** Stage file(s). */
     stage(file?: string, all?: boolean): Promise<{ status: string }> {
-      return ipcRenderer.invoke('git:stage', { file, all });
+      return ipcRenderer.invoke(CH.GIT_STAGE, { file, all });
     },
     /** Unstage file(s). */
     unstage(file?: string, all?: boolean): Promise<{ status: string }> {
-      return ipcRenderer.invoke('git:unstage', { file, all });
+      return ipcRenderer.invoke(CH.GIT_UNSTAGE, { file, all });
     },
     /** Create a commit with the given message. */
     commit(message: string): Promise<{ status: string; error?: string }> {
-      return ipcRenderer.invoke('git:commit', { message });
+      return ipcRenderer.invoke(CH.GIT_COMMIT, { message });
+    },
+    /** Push to remote. */
+    push(opts?: { remote?: string; branch?: string; setUpstream?: boolean; force?: boolean; tags?: boolean }): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_PUSH, opts);
+    },
+    /** Pull from remote. */
+    pull(opts?: { remote?: string; branch?: string; rebase?: boolean }): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_PULL, opts);
+    },
+    /** Fetch from remote. */
+    fetch(opts?: { remote?: string; prune?: boolean; all?: boolean }): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_FETCH, opts);
+    },
+    /** Discard changes to a file (irreversible). */
+    discard(file: string): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_DISCARD, { file });
+    },
+    /** List all branches. */
+    branchList(): Promise<{ branches: Array<{ name: string; hash: string; upstream: string; current: boolean }> }> {
+      return ipcRenderer.invoke(CH.GIT_BRANCH_LIST);
+    },
+    /** Switch to a branch (or create and switch). */
+    checkout(opts: { branch: string; create?: boolean; base?: string }): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_CHECKOUT, opts);
+    },
+    /** Delete a branch. */
+    branchDelete(branch: string, force?: boolean): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_BRANCH_DELETE, { branch, force });
+    },
+    /** List stashes. */
+    stashList(): Promise<{ stashes: Array<{ ref: string; message: string; date: string }> }> {
+      return ipcRenderer.invoke(CH.GIT_STASH_LIST);
+    },
+    /** Save changes to stash. */
+    stashSave(opts?: { message?: string; includeUntracked?: boolean }): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_STASH_SAVE, opts);
+    },
+    /** Pop latest stash (or specific ref). */
+    stashPop(ref?: string): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_STASH_POP, { ref });
+    },
+    /** Drop a stash. */
+    stashDrop(ref?: string): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_STASH_DROP, { ref });
+    },
+    /** Amend the last commit. */
+    commitAmend(message?: string): Promise<{ status: string; output?: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_COMMIT_AMEND, { message });
+    },
+    /** Stage a specific hunk via git apply --cached. */
+    stageHunk(file: string, hunk: string): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_STAGE_HUNK, { file, hunk });
+    },
+    /** Revert a specific hunk via git apply --reverse. */
+    revertHunk(file: string, hunk: string): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_REVERT_HUNK, { file, hunk });
     },
   },
 

@@ -3,12 +3,28 @@ import { create } from 'zustand';
 export type PermissionMode = 'plan' | 'ask' | 'auto';
 export type Theme = 'dark' | 'light';
 
+export type NotificationType = 'error' | 'warning' | 'success' | 'info';
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  message: string;
+  detail?: string;
+  duration?: number; // ms, default: error=0(sticky), success=3000
+}
+
 export interface UIState {
   sidebarOpen: boolean;
   detailPanelOpen: boolean;
   terminalOpen: boolean;
   permissionMode: PermissionMode;
   theme: Theme;
+  notifications: AppNotification[];
+  // Git state (written by GitPanel, read by StatusBar and FileExplorer)
+  gitBranch: string;
+  gitAhead: number;
+  gitBehind: number;
+  gitFileStatuses: Record<string, string>; // path → 'modified'|'added'|'deleted'|'untracked'
 
   // Actions
   toggleSidebar: () => void;
@@ -17,6 +33,10 @@ export interface UIState {
   setTerminalOpen: (open: boolean) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setTheme: (theme: Theme) => void;
+  addNotification: (n: Omit<AppNotification, 'id'>) => void;
+  removeNotification: (id: string) => void;
+  setGitBranch: (branch: string, ahead?: number, behind?: number) => void;
+  setGitFileStatuses: (statuses: Record<string, string>) => void;
 }
 
 /**
@@ -37,6 +57,11 @@ export const useUIStore = create<UIState>()((set) => ({
   terminalOpen: false,
   permissionMode: 'ask',
   theme: 'light',
+  notifications: [],
+  gitBranch: '',
+  gitAhead: 0,
+  gitBehind: 0,
+  gitFileStatuses: {},
 
   toggleSidebar: () => {
     set((state) => ({ sidebarOpen: !state.sidebarOpen }));
@@ -62,5 +87,34 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ theme });
     // Sync with DOM
     document.documentElement.setAttribute('data-theme', theme);
+  },
+
+  addNotification: (n) => {
+    const id = Math.random().toString(36).slice(2, 9);
+    const notification: AppNotification = { ...n, id };
+    set((state) => ({ notifications: [...state.notifications, notification] }));
+    // Auto-dismiss for non-error notifications
+    const duration = n.duration ?? (n.type === 'error' ? 0 : 4000);
+    if (duration > 0) {
+      setTimeout(() => {
+        set((state) => ({
+          notifications: state.notifications.filter((x) => x.id !== id),
+        }));
+      }, duration);
+    }
+  },
+
+  removeNotification: (id) => {
+    set((state) => ({
+      notifications: state.notifications.filter((n) => n.id !== id),
+    }));
+  },
+
+  setGitBranch: (gitBranch, gitAhead = 0, gitBehind = 0) => {
+    set({ gitBranch, gitAhead, gitBehind });
+  },
+
+  setGitFileStatuses: (gitFileStatuses) => {
+    set({ gitFileStatuses });
   },
 }));

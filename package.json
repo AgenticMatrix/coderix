@@ -7,9 +7,9 @@
     "coderix": "./bin/coderix.js"
   },
   "scripts": {
-    "start": "NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json packages/coderix-cli/src/cli/main.tsx",
-    "dev": "NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
-    "dev:cli": "NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
+    "start": "cross-env NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json packages/coderix-cli/src/cli/main.tsx",
+    "dev": "cross-env NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
+    "dev:cli": "cross-env NODE_ENV=production tsx --tsconfig packages/coderix-cli/tsconfig.json --watch packages/coderix-cli/src/cli/main.tsx",
     "dev:vscode": "pnpm --filter @coderix/vscode dev",
     "build": "pnpm --filter @coderix/core build && pnpm --filter @coderix/cli build",
     "build:all": "pnpm --filter @coderix/core build && pnpm --filter @coderix/cli build && pnpm --filter @coderix/vscode build",
@@ -43,6 +43,7 @@
     "@types/shell-quote": "^1.7.5",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.8",
+    "cross-env": "^10.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
