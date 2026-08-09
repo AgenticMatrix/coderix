@@ -12,6 +12,8 @@ export interface TerminalProps {
   onReady?: (term: XTerm) => void;
   /** Called when user types into the terminal */
   onData?: (data: string) => void;
+  /** Called when terminal is resized (cols, rows) */
+  onResize?: (cols: number, rows: number) => void;
   /** If true, the terminal is in a collapsed/read-only state */
   readOnly?: boolean;
 }
@@ -40,6 +42,7 @@ export default function Terminal({
   ptySessionId: _ptySessionId,
   onReady,
   onData,
+  onResize,
   readOnly = false,
 }: TerminalProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -141,6 +144,9 @@ export default function Terminal({
 
     const observer = new ResizeObserver(() => {
       handleResize();
+      if (onResize && termRef.current) {
+        onResize(termRef.current.cols, termRef.current.rows);
+      }
     });
 
     if (containerRef.current) {
@@ -148,7 +154,7 @@ export default function Terminal({
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [onResize]);
 
   // ── Render ─────────────────────────────────────────────────
   return (

@@ -31,6 +31,7 @@ function sqliteStubPlugin(): Plugin {
 const external = [
   'electron',
   'electron/main',
+  'node-pty',
   ...builtinModules.flatMap(m => m === 'sqlite' ? [] : [m, `node:${m}`]),
 ]
 

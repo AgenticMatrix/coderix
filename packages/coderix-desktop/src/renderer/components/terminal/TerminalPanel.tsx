@@ -30,30 +30,49 @@ export default function TerminalPanel({
 }: TerminalPanelProps): React.ReactElement {
   const [term, setTerm] = useState<XTerm | null>(null);
   const termRef = useRef<XTerm | null>(null);
+  const ptyIdRef = useRef<string | null>(null);
 
-  const handleReady = useCallback((t: XTerm) => {
+  const handleReady = useCallback(async (t: XTerm) => {
     termRef.current = t;
     setTerm(t);
-    // Welcome message
+
     writeToTerminal(t, '\x1b[1;36m╭────────────────────────────────────────────╮\x1b[0m\r\n');
     writeToTerminal(t, '\x1b[1;36m│\x1b[0m  \x1b[1mCoderix Terminal\x1b[0m                          \x1b[1;36m│\x1b[0m\r\n');
-    writeToTerminal(t, '\x1b[1;36m│\x1b[0m  Type commands directly in this panel.      \x1b[1;36m│\x1b[0m\r\n');
+
+    // Create PTY session via IPC
+    const api = window.coderixAPI;
+    if (api?.terminal?.create) {
+      try {
+        const result = await api.terminal.create({ cwd: undefined, rows: 24, cols: 80 });
+        ptyIdRef.current = result.terminalId;
+
+        // Pipe PTY output → terminal
+        api.terminal.onData(result.terminalId, (data: string) => {
+          writeToTerminal(t, data);
+        });
+
+        // Handle PTY exit
+        api.terminal.onExit(result.terminalId, (exitCode: number) => {
+          writeToTerminal(t, `\r\n\x1b[33mProcess exited with code ${exitCode}\x1b[0m\r\n`);
+        });
+
+        writeToTerminal(t, '\x1b[1;36m│\x1b[0m  PTY connected — type commands below         \x1b[1;36m│\x1b[0m\r\n');
+      } catch (e) {
+        writeToTerminal(t, `\x1b[1;31m│\x1b[0m  PTY error: ${String(e).slice(0, 40)}  \x1b[1;31m│\x1b[0m\r\n`);
+      }
+    } else {
+      writeToTerminal(t, '\x1b[1;33m│\x1b[0m  PTY API not available (preload missing?)    \x1b[1;33m│\x1b[0m\r\n');
+    }
     writeToTerminal(t, '\x1b[1;36m│\x1b[0m  \x1b[2mCtrl+`\x1b[0m to toggle  ·  \x1b[2mCmd+K\x1b[0m for commands  \x1b[1;36m│\x1b[0m\r\n');
     writeToTerminal(t, '\x1b[1;36m╰────────────────────────────────────────────╯\x1b[0m\r\n\r\n');
-    writeToTerminal(t, '\x1b[1;32m$\x1b[0m ');
   }, []);
 
   const handleData = useCallback(
     (data: string) => {
-      const t = termRef.current;
-      if (!t) return;
-      // For now, echo data back (local-echo mode until PTY is wired)
-      if (data === '\r') {
-        writeToTerminal(t, '\r\n\x1b[1;32m$\x1b[0m ');
-      } else if (data === '\x7f') {
-        // Backspace — xterm handles internally
-      } else {
-        writeToTerminal(t, data);
+      // Send keystrokes to PTY
+      const api = window.coderixAPI;
+      if (ptyIdRef.current && api?.terminal?.write) {
+        api.terminal.write(ptyIdRef.current, data);
       }
     },
     [],
@@ -132,6 +151,11 @@ export default function TerminalPanel({
           <Terminal
             onReady={handleReady}
             onData={handleData}
+            onResize={(cols, rows) => {
+              if (ptyIdRef.current && window.coderixAPI?.terminal?.resize) {
+                window.coderixAPI.terminal.resize(ptyIdRef.current, rows, cols);
+              }
+            }}
           />
         </div>
       )}

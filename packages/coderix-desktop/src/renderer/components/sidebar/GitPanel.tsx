@@ -17,7 +17,7 @@ const BRANCH_COLORS = [
   '#00bcd4', '#795548', '#607d8b', '#cddc39', '#ff5722',
 ];
 
-export function GitPanel({ onFileSelect }: { onFileSelect?: (file: string, diff: string) => void }): React.ReactElement {
+export function GitPanel({ onFileSelect, projectPath }: { onFileSelect?: (file: string, diff: string) => void; projectPath?: string }): React.ReactElement {
   const [branch, setBranch] = useState('');
   const [files, setFiles] = useState<GitFile[]>([]);
   const [commits, setCommits] = useState<GitCommit[]>([]);
@@ -48,7 +48,7 @@ const api = window.coderixAPI?.git;
     setLoading(false);
   }, [api]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, projectPath]);
 
   const handleCommit = useCallback(async () => {
     if (!api || !commitMsg.trim()) return;

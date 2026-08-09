@@ -278,6 +278,7 @@ export function ToolRenderer({
   const writeStats = isWrite && toolMetadata
     ? `${toolMetadata.addedLines ?? 0} added, ${toolMetadata.removedLines ?? 0} removed`
     : undefined;
+  const writeContent = typeof toolInput.content === 'string' ? toolInput.content : '';
 
   return (
     <motion.div
@@ -343,9 +344,9 @@ export function ToolRenderer({
                       {writeStats}
                     </div>
                   )}
-                  {toolInput.content && (
+                  {writeContent && (
                     <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-                      {toolInput.content as string}
+                      {writeContent}
                     </div>
                   )}
                 </div>
