@@ -108,6 +108,8 @@ export const IPC_CHANNELS = {
   GIT_COMMIT_AMEND: 'git:commit-amend',
   GIT_STAGE_HUNK: 'git:stage-hunk',
   GIT_REVERT_HUNK: 'git:revert-hunk',
+  GIT_SHOW_FILE: 'git:show-file',
+  GIT_COMMIT_BODY: 'git:commit-body',
 
   // Push (main → renderer)
   STREAM_BLOCK: 'stream:block',       // combined block event (for preload compatibility)
@@ -532,7 +534,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     try {
       const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
       const status = execSync('git status --porcelain', { cwd, encoding: 'utf-8' });
-      const log = execSync('git log --all --oneline --graph --decorate -50', { cwd, encoding: 'utf-8' });
+      // Null-byte separated: hash subject, author, relative date, absolute date, full message, refs
+      const log = execSync('git log --all --graph --format="%h %s%x00%an%x00%ar%x00%ad%x00%d" -50', { cwd, encoding: 'utf-8' });
 
       const files = status.split('\n').filter(Boolean).map((line) => {
         const code = line.slice(0, 2).trim();
@@ -547,22 +550,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       });
 
       const commits = log.split('\n').filter(Boolean).map((line) => {
-        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.*)$/);
+        // Format: [graph][short hash] [subject]\x00[author]\x00[relative date]\x00[absolute date]\x00[refs]
+        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.+?)\x00(.*?)\x00(.*?)\x00(.*?)\x00(.*)$/);
         if (match) {
-          const graph = match[1];
-          const hash = match[2];
-          const rest = match[3];
-          const refMatch = rest.match(/\((.+?)\)$/);
           return {
-            hash,
-            message: refMatch ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest.trim(),
-            graph,
-            refs: refMatch ? refMatch[1] : '',
+            hash: match[2],
+            message: match[3].trim(),
+            author: match[4].trim(),
+            date: match[5].trim(),
+            dateAbsolute: match[6].trim(),
+            graph: match[1],
+            refs: match[7].replace(/[()]/g, '').trim(),
           };
         }
-        const [hash, ...rest] = line.split(' ');
-        return { hash, message: rest.join(' '), graph: '', refs: '' };
-      });
+        return null;
+      }).filter(Boolean) as Array<{ hash: string; message: string; author: string; date: string; dateAbsolute: string; graph: string; refs: string }>;
 
       // Compute ahead/behind for branch indicator
       let ahead = 0, behind = 0;
@@ -599,32 +601,28 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const { execSync } = await import('node:child_process');
       const cwd = findGitRoot();
       const n = payload?.maxCount ?? 30;
-      // --graph --all for branch visualization, --decorate for branch names
       const log = execSync(
-        `git log --all --oneline --graph --decorate -${n}`,
+        `git log --all --graph --format="%h %s%x00%an%x00%ar%x00%ad%x00%d" -${n}`,
         { cwd, encoding: 'utf-8' },
       );
       const lines = log.split('\n').filter(Boolean);
-      const commits: Array<{ hash: string; message: string; graph: string; refs: string }> = [];
+      const commits: Array<{ hash: string; message: string; author: string; date: string; dateAbsolute: string; graph: string; refs: string }> = [];
       for (const line of lines) {
-        // Parse: graph chars | hash message (refs)
-        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.*)$/);
+        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.+?)\x00(.*?)\x00(.*?)\x00(.*?)\x00(.*)$/);
         if (match) {
-          const graph = match[1];
-          const hash = match[2];
-          const rest = match[3];
-          // Extract refs from parentheses
-          const refMatch = rest.match(/\((.+?)\)$/);
           commits.push({
-            hash,
-            message: refMatch ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest.trim(),
-            graph,
-            refs: refMatch ? refMatch[1] : '',
+            hash: match[2],
+            message: match[3].trim(),
+            author: match[4].trim(),
+            date: match[5].trim(),
+            dateAbsolute: match[6].trim(),
+            graph: match[1],
+            refs: match[7].replace(/[()]/g, '').trim(),
           });
         }
       }
       return { commits };
-    } catch { return { commits: [] as Array<{ hash: string; message: string; graph: string; refs: string }> }; }
+    } catch { return { commits: [] as Array<{ hash: string; message: string; author: string; date: string; dateAbsolute: string; graph: string; refs: string }> }; }
   });
 
   ipcMain.handle('git:show', async (_event, payload: { hash: string }) => {
@@ -637,14 +635,32 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
       const stat = spawnSync('git', ['show', '--stat', '--name-status', payload.hash], { cwd, encoding: 'utf-8' });
       const show = spawnSync('git', ['show', payload.hash], { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+
+      // Parse author, date, stats from --stat output
+      let author = '', date = '', filesChanged = 0, insertions = 0, deletions = 0;
+      const statLines = stat.stdout.split('\n');
+      for (const line of statLines) {
+        const authMatch = line.match(/^Author:\s+(.+)$/);
+        if (authMatch) author = authMatch[1];
+        const dateMatch = line.match(/^Date:\s+(.+)$/);
+        if (dateMatch) date = dateMatch[1];
+        // Parse: "N files changed, M insertions(+), K deletions(-)"
+        const statMatch = line.match(/(\d+)\s+files?\s*changed(?:,\s*(\d+)\s+insertions?\(\+\))?(?:,\s*(\d+)\s+deletions?\(-\))?/);
+        if (statMatch) {
+          filesChanged = parseInt(statMatch[1], 10) || 0;
+          insertions = parseInt(statMatch[2], 10) || 0;
+          deletions = parseInt(statMatch[3], 10) || 0;
+        }
+      }
+
       // Parse --name-status output for changed files
       const files: Array<{ file: string; type: string }> = [];
-      const lines = stat.stdout.split('\n');
-      for (const line of lines) {
+      for (const line of statLines) {
         const match = line.match(/^([MADR]\d{0,3})\s+(.+)$/);
         if (match) files.push({ file: match[2], type: match[1].charAt(0) });
       }
-      return { diff: show.stdout, files };
+
+      return { diff: show.stdout, files, author, date, filesChanged, insertions, deletions };
     } catch (e) { return { diff: '', files: [], error: (e as Error).message }; }
   });
 
@@ -858,6 +874,35 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
       return { status: 'ok', output: result.stdout.trim() };
     } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:show-file', async (_event, payload: { hash: string; file: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
+        return { diff: '', content: '', error: 'Invalid commit hash' };
+      }
+      // Get file content at this commit
+      const contentResult = spawnSync('git', ['show', `${payload.hash}:${payload.file}`], { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      // Get per-file diff
+      const diffResult = spawnSync('git', ['show', payload.hash, '--', payload.file], { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      return {
+        diff: diffResult.status === 0 ? diffResult.stdout : '',
+        content: contentResult.status === 0 ? contentResult.stdout : '',
+        error: diffResult.status !== 0 ? diffResult.stderr.trim() : undefined,
+      };
+    } catch (e) { return { diff: '', content: '', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:commit-body', async (_event, payload: { hash: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot();
+      if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) return { body: '' };
+      const result = spawnSync('git', ['log', '-1', '--format=%B', payload.hash], { cwd, encoding: 'utf-8' });
+      return { body: result.stdout.trim() };
+    } catch (e) { return { body: '' }; }
   });
 
   // ── Git: Hunk-level operations ────────────────────────────────────────
@@ -1089,6 +1134,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.GIT_COMMIT_AMEND);
       ipcMain.removeHandler(IPC_CHANNELS.GIT_STAGE_HUNK);
       ipcMain.removeHandler(IPC_CHANNELS.GIT_REVERT_HUNK);
+      ipcMain.removeHandler(IPC_CHANNELS.GIT_SHOW_FILE);
+      ipcMain.removeHandler(IPC_CHANNELS.GIT_COMMIT_BODY);
     },
   };
 }

@@ -7,8 +7,8 @@ import { StashPicker } from './StashPicker';
 import { Sparkles } from 'lucide-react';
 
 interface GitFile { file: string; type: string; code: string; }
-interface GitCommit { hash: string; message: string; graph?: string; refs?: string; }
-interface ShowData { diff: string; files: Array<{ file: string; type: string }>; }
+interface GitCommit { hash: string; message: string; author?: string; date?: string; dateAbsolute?: string; graph?: string; refs?: string; }
+interface ShowData { diff: string; files: Array<{ file: string; type: string }>; author?: string; date?: string; filesChanged?: number; insertions?: number; deletions?: number; }
 
 const TYPE_CFG: Record<string, { label: string; color: string }> = {
   M: { label: 'M', color: '#e2b714' }, A: { label: 'A', color: '#4caf50' },
@@ -46,16 +46,29 @@ export function GitPanel(): React.ReactElement {
   const [amend, setAmend] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [hoveredCommit, setHoveredCommit] = useState<{ commit: GitCommit; body?: string; x: number; y: number } | null>(null);
   // Commit message history (localStorage per repo)
   const [msgHistory, setMsgHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('coderix-commit-msgs') || '[]'); } catch { return []; }
   });
 
-  function emitDiff(file: string, diff: string) {
-  window.dispatchEvent(new CustomEvent('coderix:open-diff', { detail: { file, diff } }));
+  function emitDiff(file: string, diff: string, content?: string) {
+  window.dispatchEvent(new CustomEvent('coderix:open-diff', { detail: { file, diff, content } }));
 }
 
 const api = window.coderixAPI?.git;
+
+  // Fetch full commit body on hover for tooltip
+  useEffect(() => {
+    if (!hoveredCommit?.commit.hash || !api) return;
+    let cancelled = false;
+    (api as any).commitBody?.(hoveredCommit.commit.hash).then((r: any) => {
+      if (!cancelled && r?.body) {
+        setHoveredCommit(prev => prev?.commit.hash === hoveredCommit.commit.hash ? { ...prev, body: r.body } : prev);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [hoveredCommit?.commit.hash, api]);
 
   // Derived file lists (must be before handlers that reference them)
   const staged = files.filter(f => f.code[0] !== ' ' && f.code[0] !== '?');
@@ -442,6 +455,9 @@ const api = window.coderixAPI?.git;
               <div
                 className="pr-2 hover:bg-[var(--color-bg-tertiary)] cursor-pointer flex items-center gap-1"
                 onClick={() => handleExpandCommit(c.hash)}
+                onMouseEnter={(e) => { if (c.author) setHoveredCommit({ commit: c, x: e.clientX, y: e.clientY }); }}
+                onMouseMove={(e) => { if (hoveredCommit?.commit.hash === c.hash) setHoveredCommit(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : prev); }}
+                onMouseLeave={() => setHoveredCommit(null)}
                 style={{ paddingLeft: '2px', lineHeight: '16px', minHeight: '16px' }}
               >
                 {/* Graph visualization */}
@@ -451,6 +467,11 @@ const api = window.coderixAPI?.git;
                 {/* Commit hash + message */}
                 <span className="font-mono text-[10px] text-[var(--color-text-tertiary)] flex-shrink-0 mr-1">{c.hash.slice(0, 7)}</span>
                 <span className="truncate text-[11px] text-[var(--color-text-primary)]">{c.message}</span>
+                {c.author && (
+                  <span className="text-[9px] text-[var(--color-text-tertiary)] flex-shrink-0 hidden group-hover:inline ml-1">
+                    {c.author} · {c.date}
+                  </span>
+                )}
                 {/* Branch refs */}
                 {c.refs && (
                   <span className="flex-shrink-0 flex items-center gap-0.5 ml-1">
@@ -479,7 +500,18 @@ const api = window.coderixAPI?.git;
                         <div
                           key={i}
                           className="py-0.5 hover:bg-[var(--color-bg-tertiary)] cursor-pointer flex items-center gap-1.5 rounded"
-                          onClick={(e) => { e.stopPropagation(); if (commitDetail) emitDiff(f.file, commitDetail.diff); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!commitDetail || !api) return;
+                            const fileHash = expandedCommit;
+                            if (fileHash) {
+                              (api as any).showFile?.(fileHash, f.file).then((r: any) => {
+                                emitDiff(f.file, r?.diff || commitDetail.diff, r?.content || '');
+                              });
+                            } else {
+                              emitDiff(f.file, commitDetail.diff);
+                            }
+                          }}
                         >
                           <span style={{ color: cfg.color, fontWeight: 600, fontSize: '9px', width: '14px', textAlign: 'center', flexShrink: 0 }}>{cfg.label}</span>
                           <span className="truncate text-[11px]">{f.file}</span>
@@ -500,6 +532,21 @@ const api = window.coderixAPI?.git;
     {branchPickerOpen && <BranchPicker onClose={() => { setBranchPickerOpen(false); load(); }} />}
     {/* Stash picker modal */}
     {stashPickerOpen && <StashPicker onClose={() => { setStashPickerOpen(false); load(); }} />}
+    {/* Commit hover tooltip */}
+    {hoveredCommit?.commit.author && (
+      <div className="fixed z-[9999] pointer-events-none rounded-[var(--radius-md)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] shadow-xl p-3 max-w-sm"
+        style={{ left: Math.min(hoveredCommit.x, window.innerWidth - 360), top: hoveredCommit.y + 10 }}>
+        <div className="text-xs font-medium text-[var(--color-text-primary)] mb-1">{hoveredCommit.commit.author}</div>
+        <div className="text-[11px] text-[var(--color-text-secondary)] mb-2">
+          {hoveredCommit.commit.date}
+          {hoveredCommit.commit.dateAbsolute && ` (${hoveredCommit.commit.dateAbsolute})`}
+        </div>
+        <div className="text-[11px] text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed mb-2">
+          {hoveredCommit.body || hoveredCommit.commit.message}
+        </div>
+        <div className="text-[10px] text-[var(--color-text-tertiary)] font-mono">{hoveredCommit.commit.hash}</div>
+      </div>
+    )}
     </>
   );
 }

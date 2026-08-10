@@ -81,6 +81,8 @@ const CH = {
   GIT_COMMIT_AMEND: 'git:commit-amend',
   GIT_STAGE_HUNK: 'git:stage-hunk',
   GIT_REVERT_HUNK: 'git:revert-hunk',
+  GIT_SHOW_FILE: 'git:show-file',
+  GIT_COMMIT_BODY: 'git:commit-body',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -448,8 +450,25 @@ const coderixAPI = {
       return ipcRenderer.invoke(CH.GIT_LOG, { maxCount });
     },
     /** Show a commit's details: full diff + changed files. */
-    show(hash: string): Promise<{ diff: string; files: Array<{ file: string; type: string }>; error?: string }> {
+    show(hash: string): Promise<{
+      diff: string;
+      files: Array<{ file: string; type: string }>;
+      author: string;
+      date: string;
+      filesChanged: number;
+      insertions: number;
+      deletions: number;
+      error?: string;
+    }> {
       return ipcRenderer.invoke(CH.GIT_SHOW, { hash });
+    },
+    /** Get the full commit message body. */
+    commitBody(hash: string): Promise<{ body: string }> {
+      return ipcRenderer.invoke(CH.GIT_COMMIT_BODY, { hash });
+    },
+    /** Show a single file's content + diff from a specific commit. */
+    showFile(hash: string, file: string): Promise<{ diff: string; content: string; error?: string }> {
+      return ipcRenderer.invoke(CH.GIT_SHOW_FILE, { hash, file });
     },
     /** Stage file(s). */
     stage(file?: string, all?: boolean): Promise<{ status: string }> {
