@@ -1,5 +1,7 @@
 import React from 'react';
 import { X, FileText } from 'lucide-react';
+import { useEditorStore } from '../../store/editorStore.js';
+import { EditorPanel } from '../editor/EditorPanel.js';
 
 export interface DiffData {
   file: string;
@@ -7,20 +9,36 @@ export interface DiffData {
 }
 
 export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose?: () => void }): React.ReactElement | null {
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
-        点击文件查看 diff
-      </div>
-    );
+  const editorFiles = useEditorStore((s) => s.files);
+
+  // Show editor when files are open (even if diff data is present)
+  if (editorFiles.length > 0) {
+    return <EditorPanel />;
   }
 
+  // Show diff viewer
+  if (data) {
+    return <DiffView data={data} onClose={onClose} />;
+  }
+
+  // Empty state
+  return (
+    <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
+      点击文件查看
+    </div>
+  );
+}
+
+DetailPanel.displayName = 'DetailPanel';
+
+// ── Diff view (moved from original DetailPanel) ──
+
+function DiffView({ data, onClose }: { data: DiffData; onClose?: () => void }): React.ReactElement {
   const lines = data.diff.split('\n');
   const fileName = data.file.split('/').pop() ?? data.file;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-3 h-[35px] border-b border-[var(--color-separator)] flex-shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <FileText size={12} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
@@ -32,8 +50,6 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
           </button>
         )}
       </div>
-
-      {/* Diff content */}
       <div className="flex-1 overflow-auto font-mono text-xs leading-5">
         {lines.map((line, i) => {
           let bg = 'transparent';
@@ -57,5 +73,3 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
     </div>
   );
 }
-
-DetailPanel.displayName = 'DetailPanel';

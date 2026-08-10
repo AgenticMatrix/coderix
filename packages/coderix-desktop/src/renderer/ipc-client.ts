@@ -13,6 +13,17 @@
 
 import type { StreamBlock, PermissionRequest, TokenUsage, SessionInfo } from './types.js';
 
+export interface QuestionRequest {
+  toolUseId: string;
+  toolName: string;
+  questions: Array<{
+    header: string;
+    question: string;
+    options?: Array<{ label: string; description: string }>;
+    multiSelect?: boolean;
+  }>;
+}
+
 // ---------------------------------------------------------------------------
 // Safety: Preload API Guard
 // ---------------------------------------------------------------------------
@@ -67,6 +78,13 @@ async function invokeWithTimeout<T>(
 export async function submitQuery(query: string, sessionId?: string): Promise<unknown> {
   return invokeWithTimeout('query:submit', () =>
     getAPI().query.submit(query, sessionId),
+  );
+}
+
+/** Interrupt the active query in the main process. */
+export async function interruptQuery(): Promise<unknown> {
+  return invokeWithTimeout('query:interrupt', () =>
+    getAPI().query.interrupt(),
   );
 }
 
@@ -400,6 +418,20 @@ export async function getConfig(): Promise<Record<string, unknown>> {
 export async function setConfig(key: string, value: unknown): Promise<unknown> {
   return invokeWithTimeout('config:set', () =>
     getAPI().config.set(key, value),
+  );
+}
+
+/** Get the current project directory. */
+export async function getProjectDirectory(): Promise<{ path: string }> {
+  return invokeWithTimeout('project:get', () =>
+    getAPI().project.get(),
+  );
+}
+
+/** Open a folder picker and update the active project directory. */
+export async function selectProjectDirectory(): Promise<{ canceled: boolean; path: string }> {
+  return invokeWithTimeout('project:select', () =>
+    getAPI().project.select(),
   );
 }
 

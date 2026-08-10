@@ -1,6 +1,5 @@
-import React, { type ReactNode } from 'react';
+import React, { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ResizablePanel } from '../shared/ResizablePanel';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { IconSidebar } from '../sidebar/IconSidebar';
 import type { SidebarTab } from '../sidebar/IconSidebar';
@@ -109,16 +108,15 @@ export function AppLayout({
               {...sidebarAnimation}
               className="overflow-hidden flex-shrink-0"
             >
-              <ResizablePanel
-                direction="right"
-                defaultSize={sidebarWidth}
-                minSize={200}
-                maxSize={400}
-                onResize={onSidebarResize}
+              <div
+                style={{
+                  width: sidebarWidth || 260, minWidth: 200, maxWidth: 400,
+                  resize: 'horizontal', overflow: 'auto',
+                }}
                 className="h-full glass-sidebar border-r border-[var(--color-separator)]"
               >
                 {sidebar}
-              </ResizablePanel>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -135,16 +133,9 @@ export function AppLayout({
               {...detailAnimation}
               className="overflow-hidden flex-shrink-0"
             >
-              <ResizablePanel
-                direction="left"
-                defaultSize={detailWidth}
-                minSize={280}
-                maxSize={600}
-                onResize={onDetailResize}
-                className="h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]"
-              >
+              <DetailResizablePanel width={detailWidth} onResize={onDetailResize}>
                 {detailPanel}
-              </ResizablePanel>
+              </DetailResizablePanel>
             </motion.div>
           )}
         </AnimatePresence>
@@ -158,3 +149,59 @@ export function AppLayout({
 }
 
 AppLayout.displayName = 'AppLayout';
+
+// ── Simple resizable panel with visible drag handle ──
+
+function DetailResizablePanel({ children, width, onResize }: {
+  children: ReactNode; width?: number; onResize?: (w: number) => void;
+}) {
+  const [w, setW] = useState(width || 380);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startW = useRef(0);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    startW.current = w;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [w]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = startX.current - e.clientX;
+      const newW = Math.max(280, Math.min(600, startW.current + delta));
+      setW(newW);
+      onResize?.(newW);
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [onResize]);
+
+  return (
+    <div style={{ position: 'relative', width: w, minWidth: 280, maxWidth: 600, flexShrink: 0 }} className="h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]">
+      {/* Drag handle — left edge */}
+      <div
+        onMouseDown={onMouseDown}
+        style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px',
+          cursor: 'col-resize', zIndex: 10,
+        }}
+        className="hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors"
+      />
+      {children}
+    </div>
+  );
+}
