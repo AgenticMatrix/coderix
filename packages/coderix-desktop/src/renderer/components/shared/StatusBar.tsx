@@ -29,6 +29,9 @@ export interface StatusBarProps {
   cost?: number;
   /** Git branch */
   gitBranch?: string;
+  /** Git ahead/behind counts */
+  gitAhead?: number;
+  gitBehind?: number;
   /** Agent status */
   agentStatus?: 'idle' | 'thinking' | 'executing' | 'waiting' | 'error';
   /** Current project path */
@@ -64,6 +67,8 @@ export function StatusBar({
   outputTokens,
   cost,
   gitBranch,
+  gitAhead = 0,
+  gitBehind = 0,
   agentStatus = 'idle',
   projectPath,
   onSelectProject,
@@ -191,6 +196,18 @@ export function StatusBar({
           <span className="inline-flex items-center gap-1">
             <GitBranch size={10} className="text-[var(--color-text-tertiary)]" />
             <span>{gitBranch}</span>
+            {gitAhead > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[#4caf50]">
+                <ArrowUp size={9} />
+                <span>{gitAhead}</span>
+              </span>
+            )}
+            {gitBehind > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[#2196f3]">
+                <ArrowDown size={9} />
+                <span>{gitBehind}</span>
+              </span>
+            )}
           </span>
           <div className="w-px h-3 bg-[var(--color-separator)]" />
         </>

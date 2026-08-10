@@ -575,59 +575,72 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const inRepo = existsSync(require('node:path').join(cwd, '.git'));
 
     if (!inRepo) {
-      console.log('[Coderix] git:status — no git repo found from', currentWorkDir);
+      console.log('[Coderix] git:status — no git repo found from', process.cwd());
       return { branch: '', files: [], commits: [] };
     }
 
     try {
       const branch = execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim();
       const status = execSync('git status --porcelain', { cwd, encoding: 'utf-8' });
-      const log = execSync('git log --all --oneline --graph --decorate -50', { cwd, encoding: 'utf-8' });
+      // Null-byte separated: hash subject, author, relative date, absolute date, full message, refs
+      const log = execSync('git log --all --graph --format="%h %s%x00%an%x00%ar%x00%ad%x00%d" -50', { cwd, encoding: 'utf-8' });
 
       const files = status.split('\n').filter(Boolean).map((line) => {
         const code = line.slice(0, 2).trim();
         const file = line.slice(3);
-        let type: 'modified' | 'added' | 'deleted' | 'untracked' | 'renamed' = 'modified';
-        if (code.includes('?')) type = 'untracked';
-        else if (code.includes('A')) type = 'added';
-        else if (code.includes('D')) type = 'deleted';
-        else if (code.includes('R')) type = 'renamed';
+        // Use single-character type to match GitPanel TYPE_CFG keys (M/A/D/R/?)
+        let type = 'M'; // default: Modified
+        if (code.includes('?')) type = '?';
+        else if (code.includes('A')) type = 'A';
+        else if (code.includes('D')) type = 'D';
+        else if (code.includes('R')) type = 'R';
         return { file, type, code };
       });
 
       const commits = log.split('\n').filter(Boolean).map((line) => {
-        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.*)$/);
+        // Format: [graph][short hash] [subject]\x00[author]\x00[relative date]\x00[absolute date]\x00[refs]
+        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.+?)\x00(.*?)\x00(.*?)\x00(.*?)\x00(.*)$/);
         if (match) {
-          const graph = match[1];
-          const hash = match[2];
-          const rest = match[3];
-          const refMatch = rest.match(/\((.+?)\)$/);
           return {
-            hash,
-            message: refMatch ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest.trim(),
-            graph,
-            refs: refMatch ? refMatch[1] : '',
+            hash: match[2],
+            message: match[3].trim(),
+            author: match[4].trim(),
+            date: match[5].trim(),
+            dateAbsolute: match[6].trim(),
+            graph: match[1],
+            refs: match[7].replace(/[()]/g, '').trim(),
           };
         }
-        const [hash, ...rest] = line.split(' ');
-        return { hash, message: rest.join(' '), graph: '', refs: '' };
-      });
+        return null;
+      }).filter(Boolean) as Array<{ hash: string; message: string; author: string; date: string; dateAbsolute: string; graph: string; refs: string }>;
 
-      console.log(`[Coderix] git:status — branch=${branch}, files=${files.length}, commits=${commits.length}`);
-      return { branch, files, commits };
+      // Compute ahead/behind for branch indicator
+      let ahead = 0, behind = 0;
+      try {
+        const upstream = execSync(`git rev-parse --abbrev-ref --symbolic-full-name @{u}`, { cwd, encoding: 'utf-8' }).trim();
+        const counts = execSync(`git rev-list --left-right --count ${upstream}...HEAD`, { cwd, encoding: 'utf-8' }).trim();
+        const parts = counts.split('\t');
+        behind = parseInt(parts[0], 10) || 0;
+        ahead = parseInt(parts[1], 10) || 0;
+      } catch { /* no upstream configured */ }
+
+      console.log(`[Coderix] git:status — branch=${branch}, files=${files.length}, commits=${commits.length}, ↑${ahead} ↓${behind}`);
+      return { branch, files, commits, ahead, behind };
     } catch (e) {
       console.error('[Coderix] git:status failed:', (e as Error).message);
-      return { branch: '', files: [], commits: [] };
+      return { branch: '', files: [], commits: [], ahead: 0, behind: 0 };
     }
   });
 
   ipcMain.handle('git:diff', async (_event, payload: { file: string; staged?: boolean }) => {
     try {
-      const { execSync } = await import('node:child_process');
+      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
-      const args = payload.staged ? ['diff', '--staged', '--', payload.file] : ['diff', '--', payload.file];
-      const diff = execSync(`git ${args.join(' ')}`, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
-      return { diff };
+      const args = payload.staged
+        ? ['diff', '--staged', '--', payload.file]
+        : ['diff', '--', payload.file];
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      return { diff: result.stdout };
     } catch (e) { return { diff: '', error: (e as Error).message }; }
   });
 
@@ -636,79 +649,338 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const { execSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const n = payload?.maxCount ?? 30;
-      // --graph --all for branch visualization, --decorate for branch names
       const log = execSync(
-        `git log --all --oneline --graph --decorate -${n}`,
+        `git log --all --graph --format="%h %s%x00%an%x00%ar%x00%ad%x00%d" -${n}`,
         { cwd, encoding: 'utf-8' },
       );
       const lines = log.split('\n').filter(Boolean);
-      const commits: Array<{ hash: string; message: string; graph: string; refs: string }> = [];
+      const commits: Array<{ hash: string; message: string; author: string; date: string; dateAbsolute: string; graph: string; refs: string }> = [];
       for (const line of lines) {
-        // Parse: graph chars | hash message (refs)
-        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.*)$/);
+        const match = line.match(/^([*|/\\_\s]+)([0-9a-f]{7,})\s+(.+?)\x00(.*?)\x00(.*?)\x00(.*?)\x00(.*)$/);
         if (match) {
-          const graph = match[1];
-          const hash = match[2];
-          const rest = match[3];
-          // Extract refs from parentheses
-          const refMatch = rest.match(/\((.+?)\)$/);
           commits.push({
-            hash,
-            message: refMatch ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest.trim(),
-            graph,
-            refs: refMatch ? refMatch[1] : '',
+            hash: match[2],
+            message: match[3].trim(),
+            author: match[4].trim(),
+            date: match[5].trim(),
+            dateAbsolute: match[6].trim(),
+            graph: match[1],
+            refs: match[7].replace(/[()]/g, '').trim(),
           });
         }
       }
       return { commits };
-    } catch { return { commits: [] as Array<{ hash: string; message: string; graph: string; refs: string }> }; }
+    } catch { return { commits: [] as Array<{ hash: string; message: string; author: string; date: string; dateAbsolute: string; graph: string; refs: string }> }; }
   });
 
   ipcMain.handle('git:show', async (_event, payload: { hash: string }) => {
     try {
-      const { execSync } = await import('node:child_process');
+      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
-      const stat = execSync(`git show --stat --name-status ${payload.hash}`, { cwd, encoding: 'utf-8' });
-      const show = execSync(`git show ${payload.hash}`, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      // Validate hash is a hex SHA before passing to git
+      if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
+        return { diff: '', files: [], error: 'Invalid commit hash' };
+      }
+      const stat = spawnSync('git', ['show', '--stat', '--name-status', payload.hash], { cwd, encoding: 'utf-8' });
+      const show = spawnSync('git', ['show', payload.hash], { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+
+      // Parse author, date, stats from --stat output
+      let author = '', date = '', filesChanged = 0, insertions = 0, deletions = 0;
+      const statLines = stat.stdout.split('\n');
+      for (const line of statLines) {
+        const authMatch = line.match(/^Author:\s+(.+)$/);
+        if (authMatch) author = authMatch[1];
+        const dateMatch = line.match(/^Date:\s+(.+)$/);
+        if (dateMatch) date = dateMatch[1];
+        // Parse: "N files changed, M insertions(+), K deletions(-)"
+        const statMatch = line.match(/(\d+)\s+files?\s*changed(?:,\s*(\d+)\s+insertions?\(\+\))?(?:,\s*(\d+)\s+deletions?\(-\))?/);
+        if (statMatch) {
+          filesChanged = parseInt(statMatch[1], 10) || 0;
+          insertions = parseInt(statMatch[2], 10) || 0;
+          deletions = parseInt(statMatch[3], 10) || 0;
+        }
+      }
+
       // Parse --name-status output for changed files
       const files: Array<{ file: string; type: string }> = [];
-      const lines = stat.split('\n');
-      for (const line of lines) {
+      for (const line of statLines) {
         const match = line.match(/^([MADR]\d{0,3})\s+(.+)$/);
         if (match) files.push({ file: match[2], type: match[1].charAt(0) });
       }
-      return { diff: show, files };
+
+      return { diff: show.stdout, files, author, date, filesChanged, insertions, deletions };
     } catch (e) { return { diff: '', files: [], error: (e as Error).message }; }
   });
 
   ipcMain.handle('git:stage', async (_event, payload: { file?: string; all?: boolean }) => {
     try {
-      const { execSync } = await import('node:child_process');
+      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
-      if (payload.all) execSync('git add -A', { cwd, encoding: 'utf-8' });
-      else if (payload.file) execSync(`git add ${payload.file}`, { cwd, encoding: 'utf-8' });
+      if (payload.all) {
+        spawnSync('git', ['add', '-A'], { cwd, encoding: 'utf-8' });
+      } else if (payload.file) {
+        spawnSync('git', ['add', payload.file], { cwd, encoding: 'utf-8' });
+      }
       return { status: 'ok' };
     } catch (e) { return { status: 'error', error: (e as Error).message }; }
   });
 
   ipcMain.handle('git:unstage', async (_event, payload: { file?: string; all?: boolean }) => {
     try {
-      const { execSync } = await import('node:child_process');
+      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
-      if (payload.all) execSync('git reset HEAD', { cwd, encoding: 'utf-8' });
-      else if (payload.file) execSync(`git reset HEAD ${payload.file}`, { cwd, encoding: 'utf-8' });
+      if (payload.all) {
+        spawnSync('git', ['reset', 'HEAD'], { cwd, encoding: 'utf-8' });
+      } else if (payload.file) {
+        spawnSync('git', ['reset', 'HEAD', payload.file], { cwd, encoding: 'utf-8' });
+      }
       return { status: 'ok' };
     } catch (e) { return { status: 'error', error: (e as Error).message }; }
   });
 
   ipcMain.handle('git:commit', async (_event, payload: { message: string }) => {
     try {
-      const { execSync } = await import('node:child_process');
+      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
-      const result = execSync(`git commit -m "${payload.message.replace(/"/g, '\\"')}"`, { cwd, encoding: 'utf-8' });
-      return { status: 'ok', output: result.trim() };
+      // Use -F - to read commit message from stdin (no shell interpolation)
+      const result = spawnSync('git', ['commit', '-F', '-'], {
+        cwd, encoding: 'utf-8',
+        input: payload.message,
+      });
+      if (result.status !== 0) {
+        return { status: 'error', error: result.stderr.trim() };
+      }
+      return { status: 'ok', output: result.stdout.trim() };
     } catch (e) { return { status: 'error', error: (e as Error).message }; }
   });
+
+  // ── Git: Remote operations ─────────────────────────────────────────────
+
+  ipcMain.handle('git:push', async (_event, payload?: { remote?: string; branch?: string; setUpstream?: boolean; force?: boolean; tags?: boolean }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['push'];
+      if (payload?.force) args.push('--force-with-lease');
+      if (payload?.tags) args.push('--tags');
+      if (payload?.setUpstream) args.push('--set-upstream');
+      if (payload?.remote) args.push(payload.remote);
+      if (payload?.branch) args.push(payload.branch);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:pull', async (_event, payload?: { remote?: string; branch?: string; rebase?: boolean }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['pull'];
+      if (payload?.rebase) args.push('--rebase');
+      if (payload?.remote) args.push(payload.remote);
+      if (payload?.branch) args.push(payload.branch);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:fetch', async (_event, payload?: { remote?: string; prune?: boolean; all?: boolean }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['fetch'];
+      if (payload?.prune) args.push('--prune');
+      if (payload?.all) args.push('--all');
+      if (payload?.remote) args.push(payload.remote);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:discard', async (_event, payload: { file: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      // Unstage first if staged, then checkout to discard
+      spawnSync('git', ['reset', 'HEAD', '--', payload.file], { cwd });
+      spawnSync('git', ['checkout', '--', payload.file], { cwd });
+      spawnSync('git', ['clean', '-f', '--', payload.file], { cwd });
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  // ── Git: Branch management ─────────────────────────────────────────────
+
+  ipcMain.handle('git:branch-list', async () => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      // List local branches with format
+      const local = spawnSync('git', ['branch', '--format=%(refname:short)|%(objectname:short)|%(upstream:short)'], { cwd, encoding: 'utf-8' });
+      const current = spawnSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf-8' });
+      const branches = local.stdout.split('\n').filter(Boolean).map(line => {
+        const [name, hash, upstream] = line.split('|');
+        return { name: name.trim(), hash, upstream: upstream?.trim() || '', current: name.trim() === current.stdout.trim() };
+      });
+      return { branches };
+    } catch (e) { return { branches: [] }; }
+  });
+
+  ipcMain.handle('git:checkout', async (_event, payload: { branch: string; create?: boolean; base?: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = payload.create ? ['checkout', '-b', payload.branch] : ['checkout', payload.branch];
+      if (payload.create && payload.base) args.push(payload.base);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:branch-delete', async (_event, payload: { branch: string; force?: boolean }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = payload.force ? ['branch', '-D', payload.branch] : ['branch', '-d', payload.branch];
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  // ── Git: Stash management ──────────────────────────────────────────────
+
+  ipcMain.handle('git:stash-list', async () => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const result = spawnSync('git', ['stash', 'list', '--format=%gd|%s|%ar'], { cwd, encoding: 'utf-8' });
+      const stashes = result.stdout.split('\n').filter(Boolean).map(line => {
+        const [ref, message, date] = line.split('|');
+        return { ref: ref.trim(), message: message.trim(), date: date.trim() };
+      });
+      return { stashes };
+    } catch (e) { return { stashes: [] }; }
+  });
+
+  ipcMain.handle('git:stash-save', async (_event, payload: { message?: string; includeUntracked?: boolean }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['stash', 'push'];
+      if (payload.includeUntracked) args.push('--include-untracked');
+      if (payload.message) args.push('-m', payload.message);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() || 'Changes stashed' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:stash-pop', async (_event, payload?: { ref?: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['stash', 'pop'];
+      if (payload?.ref) args.push(payload.ref);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:stash-drop', async (_event, payload?: { ref?: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['stash', 'drop'];
+      if (payload?.ref) args.push(payload.ref);
+      const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  // ── Git: Amend commit ──────────────────────────────────────────────────
+
+  ipcMain.handle('git:commit-amend', async (_event, payload: { message?: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const args = ['commit', '--amend'];
+      if (payload.message) {
+        args.push('-F', '-');
+      } else {
+        args.push('--no-edit');
+      }
+      const opts: any = { cwd, encoding: 'utf-8' };
+      if (payload.message) opts.input = payload.message;
+      const result = spawnSync('git', args, opts);
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok', output: result.stdout.trim() };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:show-file', async (_event, payload: { hash: string; file: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
+        return { diff: '', content: '', error: 'Invalid commit hash' };
+      }
+      // Get file content at this commit
+      const contentResult = spawnSync('git', ['show', `${payload.hash}:${payload.file}`], { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      // Get per-file diff
+      const diffResult = spawnSync('git', ['show', payload.hash, '--', payload.file], { cwd, encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+      return {
+        diff: diffResult.status === 0 ? diffResult.stdout : '',
+        content: contentResult.status === 0 ? contentResult.stdout : '',
+        error: diffResult.status !== 0 ? diffResult.stderr.trim() : undefined,
+      };
+    } catch (e) { return { diff: '', content: '', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:commit-body', async (_event, payload: { hash: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) return { body: '' };
+      const result = spawnSync('git', ['log', '-1', '--format=%B', payload.hash], { cwd, encoding: 'utf-8' });
+      return { body: result.stdout.trim() };
+    } catch (e) { return { body: '' }; }
+  });
+
+  // ── Git: Hunk-level operations ────────────────────────────────────────
+
+  ipcMain.handle('git:stage-hunk', async (_event, payload: { file: string; hunk: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const result = spawnSync('git', ['apply', '--cached'], {
+        cwd, encoding: 'utf-8',
+        input: payload.hunk,
+      });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
+  ipcMain.handle('git:revert-hunk', async (_event, payload: { file: string; hunk: string }) => {
+    try {
+      const { spawnSync } = await import('node:child_process');
+      const cwd = findGitRoot(currentWorkDir);
+      const result = spawnSync('git', ['apply', '--reverse'], {
+        cwd, encoding: 'utf-8',
+        input: payload.hunk,
+      });
+      if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
+      return { status: 'ok' };
+    } catch (e) { return { status: 'error', error: (e as Error).message }; }
+  });
+
 
   // ── Config ─────────────────────────────────────────────────────────────
 

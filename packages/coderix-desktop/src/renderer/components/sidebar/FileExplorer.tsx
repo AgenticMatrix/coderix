@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Folder, FolderOpen, File, FileCode, FileText, FileJson, FileImage, FileType, Cog, Globe, Terminal, Package } from 'lucide-react';
+import { useUIStore } from '../../store/uiStore';
 
 interface FileNode {
   name: string;
@@ -118,6 +119,8 @@ function TreeNode({ node, depth = 0, onToggle, onFileClick }: {
 }): React.ReactElement {
   const [isOpen, setIsOpen] = useState(depth < 1);
   const hasChildren = node.type === 'directory';
+  const gitStatusMap = useUIStore((s) => s.gitFileStatuses);
+  const resolvedStatus = node.gitStatus || (node.type === 'file' ? gitStatusMap[node.path] as FileNode['gitStatus'] : undefined);
 
   const handleClick = () => {
     if (hasChildren) {
@@ -147,9 +150,9 @@ function TreeNode({ node, depth = 0, onToggle, onFileClick }: {
           ? (isOpen ? <FolderOpen size={13} className="text-[var(--color-info)] flex-shrink-0" /> : <Folder size={13} className="text-[var(--color-info)] flex-shrink-0" />)
           : getFileIcon(node.name)}
         <span className="truncate text-[var(--color-text-primary)]">{node.name}</span>
-        {node.gitStatus && (
-          <span className={`ml-auto text-[10px] font-mono font-bold ${gitStatusColors[node.gitStatus]}`}>
-            {gitStatusLabels[node.gitStatus]}
+        {resolvedStatus && (
+          <span className={`ml-auto text-[10px] font-mono font-bold ${gitStatusColors[resolvedStatus]}`}>
+            {gitStatusLabels[resolvedStatus]}
           </span>
         )}
       </motion.button>

@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
+import { Notifications } from '../shared/Notifications';
 import { IconSidebar } from '../sidebar/IconSidebar';
 import type { SidebarTab } from '../sidebar/IconSidebar';
 
@@ -144,6 +145,9 @@ export function AppLayout({
       {/* Status bar */}
       <StatusBar {...statusBarProps} />
       </div>{/* closes flex-1 flex-col min-w-0 */}
+
+      {/* Toast notifications — fixed overlay */}
+      <Notifications />
     </div>
   );
 }

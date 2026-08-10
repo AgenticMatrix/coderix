@@ -73,6 +73,9 @@ export function App(): React.ReactElement {
   const toggleTerminal = useUIStore((s) => s.toggleTerminal);
   const setTheme = useUIStore((s) => s.setTheme);
   const setTerminalOpen = useUIStore((s) => s.setTerminalOpen);
+  const gitBranch = useUIStore((s) => s.gitBranch);
+  const gitAhead = useUIStore((s) => s.gitAhead);
+  const gitBehind = useUIStore((s) => s.gitBehind);
 
   // ── Settings state ─────────────────────────────────────────────────────
   const settings = useSettingsStore((s) => s.settings);
@@ -504,6 +507,9 @@ export function App(): React.ReactElement {
           cost: tokenUsage.totalCost || undefined,
           projectPath,
           onSelectProject: handleProjectSelect,
+          gitBranch: gitBranch || undefined,
+          gitAhead: gitAhead || undefined,
+          gitBehind: gitBehind || undefined,
         }}
       >
         {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}
