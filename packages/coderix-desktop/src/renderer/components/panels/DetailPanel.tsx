@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, FileText, Plus, RotateCcw, Bot } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { useEditorStore } from '../../store/editorStore.js';
+import { EditorPanel } from '../editor/EditorPanel.js';
 
 export interface DiffData {
   file: string;
@@ -162,9 +164,15 @@ function lineColor(line: string): { bg: string; fg: string } {
 export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose?: () => void }): React.ReactElement | null {
   const [stagingHunks, setStagingHunks] = useState<Set<number>>(new Set());
   const [reviewing, setReviewing] = useState(false);
+  const editorFiles = useEditorStore((s) => s.files);
   const addNotification = useUIStore((s) => s.addNotification);
   const api = (window as any).coderixAPI?.git;
   const fullApi = (window as any).coderixAPI;
+
+  // Show editor when files are open (from main)
+  if (editorFiles.length > 0) {
+    return <EditorPanel />;
+  }
 
   if (!data) {
     return (

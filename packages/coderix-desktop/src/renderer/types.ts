@@ -54,6 +54,18 @@ export interface PermissionRequest {
   message?: string;
 }
 
+/** Question request emitted by AskUserQuestion. */
+export interface QuestionRequest {
+  toolUseId: string;
+  toolName: string;
+  questions: Array<{
+    header: string;
+    question: string;
+    options?: Array<{ label: string; description: string }>;
+    multiSelect?: boolean;
+  }>;
+}
+
 // ── Session Types ─────────────────────────────────────────
 
 /** Summary information for a session in the sidebar list */

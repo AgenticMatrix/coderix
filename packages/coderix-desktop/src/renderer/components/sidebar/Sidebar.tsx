@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, FolderOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { FileExplorer } from './FileExplorer';
@@ -17,6 +17,10 @@ export interface SidebarProps {
   onNewSession?: () => void;
   /** Callback to open settings */
   onOpenSettings?: () => void;
+  /** Callback to select a project directory */
+  onSelectProject?: () => void;
+  /** Current project path shown in the sidebar */
+  projectPath?: string;
   activeTab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
 }
@@ -25,6 +29,8 @@ export function Sidebar({
   activeSessionId,
   onSessionSelect,
   onNewSession,
+  onSelectProject,
+  projectPath,
   activeTab,
   onTabChange,
 }: SidebarProps): React.ReactElement {
@@ -83,12 +89,12 @@ export function Sidebar({
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.15 }}
           >
-            <FileExplorer />
+            <FileExplorer projectPath={projectPath} />
           </motion.div>
         )}
         {activeTab === 'git' && (
           <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}>
-            <GitPanel />
+            <GitPanel projectPath={projectPath} />
           </motion.div>
         )}
       </div>

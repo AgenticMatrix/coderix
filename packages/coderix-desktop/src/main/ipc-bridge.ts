@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { join, resolve, normalize } from 'node:path';
+import { join, resolve, normalize, relative, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
@@ -45,7 +45,9 @@ export interface IpcBridgeConfig {
   fileWatcher: FileWatcherManager;
   terminalManager: TerminalManager;
   sessionManager: SessionManager;
-  reloadQueryEngine?: () => Promise<void>;
+  workDir: string;
+  model: string;
+  reloadQueryEngine?: (workDir?: string) => Promise<void>;
 }
 
 export interface IpcBridge {
@@ -86,31 +88,6 @@ export const IPC_CHANNELS = {
   APP_CHECK_UPDATE: 'app:checkUpdate',
   APP_QUIT: 'app:quit',
 
-  // Git
-  GIT_STATUS: 'git:status',
-  GIT_DIFF: 'git:diff',
-  GIT_LOG: 'git:log',
-  GIT_SHOW: 'git:show',
-  GIT_STAGE: 'git:stage',
-  GIT_UNSTAGE: 'git:unstage',
-  GIT_COMMIT: 'git:commit',
-  GIT_PUSH: 'git:push',
-  GIT_PULL: 'git:pull',
-  GIT_FETCH: 'git:fetch',
-  GIT_DISCARD: 'git:discard',
-  GIT_BRANCH_LIST: 'git:branch-list',
-  GIT_CHECKOUT: 'git:checkout',
-  GIT_BRANCH_DELETE: 'git:branch-delete',
-  GIT_STASH_LIST: 'git:stash-list',
-  GIT_STASH_SAVE: 'git:stash-save',
-  GIT_STASH_POP: 'git:stash-pop',
-  GIT_STASH_DROP: 'git:stash-drop',
-  GIT_COMMIT_AMEND: 'git:commit-amend',
-  GIT_STAGE_HUNK: 'git:stage-hunk',
-  GIT_REVERT_HUNK: 'git:revert-hunk',
-  GIT_SHOW_FILE: 'git:show-file',
-  GIT_COMMIT_BODY: 'git:commit-body',
-
   // Push (main → renderer)
   STREAM_BLOCK: 'stream:block',       // combined block event (for preload compatibility)
   STREAM_BLOCK_START: 'stream:blockStart',
@@ -149,10 +126,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   let queryEngine: QueryEngine | null = null;
   let sessionManager: SessionManager | null = initialSessionManager;
   let toolRegistry: ToolRegistry | null = null;
+  let currentWorkDir = resolve(config.workDir || process.cwd());
+  let currentModel = config.model || 'deepseek-v4-pro';
   let activeAbortController: AbortController | null = null;
   let pendingPermission: DeferredPermission | null = null;
   let pendingToolName: string | null = null;
   let pendingQuestion: DeferredQuestion | null = null;
+  let updateListenersBound = false;
   let permissionsState: {
     resolve: ((value: boolean) => void) | null;
     reject: ((reason: Error) => void) | null;
@@ -161,6 +141,38 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     resolve: ((value: Record<string, string | string[]>) => void) | null;
     reject: ((reason: Error) => void) | null;
   } = { resolve: null, reject: null };
+
+  function bindUpdaterListeners(autoUpdater: {
+    on: (...args: any[]) => any;
+  }): void {
+    if (updateListenersBound) return;
+    updateListenersBound = true;
+
+    autoUpdater.on('update-available', (info: { version?: string }) => {
+      const mw = getMainWindow(windowManager);
+      mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+        updateAvailable: true,
+        version: info?.version,
+        currentVersion: app.getVersion(),
+      });
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      const mw = getMainWindow(windowManager);
+      mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+        updateAvailable: false,
+        currentVersion: app.getVersion(),
+      });
+    });
+
+    autoUpdater.on('error', (error: Error) => {
+      const mw = getMainWindow(windowManager);
+      mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+        updateAvailable: false,
+        error: sanitizeErrorMessage(error.message),
+      });
+    });
+  }
 
   // -----------------------------------------------------------------------
   // Request / Response channels
@@ -177,9 +189,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     // Ensure we have an active session (create one if needed)
     try {
-      sessionManager.getActive();
+      const active = sessionManager.getActive();
+      if (active.cwd !== currentWorkDir) {
+        sessionManager.create({ title: '新对话', cwd: currentWorkDir, model: currentModel });
+      }
     } catch {
-      sessionManager.create({ title: '新对话' });
+      sessionManager.create({ title: '新对话', cwd: currentWorkDir, model: currentModel });
     }
 
     // Switch to requested session if it exists
@@ -333,7 +348,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('session:create', async (_event, opts?: { title?: string }) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
-    const session = sessionManager.create({ title: opts?.title ?? '新对话' });
+    const session = sessionManager.create({
+      title: opts?.title ?? '新对话',
+      cwd: currentWorkDir,
+      model: currentModel,
+    });
     return { id: session.id, title: session.title, turnCount: session.turnCount };
   });
 
@@ -444,19 +463,19 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // ── File System ────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.FS_READ_FILE, async (_event, filePath: string) => {
-    const sanitized = sanitizePath(filePath);
+    const sanitized = resolveProjectPath(filePath, currentWorkDir);
     const content = await readFile(sanitized, 'utf-8');
     return { content, path: filePath };
   });
 
   ipcMain.handle(IPC_CHANNELS.FS_WRITE_FILE, async (_event, payload: { path: string; content: string }) => {
-    const sanitized = sanitizePath(payload.path);
+    const sanitized = resolveProjectPath(payload.path, currentWorkDir);
     await writeFile(sanitized, payload.content, 'utf-8');
     return { status: 'written', path: payload.path };
   });
 
   ipcMain.handle(IPC_CHANNELS.FS_LIST_DIR, async (_event, dirPath: string) => {
-    const sanitized = sanitizePath(dirPath);
+    const sanitized = resolveProjectPath(dirPath, currentWorkDir);
     const entries = await readdir(sanitized, { withFileTypes: true });
     const result = await Promise.all(
       entries.map(async (entry) => {
@@ -478,9 +497,38 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   });
 
   ipcMain.handle(IPC_CHANNELS.FS_WATCH, async (_event, watchPath: string) => {
-    const sanitized = sanitizePath(watchPath);
+    const sanitized = resolveProjectPath(watchPath, currentWorkDir);
     const watcherId = fileWatcher.watch(sanitized);
     return { watcherId, path: watchPath };
+  });
+
+  ipcMain.handle('project:get', async () => {
+    return { path: currentWorkDir };
+  });
+
+  ipcMain.handle('project:select', async () => {
+    const mainWindow = getMainWindow(windowManager);
+    if (!mainWindow) {
+      throw new Error('No main window');
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择项目目录',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: currentWorkDir };
+    }
+
+    const nextWorkDir = resolve(result.filePaths[0]!);
+    currentWorkDir = nextWorkDir;
+
+    if (config.reloadQueryEngine) {
+      await config.reloadQueryEngine(nextWorkDir);
+    }
+
+    return { canceled: false, path: nextWorkDir };
   });
 
   // ── Terminal ───────────────────────────────────────────────────────────
@@ -491,7 +539,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (!mainWindow) throw new Error('No main window');
 
     terminalManager.create(terminalId, {
-      cwd: opts.cwd ?? process.cwd(),
+      cwd: opts.cwd ?? currentWorkDir,
       rows: opts.rows ?? 30,
       cols: opts.cols ?? 120,
       onData: (data: string) => {
@@ -523,7 +571,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const { execSync } = await import('node:child_process');
     const { existsSync } = await import('node:fs');
     let cwd: string;
-    try { cwd = findGitRoot(); } catch { return { branch: '', files: [], commits: [] }; }
+    try { cwd = findGitRoot(currentWorkDir); } catch { return { branch: '', files: [], commits: [] }; }
     const inRepo = existsSync(require('node:path').join(cwd, '.git'));
 
     if (!inRepo) {
@@ -587,7 +635,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:diff', async (_event, payload: { file: string; staged?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = payload.staged
         ? ['diff', '--staged', '--', payload.file]
         : ['diff', '--', payload.file];
@@ -599,7 +647,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:log', async (_event, payload?: { maxCount?: number }) => {
     try {
       const { execSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const n = payload?.maxCount ?? 30;
       const log = execSync(
         `git log --all --graph --format="%h %s%x00%an%x00%ar%x00%ad%x00%d" -${n}`,
@@ -628,7 +676,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:show', async (_event, payload: { hash: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       // Validate hash is a hex SHA before passing to git
       if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
         return { diff: '', files: [], error: 'Invalid commit hash' };
@@ -667,7 +715,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:stage', async (_event, payload: { file?: string; all?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       if (payload.all) {
         spawnSync('git', ['add', '-A'], { cwd, encoding: 'utf-8' });
       } else if (payload.file) {
@@ -680,7 +728,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:unstage', async (_event, payload: { file?: string; all?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       if (payload.all) {
         spawnSync('git', ['reset', 'HEAD'], { cwd, encoding: 'utf-8' });
       } else if (payload.file) {
@@ -693,7 +741,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:commit', async (_event, payload: { message: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       // Use -F - to read commit message from stdin (no shell interpolation)
       const result = spawnSync('git', ['commit', '-F', '-'], {
         cwd, encoding: 'utf-8',
@@ -711,7 +759,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:push', async (_event, payload?: { remote?: string; branch?: string; setUpstream?: boolean; force?: boolean; tags?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['push'];
       if (payload?.force) args.push('--force-with-lease');
       if (payload?.tags) args.push('--tags');
@@ -727,7 +775,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:pull', async (_event, payload?: { remote?: string; branch?: string; rebase?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['pull'];
       if (payload?.rebase) args.push('--rebase');
       if (payload?.remote) args.push(payload.remote);
@@ -741,7 +789,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:fetch', async (_event, payload?: { remote?: string; prune?: boolean; all?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['fetch'];
       if (payload?.prune) args.push('--prune');
       if (payload?.all) args.push('--all');
@@ -755,7 +803,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:discard', async (_event, payload: { file: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       // Unstage first if staged, then checkout to discard
       spawnSync('git', ['reset', 'HEAD', '--', payload.file], { cwd });
       spawnSync('git', ['checkout', '--', payload.file], { cwd });
@@ -769,7 +817,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:branch-list', async () => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       // List local branches with format
       const local = spawnSync('git', ['branch', '--format=%(refname:short)|%(objectname:short)|%(upstream:short)'], { cwd, encoding: 'utf-8' });
       const current = spawnSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf-8' });
@@ -784,7 +832,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:checkout', async (_event, payload: { branch: string; create?: boolean; base?: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = payload.create ? ['checkout', '-b', payload.branch] : ['checkout', payload.branch];
       if (payload.create && payload.base) args.push(payload.base);
       const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
@@ -796,7 +844,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:branch-delete', async (_event, payload: { branch: string; force?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = payload.force ? ['branch', '-D', payload.branch] : ['branch', '-d', payload.branch];
       const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
       if (result.status !== 0) return { status: 'error', error: result.stderr.trim() };
@@ -809,7 +857,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:stash-list', async () => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const result = spawnSync('git', ['stash', 'list', '--format=%gd|%s|%ar'], { cwd, encoding: 'utf-8' });
       const stashes = result.stdout.split('\n').filter(Boolean).map(line => {
         const [ref, message, date] = line.split('|');
@@ -822,7 +870,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:stash-save', async (_event, payload: { message?: string; includeUntracked?: boolean }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['stash', 'push'];
       if (payload.includeUntracked) args.push('--include-untracked');
       if (payload.message) args.push('-m', payload.message);
@@ -835,7 +883,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:stash-pop', async (_event, payload?: { ref?: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['stash', 'pop'];
       if (payload?.ref) args.push(payload.ref);
       const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
@@ -847,7 +895,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:stash-drop', async (_event, payload?: { ref?: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['stash', 'drop'];
       if (payload?.ref) args.push(payload.ref);
       const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
@@ -861,7 +909,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:commit-amend', async (_event, payload: { message?: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const args = ['commit', '--amend'];
       if (payload.message) {
         args.push('-F', '-');
@@ -879,7 +927,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:show-file', async (_event, payload: { hash: string; file: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
         return { diff: '', content: '', error: 'Invalid commit hash' };
       }
@@ -898,7 +946,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:commit-body', async (_event, payload: { hash: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) return { body: '' };
       const result = spawnSync('git', ['log', '-1', '--format=%B', payload.hash], { cwd, encoding: 'utf-8' });
       return { body: result.stdout.trim() };
@@ -910,7 +958,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:stage-hunk', async (_event, payload: { file: string; hunk: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const result = spawnSync('git', ['apply', '--cached'], {
         cwd, encoding: 'utf-8',
         input: payload.hunk,
@@ -923,7 +971,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle('git:revert-hunk', async (_event, payload: { file: string; hunk: string }) => {
     try {
       const { spawnSync } = await import('node:child_process');
-      const cwd = findGitRoot();
+      const cwd = findGitRoot(currentWorkDir);
       const result = spawnSync('git', ['apply', '--reverse'], {
         cwd, encoding: 'utf-8',
         input: payload.hunk,
@@ -932,6 +980,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       return { status: 'ok' };
     } catch (e) { return { status: 'error', error: (e as Error).message }; }
   });
+
 
   // ── Config ─────────────────────────────────────────────────────────────
 
@@ -978,8 +1027,42 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.APP_VERSION, async () => app.getVersion());
 
   ipcMain.handle(IPC_CHANNELS.APP_CHECK_UPDATE, async () => {
-    // Placeholder — actual implementation uses electron-updater
-    return { updateAvailable: false };
+    if (!app.isPackaged) {
+      return { updateAvailable: false, skipped: true, reason: 'development' };
+    }
+
+    try {
+      const { autoUpdater } = await import('electron-updater');
+      bindUpdaterListeners(autoUpdater);
+      autoUpdater.autoDownload = false;
+      autoUpdater.autoInstallOnAppQuit = false;
+
+      const result = await autoUpdater.checkForUpdates();
+      const updateInfo = result?.updateInfo;
+      const updateAvailable = !!updateInfo && updateInfo.version !== app.getVersion();
+
+      if (updateAvailable) {
+        const mw = getMainWindow(windowManager);
+        mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+          updateAvailable: true,
+          version: updateInfo?.version,
+          currentVersion: app.getVersion(),
+        });
+      }
+
+      return {
+        updateAvailable,
+        currentVersion: app.getVersion(),
+        version: updateInfo?.version,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('[Coderix] update check failed:', message);
+      return {
+        updateAvailable: false,
+        error: sanitizeErrorMessage(message),
+      };
+    }
   });
 
   ipcMain.on(IPC_CHANNELS.APP_QUIT, () => {
@@ -1070,8 +1153,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       if (config.sessionManager) {
         sessionManager = config.sessionManager;
       }
+      if (config.cwd) {
+        currentWorkDir = resolve(config.cwd);
+      }
+      if (config.model) {
+        currentModel = config.model;
+      }
       if (!isReload || !toolRegistry) {
         toolRegistry = config.toolRegistry ?? new ToolRegistry();
+      }
+
+      if (!sessionManager) {
+        throw new Error('SessionManager not initialized');
       }
 
       // Instantiate QueryEngine
@@ -1113,29 +1206,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_GET_MODEL_LIST);
       ipcMain.removeHandler(IPC_CHANNELS.APP_VERSION);
       ipcMain.removeHandler(IPC_CHANNELS.APP_CHECK_UPDATE);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STATUS);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_DIFF);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_LOG);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_SHOW);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STAGE);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_UNSTAGE);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_COMMIT);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_PUSH);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_PULL);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_FETCH);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_DISCARD);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_BRANCH_LIST);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_CHECKOUT);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_BRANCH_DELETE);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STASH_LIST);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STASH_SAVE);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STASH_POP);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STASH_DROP);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_COMMIT_AMEND);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_STAGE_HUNK);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_REVERT_HUNK);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_SHOW_FILE);
-      ipcMain.removeHandler(IPC_CHANNELS.GIT_COMMIT_BODY);
+      ipcMain.removeHandler('project:get');
+      ipcMain.removeHandler('project:select');
     },
   };
 }
@@ -1144,8 +1216,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 // Git helper — find repo root
 // ---------------------------------------------------------------------------
 
-function findGitRoot(): string {
-  let current = process.cwd();
+function findGitRoot(startDir: string): string {
+  let current = resolve(startDir);
   const { join, dirname } = require('node:path') as typeof import('node:path');
   while (!require('node:fs').existsSync(join(current, '.git')) && current !== dirname(current)) {
     current = dirname(current);
@@ -1185,11 +1257,12 @@ function sanitizeErrorMessage(raw: string): string {
 // Path sanitization — prevent directory traversal attacks
 // ---------------------------------------------------------------------------
 
-function sanitizePath(userPath: string): string {
-  const normalized = normalize(userPath);
-  // Prevent escaping to parent directories via ../
-  if (normalized.includes('..')) {
+function resolveProjectPath(userPath: string, projectRoot: string): string {
+  const root = resolve(projectRoot);
+  const candidate = isAbsolute(userPath) ? resolve(userPath) : resolve(root, userPath || '.');
+  const rel = relative(root, candidate);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
     throw new Error(`Path traversal not allowed: ${userPath}`);
   }
-  return normalized;
+  return candidate;
 }

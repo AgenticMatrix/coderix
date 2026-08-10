@@ -9,11 +9,20 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
   const [draft, setDraft] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [appVersion, setAppVersion] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState('');
   const { setTheme, setPermissionMode } = useUIStore();
   const { settings, loading, load, save } = useSettingsStore();
 
   // Reload from file every time settings panel opens
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    window.coderixAPI?.app?.getVersion?.()
+      .then((version) => setAppVersion(version))
+      .catch(() => {});
+  }, []);
 
   // Sync from store to draft whenever store updates (e.g. after load completes)
   useEffect(() => {
@@ -68,6 +77,28 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
   }, []);
 
   const toggleApiKey = useCallback((name: string) => setShowApiKey((s) => ({ ...s, [name]: !s[name] })), []);
+
+  const handleCheckUpdate = useCallback(async () => {
+    if (!window.coderixAPI?.app?.checkUpdate) return;
+    setCheckingUpdate(true);
+    setUpdateMsg('');
+    try {
+      const result = await window.coderixAPI.app.checkUpdate();
+      if (result.updateAvailable) {
+        setUpdateMsg(`发现新版本 ${result.version ?? ''}`.trim());
+      } else if (result.error) {
+        setUpdateMsg(result.error);
+      } else if (result.skipped) {
+        setUpdateMsg('开发环境未执行更新检查');
+      } else {
+        setUpdateMsg('已是最新版本');
+      }
+    } catch (err) {
+      setUpdateMsg((err as Error).message);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }, []);
 
   // ── Inline styles ────────────────────────────────────────
   const S = {
@@ -192,6 +223,24 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
             </button>
           ))}
+        </div>
+        <div style={S.section}>
+          <h3 style={S.sectionTitle}>更新</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <button onClick={handleCheckUpdate} disabled={checkingUpdate} style={S.saveBtn}>
+              {checkingUpdate ? '检查中...' : '检查更新'}
+            </button>
+            {appVersion && (
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
+                版本 {appVersion}
+              </span>
+            )}
+            {updateMsg && (
+              <span style={{ fontSize: 'var(--text-xs)', color: updateMsg.includes('发现') ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
+                {updateMsg}
+              </span>
+            )}
+          </div>
         </div>
       </div>
       </div>

@@ -100,10 +100,10 @@ export function ResizablePanel({
   const sizeStyle = isHorizontal ? { width: displaySize } : { height: displaySize };
 
   const handlePositionStyles: Record<string, string> = {
-    right: 'left-0 top-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-brand)]/30 active:bg-[var(--color-brand)]/50 transition-colors',
-    left: 'right-0 top-0 h-full w-1 cursor-col-resize hover:bg-[var(--color-brand)]/30 active:bg-[var(--color-brand)]/50 transition-colors',
-    bottom: 'top-0 left-0 w-full h-1 cursor-row-resize hover:bg-[var(--color-brand)]/30 active:bg-[var(--color-brand)]/50 transition-colors',
-    top: 'bottom-0 left-0 w-full h-1 cursor-row-resize hover:bg-[var(--color-brand)]/30 active:bg-[var(--color-brand)]/50 transition-colors',
+    right: 'left-0 top-0 h-full w-[3px] cursor-col-resize bg-transparent hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors z-10',
+    left: 'right-0 top-0 h-full w-[3px] cursor-col-resize bg-transparent hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors z-10',
+    bottom: 'top-0 left-0 w-full h-[3px] cursor-row-resize bg-transparent hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors z-10',
+    top: 'bottom-0 left-0 w-full h-[3px] cursor-row-resize bg-transparent hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors z-10',
   };
 
   return (

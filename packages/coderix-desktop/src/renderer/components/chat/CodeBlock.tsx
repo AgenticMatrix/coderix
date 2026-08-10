@@ -1,14 +1,17 @@
 import { useState, useCallback } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, FileOutput } from 'lucide-react';
 
 interface CodeBlockProps {
   code: string;
   language: string;
   maxLines?: number;
+  /** Optional target file path (auto-detected from language label) */
+  filePath?: string;
 }
 
-export function CodeBlock({ code, language, maxLines }: CodeBlockProps) {
+export function CodeBlock({ code, language, maxLines, filePath }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const [applied, setApplied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const lines = code.split('\n');
@@ -20,10 +23,25 @@ export function CodeBlock({ code, language, maxLines }: CodeBlockProps) {
       await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
-    }
+    } catch { /* noop */ }
   }, [code]);
+
+  const handleApply = useCallback(async () => {
+    const target = filePath || window.prompt('File path to apply to:');
+    if (!target || !target.trim()) return;
+    const api = window.coderixAPI?.fs;
+    if (!api) return;
+    try {
+      await api.writeFile(target.trim(), code);
+      setApplied(true);
+      setTimeout(() => setApplied(false), 2000);
+    } catch (e) {
+      alert('Failed to write: ' + (e as Error).message);
+    }
+  }, [code, filePath]);
+
+  // Auto-detect file path from language label: "tsx src/App.tsx" → src/App.tsx
+  const detectedFile = !filePath && language ? language.split(' ').find(w => w.includes('.') || w.includes('/')) : undefined;
 
   return (
     <div className="my-2 rounded-[var(--radius-lg)] border border-[var(--color-separator)] overflow-hidden bg-[var(--color-code-bg)]">
@@ -32,14 +50,24 @@ export function CodeBlock({ code, language, maxLines }: CodeBlockProps) {
         <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
           {language || 'text'}
         </span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors px-1.5 py-0.5 rounded"
-          title="Copy code"
-        >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleApply}
+            className="flex items-center gap-1 text-[11px] text-[var(--color-link)] hover:text-[var(--color-brand)] transition-colors px-1.5 py-0.5 rounded"
+            title={applied ? 'Applied!' : 'Apply to file'}
+          >
+            {applied ? <Check size={12} /> : <FileOutput size={12} />}
+            {applied ? 'Applied' : detectedFile || 'Apply'}
+          </button>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors px-1.5 py-0.5 rounded"
+            title="Copy code"
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
       </div>
 
       {/* Code content */}

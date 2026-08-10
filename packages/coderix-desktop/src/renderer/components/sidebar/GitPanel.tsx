@@ -22,7 +22,7 @@ const BRANCH_COLORS = [
   '#00bcd4', '#795548', '#607d8b', '#cddc39', '#ff5722',
 ];
 
-export function GitPanel(): React.ReactElement {
+export function GitPanel({ projectPath }: { projectPath?: string }): React.ReactElement {
   const [branch, setBranch] = useState('');
   const [files, setFiles] = useState<GitFile[]>([]);
   const [commits, setCommits] = useState<GitCommit[]>([]);
@@ -107,7 +107,7 @@ const api = window.coderixAPI?.git;
     loadingRef.current = false;
   }, [api, addNotification, setGitBranch, setGitFileStatuses]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, projectPath]);
 
   // Auto-refresh: silently poll git status every 5s
   useEffect(() => {

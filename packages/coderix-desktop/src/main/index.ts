@@ -77,6 +77,9 @@ let ipcBridge: IpcBridge | null = null;
 let fileWatcher: FileWatcherManager | null = null;
 let terminalManager: TerminalManager | null = null;
 let trayManager: TrayManager | null = null;
+let sessionManagerRef: SessionManager | null = null;
+let activeWorkDir = process.cwd();
+let activeModel = 'deepseek-v4-pro';
 
 // ---------------------------------------------------------------------------
 // Bootstrap sequence — create window FIRST before any heavy init
@@ -84,12 +87,17 @@ let trayManager: TrayManager | null = null;
 
 async function bootstrap(): Promise<void> {
   try {
+    const initialConfig = loadConfig();
+    activeWorkDir = initialConfig.cwd || process.cwd();
+    activeModel = initialConfig.model;
+
     // Step 1: Create window manager
     windowManager = createWindowManager();
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
     const sessionManager = new SessionManager();
+    sessionManagerRef = sessionManager;
 
     // Step 3: Create IPC bridge BEFORE window (renderer calls IPC on load)
     fileWatcher = createFileWatcherManager();
@@ -99,7 +107,9 @@ async function bootstrap(): Promise<void> {
       fileWatcher,
       terminalManager,
       sessionManager,
-      reloadQueryEngine: () => initQueryEngine(),
+      workDir: activeWorkDir,
+      model: activeModel,
+      reloadQueryEngine: (workDir) => initQueryEngine(workDir),
     });
 
     // Step 3: Create the window — this must happen before heavy init
@@ -135,7 +145,7 @@ async function bootstrap(): Promise<void> {
 
     // Step 7: Defer QueryEngine init to avoid blocking renderer startup
     setTimeout(() => {
-      initQueryEngine().catch((err) => {
+      initQueryEngine(activeWorkDir).catch((err) => {
         console.error('[Coderix] Failed to initialize query engine:', err);
       });
     }, 1000);
@@ -150,11 +160,12 @@ async function bootstrap(): Promise<void> {
 // QueryEngine initialization
 // ---------------------------------------------------------------------------
 
-async function initQueryEngine(): Promise<void> {
+async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
   if (!ipcBridge) {
     throw new Error('IPC bridge not initialized');
   }
 
+  activeWorkDir = workDir;
   const isReload = ipcBridge.queryEngine !== null;
 
   // Load config from ~/.coderix/settings.json
@@ -163,6 +174,7 @@ async function initQueryEngine(): Promise<void> {
   const apiKey = appConfig.apiKey;
   const baseURL = appConfig.baseUrl;
 
+  activeModel = model;
   console.log(`[Coderix] Config ${isReload ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${baseURL}, apiKey=${apiKey.slice(0, 10)}...`);
 
   let callModel: QueryEngineConfig['callModel'];
@@ -172,7 +184,7 @@ async function initQueryEngine(): Promise<void> {
       apiKey,
       baseURL,
     });
-    callModel = createCallModelFromClient(client, model);
+    callModel = createCallModelFromClient(client as any, model);
     console.log(`[Coderix] callModel initialized: model=${model}, baseURL=${baseURL}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -220,7 +232,7 @@ async function initQueryEngine(): Promise<void> {
     toolRegistry.register(
       { name, description, input_schema },
       async (input, ctx) => {
-        const result = await t.executor(input, { cwd: ctx.cwd ?? process.cwd() });
+        const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir });
         return { content: String(result.content ?? ''), isError: result.isError ?? false };
       },
     );
@@ -228,10 +240,10 @@ async function initQueryEngine(): Promise<void> {
   console.log(`[Coderix] Registered ${toolRegistry.names.length} tools: ${toolRegistry.names.join(', ')}`);
 
   const config: QueryEngineConfig = {
-    cwd: process.cwd(),
+    cwd: activeWorkDir,
     model,
     customSystemPrompt: undefined,
-    // sessionManager is already set in the IPC bridge from bootstrap()
+    sessionManager: sessionManagerRef!,
     toolRegistry: isReload ? undefined! : toolRegistry,
     callModel,
   };

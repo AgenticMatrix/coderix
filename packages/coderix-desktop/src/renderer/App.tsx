@@ -23,6 +23,7 @@ import { ChatView } from './components/chat/ChatView';
 import type { ChatViewMessage } from './components/chat/ChatView';
 import { Composer } from './components/composer/Composer';
 import { PermissionPrompt } from './components/composer/PermissionPrompt';
+import { QuestionPrompt } from './components/composer/QuestionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
@@ -30,14 +31,19 @@ import { GlobalModal } from './components/modals';
 import type { SidebarTab } from './components/sidebar/IconSidebar';
 
 import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';
+import { useSettingsStore } from './store/settingsStore.js';
+import { useEditorStore } from './store/editorStore.js';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import {
   submitQuery,
+  interruptQuery,
   onPermissionRequest,
   approvePermission,
   denyPermission,
+  getProjectDirectory,
+  selectProjectDirectory,
 } from './ipc-client';
-import type { PermissionRequest } from './types';
+import type { PermissionRequest, QuestionRequest } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +52,10 @@ import type { PermissionRequest } from './types';
 interface PendingPermission {
   request: PermissionRequest;
   resolve: (approved: boolean) => void;
+}
+
+interface PendingQuestion {
+  request: QuestionRequest;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +77,10 @@ export function App(): React.ReactElement {
   const gitAhead = useUIStore((s) => s.gitAhead);
   const gitBehind = useUIStore((s) => s.gitBehind);
 
+  // ── Settings state ─────────────────────────────────────────────────────
+  const settings = useSettingsStore((s) => s.settings);
+  const loadSettings = useSettingsStore((s) => s.load);
+
   // ── Chat State ──────────────────────────────────────────────────────────
   const messages = useChatStore((s) => s.messages);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -87,8 +101,10 @@ export function App(): React.ReactElement {
   // ── Local state ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<QuestionRequest | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sessions');
   const [diffData, setDiffData] = useState<{ file: string; diff: string } | null>(null);
+  const [projectPath, setProjectPath] = useState('');
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -97,6 +113,17 @@ export function App(): React.ReactElement {
   // Registers onStreamBlock, onStreamDone, onStreamError, onTokenUsage
   // via the preload contextBridge. Cleaned up on unmount.
   useStreamEvents();
+
+  // ── Load settings / current project on mount ──────────────────────────
+  useEffect(() => {
+    loadSettings().catch((err) => console.error('[App] Failed to load settings:', err));
+  }, [loadSettings]);
+
+  useEffect(() => {
+    getProjectDirectory()
+      .then((result) => setProjectPath(result.path))
+      .catch((err) => console.error('[App] Failed to load project directory:', err));
+  }, []);
 
   // ── Permission request listener ─────────────────────────────────────────
   useEffect(() => {
@@ -119,22 +146,9 @@ export function App(): React.ReactElement {
   // ── Question request listener (auto-answer for now) ────────────────────
   useEffect(() => {
     if (!window.coderixAPI?.onQuestionRequest) return;
-    const unsub = window.coderixAPI.onQuestionRequest((req: any) => {
+    const unsub = window.coderixAPI.onQuestionRequest((req: QuestionRequest) => {
       console.log('[App] Question received:', req.toolName, req.questions?.length, 'questions');
-      // Auto-answer with defaults for now (proper UI TBD)
-      const answers: Record<string, string | string[]> = {};
-      if (req.questions) {
-        for (const q of req.questions) {
-          if (q.options && q.options.length > 0) {
-            answers[q.question] = [q.options[0].label];
-          } else {
-            answers[q.question] = '';
-          }
-        }
-      }
-      window.coderixAPI.question.answer(req.toolUseId, answers).catch((err: any) => {
-        console.error('[App] Failed to answer question:', err);
-      });
+      setPendingQuestion(req);
     });
     return unsub;
   }, []);
@@ -155,6 +169,26 @@ export function App(): React.ReactElement {
     }
     init().catch((err) => console.error('[App] Session init failed:', err));
   }, [loadSessions, createSession, setSessionId]);
+
+  // ── Auto-close right panel when all editor tabs are closed ──────────
+  const editorFiles = useEditorStore((s) => s.files);
+  useEffect(() => {
+    if (editorFiles.length === 0 && detailPanelOpen && !diffData) {
+      toggleDetailPanel();
+    }
+  }, [editorFiles.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── File open event (from FileExplorer) ─────────────────────────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail as { path: string; name: string; content: string };
+      useEditorStore.getState().openFile({ path: d.path, name: d.name, content: d.content, language: '', modified: false });
+      // Open the right panel if not already open
+      if (!useUIStore.getState().detailPanelOpen) useUIStore.getState().toggleDetailPanel();
+    };
+    window.addEventListener('coderix:open-file', handler);
+    return () => window.removeEventListener('coderix:open-file', handler);
+  }, []);
 
   // ── Git diff event listener ──────────────────────────────────────────
   useEffect(() => {
@@ -192,10 +226,18 @@ export function App(): React.ReactElement {
         e.preventDefault();
         toggleDetailPanel();
       }
-      // ⌘` — toggle terminal
-      if (meta && e.key === '`') {
+      // ⌘` — toggle terminal (use code for cross-keyboard reliability)
+      if (meta && (e.key === '`' || e.code === 'Backquote')) {
         e.preventDefault();
         toggleTerminal();
+      }
+      // ⌘. — interrupt generation
+      if (meta && e.key === '.') {
+        e.preventDefault();
+        void interruptQuery().catch((err) => {
+          console.error('[App] Failed to interrupt query:', err);
+        });
+        useChatStore.getState().interruptStream();
       }
       // ⌘⇧T — toggle theme
       if (meta && e.shiftKey && e.key === 't') {
@@ -328,6 +370,21 @@ export function App(): React.ReactElement {
     setSettingsOpen((prev) => !prev);
   }, []);
 
+  const handleProjectSelect = useCallback(async () => {
+    try {
+      const result = await selectProjectDirectory();
+      if (result.canceled) return;
+      setProjectPath(result.path);
+      setSessionId(null);
+      useSessionStore.getState().setCurrentSessionId(null);
+      useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null });
+      useStreamStore.setState({ currentMessage: null });
+      await loadSessions();
+    } catch (err) {
+      console.error('[App] Failed to select project directory:', err);
+    }
+  }, [loadSessions, setSessionId]);
+
   const handleComposerSubmit = useCallback(
     async (value: string) => {
       if (!value.trim()) return;
@@ -425,27 +482,31 @@ export function App(): React.ReactElement {
     <>
       <AppLayout
         sidebar={
-          <Sidebar
-            activeSessionId={currentSessionId ?? undefined}
-            onSessionSelect={handleSessionSelect}
-            onNewSession={handleNewSession}
-            onOpenSettings={() => setSettingsOpen(true)}
-            activeTab={sidebarTab}
-            onTabChange={setSidebarTab}
-          />
-        }
+        <Sidebar
+          activeSessionId={currentSessionId ?? undefined}
+          onSessionSelect={handleSessionSelect}
+          onNewSession={handleNewSession}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onSelectProject={handleProjectSelect}
+          activeTab={sidebarTab}
+          onTabChange={setSidebarTab}
+          projectPath={projectPath}
+        />
+      }
         sidebarVisible={sidebarOpen}
         iconActiveTab={sidebarTab}
         onIconTabChange={setSidebarTab}
         onIconSettings={() => setSettingsOpen(true)}
-        detailPanel={<DetailPanel data={diffData} onClose={() => setDiffData(null)} />}
+        detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
         statusBarProps={{
-          model: 'DeepSeek V4 Pro',
+          model: settings?.defaultModel || '未配置模型',
           agentStatus,
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
           cost: tokenUsage.totalCost || undefined,
+          projectPath,
+          onSelectProject: handleProjectSelect,
           gitBranch: gitBranch || undefined,
           gitAhead: gitAhead || undefined,
           gitBehind: gitBehind || undefined,
@@ -483,13 +544,42 @@ export function App(): React.ReactElement {
             />
           )}
 
+          {pendingQuestion && (
+            <QuestionPrompt
+              request={pendingQuestion}
+              onResolved={() => setPendingQuestion(null)}
+            />
+          )}
+
           {/* Composer — fixed at bottom of chat */}
           <Composer
             onSubmit={handleComposerSubmit}
-            disabled={isStreaming}
-            model="DeepSeek V4 Pro"
+            disabled={isStreaming || pendingQuestion !== null}
+            isStreaming={isStreaming}
+            onInterrupt={() => {
+              void interruptQuery().catch((err) => {
+                console.error('[App] Failed to interrupt query:', err);
+              });
+              useChatStore.getState().interruptStream();
+            }}
+            model={settings?.defaultModel || '未配置模型'}
+            onModelPick={() => setSettingsOpen(true)}
           />
 
+          {/* Terminal toggle bar — always visible */}
+          <div
+            onClick={toggleTerminal}
+            style={{
+              height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderTop: '1px solid var(--color-separator)',
+              background: 'var(--color-bg-secondary)', cursor: 'pointer',
+              fontSize: '10px', color: 'var(--color-text-tertiary)',
+              userSelect: 'none',
+            }}
+            title="Toggle Terminal (⌘`)"
+          >
+            {terminalOpen ? '▼ Terminal' : '▲ Terminal'}
+          </div>
           {/* Terminal — collapsible */}
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>

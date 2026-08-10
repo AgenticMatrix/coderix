@@ -432,6 +432,20 @@ const coderixAPI = {
     },
   },
 
+  // ── Project ──────────────────────────────────────────────────────────
+
+  project: {
+    /** Get the current project directory. */
+    get(): Promise<{ path: string }> {
+      return ipcRenderer.invoke('project:get');
+    },
+
+    /** Select a new project directory. */
+    select(): Promise<{ canceled: boolean; path: string }> {
+      return ipcRenderer.invoke('project:select');
+    },
+  },
+
   // ── App ──────────────────────────────────────────────────────────────
 
   // ── Git ─────────────────────────────────────────────────────────────
@@ -547,7 +561,7 @@ const coderixAPI = {
     },
 
     /** Check for available updates. */
-    checkUpdate(): Promise<{ updateAvailable: boolean }> {
+    checkUpdate(): Promise<{ updateAvailable: boolean; currentVersion?: string; version?: string; skipped?: boolean; reason?: string; error?: string }> {
       return ipcRenderer.invoke(CH.APP_CHECK_UPDATE);
     },
 
