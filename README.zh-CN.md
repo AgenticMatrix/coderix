@@ -16,7 +16,7 @@
 <img src="./assets/screen.gif" width="80%" alt="Coderix 演示" />
 </div>
 
-Coderix 是一个强大的命令行 AI 编程助手，完全运行在你的终端中。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。基于 Ink/React 构建，拥有精美的终端界面。
+Coderix 是一个强大的 AI 编程助手，可在终端或桌面应用中使用。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。基于 Ink/React 构建，拥有精美的终端界面（TUI 版），同时提供共用同一核心引擎的 Electron 桌面版（React DOM + Monaco + xterm）。
 
 > 本项目 **99.9%** 的代码由 **DeepSeek** 模型生成。我们相信，展示 AI 编码能力的最佳方式就是用 AI 构建一个编码工具。
 
@@ -51,8 +51,22 @@ cd coderix
 
 ### 开发模式
 
+Coderix 提供两种界面，共用同一套核心引擎：
+
+| 命令 | 界面 |
+|---|---|
+| `npm run dev:cli` | **TUI 版** —— 终端界面（Ink/React） |
+| `npm run dev:desk` | **桌面版** —— Electron 应用（React DOM） |
+
 ```bash
-npm run dev
+# TUI 版（终端界面）
+npm run dev:cli
+
+# 桌面版（Electron）
+npm run dev:desk
+
+# 桌面版（一键启动，自动释放 5173 端口）
+./start_desk.sh
 ```
 
 ### 配置
@@ -94,6 +108,7 @@ coderix -m "deepseek/deepseek-v4-pro"
 - **技能模块** — 可插拔的技能插件
 - **会话管理** — 检查点保存、恢复、分支会话
 - **模型选择器** — 交互式终端模型选择（`coderix --model` / `coderix setup`）
+- **桌面应用** — Electron 桌面客户端，内置 Monaco 编辑器、xterm 终端和源代码管理
 
 ---
 
