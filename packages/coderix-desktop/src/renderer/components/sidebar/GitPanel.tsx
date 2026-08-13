@@ -16,12 +16,6 @@ const TYPE_CFG: Record<string, { label: string; color: string }> = {
   '?': { label: 'U', color: '#4caf50' },
 };
 
-// Branch colors for graph lines (cycling palette)
-const BRANCH_COLORS = [
-  '#2196f3', '#4caf50', '#ff9800', '#e91e63', '#9c27b0',
-  '#00bcd4', '#795548', '#607d8b', '#cddc39', '#ff5722',
-];
-
 export function GitPanel({ projectPath }: { projectPath?: string }): React.ReactElement {
   const [branch, setBranch] = useState('');
   const [files, setFiles] = useState<GitFile[]>([]);
@@ -458,12 +452,8 @@ const api = window.coderixAPI?.git;
                 onMouseEnter={(e) => { if (c.author) setHoveredCommit({ commit: c, x: e.clientX, y: e.clientY }); }}
                 onMouseMove={(e) => { if (hoveredCommit?.commit.hash === c.hash) setHoveredCommit(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : prev); }}
                 onMouseLeave={() => setHoveredCommit(null)}
-                style={{ paddingLeft: '2px', lineHeight: '16px', minHeight: '16px' }}
+                style={{ paddingLeft: '20px', lineHeight: '16px', minHeight: '16px' }}
               >
-                {/* Graph visualization */}
-                <span className="font-mono text-[11px] leading-none flex-shrink-0" style={{ width: '60px', whiteSpace: 'pre' }}>
-                  {c.graph ? renderGraph(c.graph) : ''}
-                </span>
                 {/* Commit hash + message */}
                 <span className="font-mono text-[10px] text-[var(--color-text-tertiary)] flex-shrink-0 mr-1">{c.hash.slice(0, 7)}</span>
                 <span className="truncate text-[11px] text-[var(--color-text-primary)]">{c.message}</span>
@@ -490,7 +480,7 @@ const api = window.coderixAPI?.git;
                 )}
               </div>
               {isOpen && (
-                <div className="pl-[66px] pr-2 pb-2">
+                <div className="pl-8 pr-2 pb-2">
                   {loadingCommit ? (
                     <div className="text-[var(--color-text-tertiary)] py-1">Loading...</div>
                   ) : commitDetail?.files?.length ? (
@@ -625,55 +615,6 @@ function FileRow({ file, onClick, actionLabel, actionTitle, onAction, contextAct
         </>
       )}
     </>
-  );
-}
-
-// ── Git graph ASCII → colored React element rendering ──────────
-
-function renderGraph(graph: string): React.ReactNode {
-  if (!graph) return null;
-
-  // Assign lane colors
-  const laneColor: Record<number, string> = {};
-  let nc = 0;
-  const positions = new Set<number>();
-  for (let i = 0; i < graph.length; i++) {
-    if (graph[i] === '|' || graph[i] === '/' || graph[i] === '\\') positions.add(i);
-  }
-  const sorted = [...positions].sort((a, b) => a - b);
-  for (const p of sorted) {
-    if (!(p in laneColor)) laneColor[p] = BRANCH_COLORS[nc++ % BRANCH_COLORS.length];
-  }
-  const dotColor = sorted.length > 0 ? laneColor[sorted[0]] : BRANCH_COLORS[0];
-
-  // Build React elements (no dangerouslySetInnerHTML)
-  const chars = [...graph].map((ch, i) => {
-    if (ch === '*') {
-      return <span key={i} style={{ color: dotColor, fontWeight: 900 }}>●</span>;
-    } else if (ch === '|') {
-      return <span key={i} style={{ color: laneColor[i] || '#888', fontWeight: 'bold' }}>│</span>;
-    } else if (ch === '/') {
-      const right = sorted.find(p => p > i);
-      return <span key={i} style={{ color: right !== undefined ? laneColor[right] : '#ff9800' }}>╱</span>;
-    } else if (ch === '\\') {
-      const left = [...sorted].reverse().find(p => p < i);
-      return <span key={i} style={{ color: left !== undefined ? laneColor[left] : '#ff9800' }}>╲</span>;
-    } else if (ch === '_') {
-      return <span key={i} style={{ color: laneColor[sorted[0]] || '#888' }}>─</span>;
-    } else {
-      return <React.Fragment key={i}> </React.Fragment>;
-    }
-  });
-
-  return (
-    <span style={{
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      fontSize: '11px',
-      lineHeight: '16px',
-      whiteSpace: 'pre',
-    }}>
-      {chars}
-    </span>
   );
 }
 
