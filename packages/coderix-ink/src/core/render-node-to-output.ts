@@ -32,9 +32,11 @@ function isXtermJsHost(): boolean {
 // shift layout → narrow damage bounds → O(changed cells) diff instead of
 // O(rows×cols).
 let layoutShifted = false
+let insideScrollContent = false
 
 export function resetLayoutShifted(): void {
   layoutShifted = false
+  insideScrollContent = false
 }
 
 export function didLayoutShift(): boolean {
@@ -484,10 +486,16 @@ function renderNodeToOutput(
     // Clear stale content from the old position when re-rendering.
     // Dirty: content changed. Moved: position/size changed (e.g., sibling
     // above changed height), old cells still on the terminal.
+    // Inside a scroll container, the screen y changes every frame due to
+    // scrollTop adjustment — compare the Yoga-local top instead so only
+    // genuine layout shifts (not scroll-induced motion) flag a change.
+    const yChanged = insideScrollContent
+      ? cached?.top !== yogaTop
+      : cached?.y !== y
     const positionChanged =
       cached !== undefined &&
       (cached.x !== x ||
-        cached.y !== y ||
+        yChanged ||
         cached.width !== width ||
         cached.height !== height)
     if (positionChanged) {
@@ -510,7 +518,14 @@ function renderNodeToOutput(
     const clears = pendingClears.get(node)
     const hasRemovedChild = clears !== undefined
     if (hasRemovedChild) {
-      layoutShifted = true
+      // Child removals INSIDE a scroll container are handled by the scroll
+      // mechanism (DECSTBM, culling).  Setting layoutShifted here would
+      // trigger a full-screen clearTerminal, cancelling the user's text
+      // selection and causing visual flicker on every frame that virtual
+      // scroll unmounts items.
+      if (!insideScrollContent) {
+        layoutShifted = true
+      }
       for (const rect of clears) {
         output.clear({
           x: Math.floor(rect.x),
@@ -722,7 +737,23 @@ function renderNodeToOutput(
         // drag-to-scroll can detect when the drag leaves the scroll viewport.
         node.scrollViewportTop = (y1 ?? y) + padTop
 
-        const maxScroll = Math.max(0, scrollHeight - innerHeight)
+        const prevMaxScroll = Math.max(0, prevScrollHeight - prevInnerHeight)
+
+        const rawMaxScroll = Math.max(0, scrollHeight - innerHeight)
+        // Safety net: virtual scroll can transiently shrink scrollHeight
+        // (tail unmount + stale heightCache spacer) causing
+        // contentYoga.getComputedHeight() to briefly return viewport height
+        // instead of the true content height.  When sticky mode is active and
+        // the previous frame was scrollable, a rawMaxScroll of 0 is a Yoga
+        // glitch — retain the previous frame's maxScroll so the at-bottom
+        // logic doesn't pin scrollTop to 0 (jump to top).  Next frame's
+        // Yoga recalc will restore the correct value.
+        const maxScroll =
+          rawMaxScroll === 0 &&
+          prevScrollHeight > innerHeight &&
+          (node.stickyScroll ?? Boolean(node.attributes['stickyScroll']))
+            ? Math.max(1, prevMaxScroll)
+            : rawMaxScroll
         // scrollAnchor: scroll so the anchored element's top is at the
         // viewport top (plus offset). Yoga is FRESH — same calculateLayout
         // pass that just produced scrollHeight. Deterministic alternative
@@ -756,7 +787,6 @@ function renderNodeToOutput(
         const scrollTopBeforeFollow = node.scrollTop ?? 0
         const sticky =
           node.stickyScroll ?? Boolean(node.attributes['stickyScroll'])
-        const prevMaxScroll = Math.max(0, prevScrollHeight - prevInnerHeight)
         // Positional check only valid when content grew — virtualization can
         // transiently SHRINK scrollHeight (tail unmount + stale heightCache
         // spacer) making scrollTop >= prevMaxScroll true by artifact, not
@@ -850,6 +880,12 @@ function renderNodeToOutput(
         scrollTop = clamped
 
         if (content && contentYoga) {
+          // Track that we're inside a scroll container — child removals
+          // here (virtual scroll unmounting items) should not trigger
+          // layoutShifted, which would cause a full-screen clearTerminal
+          // that cancels text selection and flickers.
+          const savedInsideScroll = insideScrollContent
+          insideScrollContent = true
           // Compute content wrapper's absolute render position with scroll
           // offset applied, then render its children with culling.
           const contentX = x + contentYoga.getComputedLeft()
@@ -1151,6 +1187,7 @@ function renderNodeToOutput(
             height: contentYoga.getComputedHeight(),
           })
           content.dirty = false
+          insideScrollContent = savedInsideScroll
         }
       } else {
         // Fill interior with background color before rendering children.

@@ -5,7 +5,6 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![DeepSeek](https://img.shields.io/badge/%E7%94%B1%20DeepSeek%2099.9%25%20%E7%94%9F%E6%88%90-536DFE)](https://deepseek.com)
 [![English](https://img.shields.io/badge/🌐-English_README-6f42c1?style=flat-square)](README.md)
 
 **一个完全开源（Apache 2.0）的终端 AI 编程助手 —— Claude Code 的自由替代品。**
@@ -17,8 +16,6 @@
 </div>
 
 Coderix 是一个强大的 AI 编程助手，可在终端或桌面应用中使用。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。基于 Ink/React 构建，拥有精美的终端界面（TUI 版），同时提供共用同一核心引擎的 Electron 桌面版（React DOM + Monaco + xterm）。
-
-> 本项目 **99.9%** 的代码由 **DeepSeek** 模型生成。我们相信，展示 AI 编码能力的最佳方式就是用 AI 构建一个编码工具。
 
 ---
 
@@ -242,11 +239,3 @@ Coderix/
 ## 开源协议
 
 [Apache 2.0](LICENSE) —— 完全开源。自由使用、修改、发布。
-
----
-
-<div align="center">
-
-**由 [DeepSeek](https://deepseek.com) 构建** · **[Claude Code](https://claude.ai/code) 的开源替代品**
-
-</div>
