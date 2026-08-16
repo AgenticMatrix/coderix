@@ -207,6 +207,9 @@ export function ChatView({
             const isAssistant = message.role === 'assistant';
             const isLastMessage = index === messages.length - 1;
             const isStreamingMsg = isLastMessage && message.isStreaming;
+            const showAvatar =
+              isAssistant &&
+              message.blocks.some((b) => b.type === 'text' || b.type === 'tool_result');
 
             return (
               <motion.div
@@ -219,11 +222,22 @@ export function ChatView({
                 }}
                 className={`message-row ${message.role} ${message.isGroupStart ? 'group-start' : ''}`}
               >
-                <MessageBubbleContent
-                  message={message}
-                  isStreamingMsg={isStreamingMsg ?? false}
-                  isAssistant={isAssistant}
-                />
+                {isAssistant && (
+                  <span
+                    className="message-avatar"
+                    style={showAvatar ? undefined : { visibility: 'hidden' }}
+                    aria-hidden="true"
+                  >
+                    C
+                  </span>
+                )}
+                <div className="message-body">
+                  <MessageBubbleContent
+                    message={message}
+                    isStreamingMsg={isStreamingMsg ?? false}
+                    isAssistant={isAssistant}
+                  />
+                </div>
               </motion.div>
             );
           })}

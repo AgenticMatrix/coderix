@@ -1,256 +1,205 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FileText, FileEdit, FilePlus, Terminal, Search, Globe,
-  FolderSearch, CheckSquare, Clock, Brain,
-  Network, Users, UserPlus, UserMinus, BookOpen, MessageSquare,
-  GitBranch, FileCode, Play, Wrench, ChevronRight,
-  ExternalLink, FolderSync,
+  Clock, ChevronRight, CheckCircle2, XCircle, Loader2, Copy, Check,
 } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 
 // ── Tool Display Config ────────────────────────────────────
+// Each tool gets a display name + a `content` builder so the collapsed
+// header reads naturally, e.g. "Bash (npm install)", "Read (src/app.ts)".
 
 interface ToolDisplayConfig {
-  icon: React.ReactNode;
-  label: (input: Record<string, unknown>) => string;
-  detail?: (input: Record<string, unknown>) => string;
+  name: string;
+  content: (input: Record<string, unknown>) => string;
+}
+
+function truncate(text: string, max = 60): string {
+  if (!text) return '';
+  if (text.length <= max) return text;
+  return text.slice(0, max) + '…';
+}
+
+function truncatePath(path: string, max = 80): string {
+  if (!path) return '';
+  if (path.length <= max) return path;
+  const parts = path.split('/');
+  if (parts.length <= 2) return path.slice(0, max) + '…';
+  return `…/${parts[parts.length - 1]}`;
 }
 
 const toolConfigs: Record<string, ToolDisplayConfig> = {
   read: {
-    icon: <FileText size={13} />,
-    label: (input) => {
-      const fp = input.file_path as string ?? '';
-      return fp ? `Read (${fp})` : 'Read';
-    },
+    name: 'Read',
+    content: (i) => truncatePath((i.file_path as string) || (i.path as string) || ''),
   },
   write: {
-    icon: <FilePlus size={13} />,
-    label: (input) => {
-      const fp = input.file_path as string ?? '';
-      return `Write(${fp})`;
-    },
+    name: 'Write',
+    content: (i) => truncatePath((i.file_path as string) || (i.path as string) || ''),
   },
   update: {
-    icon: <FileEdit size={13} />,
-    label: (input) => {
-      const fp = input.file_path as string ?? '';
-      return `Update ${truncatePath(fp)}`;
-    },
+    name: 'Update',
+    content: (i) => truncatePath((i.file_path as string) || (i.path as string) || ''),
   },
   bash: {
-    icon: <Terminal size={13} />,
-    label: (input) => {
-      const desc = input.description as string ?? '';
-      const cmd = input.command as string ?? '';
-      if (desc && cmd) return `Bash (${desc}, ${cmd})`;
-      if (desc) return `Bash (${desc})`;
-      if (cmd) return `Bash ${truncateText(cmd, 60)}`;
-      return 'Bash';
-    },
+    name: 'Bash',
+    content: (i) => truncate((i.description as string) || '', 60),
   },
   glob: {
-    icon: <FolderSearch size={13} />,
-    label: (input) => {
-      const path = input.path as string ?? '';
-      const pattern = input.pattern as string ?? '';
-      if (path && pattern) return `Glob (${path}, ${pattern})`;
-      if (pattern) return `Glob (${pattern})`;
-      return 'Glob';
-    },
+    name: 'Glob',
+    content: (i) => truncate((i.pattern as string) || (i.path as string) || '', 60),
   },
   grep: {
-    icon: <Search size={13} />,
-    label: (input) => {
-      const p = input.pattern as string ?? '';
-      return `Grep ${truncateText(p, 60)}`;
-    },
+    name: 'Grep',
+    content: (i) => truncate((i.pattern as string) || '', 60),
   },
   webfetch: {
-    icon: <Globe size={13} />,
-    label: (input) => {
-      const url = input.url as string ?? '';
-      return `WebFetch ${truncateText(url, 50)}`;
-    },
+    name: 'WebFetch',
+    content: (i) => truncate((i.url as string) || '', 60),
   },
   websearch: {
-    icon: <ExternalLink size={13} />,
-    label: (input) => {
-      const q = input.query as string ?? '';
-      return `WebSearch "${truncateText(q, 40)}"`;
-    },
+    name: 'WebSearch',
+    content: (i) => truncate((i.query as string) || '', 50),
   },
   taskcreate: {
-    icon: <CheckSquare size={13} />,
-    label: (input) => {
-      const af = input.activeForm as string ?? '';
-      const desc = input.description as string ?? '';
-      if (af && desc) return `TaskCreate (${af}: ${desc})`;
-      if (af) return `TaskCreate (${af})`;
-      if (desc) return `TaskCreate (${desc})`;
-      return 'TaskCreate';
+    name: 'TaskCreate',
+    content: (i) => {
+      const af = i.activeForm as string | undefined;
+      const d = i.description as string | undefined;
+      if (af && d) return truncate(`${af}: ${d}`, 50);
+      return truncate(af || d || '', 50);
     },
   },
   taskupdate: {
-    icon: <CheckSquare size={13} />,
-    label: (input) => {
-      const id = input.taskId as string ?? '';
-      return `TaskUpdate ${id}`;
-    },
+    name: 'TaskUpdate',
+    content: (i) => truncate((i.taskId as string) || '', 30),
   },
   tasklist: {
-    icon: <CheckSquare size={13} />,
-    label: () => 'TaskList',
+    name: 'TaskList',
+    content: () => '',
   },
   taskget: {
-    icon: <CheckSquare size={13} />,
-    label: (input) => {
-      const id = input.taskId as string ?? '';
-      return `TaskGet ${id}`;
-    },
+    name: 'TaskGet',
+    content: (i) => truncate((i.taskId as string) || '', 30),
   },
   taskoutput: {
-    icon: <CheckSquare size={13} />,
-    label: (input) => {
-      const id = input.task_id as string ?? '';
-      return `TaskOutput ${id}`;
-    },
+    name: 'TaskOutput',
+    content: (i) => truncate((i.task_id as string) || '', 30),
   },
   taskstop: {
-    icon: <CheckSquare size={13} />,
-    label: (input) => {
-      const id = input.task_id as string ?? '';
-      return `TaskStop ${id}`;
+    name: 'TaskStop',
+    content: (i) => truncate((i.task_id as string) || '', 30),
+  },
+  todowrite: {
+    name: 'TodoWrite',
+    content: (i) => {
+      const todos = i.newTodos || i.todos;
+      const n = Array.isArray(todos) ? todos.length : 0;
+      return n ? `${n} items` : '';
     },
   },
   skill: {
-    icon: <BookOpen size={13} />,
-    label: (input) => {
-      const s = input.skill as string ?? '';
-      return `Skill ${s}`;
-    },
+    name: 'Skill',
+    content: (i) => truncate((i.skill as string) || (i.command as string) || '', 40),
   },
   askuserquestion: {
-    icon: <MessageSquare size={13} />,
-    label: (input) => {
-      const questions = input.questions as Array<{ question: string }> ?? [];
-      const q = questions[0]?.question ?? '';
-      return `Ask ${truncateText(q, 50)}`;
+    name: 'Ask',
+    content: (i) => {
+      const qs = i.questions as Array<{ question?: string }> | undefined;
+      return truncate(qs?.[0]?.question || '', 50);
     },
   },
   enterplanmode: {
-    icon: <Brain size={13} />,
-    label: () => 'Enter Plan Mode',
+    name: 'Enter Plan Mode',
+    content: () => '',
   },
   exitplanmode: {
-    icon: <Brain size={13} />,
-    label: () => 'Exit Plan Mode',
+    name: 'Exit Plan Mode',
+    content: () => '',
   },
   notebookedit: {
-    icon: <FileCode size={13} />,
-    label: (input) => {
-      const fp = input.notebook_path as string ?? '';
-      return `NotebookEdit ${truncatePath(fp)}`;
-    },
+    name: 'NotebookEdit',
+    content: (i) => truncatePath((i.notebook_path as string) || (i.file_path as string) || ''),
   },
   agent: {
-    icon: <Network size={13} />,
-    label: (input) => {
-      const desc = input.description as string ?? input.prompt as string ?? '';
-      return `Agent ${truncateText(desc, 50)}`;
-    },
+    name: 'Agent',
+    content: (i) => truncate((i.description as string) || (i.prompt as string) || '', 50),
   },
   sendmessage: {
-    icon: <Users size={13} />,
-    label: (input) => {
-      const agentName = input.agent_name as string ?? '';
-      return `SendMessage → ${agentName}`;
-    },
+    name: 'SendMessage',
+    content: (i) => truncate((i.agent_name as string) || '', 40),
   },
   teamcreate: {
-    icon: <UserPlus size={13} />,
-    label: (input) => {
-      const name = input.name as string ?? '';
-      return `TeamCreate ${name}`;
-    },
+    name: 'TeamCreate',
+    content: (i) => truncate((i.name as string) || '', 40),
   },
   teamdelete: {
-    icon: <UserMinus size={13} />,
-    label: (input) => {
-      const name = input.name as string ?? '';
-      return `TeamDelete ${name}`;
-    },
+    name: 'TeamDelete',
+    content: (i) => truncate((i.name as string) || '', 40),
   },
   listen: {
-    icon: <Clock size={13} />,
-    label: (input) => {
-      const d = input.duration as string ?? '';
-      return `Listen ${d}`;
-    },
+    name: 'Listen',
+    content: (i) => truncate((i.duration as string) || '', 20),
   },
   enterworktree: {
-    icon: <GitBranch size={13} />,
-    label: (input) => {
-      const name = input.name as string ?? input.path as string ?? '';
-      return name ? `EnterWorktree ${name}` : 'EnterWorktree';
-    },
+    name: 'EnterWorktree',
+    content: (i) => truncate((i.name as string) || (i.path as string) || '', 40),
   },
   exitworktree: {
-    icon: <FolderSync size={13} />,
-    label: (input) => {
-      const action = input.action as string ?? '';
-      return `ExitWorktree ${action}`;
-    },
+    name: 'ExitWorktree',
+    content: (i) => truncate((i.action as string) || '', 40),
   },
   workflow: {
-    icon: <Play size={13} />,
-    label: (input) => {
-      const name = input.name as string ?? '';
-      return `Workflow ${name}`;
-    },
+    name: 'Workflow',
+    content: (i) => truncate((i.name as string) || '', 40),
   },
 };
 
 function getToolConfig(toolName: string): ToolDisplayConfig {
   return toolConfigs[toolName.toLowerCase()] ?? {
-    icon: <Wrench size={13} />,
-    label: () => toolName,
+    name: toolName,
+    content: () => '',
   };
-}
-
-// ── Helpers ────────────────────────────────────────────────
-
-function truncatePath(path: string, maxLen = 80): string {
-  if (path.length <= maxLen) return path;
-  const parts = path.split('/');
-  if (parts.length <= 2) return path.slice(0, maxLen) + '…';
-  const first = parts[0] || '';
-  const last = parts[parts.length - 1] || '';
-  const mid = `/${parts.slice(1, -1).map(p => p[0] || '').join('/')}/`;
-  const result = `${first}${mid}${last}`;
-  if (result.length <= maxLen) return result;
-  return `…/${last}`;
-}
-
-function truncateText(text: string, maxLen = 80): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + '…';
-}
-
-function formatTime(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 // ── State Config ───────────────────────────────────────────
 
-const stateColors: Record<string, string> = {
-  pending: 'var(--color-text-tertiary)',
-  executing: 'var(--color-info)',
-  done: 'var(--color-success)',
-  error: 'var(--color-danger)',
+interface StateConfig {
+  icon: React.ReactNode;
+  className: string;
+  label: string;
+}
+
+const stateConfigs: Record<string, StateConfig> = {
+  pending: { icon: <Clock size={12} />, className: 'pending', label: 'Pending' },
+  executing: { icon: <Loader2 size={12} className="animate-spin" />, className: 'executing', label: 'Running' },
+  done: { icon: <CheckCircle2 size={12} />, className: 'done', label: 'Done' },
+  error: { icon: <XCircle size={12} />, className: 'error', label: 'Error' },
 };
+
+// ── Helpers ────────────────────────────────────────────────
+
+function renderParamValue(value: unknown, max = 160): string {
+  const str = typeof value === 'string' ? value : JSON.stringify(value);
+  return truncate(str, max);
+}
+
+function KeyValueList({ input }: { input: Record<string, unknown> }) {
+  const entries = Object.entries(input);
+  if (entries.length === 0) return null;
+  return (
+    <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono">
+      {entries.map(([key, value]) => (
+        <div key={key} className="flex gap-2 py-0.5">
+          <span className="text-[var(--color-info)] flex-shrink-0">{key}:</span>
+          <span className="text-[var(--color-text-secondary)] break-all">
+            {renderParamValue(value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── Component ──────────────────────────────────────────────
 
@@ -267,18 +216,48 @@ export function ToolRenderer({
   toolName,
   toolInput = {},
   state = 'executing',
-  toolId,
   toolResult,
   toolMetadata,
 }: ToolRendererProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   const config = getToolConfig(toolName);
-  const sc = stateColors[state] ?? stateColors.pending;
-  const isWrite = toolName.toLowerCase() === 'write';
+  const labelContent = config.content(toolInput);
+  const sc = stateConfigs[state] ?? stateConfigs.pending;
+
+  const lower = toolName.toLowerCase();
+  const isBash = lower === 'bash';
+  const isFileTool = ['read', 'write', 'edit', 'update', 'notebookedit', 'multiedit'].includes(lower);
+  const isWrite = lower === 'write';
   const writeStats = isWrite && toolMetadata
     ? `${toolMetadata.addedLines ?? 0} added, ${toolMetadata.removedLines ?? 0} removed`
     : undefined;
   const writeContent = typeof toolInput.content === 'string' ? toolInput.content : '';
+
+  const filePath =
+    (toolInput.file_path as string) ||
+    (toolInput.notebook_path as string) ||
+    (toolInput.path as string) ||
+    '';
+
+  const handleCopy = (key: string, content: string) => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    }).catch(() => {});
+  };
+
+  const copyBtn = (key: string, content: string) => (
+    <button
+      type="button"
+      className="p-0.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-[var(--radius-xs)] transition-colors"
+      onClick={(e) => { e.stopPropagation(); handleCopy(key, content); }}
+      title="Copy"
+    >
+      {copiedKey === key ? <Check size={12} /> : <Copy size={12} />}
+    </button>
+  );
 
   return (
     <motion.div
@@ -295,14 +274,29 @@ export function ToolRenderer({
         <motion.span
           animate={{ rotate: isExpanded ? 90 : 0 }}
           transition={{ duration: 0.15 }}
+          className="flex-shrink-0"
         >
-          <ChevronRight size={10} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
+          <ChevronRight size={10} className="text-[var(--color-text-tertiary)]" />
         </motion.span>
-        <span className="flex-shrink-0" style={{ color: sc }}>
-          {config.icon}
+        <span className="min-w-0 flex items-center gap-1 overflow-hidden whitespace-nowrap">
+          <span className="font-medium text-[var(--color-text-primary)] flex-shrink-0">
+            {config.name}
+          </span>
+          {labelContent && (
+            <span className="text-[var(--color-text-secondary)] overflow-hidden text-ellipsis">
+              ({labelContent})
+            </span>
+          )}
         </span>
-        <span className="font-medium text-[var(--color-text-primary)]">
-          {config.label(toolInput)}
+        <span className="flex-1" />
+        <span className={`flex items-center gap-1 text-[11px] font-medium flex-shrink-0 ${
+          sc.className === 'pending' ? 'text-[var(--color-text-tertiary)]' :
+          sc.className === 'executing' ? 'text-[var(--color-info)]' :
+          sc.className === 'done' ? 'text-[var(--color-success)]' :
+          'text-[var(--color-danger)]'
+        }`}>
+          {sc.icon}
+          <span>{sc.label}</span>
         </span>
       </motion.button>
 
@@ -316,49 +310,56 @@ export function ToolRenderer({
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="pl-7 pb-2 space-y-1.5">
-              {/* Tool input parameters (hidden for some tools — info is in the header) */}
-              {toolName.toLowerCase() !== 'bash' && toolName.toLowerCase() !== 'glob' && toolName.toLowerCase() !== 'read' && toolName.toLowerCase() !== 'write' && toolName.toLowerCase() !== 'taskcreate' && Object.keys(toolInput).length > 0 && (
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-                    Input
-                  </div>
-                  <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono">
-                    {Object.entries(toolInput).map(([key, value]) => (
-                      <div key={key} className="flex gap-2 py-0.5">
-                        <span className="text-[var(--color-info)] flex-shrink-0">{key}:</span>
-                        <span className="text-[var(--color-text-secondary)] break-all">
-                          {truncateParamValue(value)}
-                        </span>
+            <div className="pl-6 pb-2 space-y-2">
+              {/* Input: bash shows the command; file tools show the path */}
+              {isBash ? (
+                toolInput.command != null ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+                        Command
                       </div>
-                    ))}
+                      {copyBtn('command', String(toolInput.command))}
+                    </div>
+                    <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-primary)] font-mono whitespace-pre-wrap break-all leading-[18px] m-0 max-h-48 overflow-y-auto">
+                      {String(toolInput.command)}
+                    </pre>
                   </div>
+                ) : (
+                  <KeyValueList input={toolInput} />
+                )
+              ) : isFileTool && filePath ? (
+                <div className="text-xs font-mono text-[var(--color-info)] break-all">
+                  {filePath}
+                </div>
+              ) : Object.keys(toolInput).length > 0 ? (
+                <KeyValueList input={toolInput} />
+              ) : null}
+
+              {/* Write stats + content */}
+              {isWrite && writeStats && (
+                <div className="text-xs text-[var(--color-text-secondary)]">
+                  {writeStats}
+                </div>
+              )}
+              {isWrite && writeContent && (
+                <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                  {writeContent}
                 </div>
               )}
 
-              {/* Tool output */}
-              {isWrite && toolResult && (
+              {/* Tool result */}
+              {!isWrite && toolResult != null && toolResult !== '' && (
                 <div>
-                  {writeStats && (
-                    <div className="text-xs text-[var(--color-text-secondary)] mb-1">
-                      {writeStats}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+                      Result
                     </div>
-                  )}
-                  {writeContent && (
-                    <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-                      {writeContent}
-                    </div>
-                  )}
-                </div>
-              )}
-              {!isWrite && toolResult && (
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-                    Output
+                    {copyBtn('result', toolResult)}
                   </div>
-                  <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                  <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 max-h-48 overflow-y-auto">
                     {toolResult}
-                  </div>
+                  </pre>
                 </div>
               )}
             </div>
@@ -370,9 +371,3 @@ export function ToolRenderer({
 }
 
 ToolRenderer.displayName = 'ToolRenderer';
-
-function truncateParamValue(value: unknown, maxLen = 120): string {
-  const str = typeof value === 'string' ? value : JSON.stringify(value);
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen) + '…';
-}
