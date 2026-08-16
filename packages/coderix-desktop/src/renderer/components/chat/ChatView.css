@@ -157,12 +157,11 @@
   user-select: none;
 }
 
-/* Assistant message block — left-aligned with bottom border */
+/* Assistant message block — left-aligned */
 .message-bubble.assistant {
   background-color: transparent;
   color: var(--color-text-primary);
   border-radius: 0;
-  border-bottom: 1px solid var(--color-separator);
   margin: 0;
   max-width: 100%;
   padding-left: 0;
