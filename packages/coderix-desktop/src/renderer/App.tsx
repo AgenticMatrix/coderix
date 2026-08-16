@@ -424,40 +424,40 @@ export function App(): React.ReactElement {
   );
 
   // ── Build chat messages for ChatView ────────────────────────────────────
-  // Stabilize references: during streaming, only the streaming message changes.
-  // Reusing previous ChatViewMessage objects for unchanged messages prevents
-  // Framer Motion's AnimatePresence from re-processing every child each render.
-  const prevChatMessagesRef = useRef<ChatViewMessage[]>([]);
-
+  // Tool-only assistant turns (no text block) merge into the preceding
+  // assistant message so their "N tools used" group flows directly under the
+  // text instead of rendering as a separate block.
   const chatViewMessages = useMemo<ChatViewMessage[]>(() => {
     const result: ChatViewMessage[] = [];
-    const prevList = prevChatMessagesRef.current;
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]!;
-      const prev = prevList[i];
+      const hasText = msg.blocks.some((b: StreamBlock) => b.type === 'text');
+      const isToolOnlyAssistant =
+        msg.role === 'assistant' &&
+        !hasText &&
+        msg.blocks.some((b: StreamBlock) => b.type === 'tool_use');
 
-      // Reuse previous wrapper object if message data hasn't changed
-      if (
-        prev &&
-        prev.id === msg.id &&
-        prev.blocks === msg.blocks &&
-        prev.role === msg.role
-      ) {
-        result.push(prev);
-      } else {
-        result.push({
-          id: msg.id,
-          role: msg.role,
-          blocks: msg.blocks,
-          timestamp: msg.timestamp,
-          // A text turn starts a new "group" (blank-line separator above);
-          // tool-only turns flow together with no separator.
-          isGroupStart:
-            msg.role === 'assistant' &&
-            msg.blocks.some((b: StreamBlock) => b.type === 'text'),
-        });
+      if (isToolOnlyAssistant) {
+        const last = result[result.length - 1];
+        if (last && last.role === 'assistant') {
+          result[result.length - 1] = {
+            ...last,
+            blocks: [...last.blocks, ...msg.blocks],
+          };
+          continue;
+        }
       }
+
+      result.push({
+        id: msg.id,
+        role: msg.role,
+        blocks: msg.blocks,
+        timestamp: msg.timestamp,
+        // A text turn starts a new "group" (blank-line separator above);
+        // tool-only turns flow together with no separator.
+        isGroupStart: msg.role === 'assistant' && hasText,
+      });
     }
 
     // Append streaming message (always fresh — blocks change every delta)
@@ -474,7 +474,6 @@ export function App(): React.ReactElement {
       });
     }
 
-    prevChatMessagesRef.current = result;
     return result;
   }, [messages, streamCurrentMessage]);
 

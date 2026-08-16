@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Zap } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { ContentBlockRenderer } from './ContentBlockRenderer';
+import { ToolGroup } from './ToolGroup';
 import './ChatView.css';
 
 export interface ChatViewMessage {
@@ -52,21 +53,32 @@ const MessageBubbleContent = React.memo(
     const displayRole = hasToolResult && message.role === 'user' ? 'assistant' : message.role;
     const displayAsAssistant = isAssistant || (hasToolResult && message.role === 'user');
 
+    // Tool calls render collapsed behind a single "N tools used" summary,
+    // placed after any text/thinking content. Keep original indices so the
+    // streaming flag still lands on the true last block.
+    const entries = message.blocks.map((block, idx) => ({ block, idx }));
+    const toolBlocks = entries
+      .filter((e) => e.block.type === 'tool_use')
+      .map((e) => e.block);
+    const otherBlocks = entries.filter((e) => e.block.type !== 'tool_use');
+
     return (
       <>
         <div
           className={`message-bubble ${displayRole} ${isStreamingMsg ? 'streaming' : ''}`}
         >
-          {message.blocks.map((block, blockIdx) => (
+          {otherBlocks.map(({ block, idx }) => (
             <ContentBlockRenderer
-              key={`${message.id}-block-${blockIdx}`}
+              key={`${message.id}-block-${idx}`}
               block={block}
               isStreaming={
                 isStreamingMsg &&
-                blockIdx === message.blocks.length - 1
+                idx === message.blocks.length - 1
               }
             />
           ))}
+
+          {toolBlocks.length > 0 && <ToolGroup tools={toolBlocks} />}
 
           {/* User message timestamp — inline at bottom-right */}
           {!displayAsAssistant && message.timestamp && !isStreamingMsg && (
