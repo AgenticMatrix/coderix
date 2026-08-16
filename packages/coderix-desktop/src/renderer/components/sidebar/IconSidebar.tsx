@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, FolderGit2, GitBranch, Settings, Sun, Moon, Terminal } from 'lucide-react';
+import { MessageSquare, FolderGit2, GitBranch, Settings, Sun, Moon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import './IconSidebar.css';
 import styles from './IconSidebar.module.css';
@@ -15,8 +15,6 @@ interface Props {
 export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): React.ReactElement {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
-  const terminalOpen = useUIStore((s) => s.terminalOpen);
-  const toggleTerminal = useUIStore((s) => s.toggleTerminal);
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
@@ -46,10 +44,6 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
 
       {/* Bottom actions */}
       <div className={styles.bottomActions}>
-        <button className={`${styles.iconButton} ${terminalOpen ? styles.active : ''}`} onClick={toggleTerminal} title="Toggle Terminal (⌘`)">
-          <Terminal size={20} strokeWidth={2} />
-          <span className="tooltip">{terminalOpen ? 'Hide Terminal' : 'Terminal'}</span>
-        </button>
         <button className={styles.iconButton} onClick={toggleTheme} title={theme === 'light' ? 'Switch to Dark' : 'Switch to Light'}>
           {theme === 'light' ? <Sun size={20} strokeWidth={2} /> : <Moon size={20} strokeWidth={2} />}
           <span className="tooltip">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>

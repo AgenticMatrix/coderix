@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, FolderOpen, ChevronDown } from 'lucide-react';
+import { Cpu, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, FolderOpen, ChevronDown, Terminal } from 'lucide-react';
 import { Badge } from './Badge';
 import './StatusBar.css';
 
@@ -38,6 +38,10 @@ export interface StatusBarProps {
   projectPath?: string;
   /** Select project directory callback */
   onSelectProject?: () => void;
+  /** Whether the terminal panel is open */
+  terminalOpen?: boolean;
+  /** Toggle the terminal panel */
+  onToggleTerminal?: () => void;
   /** Additional CSS classes */
   className?: string;
 }
@@ -72,6 +76,8 @@ export function StatusBar({
   agentStatus = 'idle',
   projectPath,
   onSelectProject,
+  terminalOpen = false,
+  onToggleTerminal,
   className = '',
 }: StatusBarProps): React.ReactElement {
   const status = statusConfig[agentStatus];
@@ -218,6 +224,25 @@ export function StatusBar({
         <Command size={10} />
         <span>K commands</span>
       </span>
+
+      {/* Terminal toggle */}
+      {onToggleTerminal && (
+        <>
+          <div className="w-px h-3 bg-[var(--color-separator)]" />
+          <button
+            type="button"
+            onClick={onToggleTerminal}
+            className={`inline-flex items-center gap-1 transition-colors cursor-pointer ${
+              terminalOpen ? 'text-[var(--color-brand)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+            }`}
+            title={terminalOpen ? 'Hide Terminal (⌘`)' : 'Toggle Terminal (⌘`)'}
+            aria-label="Toggle Terminal"
+          >
+            <Terminal size={12} />
+            <span>Terminal</span>
+          </button>
+        </>
+      )}
     </div>
   );
 }

@@ -517,6 +517,8 @@ export function App(): React.ReactElement {
           gitBranch: gitBranch || undefined,
           gitAhead: gitAhead || undefined,
           gitBehind: gitBehind || undefined,
+          terminalOpen,
+          onToggleTerminal: toggleTerminal,
         }}
       >
         {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}
