@@ -80,13 +80,13 @@
   /* full width, no alignment needed */
 }
 
-/* Assistant message — avatar + content row */
+/* Assistant message — avatar + content row, left-aligned 24px from edge */
 .message-row.assistant {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   max-width: 80%;
-  margin: 0 auto;
+  margin: 0 0 0 24px;
   width: 100%;
 }
 
@@ -162,7 +162,7 @@
   user-select: none;
 }
 
-/* Assistant message block — left-aligned */
+/* Assistant message block — left-aligned, avatar provides the left indent */
 .message-bubble.assistant {
   background-color: transparent;
   color: var(--color-text-primary);
