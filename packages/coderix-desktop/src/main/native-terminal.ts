@@ -28,6 +28,12 @@ export interface TerminalSessionConfig {
   cols: number;
   /** Shell to use. Defaults to $SHELL or /bin/zsh. */
   shell?: string;
+  /**
+   * Command to run after the shell starts. Written to the PTY as typed
+   * input (after a short delay so the shell's rc files finish loading),
+   * mirroring agentstation's "open a terminal then launch the agent" flow.
+   */
+  startupCommand?: string;
   /** Callback when PTY emits data. */
   onData: (data: string) => void;
   /** Callback when PTY process exits. */
@@ -144,6 +150,19 @@ export function createTerminalManager(): TerminalManager {
       });
 
       sessions.set(id, session);
+
+      // Launch the requested command inside the shell once it's ready.
+      if (config.startupCommand) {
+        const startupCommand = config.startupCommand;
+        setTimeout(() => {
+          try {
+            ptyProcess.write(startupCommand);
+          } catch (err) {
+            console.error('[TerminalManager] startupCommand write error:', err);
+          }
+        }, 500);
+      }
+
       return id;
     },
 

@@ -573,21 +573,7 @@ export function App(): React.ReactElement {
             onModelPick={() => setSettingsOpen(true)}
           />
 
-          {/* Terminal toggle bar — always visible */}
-          <div
-            onClick={toggleTerminal}
-            style={{
-              height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderTop: '1px solid var(--color-separator)',
-              background: 'var(--color-bg-secondary)', cursor: 'pointer',
-              fontSize: '10px', color: 'var(--color-text-tertiary)',
-              userSelect: 'none',
-            }}
-            title="Toggle Terminal (⌘`)"
-          >
-            {terminalOpen ? '▼ Terminal' : '▲ Terminal'}
-          </div>
-          {/* Terminal — collapsible */}
+          {/* Terminal — collapsible, toggled from the icon sidebar */}
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>
       </AppLayout>

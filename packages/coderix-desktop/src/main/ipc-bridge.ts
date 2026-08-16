@@ -533,6 +533,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Terminal ───────────────────────────────────────────────────────────
 
+  function resolveCoderixStartupCommand(): string {
+    // Launch the coderix TUI inside the shell (agentstation-style: open a
+    // terminal, then run the agent). Fall back to the `coderix` bin name if
+    // the monorepo dist entry isn't present (e.g. packaged build).
+    const cliEntry = resolve(__dirname, '../../../../packages/coderix-cli/dist/cli/main.js');
+    const cliPath = existsSync(cliEntry) ? `"${cliEntry}"` : 'coderix';
+    return `clear\nnode ${cliPath}\n`;
+  }
+
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (_event, opts: { cwd?: string; rows?: number; cols?: number }) => {
     const terminalId = randomUUID();
     const mainWindow = getMainWindow(windowManager);
@@ -542,6 +551,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       cwd: opts.cwd ?? currentWorkDir,
       rows: opts.rows ?? 30,
       cols: opts.cols ?? 120,
+      startupCommand: resolveCoderixStartupCommand(),
       onData: (data: string) => {
         mainWindow.webContents.send(`terminal:${terminalId}:data`, data);
       },
