@@ -90,6 +90,11 @@
   width: 100%;
 }
 
+/* Blank-line separator before a text turn; tool-only turns stay tight */
+.message-row.assistant.group-start {
+  margin-top: var(--space-5);
+}
+
 /* Circled avatar for assistant messages (the "C" mark) */
 .message-avatar {
   width: 30px;
@@ -125,7 +130,7 @@
   max-width: 80%;
   margin: 0 auto;
   width: 100%;
-  padding: 4px 24px;
+  padding: 0 24px;
   font-size: var(--text-body);
   line-height: 1.65;
   word-wrap: break-word;

@@ -37,7 +37,7 @@ export function ThinkingBlock({
   };
 
   return (
-    <div className="my-2">
+    <div>
       {/* Header */}
       <div className="flex items-center gap-1">
         <button

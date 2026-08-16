@@ -43,7 +43,7 @@ import {
   getProjectDirectory,
   selectProjectDirectory,
 } from './ipc-client';
-import type { PermissionRequest, QuestionRequest } from './types';
+import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -451,6 +451,11 @@ export function App(): React.ReactElement {
           role: msg.role,
           blocks: msg.blocks,
           timestamp: msg.timestamp,
+          // A text turn starts a new "group" (blank-line separator above);
+          // tool-only turns flow together with no separator.
+          isGroupStart:
+            msg.role === 'assistant' &&
+            msg.blocks.some((b: StreamBlock) => b.type === 'text'),
         });
       }
     }
@@ -463,6 +468,9 @@ export function App(): React.ReactElement {
         blocks: streamCurrentMessage.blocks,
         timestamp: Date.now(),
         isStreaming: true,
+        isGroupStart: streamCurrentMessage.blocks.some(
+          (b: StreamBlock) => b.type === 'text',
+        ),
       });
     }
 

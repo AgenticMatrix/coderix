@@ -193,7 +193,7 @@ export function ContentBlockRenderer({
 
     case 'tool_result':
       return (
-        <div className="my-1">
+        <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
             Output
           </div>

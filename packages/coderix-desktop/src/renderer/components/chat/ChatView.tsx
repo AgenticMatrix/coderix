@@ -225,7 +225,7 @@ export function ChatView({
                 {isAssistant && (
                   <span
                     className="message-avatar"
-                    style={showAvatar ? undefined : { visibility: 'hidden' }}
+                    style={showAvatar ? undefined : { visibility: 'hidden', height: 0, marginTop: 0 }}
                     aria-hidden="true"
                   >
                     C
