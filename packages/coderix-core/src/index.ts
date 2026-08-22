@@ -197,6 +197,37 @@ export { detectShell } from './utils/shell-detect.js';
 export type { ShellInfo, ShellType } from './utils/shell-detect.js';
 export { toPosixPath, toWindowsPath } from './utils/windows-paths.js';
 
+// ── SDK (shared message schema for @coderix/sdk & CLI --sdk) ────────
+export {
+  mapEngineEventToSdkMessage,
+  buildInitMessage,
+  buildResultMessage,
+  toCorePermissionMode,
+  fromCorePermissionMode,
+} from './sdk/index.js';
+export type {
+  PermissionMode as SdkPermissionMode,
+  SystemPromptConfig,
+  McpServerConfig,
+  PermissionRule as SdkPermissionRule,
+  PermissionUpdate,
+  PermissionResult,
+  CanUseTool,
+  HookEvent as SdkHookEvent,
+  HookCallback as SdkHookCallback,
+  SDKSystemMessage,
+  SDKAssistantMessage,
+  SDKUserMessage,
+  SDKResultMessage,
+  SDKResultUsage,
+  SDKPartialAssistantMessage,
+  SDKMessage,
+  SDKInputMessage,
+  Options as SdkOptions,
+  QueryArguments,
+  Query,
+} from './sdk/index.js';
+
 // ── State primitives ───────────────────────────────────────────────
 export { createStore } from './state/store.js';
 export type { Store } from './state/store.js';
