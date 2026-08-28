@@ -58,6 +58,21 @@ interface PendingQuestion {
   request: QuestionRequest;
 }
 
+/**
+ * Synthetic background task/agent notifications are injected into the
+ * conversation as user messages so the model knows a background task
+ * finished. They are model context, not user-visible turns — filter them
+ * out of the rendered transcript (mirrors the CLI TUI behaviour).
+ */
+function isBackgroundNotificationMessage(msg: { role: string; blocks: StreamBlock[] }): boolean {
+  return (
+    msg.role === 'user' &&
+    msg.blocks.some(
+      (b) => b.type === 'text' && typeof b.content === 'string' && b.content.startsWith('<background-agent-notifications>'),
+    )
+  );
+}
+
 // ---------------------------------------------------------------------------
 // App Shell
 // ---------------------------------------------------------------------------
@@ -432,6 +447,8 @@ export function App(): React.ReactElement {
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]!;
+      // Skip synthetic background task/agent notifications.
+      if (isBackgroundNotificationMessage(msg)) continue;
       const hasText = msg.blocks.some((b: StreamBlock) => b.type === 'text');
       const isToolOnlyAssistant =
         msg.role === 'assistant' &&
