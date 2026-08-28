@@ -422,8 +422,8 @@ export function App(): React.ReactElement {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
           await submitQuery(value, currentSid);
-          // Reload sessions to pick up auto-generated titles
-          useSessionStore.getState().loadSessions();
+          // Refresh only the session that just changed (title/turn count).
+          useSessionStore.getState().refreshSession(currentSid);
         } catch (err) {
           console.error('[App] Failed to submit query:', err);
           useChatStore.getState().setError(

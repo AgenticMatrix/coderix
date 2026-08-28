@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { SessionSummary } from './types.js';
-import { listSessions, forkSession as ipcForkSession, deleteSession as ipcDeleteSession } from '../ipc-client.js';
+import { listSessions, getSession, forkSession as ipcForkSession, deleteSession as ipcDeleteSession } from '../ipc-client.js';
 
 export interface SessionState {
   sessions: SessionSummary[];
@@ -10,6 +10,7 @@ export interface SessionState {
 
   // Actions
   loadSessions: () => Promise<void>;
+  refreshSession: (id: string) => Promise<void>;
   createSession: () => Promise<void>;
   forkSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
@@ -61,6 +62,36 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load sessions';
       set({ error: message, isLoading: false });
+    }
+  },
+
+  refreshSession: async (id: string) => {
+    try {
+      if (!window.coderixAPI) return;
+      const s = await getSession(id);
+      if (!s) return;
+      const normalized: SessionSummary = {
+        id: s.id,
+        title: s.title,
+        turnCount: s.turnCount,
+        model: s.model,
+        updatedAt: s.updatedAt,
+        createdAt: s.createdAt,
+      };
+      // Patch only the matching entry — do not toggle isLoading or touch others.
+      set((state) => {
+        const sessions = state.sessions.map((existing) =>
+          existing.id === id ? normalized : existing,
+        );
+        // Preserve "most recently updated first" ordering without refetching.
+        sessions.sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        );
+        return { sessions };
+      });
+    } catch {
+      // Best-effort refresh — never disturb the list over a single-session miss.
     }
   },
 

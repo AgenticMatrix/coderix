@@ -19,6 +19,7 @@ const CH = {
   QUERY_SUBMIT: 'query:submit',
   QUERY_INTERRUPT: 'query:interrupt',
   SESSION_LIST: 'session:list',
+  SESSION_GET: 'session:get',
   SESSION_LOAD: 'session:load',
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
@@ -278,6 +279,11 @@ const coderixAPI = {
     /** List all sessions. */
     list(): Promise<unknown[]> {
       return ipcRenderer.invoke(CH.SESSION_LIST);
+    },
+
+    /** Get a single session summary by ID. */
+    get(sessionId: string): Promise<unknown> {
+      return ipcRenderer.invoke(CH.SESSION_GET, sessionId);
     },
 
     /** Load a session by ID and set it as active. */

@@ -569,12 +569,72 @@ export class SessionManager {
   }
 
   /**
+   * Build a single session summary from its on-disk directory.
+   * Returns null if the session is missing, empty, or a child session.
+   */
+  private buildSummaryFromDir(id: string): SessionSummary | null {
+    const dir = getSessionDir(id);
+    const jsonlPath = sessionJsonlPath(dir);
+
+    // Skip directories without session.jsonl (legacy or empty)
+    if (!existsSync(jsonlPath)) return null;
+
+    // Fast path: read tail metadata from JSONL
+    const { lastTitle, lastUserPreview, firstUserText, hasParent, transcriptEntryCount } = readTailMetadata(jsonlPath);
+
+    // Skip sub-agent / workflow sessions (child sessions)
+    if (hasParent) return null;
+
+    // Skip sessions with no transcript entries (no actual conversation)
+    if (transcriptEntryCount === 0) return null;
+
+    // Approximate turnCount from transcript entries (one turn = user + assistant)
+    const approxTurns = Math.floor(transcriptEntryCount / 2);
+
+    // Read title from meta.json (new), fall back to session.jsonl title entry (legacy)
+    const meta = readSessionMeta(dir);
+    const title = meta?.title ?? lastTitle ?? `Session ${id.slice(0, 8)}`;
+    const mtime = statSync(jsonlPath).mtime;
+
+    // Compute display title for the session picker
+    let displayTitle: string | undefined;
+    if (meta?.title) {
+      // meta.json has a title — use it directly (may be truncated placeholder or LLM-refined)
+      displayTitle = meta.title;
+    } else if (isAutoTitle(title) && firstUserText) {
+      // Legacy session without meta.json — generate from first user text
+      displayTitle = generateSessionTitle(firstUserText);
+    }
+
+    return {
+      id,
+      title,
+      status: 'active' as const,
+      turnCount: approxTurns,
+      totalCost: 0,
+      createdAt: mtime,
+      updatedAt: mtime,
+      model: lastUserPreview ?? 'unknown',
+      lastUserPreview: lastUserPreview ?? undefined,
+      displayTitle,
+      firstUserText: firstUserText ?? undefined,
+      workDir: meta?.workDir,
+    };
+  }
+
+  /**
+   * Get a single session summary by ID without listing all sessions.
+   * Returns null when the session no longer exists or is a child session.
+   */
+  getSummary(id: string): SessionSummary | null {
+    return this.buildSummaryFromDir(id);
+  }
+
+  /**
    * List sessions matching a filter.
    * Uses fast tail reads of JSONL files instead of parsing full files.
    */
   list(filter?: SessionFilter): SessionSummary[] {
-    const summaries: SessionSummary[] = [];
-
     let entries: string[];
     try {
       entries = readdirSync(SESSIONS_DIR, { withFileTypes: true })
@@ -584,54 +644,10 @@ export class SessionManager {
       return [];
     }
 
+    const summaries: SessionSummary[] = [];
     for (const id of entries) {
-      const dir = getSessionDir(id);
-      const jsonlPath = sessionJsonlPath(dir);
-
-      // Skip directories without session.jsonl (legacy or empty)
-      if (!existsSync(jsonlPath)) continue;
-
-      // Fast path: read tail metadata from JSONL
-      const { lastTitle, lastUserPreview, firstUserText, hasParent, transcriptEntryCount } = readTailMetadata(jsonlPath);
-
-      // Skip sub-agent / workflow sessions (child sessions)
-      if (hasParent) continue;
-
-      // Skip sessions with no transcript entries (no actual conversation)
-      if (transcriptEntryCount === 0) continue;
-
-      // Approximate turnCount from transcript entries (one turn = user + assistant)
-      const approxTurns = Math.floor(transcriptEntryCount / 2);
-
-      // Read title from meta.json (new), fall back to session.jsonl title entry (legacy)
-      const meta = readSessionMeta(dir);
-      const title = meta?.title ?? lastTitle ?? `Session ${id.slice(0, 8)}`;
-      const mtime = statSync(jsonlPath).mtime;
-
-      // Compute display title for the session picker
-      let displayTitle: string | undefined;
-      if (meta?.title) {
-        // meta.json has a title — use it directly (may be truncated placeholder or LLM-refined)
-        displayTitle = meta.title;
-      } else if (isAutoTitle(title) && firstUserText) {
-        // Legacy session without meta.json — generate from first user text
-        displayTitle = generateSessionTitle(firstUserText);
-      }
-
-      summaries.push({
-        id,
-        title,
-        status: 'active' as const,
-        turnCount: approxTurns,
-        totalCost: 0,
-        createdAt: mtime,
-        updatedAt: mtime,
-        model: lastUserPreview ?? 'unknown',
-        lastUserPreview: lastUserPreview ?? undefined,
-        displayTitle,
-        firstUserText: firstUserText ?? undefined,
-        workDir: meta?.workDir,
-      });
+      const summary = this.buildSummaryFromDir(id);
+      if (summary) summaries.push(summary);
     }
 
     // Sort by most recently updated (session IDs are random, use dir mtime)

@@ -306,6 +306,13 @@ export async function listSessions(): Promise<SessionInfo[]> {
   );
 }
 
+/** Get a single session summary by ID. */
+export async function getSession(id: string): Promise<SessionInfo | null> {
+  return invokeWithTimeout<SessionInfo | null>('session:get', () =>
+    getAPI().session.get(id),
+  );
+}
+
 /** Fork an existing session into a new one. */
 export async function forkSession(id: string): Promise<unknown> {
   return invokeWithTimeout('session:fork', () => getAPI().session.fork(id));

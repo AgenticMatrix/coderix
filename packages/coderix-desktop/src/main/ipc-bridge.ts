@@ -65,6 +65,7 @@ export const IPC_CHANNELS = {
   QUERY_SUBMIT: 'query:submit',
   QUERY_INTERRUPT: 'query:interrupt',
   SESSION_LIST: 'session:list',
+  SESSION_GET: 'session:get',
   SESSION_LOAD: 'session:load',
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
@@ -374,6 +375,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         })
         .filter(Boolean);
     } catch { return []; }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_GET, async (_event, sessionId: string) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    return sessionManager.getSummary(sessionId);
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD, async (_event, sessionId: string) => {
@@ -1198,6 +1204,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.QUERY_SUBMIT);
       ipcMain.removeHandler(IPC_CHANNELS.QUERY_INTERRUPT);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LIST);
+      ipcMain.removeHandler(IPC_CHANNELS.SESSION_GET);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LOAD);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_FORK);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_DELETE);
