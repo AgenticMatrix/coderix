@@ -609,7 +609,7 @@ export function App(): React.ReactElement {
               position: 'relative',
               display: 'flex',
               flexDirection: 'column',
-              width: '720px',
+              width: '880px',
               maxWidth: '95vw',
               height: '85vh',
               maxHeight: '85vh',
@@ -620,8 +620,8 @@ export function App(): React.ReactElement {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Scrollable content */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
+            {/* Settings fills the modal; its internal content pane scrolls */}
+            <div style={{ flex: 1, minHeight: 0 }}>
               <SettingsView onClose={() => setSettingsOpen(false)} />
             </div>
           </div>
