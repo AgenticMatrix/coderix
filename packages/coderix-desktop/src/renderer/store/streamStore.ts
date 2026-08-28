@@ -4,6 +4,7 @@ import type { AggregatedTokenUsage } from './types.js';
 import { createId } from './types.js';
 import type { ChatMessage } from './types.js';
 import { useChatStore } from './chatStore.js';
+import { useSessionStore } from './sessionStore.js';
 import {
   onStreamBlock,
   onStreamDone,
@@ -75,6 +76,21 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     if (existing.length > 0) return;
 
     const cleanups: Array<() => void> = [];
+
+    // Refresh the sidebar entry for the active session once a turn finishes.
+    // A completed turn is bumped optimistically so "turns"/time update
+    // immediately; a delayed disk read then reconciles the exact count and
+    // title once the engine's async JSONL/meta writes have landed.
+    const refreshSidebarSession = (bump: boolean) => {
+      const sessionId =
+        useChatStore.getState().sessionId ??
+        useSessionStore.getState().currentSessionId;
+      if (!sessionId) return;
+      if (bump) useSessionStore.getState().bumpSession(sessionId);
+      setTimeout(() => {
+        void useSessionStore.getState().refreshSession(sessionId);
+      }, 400);
+    };
 
     // ── Stream Block ──────────────────────────────────────
     const unsubBlock = onStreamBlock((block: StreamBlock) => {
@@ -219,6 +235,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       } else {
         useChatStore.setState({ isStreaming: false });
       }
+      refreshSidebarSession(true);
     });
     cleanups.push(unsubDone);
 
@@ -226,6 +243,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     const unsubError = onStreamError((error: string) => {
       useChatStore.setState({ error: error, isStreaming: false });
       set({ currentMessage: null });
+      refreshSidebarSession(false);
     });
     cleanups.push(unsubError);
 

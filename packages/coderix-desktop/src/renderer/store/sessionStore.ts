@@ -11,6 +11,7 @@ export interface SessionState {
   // Actions
   loadSessions: () => Promise<void>;
   refreshSession: (id: string) => Promise<void>;
+  bumpSession: (id: string) => void;
   createSession: () => Promise<void>;
   forkSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
@@ -81,7 +82,13 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       // Patch only the matching entry — do not toggle isLoading or touch others.
       set((state) => {
         const sessions = state.sessions.map((existing) =>
-          existing.id === id ? normalized : existing,
+          existing.id === id
+            ? {
+                ...normalized,
+                // Never let a briefly-stale disk read revert an optimistic bump.
+                turnCount: Math.max(existing.turnCount, normalized.turnCount),
+              }
+            : existing,
         );
         // Preserve "most recently updated first" ordering without refetching.
         sessions.sort(
@@ -93,6 +100,24 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     } catch {
       // Best-effort refresh — never disturb the list over a single-session miss.
     }
+  },
+
+  bumpSession: (id: string) => {
+    // Optimistically reflect a completed turn so the sidebar updates
+    // immediately, even before the on-disk summary is readable.
+    set((state) => {
+      const sessions = state.sessions.map((s) =>
+        s.id === id
+          ? { ...s, turnCount: s.turnCount + 1, updatedAt: Date.now() }
+          : s,
+      );
+      // Keep "most recently updated first" ordering.
+      sessions.sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+      return { sessions };
+    });
   },
 
   createSession: async () => {

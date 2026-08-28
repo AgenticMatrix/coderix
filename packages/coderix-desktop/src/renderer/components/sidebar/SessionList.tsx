@@ -27,15 +27,14 @@ export function SessionList({
   const sessions = useSessionStore((s) => s.sessions);
   const isLoading = useSessionStore((s) => s.isLoading);
   const deleteSession = useSessionStore((s) => s.deleteSession);
-  const loadSessions = useSessionStore((s) => s.loadSessions);
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setDeleting(id);
     try {
+      // deleteSession already removes the entry optimistically.
       await deleteSession(id);
-      await loadSessions();
     } catch { /* ignore */ }
     setDeleting(null);
   };
@@ -45,7 +44,6 @@ export function SessionList({
     for (const s of sessions) {
       try { await deleteSession(s.id); } catch { /* ignore */ }
     }
-    await loadSessions();
   };
 
   if (isLoading) {
