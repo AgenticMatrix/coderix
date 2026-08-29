@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
     "@coderix/core": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-tooltip": "^1.1.0",

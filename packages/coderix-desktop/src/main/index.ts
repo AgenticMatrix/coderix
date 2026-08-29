@@ -248,6 +248,11 @@ async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
     callModel,
   };
 
+  // Set the engine BEFORE re-initializing the QueryEngine so that an engine
+  // switch (e.g. coderix → claude-code) takes effect even if the in-process
+  // QueryEngine re-init below throws for any reason.
+  ipcBridge.setEngine(appConfig.engine ?? 'coderix');
+
   await ipcBridge.initEngine(config);
   const settings = loadSettings();
   const permMode: PermissionMode = (settings.default_permission_mode as PermissionMode)

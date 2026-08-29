@@ -26,7 +26,10 @@ export interface SettingsData {
   defaultPermissionMode: PermissionMode;
   theme: Theme;
   mcpServers: Array<{ name: string; url: string; enabled: boolean }>;
+  engine: AgentEngine;
 }
+
+export type AgentEngine = 'coderix' | 'claude-code';
 
 // ---------------------------------------------------------------------------
 // Core-side settings shape (from ~/.coderix/settings.json via loadSettings())
@@ -52,6 +55,7 @@ interface CoderSettings {
   max_tokens?: number;
   env?: Record<string, string>;
   web_search?: unknown;
+  engine?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +91,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
     defaultPermissionMode: 'auto',
     theme: (config.theme as Theme) ?? 'light',
     mcpServers: [],
+    engine: (config.engine === 'claude-code' ? 'claude-code' : 'coderix'),
   };
 }
 
@@ -94,6 +99,7 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
   return {
     theme: data.theme,
     default_model: data.defaultModel,
+    engine: data.engine,
     model_list: data.providers.map((p) => ({
       provider: p.name.toLowerCase(),
       base_url: p.baseUrl,
@@ -197,6 +203,7 @@ export const useSettingsStore = create<SettingsStore>()((set) => ({
             defaultPermissionMode: 'auto',
             theme: 'light',
             mcpServers: [],
+            engine: 'coderix',
           },
           loading: false,
         });

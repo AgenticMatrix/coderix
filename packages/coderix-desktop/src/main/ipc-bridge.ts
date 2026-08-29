@@ -29,8 +29,9 @@ import type {
 } from '@coderix/core';
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
-import type { QueryEngineConfig, QueryEngineEvent } from '@coderix/core';
+import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
 import { loadSettings } from '@coderix/core';
+import { runClaudeCodeQuery } from './claude-code-engine.js';
 
 import type { WindowManager } from './window-manager.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -53,6 +54,8 @@ export interface IpcBridgeConfig {
 export interface IpcBridge {
   queryEngine: QueryEngine | null;
   initEngine(config: QueryEngineConfig): Promise<void>;
+  setEngine(engine: AgentEngine): void;
+  readonly engine: AgentEngine;
   destroy(): void;
 }
 
@@ -129,6 +132,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   let toolRegistry: ToolRegistry | null = null;
   let currentWorkDir = resolve(config.workDir || process.cwd());
   let currentModel = config.model || 'deepseek-v4-pro';
+  let activeEngine: AgentEngine = 'coderix';
   let activeAbortController: AbortController | null = null;
   let pendingPermission: DeferredPermission | null = null;
   let pendingToolName: string | null = null;
@@ -182,7 +186,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // ── Query ──────────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: { query: string; sessionId?: string }) => {
-    if (!queryEngine || !sessionManager) {
+    if (!sessionManager) {
+      throw new Error('SessionManager not initialized');
+    }
+    if (activeEngine === 'coderix' && !queryEngine) {
       throw new Error('QueryEngine not initialized');
     }
 
@@ -233,9 +240,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     } catch { /* ignore */ }
 
     // Start streaming in background (don't await — send via push channels)
+    const engineStream: AsyncGenerator<QueryEngineEvent> =
+      activeEngine === 'claude-code'
+        ? runClaudeCodeQuery({
+            prompt: userInput,
+            sessionId: sessionManager.getActive()?.id ?? '',
+            cwd: currentWorkDir,
+            model: currentModel,
+            abortController: activeAbortController!,
+          })
+        : queryEngine!.submitMessage(userInput);
+
     (async () => {
       try {
-        for await (const event of queryEngine!.submitMessage(userInput)) {
+        for await (const event of engineStream) {
           if (activeAbortController?.signal.aborted) break;
 
           switch (event.type) {
@@ -1160,6 +1178,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   return {
     get queryEngine() {
       return queryEngine;
+    },
+
+    get engine() {
+      return activeEngine;
+    },
+
+    setEngine(engine: AgentEngine): void {
+      activeEngine = engine;
+      console.log('[Coderix] Agent engine set to:', engine);
     },
 
     async initEngine(config: QueryEngineConfig): Promise<void> {

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bot, Palette, ShieldCheck, RefreshCw, X, Plus, Trash2, Sun, Moon } from 'lucide-react';
+import { Bot, Palette, ShieldCheck, RefreshCw, X, Plus, Trash2, Sun, Moon, Cpu } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useUIStore, type PermissionMode, type Theme } from '../../store/uiStore.js';
-import { useSettingsStore, type SettingsData, type ProviderConfig, PROVIDER_CATALOG, getProviderModels, getProviderBaseUrl } from '../../store/settingsStore.js';
+import { useSettingsStore, type SettingsData, type ProviderConfig, type AgentEngine, PROVIDER_CATALOG, getProviderModels, getProviderBaseUrl } from '../../store/settingsStore.js';
 
 // ── Types ──────────────────────────────────────────────────
 
-type SettingsTab = 'model' | 'appearance' | 'permissions' | 'update';
+type SettingsTab = 'model' | 'engine' | 'appearance' | 'permissions' | 'update';
 
 interface NavItem {
   id: SettingsTab;
@@ -16,6 +16,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'model', label: '模型', icon: Bot },
+  { id: 'engine', label: '智能体引擎', icon: Cpu },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'permissions', label: '权限', icon: ShieldCheck },
   { id: 'update', label: '更新', icon: RefreshCw },
@@ -130,6 +131,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
     select: { width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-separator)', background: 'var(--color-input-bg)', color: 'var(--color-text-primary)', fontSize: 'var(--text-sm)', boxSizing: 'border-box' as const } as React.CSSProperties,
     themeBtn: (active: boolean, t: Theme) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 24px', borderRadius: 'var(--radius-lg)', border: active ? '2px solid var(--color-brand)' : '1px solid var(--color-separator)', background: t === 'light' ? '#FAF9F5' : '#262624', color: t === 'light' ? '#29261B' : '#EDEBE0', cursor: 'pointer', fontSize: 'var(--text-sm)', fontWeight: active ? 600 : 400, minWidth: '120px' } as React.CSSProperties),
     permBtn: (active: boolean) => ({ textAlign: 'left' as const, padding: '12px 16px', borderRadius: 'var(--radius-lg)', border: active ? '2px solid var(--color-brand)' : '1px solid var(--color-separator)', background: 'var(--color-bg-secondary)', cursor: 'pointer', marginBottom: '8px', width: '100%' }),
+    engineBtn: (active: boolean) => ({ textAlign: 'left' as const, padding: '14px 16px', borderRadius: 'var(--radius-lg)', border: active ? '2px solid var(--color-brand)' : '1px solid var(--color-separator)', background: 'var(--color-bg-secondary)', cursor: 'pointer', marginBottom: '12px', width: '100%', display: 'flex', alignItems: 'center', gap: '12px' } as React.CSSProperties),
     saveBtn: { padding: '6px 16px', borderRadius: 'var(--radius-md)', background: 'var(--color-brand)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 'var(--text-sm)', fontWeight: 500 } as React.CSSProperties,
     addBtn: { width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px dashed var(--color-separator)', background: 'transparent', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 'var(--text-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' } as React.CSSProperties,
   };
@@ -259,6 +261,30 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                   </div>
                 ))}
                 <button style={S.addBtn} onClick={addProvider}><Plus size={16} />添加 Provider</button>
+              </div>
+            )}
+
+            {activeTab === 'engine' && (
+              <div className="space-y-5">
+                <div>
+                  <h3 style={sectionTitle}>智能体引擎</h3>
+                  <p style={sectionDesc}>选择执行对话的底层引擎，保存后自动重载配置并生效。</p>
+                </div>
+                {([
+                  { id: 'coderix' as AgentEngine, title: 'Coderix', desc: '内置引擎，复用当前模型 Provider、权限与工具体系。', badge: '内置' },
+                  { id: 'claude-code' as AgentEngine, title: 'Claude Code', desc: '使用官方 Claude Code SDK，由本机 claude CLI 驱动（需已安装并登录）。', badge: 'SDK' },
+                ]).map(({ id, title, desc, badge }) => (
+                  <button key={id} onClick={() => updateDraft({ engine: id })} style={S.engineBtn((draft.engine ?? 'coderix') === id)}>
+                    <Cpu size={18} className="flex-shrink-0" style={{ color: (draft.engine ?? 'coderix') === id ? 'var(--color-brand)' : 'var(--color-text-tertiary)' }} />
+                    <div className="min-w-0 flex-1">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{title}</span>
+                        <span style={{ fontSize: 'var(--text-xs)', padding: '1px 8px', borderRadius: 'var(--radius-full)', background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}>{badge}</span>
+                      </div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
 

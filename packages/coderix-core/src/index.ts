@@ -188,7 +188,7 @@ export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js
 export { loadSettings, saveSettings, loadConfig, inferProvider, getMaxToolConcurrency } from './config.js';
 export type {
   CoderSettings, AppConfig, ModelItem, ModelEntry, ModelPrice,
-  WebSearchConfig, WebBridgeConfig, PermissionRuleEntry,
+  WebSearchConfig, WebBridgeConfig, PermissionRuleEntry, AgentEngine,
 } from './config.js';
 
 // ── Platform utilities ─────────────────────────────────────────────
