@@ -10,7 +10,8 @@
     "build:prod": "electron-vite build --config electron.vite.prod.config.ts",
     "preview": "electron-vite preview",
     "package": "electron-builder",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node -e \"const{execSync}=require('child_process');try{execSync('chmod +x node_modules/node-pty/prebuilds/*/spawn-helper',{stdio:'ignore'})}catch(e){}\""
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.141",

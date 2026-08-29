@@ -1,9 +1,62 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Terminal as XTerm } from 'xterm';
+import { Terminal as XTerm, type ITheme } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { useUIStore } from '../../store/uiStore';
 
 // Import xterm CSS — it ships with the npm package
 import 'xterm/css/xterm.css';
+
+/** xterm color palettes — track the desktop light/dark theme. */
+const TERMINAL_THEMES: Record<'light' | 'dark', ITheme> = {
+  light: {
+    background: '#FAF9F5',
+    foreground: '#29261B',
+    cursor: '#D97757',
+    cursorAccent: '#FAF9F5',
+    selectionBackground: '#D97757',
+    selectionForeground: '#FFFFFF',
+    black: '#29261B',
+    red: '#C93B1F',
+    green: '#1E7D32',
+    yellow: '#A86A00',
+    blue: '#0A66C2',
+    magenta: '#9C27B0',
+    cyan: '#00696E',
+    white: '#FAF9F5',
+    brightBlack: '#656358',
+    brightRed: '#E5484D',
+    brightGreen: '#30A46C',
+    brightYellow: '#C77D00',
+    brightBlue: '#0A84FF',
+    brightMagenta: '#B066C8',
+    brightCyan: '#0E818C',
+    brightWhite: '#FFFFFF',
+  },
+  dark: {
+    background: '#262624',
+    foreground: '#EDEBE0',
+    cursor: '#D97757',
+    cursorAccent: '#262624',
+    selectionBackground: '#D97757',
+    selectionForeground: '#262624',
+    black: '#262624',
+    red: '#FF453A',
+    green: '#30D158',
+    yellow: '#FFD60A',
+    blue: '#0A84FF',
+    magenta: '#FF375F',
+    cyan: '#5AC8FA',
+    white: '#EDEBE0',
+    brightBlack: '#6B6860',
+    brightRed: '#FF6961',
+    brightGreen: '#32D74B',
+    brightYellow: '#FFD426',
+    brightBlue: '#409CFF',
+    brightMagenta: '#FF6482',
+    brightCyan: '#70D7FF',
+    brightWhite: '#FFFFFF',
+  },
+};
 
 export interface TerminalProps {
   /** Optional PTY session ID from the main process (via terminal:create) */
@@ -49,6 +102,10 @@ export default function Terminal({
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  const theme = useUIStore((s) => s.theme);
+  const themeRef = useRef<typeof theme>(theme);
+  themeRef.current = theme;
+
   // ── Initialize xterm ──────────────────────────────────────
   const initTerminal = useCallback(() => {
     if (!containerRef.current || termRef.current) return;
@@ -57,32 +114,8 @@ export default function Terminal({
     fitAddonRef.current = fitAddon;
 
     const term = new XTerm({
-      // macOS-style appearance
-      theme: {
-        background: 'rgba(28, 28, 30, 0.85)',
-        foreground: '#f5f5f7',
-        cursor: '#0a84ff',
-        cursorAccent: '#1c1c1e',
-        selectionBackground: '#0a84ff',
-        selectionForeground: '#ffffff',
-        // ANSI colors — macOS Terminal.app palette
-        black: '#1c1c1e',
-        red: '#ff453a',
-        green: '#30d158',
-        yellow: '#ff9f0a',
-        blue: '#0a84ff',
-        magenta: '#ff375f',
-        cyan: '#5ac8fa',
-        white: '#f5f5f7',
-        brightBlack: '#636366',
-        brightRed: '#ff6961',
-        brightGreen: '#32d74b',
-        brightYellow: '#ffd426',
-        brightBlue: '#409cff',
-        brightMagenta: '#ff6482',
-        brightCyan: '#70d7ff',
-        brightWhite: '#ffffff',
-      },
+      // macOS-style appearance, palette follows the desktop light/dark theme
+      theme: TERMINAL_THEMES[themeRef.current],
       fontSize: 13,
       fontFamily: "'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
       cursorBlink: true,
@@ -156,6 +189,15 @@ export default function Terminal({
     return () => observer.disconnect();
   }, [onResize]);
 
+  // ── Theme sync ─────────────────────────────────────────────
+  // Update the live xterm palette on theme change without recreating the
+  // instance (which would drop the PTY connection).
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = TERMINAL_THEMES[theme];
+    }
+  }, [theme]);
+
   // ── Render ─────────────────────────────────────────────────
   return (
     <div
@@ -166,8 +208,8 @@ export default function Terminal({
         height: '100%',
         borderRadius: 'var(--radius-lg, 8px)',
         overflow: 'hidden',
-        // macOS translucent bg + blur — terminal stays dark for readability
-        background: 'var(--color-terminal-bg, #29261B)',
+        // macOS translucent bg + blur — background follows the desktop theme
+        background: TERMINAL_THEMES[theme].background,
         backdropFilter: 'saturate(180%) blur(20px)',
         WebkitBackdropFilter: 'saturate(180%) blur(20px)',
       }}

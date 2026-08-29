@@ -251,6 +251,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           })
         : queryEngine!.submitMessage(userInput);
 
+    // The in-process Coderix engine persists the user turn itself inside
+    // submitMessage(); the Claude Code SDK engine does not, so record it here
+    // to keep the Coderix session store in sync (otherwise the session is
+    // never written to disk and `session:load` fails with "Session not found").
+    if (activeEngine === 'claude-code') {
+      try {
+        sessionManager.addMessage({ role: 'user', content: userInput });
+      } catch { /* ignore — best-effort persistence */ }
+    }
+
     (async () => {
       try {
         for await (const event of engineStream) {
@@ -266,11 +276,27 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               if (msg.type === 'stream_event' && msg.event) {
                 forwardStreamEvent(mainWindow, msg.event);
               } else if (msg.type === 'assistant' && msg.message) {
-                mainWindow.webContents.send(IPC_CHANNELS.STREAM_DONE, {
-                  stopReason: msg.message.stop_reason ?? 'end_turn',
-                  usage: msg.message.usage,
-                  model: msg.message.model,
-                });
+                // The `message_stop` stream event (forwarded above) is the
+                // authoritative end-of-turn signal. The Claude Code SDK also
+                // emits partial `assistant` snapshots mid-stream with no
+                // stop reason yet; treating those as done would commit the
+                // message prematurely and render it twice. Only fall back to
+                // STREAM_DONE here for a final message that carries a stop
+                // reason (e.g. the Coderix engine's end-of-turn message, or a
+                // non-streaming response without a message_stop event).
+                //
+                // Note: the Coderix engine uses camelCase `stopReason`, the
+                // Claude Code SDK uses snake_case `stop_reason`.
+                const stopReason =
+                  msg.message.stop_reason ??
+                  (msg.message as { stopReason?: string }).stopReason;
+                if (stopReason) {
+                  mainWindow.webContents.send(IPC_CHANNELS.STREAM_DONE, {
+                    stopReason,
+                    usage: msg.message.usage,
+                    model: msg.message.model,
+                  });
+                }
               } else if (msg.type === 'user' && msg.message) {
                 // Forward tool_result blocks so the renderer can show output below each tool
                 const content = msg.message.content;
@@ -332,7 +358,31 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               break;
             }
             case 'done': {
-              // Query complete
+              // Query complete. The Coderix engine persists messages inside
+              // submitMessage(); the Claude Code engine hands its final result
+              // through here so we can keep the session store in sync.
+              if (activeEngine === 'claude-code') {
+                const data = event.data as {
+                  sessionId?: string;
+                  result?: string;
+                  stopReason?: string | null;
+                  usage?: CompletionUsage;
+                  totalCost?: number;
+                };
+                if (data.result) {
+                  try {
+                    sessionManager.addMessage({
+                      role: 'assistant',
+                      content: data.result,
+                    });
+                  } catch { /* ignore — best-effort persistence */ }
+                }
+                if (data.totalCost) {
+                  try {
+                    sessionManager.addCost(data.totalCost);
+                  } catch { /* ignore */ }
+                }
+              }
               break;
             }
           }
@@ -557,15 +607,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Terminal ───────────────────────────────────────────────────────────
 
-  function resolveCoderixStartupCommand(): string {
-    // Launch the coderix TUI inside the shell (agentstation-style: open a
-    // terminal, then run the agent). Fall back to the `coderix` bin name if
-    // the monorepo dist entry isn't present (e.g. packaged build).
-    const cliEntry = resolve(__dirname, '../../../../packages/coderix-cli/dist/cli/main.js');
-    const cliPath = existsSync(cliEntry) ? `"${cliEntry}"` : 'coderix';
-    return `clear\nnode ${cliPath}\n`;
-  }
-
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (_event, opts: { cwd?: string; rows?: number; cols?: number }) => {
     const terminalId = randomUUID();
     const mainWindow = getMainWindow(windowManager);
@@ -575,7 +616,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       cwd: opts.cwd ?? currentWorkDir,
       rows: opts.rows ?? 30,
       cols: opts.cols ?? 120,
-      startupCommand: resolveCoderixStartupCommand(),
+      startupCommand: 'coderix\n',
       onData: (data: string) => {
         mainWindow.webContents.send(`terminal:${terminalId}:data`, data);
       },

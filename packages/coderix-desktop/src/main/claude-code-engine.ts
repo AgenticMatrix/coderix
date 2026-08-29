@@ -160,6 +160,21 @@ export async function* runClaudeCodeQuery(
                   ? '达到最大轮次限制'
                   : 'Claude Code 执行失败';
             yield { type: 'error', data: { message } };
+          } else {
+            // Emit the final result so the ipc-bridge can persist the
+            // assistant turn to the Coderix session store (the in-process
+            // engine does this itself; the SDK engine must hand it over).
+            const result = (msg as { result?: string }).result;
+            yield {
+              type: 'done',
+              data: {
+                sessionId,
+                result,
+                stopReason: msg.stop_reason,
+                usage: msg.usage,
+                totalCost: msg.total_cost_usd,
+              },
+            };
           }
           break;
         default:
