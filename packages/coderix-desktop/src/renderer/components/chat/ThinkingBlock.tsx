@@ -72,9 +72,16 @@ export function ThinkingBlock({
         </button>
       </div>
 
-      {/* Collapsed state shows only the header — no preview. Click to expand
-          the full reasoning below. */}
-      {/* Expanded content */}
+      {/* Collapsed preview — a two-line clamp so the user can glimpse the
+          reasoning without expanding. Rendered inline (no box, no gap) right
+          below the header. */}
+      {!isExpanded && text.trim() !== '' && (
+        <div className="text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 pl-5 line-clamp-2">
+          {text}
+        </div>
+      )}
+
+      {/* Expanded content — also inline, no box, no gap */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -84,17 +91,15 @@ export function ThinkingBlock({
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="py-2 mt-1 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]/30 border-l-2 border-[var(--color-info)]/30">
-              <pre className="text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0">
-                {text}
-                {isStreaming && (
-                  <motion.span
-                    animate={{ opacity: [1, 0] }}
-                    transition={{ repeat: Infinity, duration: 0.8 }}
-                    className="ml-0.5 inline-block w-2 h-[14px] bg-[var(--color-text-tertiary)] align-middle"
-                  />
-                )}
-              </pre>
+            <div className="text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 pl-5">
+              {text}
+              {isStreaming && (
+                <motion.span
+                  animate={{ opacity: [1, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.8 }}
+                  className="ml-0.5 inline-block w-2 h-[14px] bg-[var(--color-text-tertiary)] align-middle"
+                />
+              )}
             </div>
           </motion.div>
         )}
