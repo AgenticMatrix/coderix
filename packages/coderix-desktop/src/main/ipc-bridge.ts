@@ -30,7 +30,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings } from '@coderix/core';
+import { loadSettings, loadConfig, writeSessionMeta, sessionDir } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 
 import type { WindowManager } from './window-manager.js';
@@ -227,17 +227,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
 
-    // Update session title to first question (if still default)
-    try {
-      const active = sessionManager.getActive();
-      if (active && (active.title === '新对话' || active.title.startsWith('Session '))) {
-        const title = userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
-        active.title = title;
-        const sessionDir = join(homedir(), '.coderix', 'sessions', active.id);
-        if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-        writeFileSync(join(sessionDir, 'session.json'), JSON.stringify(active, null, 2), 'utf-8');
-      }
-    } catch { /* ignore */ }
+    // Update session title to first question (if still default).
+    // This only applies to the in-process Coderix engine — Claude Code
+    // sessions persist their own title in the claude-code branch below.
+    if (activeEngine === 'coderix') {
+      try {
+        const active = sessionManager.getActive();
+        if (active && (active.title === '新对话' || active.title.startsWith('Session '))) {
+          const title = userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
+          active.title = title;
+          const sessionDir = join(homedir(), '.coderix', 'sessions', active.id);
+          if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
+          writeFileSync(join(sessionDir, 'session.json'), JSON.stringify(active, null, 2), 'utf-8');
+        }
+      } catch { /* ignore */ }
+    }
 
     // Start streaming in background (don't await — send via push channels)
     const engineStream: AsyncGenerator<QueryEngineEvent> =
@@ -257,7 +261,41 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // never written to disk and `session:load` fails with "Session not found").
     if (activeEngine === 'claude-code') {
       try {
+        // Capture whether this is the conversation's first message BEFORE
+        // addMessage() mutates the in-memory message list.
+        const isFirstMessage = sessionManager.getActive().messages.length === 0;
+
         sessionManager.addMessage({ role: 'user', content: userInput });
+
+        const active = sessionManager.getActive();
+        if (active) {
+          // addMessage() derives a title from the first user message but only
+          // writes workDir to meta.json — the title itself is never persisted,
+          // so the sidebar falls back to a bare "Session <id>". Persist a
+          // fallback title (the latest user input) so the sidebar always shows
+          // something meaningful, then refine long first inputs into a short
+          // topic summary in the background.
+          const fallback =
+            userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
+          const isPlaceholderTitle =
+            !active.title ||
+            active.title === '新对话' ||
+            active.title.startsWith('Session ') ||
+            /\.{3}$/.test(active.title);
+
+          if (isFirstMessage) {
+            // No summary can exist yet — always persist the fallback and
+            // kick off background refinement.
+            active.title = fallback;
+            sessionManager.saveSession(active);
+            void summarizeClaudeSessionTitle(active.id, userInput);
+          } else if (isPlaceholderTitle) {
+            // A later turn with no refined summary yet (e.g. refinement failed
+            // earlier): keep the fallback in sync with the latest user input.
+            active.title = fallback;
+            sessionManager.saveSession(active);
+          }
+        }
       } catch { /* ignore — best-effort persistence */ }
     }
 
@@ -1350,4 +1388,51 @@ function resolveProjectPath(userPath: string, projectRoot: string): string {
     throw new Error(`Path traversal not allowed: ${userPath}`);
   }
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// Claude Code session title refinement
+// ---------------------------------------------------------------------------
+
+/**
+ * Summarize a claude-code session's first user input into a short topic title
+ * using the configured LLM, then write it to the session's meta.json.
+ *
+ * Fire-and-forget from the caller: on any failure (missing config, network,
+ * provider error) the fallback title persisted by `saveSession()` remains in
+ * place, so the sidebar never regresses to "Session <id>".
+ */
+async function summarizeClaudeSessionTitle(sessionId: string, text: string): Promise<void> {
+  if (!text || text.trim().length <= 30) return;
+  try {
+    const config = loadConfig();
+    if (!config.apiKey || !config.baseUrl || !config.model) return;
+
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseUrl });
+
+    const stream = client.messages.stream({
+      model: config.model,
+      max_tokens: 50,
+      messages: [{
+        role: 'user',
+        content: `将以下内容总结为5-10个字的标题，只返回标题本身，不要加任何其他内容：\n\n${text}`,
+      }],
+      thinking: { type: 'disabled' },
+    });
+
+    let result = '';
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        result += event.delta.text;
+      }
+    }
+
+    const title = result.trim().slice(0, 20);
+    if (title) {
+      await writeSessionMeta(sessionDir(sessionId), { title });
+    }
+  } catch {
+    // Best-effort — keep the persisted fallback title on any failure.
+  }
 }

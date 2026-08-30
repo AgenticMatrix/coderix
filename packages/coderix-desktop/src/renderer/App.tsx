@@ -32,6 +32,7 @@ import type { SidebarTab } from './components/sidebar/IconSidebar';
 
 import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';
 import { useSettingsStore } from './store/settingsStore.js';
+import type { SettingsData } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import {
@@ -71,6 +72,21 @@ function isBackgroundNotificationMessage(msg: { role: string; blocks: StreamBloc
       (b) => b.type === 'text' && typeof b.content === 'string' && b.content.startsWith('<background-agent-notifications>'),
     )
   );
+}
+
+/**
+ * Resolve the current model into a "provider/model" display string.
+ * `default_model` may already be "provider/model", or a bare model name; in the
+ * latter case, look up which provider owns it from the model list.
+ */
+function formatModelWithProvider(settings: SettingsData | null): string {
+  const dm = settings?.defaultModel?.trim();
+  if (!dm) return '未配置模型';
+  if (dm.includes('/')) return dm;
+  const owner = settings?.providers.find((p) =>
+    p.models.some((m) => m.name === dm),
+  );
+  return owner ? `${owner.name}/${dm}` : dm;
 }
 
 // ---------------------------------------------------------------------------
@@ -522,7 +538,7 @@ export function App(): React.ReactElement {
         detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
         statusBarProps={{
-          model: settings?.defaultModel || '未配置模型',
+          model: formatModelWithProvider(settings),
           agentStatus,
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,

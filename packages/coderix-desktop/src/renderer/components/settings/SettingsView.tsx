@@ -8,6 +8,11 @@ import { useSettingsStore, type SettingsData, type ProviderConfig, type AgentEng
 
 type SettingsTab = 'model' | 'engine' | 'appearance' | 'permissions' | 'update';
 
+/** "provider/model" for the dropdown label/value, without double-prefixing relay models. */
+function qualifiedModelName(provider: string, model: string): string {
+  return model.includes('/') ? model : `${provider}/${model}`;
+}
+
 interface NavItem {
   id: SettingsTab;
   label: string;
@@ -250,12 +255,12 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                         />
                         <select onChange={(e) => { if (e.target.value) updateDraft({ defaultModel: e.target.value }); }} style={{ ...S.select, width: '40px', flexShrink: 0 }} defaultValue="">
                           <option value="" disabled>▼</option>
-                          {p.models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                          {p.models.map(m => <option key={m.name} value={qualifiedModelName(p.name, m.name)}>{qualifiedModelName(p.name, m.name)}</option>)}
                         </select>
                       </div>
                     ) : (
                       <select value={draft.defaultModel} onChange={(e) => updateDraft({ defaultModel: e.target.value })} style={S.select}>
-                        {p.models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                        {p.models.map(m => <option key={m.name} value={qualifiedModelName(p.name, m.name)}>{qualifiedModelName(p.name, m.name)}</option>)}
                       </select>
                     )}
                   </div>

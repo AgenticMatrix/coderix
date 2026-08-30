@@ -72,6 +72,16 @@ function isPlaceholderKey(key: string): boolean {
   );
 }
 
+/** Resolve a bare default_model (e.g. "deepseek-v4-pro") to "provider/model" form. */
+function qualifyDefaultModel(config: CoderSettings): string {
+  const raw = config.default_model ?? '';
+  if (!raw || raw.includes('/')) return raw;
+  const owner = config.model_list?.find((entry) =>
+    entry.model?.some((m) => (typeof m === 'string' ? m : m.name) === raw),
+  );
+  return owner?.provider ? `${owner.provider}/${raw}` : raw;
+}
+
 function settingsToUI(config: CoderSettings): SettingsData {
   return {
     providers:
@@ -87,7 +97,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
           })) ?? [],
         connected: !!(entry.auth_token_env && entry.auth_token_env.length > 0 && !isPlaceholderKey(entry.auth_token_env)),
       })) ?? [],
-    defaultModel: config.default_model ?? '',
+    defaultModel: qualifyDefaultModel(config),
     defaultPermissionMode: 'auto',
     theme: (config.theme as Theme) ?? 'light',
     mcpServers: [],

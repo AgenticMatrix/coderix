@@ -9,9 +9,13 @@ function useModelList(): string[] {
     const api = window.coderixAPI?.config;
     if (api?.getModelList) {
       api.getModelList().then((list: any) => {
-        const names = (list as any[])?.flatMap((e: any) =>
-          (e.model || []).map((m: any) => typeof m === 'string' ? m : m.name)
-        ) || [];
+        const names = (list as any[])?.flatMap((e: any) => {
+          const provider = e.provider ?? '';
+          return (e.model || []).map((m: any) => {
+            const name = typeof m === 'string' ? m : m.name;
+            return provider ? `${provider}/${name}` : name;
+          });
+        }) || [];
         setModels(names);
       }).catch(() => {});
     }

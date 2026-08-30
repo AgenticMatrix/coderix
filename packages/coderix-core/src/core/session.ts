@@ -593,17 +593,22 @@ export class SessionManager {
 
     // Read title from meta.json (new), fall back to session.jsonl title entry (legacy)
     const meta = readSessionMeta(dir);
-    const title = meta?.title ?? lastTitle ?? `Session ${id.slice(0, 8)}`;
+    // A persisted "Session <id>" or "..." placeholder carries no real signal —
+    // treat it as absent so the picker regenerates a meaningful title from the
+    // first user message instead of showing a bare session id.
+    const metaTitle = meta?.title && !isAutoTitle(meta.title) ? meta.title : undefined;
+    const generatedTitle = firstUserText ? generateSessionTitle(firstUserText) : undefined;
+    const title = metaTitle ?? lastTitle ?? generatedTitle ?? `Session ${id.slice(0, 8)}`;
     const mtime = statSync(jsonlPath).mtime;
 
     // Compute display title for the session picker
     let displayTitle: string | undefined;
-    if (meta?.title) {
-      // meta.json has a title — use it directly (may be truncated placeholder or LLM-refined)
-      displayTitle = meta.title;
-    } else if (isAutoTitle(title) && firstUserText) {
-      // Legacy session without meta.json — generate from first user text
-      displayTitle = generateSessionTitle(firstUserText);
+    if (metaTitle) {
+      // meta.json has a real (non-placeholder) title — use it directly.
+      displayTitle = metaTitle;
+    } else if (generatedTitle) {
+      // Placeholder / legacy title — generate from the first user text.
+      displayTitle = generatedTitle;
     }
 
     return {
@@ -782,6 +787,12 @@ export class SessionManager {
       // Extract messages from transcript entries
       const messages = entriesToMessages(allEntries);
 
+      // First user message text — used to derive a title when none is stored.
+      const firstUserMessage = messages.find((m) => m.role === 'user');
+      const firstUserText = firstUserMessage
+        ? extractMessageText(firstUserMessage)
+        : '';
+
       // Extract metadata from non-transcript entries (last-wins)
       let title: string | null = null;
       const subAgentIds: string[] = [];
@@ -799,9 +810,11 @@ export class SessionManager {
         }
       }
 
-      // Fall back to meta.json title (LLM-summarized titles are stored there)
+      // Fall back to meta.json title (LLM-summarized titles are stored there).
+      // Ignore persisted placeholders ("Session <id>"/"...") — they carry no
+      // real signal and would otherwise lock a placeholder in on resume.
       const meta = readSessionMeta(dir);
-      if (!title && meta?.title) {
+      if (!title && meta?.title && !isAutoTitle(meta.title)) {
         title = meta.title;
       }
 
@@ -821,7 +834,11 @@ export class SessionManager {
 
       const session: Session = {
         id,
-        title: title ?? `Session ${id.slice(0, 8)}`,
+        title:
+          title ??
+          (firstUserText
+            ? generateSessionTitle(firstUserText)
+            : `Session ${id.slice(0, 8)}`),
         status: 'active',
         messages,
         turnCount: messages.filter((m) => m.role === 'assistant').length,
