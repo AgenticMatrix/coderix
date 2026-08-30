@@ -7,10 +7,13 @@ const STANDARD_MODE_KEY = 'coderix-standard-mode';
 
 function loadStandardMode(): boolean {
   try {
-    return localStorage.getItem(STANDARD_MODE_KEY) === '1';
+    const stored = localStorage.getItem(STANDARD_MODE_KEY);
+    // First launch (nothing persisted yet) defaults to standard mode.
+    if (stored === null) return true;
+    return stored === '1';
   } catch {
-    // localStorage unavailable (e.g. strict privacy mode) — fall back to default.
-    return false;
+    // localStorage unavailable (e.g. strict privacy mode) — default to standard.
+    return true;
   }
 }
 

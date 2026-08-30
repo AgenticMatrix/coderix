@@ -78,6 +78,14 @@ function isBackgroundNotificationMessage(msg: { role: string; blocks: StreamBloc
 }
 
 /**
+ * Extract the last path segment (folder name) from a workspace path.
+ * Handles both POSIX (`/`) and Windows (`\`) separators.
+ */
+function getFolderName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+/**
  * Resolve the current model into a "provider/model" display string.
  * `default_model` may already be "provider/model", or a bare model name; in the
  * latter case, look up which provider owns it from the model list.
@@ -625,6 +633,10 @@ export function App(): React.ReactElement {
     ? ('thinking' as const)
     : ('idle' as const);
 
+  // Workspace display name — the last path segment (folder name). Defaults to
+  // the folder name so the menu header reads like the project's name.
+  const workspaceName = projectPath ? getFolderName(projectPath) : '选择目录';
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <>
@@ -709,7 +721,7 @@ export function App(): React.ReactElement {
               title={projectPath || '选择项目目录'}
             >
               <FolderOpen size={14} className="flex-shrink-0" />
-              <span className="truncate">{projectPath ? projectPath.split('/').pop() || projectPath : '选择目录'}</span>
+              <span className="truncate">{workspaceName}</span>
               <ChevronDown size={12} className={`flex-shrink-0 transition-transform ${workspaceOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -722,12 +734,15 @@ export function App(): React.ReactElement {
                         key={p}
                         type="button"
                         onClick={() => handleSelectRecentProject(p)}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-bg-tertiary)] ${p === projectPath ? 'text-[var(--color-brand)] font-medium' : 'text-[var(--color-text-primary)]'}`}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-bg-tertiary)] ${p === projectPath ? 'text-[var(--color-brand)]' : 'text-[var(--color-text-primary)]'}`}
                         title={p}
                       >
                         <span className="flex items-center gap-2">
                           <FolderOpen size={12} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
-                          <span className="truncate">{p}</span>
+                          <span className="truncate">
+                            <span className="font-medium">{getFolderName(p)}</span>
+                            <span className="text-[var(--color-text-tertiary)]">  {p}</span>
+                          </span>
                         </span>
                       </button>
                     ))}
