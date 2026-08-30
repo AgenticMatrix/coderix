@@ -566,9 +566,14 @@ export function App(): React.ReactElement {
       // A message that only contained thinking becomes empty in standard mode.
       if (blocks.length === 0) continue;
       const hasText = blocks.some((b: StreamBlock) => b.type === 'text');
+      const hasThinking = blocks.some((b: StreamBlock) => b.type === 'thinking');
+      // Only purely-tool assistant turns (no text AND no thinking) merge into
+      // the preceding assistant message. A thinking block starts a new group,
+      // so tools under one thought never merge across a thought boundary.
       const isToolOnlyAssistant =
         msg.role === 'assistant' &&
         !hasText &&
+        !hasThinking &&
         blocks.some((b: StreamBlock) => b.type === 'tool_use');
 
       if (isToolOnlyAssistant) {
@@ -587,9 +592,9 @@ export function App(): React.ReactElement {
         role: msg.role,
         blocks,
         timestamp: msg.timestamp,
-        // A text turn starts a new "group" (blank-line separator above);
-        // tool-only turns flow together with no separator.
-        isGroupStart: msg.role === 'assistant' && hasText,
+        // A text or thinking turn starts a new "group" (blank-line separator
+        // above); purely-tool turns flow together with no separator.
+        isGroupStart: msg.role === 'assistant' && (hasText || hasThinking),
       });
     }
 
@@ -604,7 +609,7 @@ export function App(): React.ReactElement {
           timestamp: Date.now(),
           isStreaming: true,
           isGroupStart: streamBlocks.some(
-            (b: StreamBlock) => b.type === 'text',
+            (b: StreamBlock) => b.type === 'text' || b.type === 'thinking',
           ),
         });
       }
