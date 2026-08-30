@@ -132,6 +132,14 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         return;
       }
 
+      // Stray blocks arriving after a stream was cancelled (e.g. a session
+      // switch interrupted the previous query) must not start a new in-progress
+      // message in the newly selected session. During a live stream
+      // `isStreaming` is true, so this only filters out orphaned blocks.
+      if (!msg && !useChatStore.getState().isStreaming) {
+        return;
+      }
+
       // Create message on first block
       if (!msg) {
         msg = {
@@ -216,7 +224,13 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubBlock);
 
     // ── Stream Done ────────────────────────────────────────
-    const unsubDone = onStreamDone(() => {
+    const unsubDone = onStreamDone((stopReason?: string) => {
+      // A stop reason of 'tool_use' means this turn ended to run tools — the
+      // engine will emit another assistant turn right after the tool results.
+      // Keep `isStreaming` true in that case so the guard above doesn't drop
+      // the next turn's blocks; only reset it on a terminal turn (end_turn /
+      // max_tokens / stop_sequence / refusal, or an undefined reason).
+      const isToolTurn = stopReason === 'tool_use';
       const { currentMessage } = get();
       if (currentMessage) {
         const chatMsg: ChatMessage = {
@@ -228,11 +242,11 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         };
         useChatStore.setState((state) => ({
           messages: [...state.messages, chatMsg],
-          isStreaming: false,
+          isStreaming: isToolTurn ? state.isStreaming : false,
           streamingContent: '',
         }));
         set({ currentMessage: null });
-      } else {
+      } else if (!isToolTurn) {
         useChatStore.setState({ isStreaming: false });
       }
       refreshSidebarSession(true);
@@ -240,7 +254,16 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubDone);
 
     // ── Stream Error ───────────────────────────────────────
-    const unsubError = onStreamError((error: string) => {
+    const unsubError = onStreamError((error: string, code?: string) => {
+      // An interrupt (user pressed ⌘. or switched sessions) is not a real
+      // error — it just means the in-flight query was aborted. Clear any
+      // partial message but don't surface an error banner, so the abort from
+      // a previous session doesn't pollute the newly selected one.
+      if (code === 'INTERRUPTED') {
+        set({ currentMessage: null });
+        useChatStore.setState({ isStreaming: false });
+        return;
+      }
       useChatStore.setState({ error: error, isStreaming: false });
       set({ currentMessage: null });
       refreshSidebarSession(false);

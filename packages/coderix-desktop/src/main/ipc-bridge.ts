@@ -26,6 +26,8 @@ import type {
   DeferredPermission,
   DeferredQuestion,
   CompletionUsage,
+  ContentBlock,
+  Message,
 } from '@coderix/core';
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
@@ -223,6 +225,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       await new Promise(r => setTimeout(r, 0));
     }
     activeAbortController = new AbortController();
+    const controller = activeAbortController;
 
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
@@ -251,7 +254,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             sessionId: sessionManager.getActive()?.id ?? '',
             cwd: currentWorkDir,
             model: currentModel,
-            abortController: activeAbortController!,
+            abortController: controller,
           })
         : queryEngine!.submitMessage(userInput);
 
@@ -300,9 +303,34 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     (async () => {
+      // Accumulate Claude Code's structured content (thinking / tool_use /
+      // tool_result) across the turn so the full transcript — not just the
+      // final text — can be persisted for later session reloads. The Coderix
+      // engine persists its own messages, so this only runs for claude-code.
+      //
+      // Messages are stored in the same interleaved form the Coderix engine
+      // produces: one assistant message per model turn, followed by a user
+      // message holding that turn's tool results (when any), repeated until
+      // the final assistant turn. A `user` message from the SDK is the turn
+      // boundary — it arrives only after the assistant turn's blocks finish
+      // streaming — so we flush the current assistant turn there.
+      const claudeTurnMessages: Message[] = [];
+      let claudeAssistantBlocks: ContentBlock[] = [];
+      const claudeBlockIndexByStreamIndex = new Map<number, number>();
+      const claudeRawInputByStreamIndex = new Map<number, string>();
+
+      const flushClaudeAssistant = (): void => {
+        if (claudeAssistantBlocks.length > 0) {
+          claudeTurnMessages.push({ role: 'assistant', content: claudeAssistantBlocks });
+          claudeAssistantBlocks = [];
+          claudeBlockIndexByStreamIndex.clear();
+          claudeRawInputByStreamIndex.clear();
+        }
+      };
+
       try {
         for await (const event of engineStream) {
-          if (activeAbortController?.signal.aborted) break;
+          if (controller.signal.aborted) break;
 
           switch (event.type) {
             case 'message': {
@@ -312,6 +340,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 message?: { content: unknown; stop_reason?: string; usage?: CompletionUsage; model?: string };
               };
               if (msg.type === 'stream_event' && msg.event) {
+                if (activeEngine === 'claude-code') {
+                  accumulateClaudeStreamEvent(
+                    msg.event,
+                    claudeAssistantBlocks,
+                    claudeBlockIndexByStreamIndex,
+                    claudeRawInputByStreamIndex,
+                  );
+                }
                 forwardStreamEvent(mainWindow, msg.event);
               } else if (msg.type === 'assistant' && msg.message) {
                 // The `message_stop` stream event (forwarded above) is the
@@ -339,6 +375,24 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 // Forward tool_result blocks so the renderer can show output below each tool
                 const content = msg.message.content;
                 if (Array.isArray(content)) {
+                  // A `user` message from the SDK is the turn boundary: flush
+                  // the assistant blocks streamed for the turn that just
+                  // produced these tool results, then record the results as a
+                  // separate user message — the same interleaving the Coderix
+                  // engine persists (assistant → user(tool results) → …).
+                  if (activeEngine === 'claude-code') {
+                    flushClaudeAssistant();
+                    const toolResultBlocks: ContentBlock[] = [];
+                    for (const block of content) {
+                      const normalized = normalizeClaudeBlock(block);
+                      if (normalized && normalized.type === 'tool_result') {
+                        toolResultBlocks.push(normalized);
+                      }
+                    }
+                    if (toolResultBlocks.length > 0) {
+                      claudeTurnMessages.push({ role: 'user', content: toolResultBlocks });
+                    }
+                  }
                   for (const block of content) {
                     if (block && (block as any).type === 'tool_result') {
                       const tr = block as { type: 'tool_result'; tool_use_id: string; content: unknown; metadata?: Record<string, unknown> };
@@ -407,14 +461,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   usage?: CompletionUsage;
                   totalCost?: number;
                 };
-                if (data.result) {
-                  try {
-                    sessionManager.addMessage({
-                      role: 'assistant',
-                      content: data.result,
-                    });
-                  } catch { /* ignore — best-effort persistence */ }
-                }
+                // Flush the final assistant turn, then persist the accumulated
+                // interleaved transcript (thinking + tool cards + final text) so
+                // switching sessions preserves it in the same message order the
+                // Coderix engine stores. Fall back to the raw result string when
+                // no structured content was captured (e.g. a plain text response).
+                flushClaudeAssistant();
+                try {
+                  if (claudeTurnMessages.length > 0) {
+                    for (const m of claudeTurnMessages) {
+                      sessionManager.addMessage(m);
+                    }
+                  } else if (data.result) {
+                    sessionManager.addMessage({ role: 'assistant', content: data.result });
+                  }
+                } catch { /* ignore — best-effort persistence */ }
                 if (data.totalCost) {
                   try {
                     sessionManager.addCost(data.totalCost);
@@ -430,12 +491,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         const message = sanitizeErrorMessage(rawMessage);
         mainWindow.webContents.send(IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME' });
       } finally {
-        if (activeAbortController?.signal.aborted) {
+        if (controller.signal.aborted) {
           const mw = getMainWindow(windowManager);
           mw?.webContents.send(IPC_CHANNELS.STREAM_ERROR, {
             message: 'Query interrupted by user',
             code: 'INTERRUPTED',
           });
+        }
+        // Release the controller once this query's stream has wound down so a
+        // later query can take over. Only clear it if a newer query hasn't
+        // already replaced `activeAbortController`.
+        if (activeAbortController === controller) {
+          activeAbortController = null;
         }
       }
     })();
@@ -446,7 +513,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.QUERY_INTERRUPT, async () => {
     if (activeAbortController) {
       activeAbortController.abort();
-      activeAbortController = null;
     }
     return { status: 'interrupted' };
   });
@@ -1212,6 +1278,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // Push channel registration helpers
   // -----------------------------------------------------------------------
 
+  // The stop reason for the current model turn. The Anthropic API carries it
+  // in `message_delta` (the following `message_stop` has no payload), so we
+  // remember it here to forward the *real* reason — not a hardcoded
+  // 'end_turn' — when `message_stop` arrives. This is what lets the renderer
+  // keep listening across a multi-turn tool loop (stop reason 'tool_use').
+  let lastStopReason: string | null = null;
+
   // Forward StreamEvent to the correct push channel
   function forwardStreamEvent(mainWindow: BrowserWindow, event: StreamEvent): void {
     switch (event.type) {
@@ -1235,20 +1308,132 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       case 'message_start':
         // Message start — could be used to reset UI state
         break;
-      case 'message_delta':
-        // Message delta — forward as delta event
+      case 'message_delta': {
+        // Message delta — forward as delta event, and remember the turn's
+        // stop reason so `message_stop` can be forwarded with the real value.
+        const delta = event.delta as { stop_reason?: string | null };
+        if (delta.stop_reason) lastStopReason = delta.stop_reason;
         mainWindow.webContents.send(IPC_CHANNELS.STREAM_BLOCK_DELTA, {
           index: -1,
           delta: event.delta,
         });
         break;
-      case 'message_stop':
+      }
+      case 'message_stop': {
+        // The Coderix engine attaches the AssistantMessage (with its camelCase
+        // `stopReason`) to `message_stop`; the Claude Code SDK's raw
+        // `message_stop` carries no payload, so fall back to the reason
+        // captured from the preceding `message_delta`.
+        const message = (event as {
+          message?: { stopReason?: string; stop_reason?: string };
+        }).message;
         mainWindow.webContents.send(IPC_CHANNELS.STREAM_DONE, {
-          stopReason: 'end_turn',
+          stopReason:
+            message?.stopReason ?? message?.stop_reason ?? lastStopReason ?? 'end_turn',
         });
+        lastStopReason = null;
         break;
+      }
       default:
         break;
+    }
+  }
+
+  /**
+   * Normalize a Claude Code SDK content block into the core `ContentBlock`
+   * shape persisted by the session store. Only the block types the renderer
+   * renders (text / thinking / tool_use / tool_result) are kept; everything
+   * else (server_tool_use, web_search, redacted_thinking, …) is dropped.
+   */
+  function normalizeClaudeBlock(block: unknown): ContentBlock | null {
+    if (!block || typeof block !== 'object') return null;
+    const b = block as {
+      type?: string;
+      text?: string;
+      thinking?: string;
+      signature?: string;
+      id?: string;
+      name?: string;
+      input?: Record<string, unknown>;
+      tool_use_id?: string;
+      content?: unknown;
+      is_error?: boolean;
+    };
+
+    switch (b.type) {
+      case 'text':
+        return { type: 'text', text: b.text ?? '' };
+      case 'thinking':
+        return { type: 'thinking', thinking: b.thinking ?? '', signature: b.signature };
+      case 'tool_use':
+        return { type: 'tool_use', id: b.id, name: b.name, input: b.input ?? {} };
+      case 'tool_result': {
+        // The renderer renders tool results as plain text — flatten structured
+        // content into a single string so reloads render consistently.
+        let content = '';
+        if (typeof b.content === 'string') {
+          content = b.content;
+        } else if (Array.isArray(b.content)) {
+          content = b.content
+            .map((c) => (typeof c === 'string' ? c : ((c as { text?: string })?.text ?? '')))
+            .join('\n');
+        }
+        return { type: 'tool_result', tool_use_id: b.tool_use_id, content, is_error: b.is_error };
+      }
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Accumulate a Claude Code stream event into the in-progress content blocks,
+   * mirroring the renderer's `onStreamBlock` accumulation so the persisted
+   * transcript matches what the user sees live. Tool input streams as
+   * `input_json_delta` fragments and is reassembled on `content_block_stop`.
+   */
+  function accumulateClaudeStreamEvent(
+    event: StreamEvent,
+    blocks: ContentBlock[],
+    indexByStreamIndex: Map<number, number>,
+    rawInputByStreamIndex: Map<number, string>,
+  ): void {
+    if (event.type === 'content_block_start') {
+      const block = normalizeClaudeBlock(event.content_block);
+      if (!block) return;
+      indexByStreamIndex.set(event.index, blocks.length);
+      blocks.push(block);
+      if (block.type === 'tool_use') {
+        rawInputByStreamIndex.set(event.index, '');
+      }
+    } else if (event.type === 'content_block_delta') {
+      const idx = indexByStreamIndex.get(event.index);
+      if (idx === undefined) return;
+      const block = blocks[idx]!;
+      const delta = event.delta as { text?: string; thinking?: string; partial_json?: string };
+      if (delta.text !== undefined) {
+        block.text = (block.text ?? '') + delta.text;
+      } else if (delta.thinking !== undefined) {
+        block.thinking = (block.thinking ?? '') + delta.thinking;
+      } else if (delta.partial_json !== undefined) {
+        rawInputByStreamIndex.set(
+          event.index,
+          (rawInputByStreamIndex.get(event.index) ?? '') + delta.partial_json,
+        );
+      }
+    } else if (event.type === 'content_block_stop') {
+      const idx = indexByStreamIndex.get(event.index);
+      if (idx === undefined) return;
+      const block = blocks[idx]!;
+      if (block.type === 'tool_use') {
+        const raw = rawInputByStreamIndex.get(event.index) ?? '';
+        if (raw.trim()) {
+          try {
+            block.input = JSON.parse(raw) as Record<string, unknown>;
+          } catch { /* keep the (empty) input as-is */ }
+        }
+        rawInputByStreamIndex.delete(event.index);
+      }
+      indexByStreamIndex.delete(event.index);
     }
   }
 

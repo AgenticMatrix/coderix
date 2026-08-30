@@ -25,7 +25,7 @@ export interface ContentBlockRendererProps {
 export function ContentBlockRenderer({
   block,
   isStreaming = false,
-}: ContentBlockRendererProps): React.ReactElement {
+}: ContentBlockRendererProps): React.ReactElement | null {
   switch (block.type) {
     case 'text':
       return (

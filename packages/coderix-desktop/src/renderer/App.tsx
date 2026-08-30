@@ -305,6 +305,15 @@ export function App(): React.ReactElement {
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
     async (id: string) => {
+      // If a query is still streaming from the previous session, abort it and
+      // drop its in-progress message so its output does not leak into the
+      // newly selected session's transcript.
+      if (useChatStore.getState().isStreaming) {
+        void interruptQuery().catch(() => {});
+      }
+      useStreamStore.setState({ currentMessage: null });
+      useChatStore.setState({ isStreaming: false, error: null });
+
       setSessionId(id);
       useSessionStore.getState().setCurrentSessionId(id);
       // Load session messages from backend
@@ -319,16 +328,32 @@ export function App(): React.ReactElement {
                 blocks = [{ type: 'text', content: blocks, state: 'done' }];
               } else if (Array.isArray(blocks)) {
                 // Normalize content blocks: backend uses 'text' field, UI expects 'content' field
-                blocks = blocks.map((b: any) => ({
-                  type: b.type || 'text',
-                  content: b.text || b.content || '',
-                  state: 'done',
-                  ...(b.tool_use_id ? { toolId: b.tool_use_id } : {}),
-                  ...(b.id ? { toolId: b.id } : {}),
-                  ...(b.name ? { toolName: b.name } : {}),
-                  ...(b.input ? { toolInput: b.input } : {}),
-                  ...(b.metadata ? { toolMetadata: b.metadata } : {}),
-                }));
+                blocks = blocks.map((b: any) => {
+                  // Backend blocks use `text` for text blocks, `thinking` for
+                  // thinking/reasoning blocks, and `content` for tool results.
+                  // Tool results may carry `content` as a string or as an array
+                  // of text blocks — flatten the latter so the tool card always
+                  // receives plain text.
+                  let content: unknown = b.text ?? b.thinking ?? b.content ?? '';
+                  if (Array.isArray(content)) {
+                    content = content
+                      .map((c: any) =>
+                        typeof c === 'string' ? c : (c?.text ?? ''),
+                      )
+                      .join('\n');
+                  }
+
+                  return {
+                    type: b.type || 'text',
+                    content: typeof content === 'string' ? content : '',
+                    state: b.is_error ? 'error' : 'done',
+                    ...(b.tool_use_id ? { toolId: b.tool_use_id } : {}),
+                    ...(b.id ? { toolId: b.id } : {}),
+                    ...(b.name ? { toolName: b.name } : {}),
+                    ...(b.input ? { toolInput: b.input } : {}),
+                    ...(b.metadata ? { toolMetadata: b.metadata } : {}),
+                  };
+                });
               }
               return {
                 id: m.id || `${Date.now()}-${Math.random()}`,
@@ -365,7 +390,14 @@ export function App(): React.ReactElement {
                     (b: { type: string; toolId?: string }) => b.type === 'tool_use' && b.toolId === tr.toolId,
                   );
                   if (idx >= 0) {
-                    prev.blocks[idx] = { ...prev.blocks[idx], toolResult: tr.content, toolMetadata: tr.toolMetadata };
+                    prev.blocks[idx] = {
+                      ...prev.blocks[idx],
+                      toolResult: tr.content,
+                      toolMetadata: tr.toolMetadata,
+                      // An errored tool_result marks its tool_use as errored too,
+                      // so the card renders an error state rather than "Done".
+                      ...(tr.state === 'error' ? { state: 'error' as const } : {}),
+                    };
                     attached = true;
                     break;
                   }
@@ -395,8 +427,12 @@ export function App(): React.ReactElement {
   );
 
   const handleNewSession = useCallback(async () => {
+    // Abort any in-flight query so its output doesn't leak into the new session.
+    if (useChatStore.getState().isStreaming) {
+      void interruptQuery().catch(() => {});
+    }
     // Clear current messages
-    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '' });
+    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', error: null });
     useStreamStore.setState({ currentMessage: null });
     await createSession();
     const newSid = useSessionStore.getState().currentSessionId;
@@ -421,10 +457,14 @@ export function App(): React.ReactElement {
   // Shared post-switch cleanup: reset the active session/chat and reload the
   // session list for the new workspace directory.
   const switchToProject = useCallback(async (path: string) => {
+    // Abort any in-flight query so its output doesn't leak into the new workspace.
+    if (useChatStore.getState().isStreaming) {
+      void interruptQuery().catch(() => {});
+    }
     setProjectPath(path);
     setSessionId(null);
     useSessionStore.getState().setCurrentSessionId(null);
-    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null });
+    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null, error: null });
     useStreamStore.setState({ currentMessage: null });
     await loadSessions();
   }, [loadSessions, setSessionId]);

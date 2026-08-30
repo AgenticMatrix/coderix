@@ -348,8 +348,10 @@ export function ToolRenderer({
                 </div>
               )}
 
-              {/* Tool result */}
-              {!isWrite && toolResult != null && toolResult !== '' && (
+              {/* Tool result — every tool shows its output, so each tool's
+                  input and output stay paired in one card (Write tools
+                  additionally show their file content above). */}
+              {toolResult != null && toolResult !== '' && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">

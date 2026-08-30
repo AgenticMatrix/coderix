@@ -185,6 +185,8 @@ export function createCallModelFromClient(
     // Track accumulated state during streaming
     const toolUses: ToolUseBlock[] = [];
     let streamedText = '';
+    let streamedThinking = '';
+    let thinkingSignature: string | undefined;
     let usage: CompletionUsage = { input_tokens: 0, output_tokens: 0 };
     let stopReason: StopReason | null = null;
 
@@ -257,6 +259,10 @@ export function createCallModelFromClient(
                 content_block: { type: 'tool_use', id: block.id, name: block.name, input: hasInput ? { ...initialInput } : {} },
               };
             } else if (block.type === 'thinking') {
+              // Capture the thinking block's initial content + signature so
+              // the persisted assistant message keeps the reasoning trace.
+              streamedThinking = (block as { thinking?: string }).thinking ?? '';
+              thinkingSignature = (block as { signature?: string }).signature;
               yield {
                 type: 'content_block_start',
                 index,
@@ -290,11 +296,14 @@ export function createCallModelFromClient(
                 delta: { type: 'input_json_delta', partial_json: delta.partial_json },
               };
             } else if (delta.type === 'thinking_delta') {
+              streamedThinking += delta.thinking;
               yield {
                 type: 'content_block_delta',
                 index,
                 delta: { type: 'thinking_delta', thinking: delta.thinking },
               };
+            } else if (delta.type === 'signature_delta') {
+              thinkingSignature = (delta as { signature?: string }).signature;
             }
             break;
           }
@@ -345,6 +354,13 @@ export function createCallModelFromClient(
 
             // Build the content blocks for the assistant message
             const content: ContentBlock[] = [];
+            if (streamedThinking) {
+              content.push({
+                type: 'thinking',
+                thinking: streamedThinking,
+                signature: thinkingSignature,
+              });
+            }
             if (streamedText) {
               content.push({ type: 'text', text: streamedText });
             }

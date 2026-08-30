@@ -4,7 +4,7 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { AppConfig } from '../types.js';
-import type { MemorySettings } from '@coderix/core';
+import type { AgentEngine, MemorySettings } from '@coderix/core';
 
 // ---------------------------------------------------------------------------
 // Settings types — matches ~/.coderix/settings.json format
@@ -107,6 +107,8 @@ export interface CoderSettings {
   };
   /** Default permission mode. One of 'auto', 'ask', 'plan', 'low'. Defaults to 'ask'. */
   default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
+  /** Agent engine backing turns. Defaults to 'coderix'. */
+  engine?: AgentEngine;
 }
 
 // ---------------------------------------------------------------------------
@@ -327,5 +329,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, theme: settings.theme };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, theme: settings.theme, engine: settings.engine ?? 'coderix' };
 }

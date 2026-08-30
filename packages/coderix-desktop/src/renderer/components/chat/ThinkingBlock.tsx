@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, ChevronRight, Copy, Check } from 'lucide-react';
+import { Brain, ChevronRight } from 'lucide-react';
 
 export interface ThinkingBlockProps {
   /** The thinking content */
@@ -11,30 +11,20 @@ export interface ThinkingBlockProps {
   isStreaming?: boolean;
 }
 
-const PREVIEW_LINES = 2;
-const PREVIEW_CHARS_PER_LINE = 60;
-
 export function ThinkingBlock({
   content,
   defaultExpanded = false,
   isStreaming = false,
-}: ThinkingBlockProps): React.ReactElement {
+}: ThinkingBlockProps): React.ReactElement | null {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const [copied, setCopied] = useState(false);
 
   const text = content ?? '';
-  const totalLines = Math.max(
-    text.split('\n').length,
-    Math.ceil(text.length / PREVIEW_CHARS_PER_LINE),
-  );
-  const moreLines = Math.max(totalLines - PREVIEW_LINES, 0);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
-  };
+  // Empty thinking blocks (a persisted block with no reasoning text) render
+  // nothing — no "Thought" label, no brain icon, no copy button. During
+  // streaming we still show the "Thinking…" header so the user sees the model
+  // is reasoning even before the first delta arrives.
+  if (text.trim() === '' && !isStreaming) return null;
 
   return (
     <div>
@@ -80,32 +70,10 @@ export function ThinkingBlock({
             </span>
           )}
         </button>
-        <button
-          type="button"
-          className="p-0.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-[var(--radius-xs)] transition-colors flex-shrink-0"
-          onClick={handleCopy}
-          title="Copy"
-        >
-          {copied ? <Check size={13} /> : <Copy size={13} />}
-        </button>
       </div>
 
-      {/* Collapsed preview — first two lines + "N lines more" */}
-      {!isExpanded && text.trim() !== '' && (
-        <div className="pl-5 pr-1">
-          <div className="py-1.5 px-2.5 rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]/40 border-l-2 border-[var(--color-info)]/25">
-            <div className="text-xs text-[var(--color-text-tertiary)] font-mono leading-[18px] whitespace-pre-wrap break-words max-h-[36px] overflow-hidden">
-              {text}
-            </div>
-            {moreLines > 0 && (
-              <div className="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">
-                {moreLines} lines more…
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
+      {/* Collapsed state shows only the header — no preview. Click to expand
+          the full reasoning below. */}
       {/* Expanded content */}
       <AnimatePresence>
         {isExpanded && (

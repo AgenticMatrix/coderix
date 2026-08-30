@@ -264,16 +264,18 @@ function mapBlockType(
 /**
  * Subscribe to stream completion.
  * Filters `onStreamEvent` for `{ type: 'done' }` events.
+ * The callback receives the turn's stop reason (e.g. 'end_turn' or 'tool_use')
+ * so callers can distinguish a terminal turn from an intermediate tool turn.
  * Returns an unsubscribe function.
  */
-export function onStreamDone(callback: () => void): () => void {
+export function onStreamDone(callback: (stopReason?: string) => void): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'done') {
-      callback();
+      callback(event.stopReason as string | undefined);
     }
   });
 }
@@ -283,14 +285,14 @@ export function onStreamDone(callback: () => void): () => void {
  * Filters `onStreamEvent` for `{ type: 'error' }` events.
  * Returns an unsubscribe function.
  */
-export function onStreamError(callback: (error: string) => void): () => void {
+export function onStreamError(callback: (error: string, code?: string) => void): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'error') {
-      callback(event.message);
+      callback(event.message, event.code);
     }
   });
 }
