@@ -95,6 +95,12 @@
   margin-top: var(--space-5);
 }
 
+/* Blank-line separator before a user input that follows an assistant reply —
+   keeps the next question from crowding the response above it. */
+.message-row.assistant + .message-row.user {
+  margin-top: var(--space-5);
+}
+
 /* Circled avatar for assistant messages (the "C" mark) */
 .message-avatar {
   width: 30px;
