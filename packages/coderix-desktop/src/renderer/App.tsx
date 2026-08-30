@@ -102,6 +102,7 @@ export function App(): React.ReactElement {
   const detailPanelOpen = useUIStore((s) => s.detailPanelOpen);
   const terminalOpen = useUIStore((s) => s.terminalOpen);
   const theme = useUIStore((s) => s.theme);
+  const standardMode = useUIStore((s) => s.standardMode);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const toggleDetailPanel = useUIStore((s) => s.toggleDetailPanel);
   const toggleTerminal = useUIStore((s) => s.toggleTerminal);
@@ -552,22 +553,30 @@ export function App(): React.ReactElement {
   const chatViewMessages = useMemo<ChatViewMessage[]>(() => {
     const result: ChatViewMessage[] = [];
 
+    // In standard mode the model's reasoning/thinking blocks are hidden —
+    // filter them out here (single choke point for persisted + streaming).
+    const visibleBlocks = (blocks: StreamBlock[]): StreamBlock[] =>
+      standardMode ? blocks.filter((b) => b.type !== 'thinking') : blocks;
+
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]!;
       // Skip synthetic background task/agent notifications.
       if (isBackgroundNotificationMessage(msg)) continue;
-      const hasText = msg.blocks.some((b: StreamBlock) => b.type === 'text');
+      const blocks = visibleBlocks(msg.blocks);
+      // A message that only contained thinking becomes empty in standard mode.
+      if (blocks.length === 0) continue;
+      const hasText = blocks.some((b: StreamBlock) => b.type === 'text');
       const isToolOnlyAssistant =
         msg.role === 'assistant' &&
         !hasText &&
-        msg.blocks.some((b: StreamBlock) => b.type === 'tool_use');
+        blocks.some((b: StreamBlock) => b.type === 'tool_use');
 
       if (isToolOnlyAssistant) {
         const last = result[result.length - 1];
         if (last && last.role === 'assistant') {
           result[result.length - 1] = {
             ...last,
-            blocks: [...last.blocks, ...msg.blocks],
+            blocks: [...last.blocks, ...blocks],
           };
           continue;
         }
@@ -576,7 +585,7 @@ export function App(): React.ReactElement {
       result.push({
         id: msg.id,
         role: msg.role,
-        blocks: msg.blocks,
+        blocks,
         timestamp: msg.timestamp,
         // A text turn starts a new "group" (blank-line separator above);
         // tool-only turns flow together with no separator.
@@ -586,20 +595,23 @@ export function App(): React.ReactElement {
 
     // Append streaming message (always fresh — blocks change every delta)
     if (streamCurrentMessage) {
-      result.push({
-        id: streamCurrentMessage.id,
-        role: 'assistant',
-        blocks: streamCurrentMessage.blocks,
-        timestamp: Date.now(),
-        isStreaming: true,
-        isGroupStart: streamCurrentMessage.blocks.some(
-          (b: StreamBlock) => b.type === 'text',
-        ),
-      });
+      const streamBlocks = visibleBlocks(streamCurrentMessage.blocks);
+      if (streamBlocks.length > 0) {
+        result.push({
+          id: streamCurrentMessage.id,
+          role: 'assistant',
+          blocks: streamBlocks,
+          timestamp: Date.now(),
+          isStreaming: true,
+          isGroupStart: streamBlocks.some(
+            (b: StreamBlock) => b.type === 'text',
+          ),
+        });
+      }
     }
 
     return result;
-  }, [messages, streamCurrentMessage]);
+  }, [messages, streamCurrentMessage, standardMode]);
 
   const isEmpty = chatViewMessages.length === 0;
 

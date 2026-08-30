@@ -3,6 +3,17 @@ import { create } from 'zustand';
 export type PermissionMode = 'plan' | 'ask' | 'auto';
 export type Theme = 'dark' | 'light';
 
+const STANDARD_MODE_KEY = 'coderix-standard-mode';
+
+function loadStandardMode(): boolean {
+  try {
+    return localStorage.getItem(STANDARD_MODE_KEY) === '1';
+  } catch {
+    // localStorage unavailable (e.g. strict privacy mode) — fall back to default.
+    return false;
+  }
+}
+
 export type NotificationType = 'error' | 'warning' | 'success' | 'info';
 
 export interface AppNotification {
@@ -19,6 +30,7 @@ export interface UIState {
   terminalOpen: boolean;
   permissionMode: PermissionMode;
   theme: Theme;
+  standardMode: boolean;
   notifications: AppNotification[];
   // Git state (written by GitPanel, read by StatusBar and FileExplorer)
   gitBranch: string;
@@ -33,6 +45,7 @@ export interface UIState {
   setTerminalOpen: (open: boolean) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setTheme: (theme: Theme) => void;
+  toggleStandardMode: () => void;
   addNotification: (n: Omit<AppNotification, 'id'>) => void;
   removeNotification: (id: string) => void;
   setGitBranch: (branch: string, ahead?: number, behind?: number) => void;
@@ -57,6 +70,7 @@ export const useUIStore = create<UIState>()((set) => ({
   terminalOpen: false,
   permissionMode: 'ask',
   theme: 'light',
+  standardMode: loadStandardMode(),
   notifications: [],
   gitBranch: '',
   gitAhead: 0,
@@ -87,6 +101,18 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ theme });
     // Sync with DOM
     document.documentElement.setAttribute('data-theme', theme);
+  },
+
+  toggleStandardMode: () => {
+    set((state) => {
+      const standardMode = !state.standardMode;
+      try {
+        localStorage.setItem(STANDARD_MODE_KEY, standardMode ? '1' : '0');
+      } catch {
+        // localStorage unavailable — keep the in-memory toggle only.
+      }
+      return { standardMode };
+    });
   },
 
   addNotification: (n) => {
