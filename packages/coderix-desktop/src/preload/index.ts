@@ -446,6 +446,16 @@ const coderixAPI = {
       return ipcRenderer.invoke('project:get');
     },
 
+    /** List recent project directories (most recent first). */
+    list(): Promise<{ paths: string[] }> {
+      return ipcRenderer.invoke('project:list');
+    },
+
+    /** Switch the active project directory to an existing path. */
+    set(path: string): Promise<{ canceled: boolean; path: string }> {
+      return ipcRenderer.invoke('project:set', path);
+    },
+
     /** Select a new project directory. */
     select(): Promise<{ canceled: boolean; path: string }> {
       return ipcRenderer.invoke('project:select');

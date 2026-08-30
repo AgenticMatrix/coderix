@@ -17,7 +17,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, ChevronDown, Plus } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
@@ -44,6 +44,8 @@ import {
   denyPermission,
   getProjectDirectory,
   selectProjectDirectory,
+  listProjectDirectories,
+  setProjectDirectory,
 } from './ipc-client';
 import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
 
@@ -137,6 +139,9 @@ export function App(): React.ReactElement {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sessions');
   const [diffData, setDiffData] = useState<{ file: string; diff: string } | null>(null);
   const [projectPath, setProjectPath] = useState('');
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [recentProjects, setRecentProjects] = useState<string[]>([]);
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
@@ -402,20 +407,60 @@ export function App(): React.ReactElement {
     setSettingsOpen((prev) => !prev);
   }, []);
 
+  // Close the workspace menu when clicking outside of it.
+  useEffect(() => {
+    const clickOut = (e: MouseEvent) => {
+      if (workspaceRef.current && !workspaceRef.current.contains(e.target as Node)) {
+        setWorkspaceOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', clickOut);
+    return () => document.removeEventListener('mousedown', clickOut);
+  }, []);
+
+  // Shared post-switch cleanup: reset the active session/chat and reload the
+  // session list for the new workspace directory.
+  const switchToProject = useCallback(async (path: string) => {
+    setProjectPath(path);
+    setSessionId(null);
+    useSessionStore.getState().setCurrentSessionId(null);
+    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null });
+    useStreamStore.setState({ currentMessage: null });
+    await loadSessions();
+  }, [loadSessions, setSessionId]);
+
   const handleProjectSelect = useCallback(async () => {
     try {
       const result = await selectProjectDirectory();
       if (result.canceled) return;
-      setProjectPath(result.path);
-      setSessionId(null);
-      useSessionStore.getState().setCurrentSessionId(null);
-      useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null });
-      useStreamStore.setState({ currentMessage: null });
-      await loadSessions();
+      await switchToProject(result.path);
     } catch (err) {
       console.error('[App] Failed to select project directory:', err);
     }
-  }, [loadSessions, setSessionId]);
+  }, [switchToProject]);
+
+  const handleSelectRecentProject = useCallback(async (path: string) => {
+    setWorkspaceOpen(false);
+    if (!path || path === projectPath) return;
+    try {
+      const result = await setProjectDirectory(path);
+      await switchToProject(result.path);
+    } catch (err) {
+      console.error('[App] Failed to switch project directory:', err);
+    }
+  }, [projectPath, switchToProject]);
+
+  const toggleWorkspaceMenu = useCallback(() => {
+    setWorkspaceOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        listProjectDirectories()
+          .then((result) => setRecentProjects(result.paths ?? []))
+          .catch(() => {});
+      }
+      return next;
+    });
+  }, []);
 
   const handleComposerSubmit = useCallback(
     async (value: string) => {
@@ -592,16 +637,50 @@ export function App(): React.ReactElement {
           )}
 
           {/* Workspace selector — above the composer input */}
-          <div className="flex items-center pl-11 pr-6 pb-1">
+          <div ref={workspaceRef} className="relative flex items-center pl-11 pr-6 pb-1">
             <button
               type="button"
-              onClick={handleProjectSelect}
+              onClick={toggleWorkspaceMenu}
               className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer max-w-full"
               title={projectPath || '选择项目目录'}
             >
               <FolderOpen size={14} className="flex-shrink-0" />
               <span className="truncate">{projectPath ? projectPath.split('/').pop() || projectPath : '选择目录'}</span>
+              <ChevronDown size={12} className={`flex-shrink-0 transition-transform ${workspaceOpen ? 'rotate-180' : ''}`} />
             </button>
+
+            {workspaceOpen && (
+              <div className="absolute bottom-full left-11 mb-1 z-50 w-72 max-w-[calc(100vw-4rem)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] rounded-[var(--radius-md)] shadow-lg py-1">
+                {recentProjects.length > 0 && (
+                  <>
+                    {recentProjects.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => handleSelectRecentProject(p)}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-bg-tertiary)] ${p === projectPath ? 'text-[var(--color-brand)] font-medium' : 'text-[var(--color-text-primary)]'}`}
+                        title={p}
+                      >
+                        <span className="flex items-center gap-2">
+                          <FolderOpen size={12} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
+                          <span className="truncate">{p}</span>
+                        </span>
+                      </button>
+                    ))}
+                    <div className="my-1 h-px bg-[var(--color-separator)]" />
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => { setWorkspaceOpen(false); void handleProjectSelect(); }}
+                  className="w-full text-left px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] flex items-center gap-2"
+                >
+                  <Plus size={12} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
+                  <span>选择新目录…</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Composer — fixed at bottom of chat */}

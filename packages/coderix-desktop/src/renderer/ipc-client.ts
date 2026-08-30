@@ -442,6 +442,20 @@ export async function selectProjectDirectory(): Promise<{ canceled: boolean; pat
   );
 }
 
+/** List recent project directories (most recent first). */
+export async function listProjectDirectories(): Promise<{ paths: string[] }> {
+  return invokeWithTimeout('project:list', () =>
+    getAPI().project.list(),
+  );
+}
+
+/** Switch the active project directory to an existing path. */
+export async function setProjectDirectory(path: string): Promise<{ canceled: boolean; path: string }> {
+  return invokeWithTimeout('project:set', () =>
+    getAPI().project.set(path),
+  );
+}
+
 // ===========================================================================
 //  App Lifecycle
 // ===========================================================================

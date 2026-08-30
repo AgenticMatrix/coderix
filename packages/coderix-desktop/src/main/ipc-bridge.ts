@@ -615,7 +615,32 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   });
 
   ipcMain.handle('project:get', async () => {
+    // Keep the active directory at the front of the recent list.
+    rememberProject(currentWorkDir);
     return { path: currentWorkDir };
+  });
+
+  ipcMain.handle('project:list', async () => {
+    return { paths: readRecentProjects() };
+  });
+
+  ipcMain.handle('project:set', async (_event, path: string) => {
+    if (!path || typeof path !== 'string') {
+      throw new Error('Invalid project path');
+    }
+    const nextWorkDir = resolve(path);
+    if (!existsSync(nextWorkDir)) {
+      throw new Error(`目录不存在: ${nextWorkDir}`);
+    }
+
+    currentWorkDir = nextWorkDir;
+    rememberProject(nextWorkDir);
+
+    if (config.reloadQueryEngine) {
+      await config.reloadQueryEngine(nextWorkDir);
+    }
+
+    return { canceled: false, path: nextWorkDir };
   });
 
   ipcMain.handle('project:select', async () => {
@@ -635,6 +660,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     const nextWorkDir = resolve(result.filePaths[0]!);
     currentWorkDir = nextWorkDir;
+    rememberProject(nextWorkDir);
 
     if (config.reloadQueryEngine) {
       await config.reloadQueryEngine(nextWorkDir);
@@ -1330,6 +1356,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.APP_VERSION);
       ipcMain.removeHandler(IPC_CHANNELS.APP_CHECK_UPDATE);
       ipcMain.removeHandler('project:get');
+      ipcMain.removeHandler('project:list');
+      ipcMain.removeHandler('project:set');
       ipcMain.removeHandler('project:select');
     },
   };
@@ -1388,6 +1416,43 @@ function resolveProjectPath(userPath: string, projectRoot: string): string {
     throw new Error(`Path traversal not allowed: ${userPath}`);
   }
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// Recent project (workspace) history — persisted to ~/.coderix/recent_projects.json
+// ---------------------------------------------------------------------------
+
+const RECENT_PROJECTS_FILE = join(homedir(), '.coderix', 'recent_projects.json');
+const MAX_RECENT_PROJECTS = 10;
+
+function readRecentProjects(): string[] {
+  try {
+    if (!existsSync(RECENT_PROJECTS_FILE)) return [];
+    const parsed = JSON.parse(readFileSync(RECENT_PROJECTS_FILE, 'utf-8')) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((p): p is string => typeof p === 'string');
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentProjects(paths: string[]): void {
+  try {
+    const dir = join(homedir(), '.coderix');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(RECENT_PROJECTS_FILE, JSON.stringify(paths, null, 2), 'utf-8');
+  } catch {
+    // Best-effort persistence — history loss is acceptable.
+  }
+}
+
+/** Move `path` to the front of the recent list and return the updated list. */
+function rememberProject(path: string): string[] {
+  const next = [path, ...readRecentProjects().filter((p) => p !== path)].slice(0, MAX_RECENT_PROJECTS);
+  writeRecentProjects(next);
+  return next;
 }
 
 // ---------------------------------------------------------------------------
