@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import type { StreamBlock } from '../../types';
+import { useUIStore } from '../../store/uiStore';
 import { ToolRenderer } from './ToolRenderer';
 
 export interface ToolGroupProps {
@@ -94,6 +95,7 @@ function buildToolSummary(tools: StreamBlock[]): string {
  */
 export function ToolGroup({ tools }: ToolGroupProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
+  const standardMode = useUIStore((s) => s.standardMode);
 
   const label = buildToolSummary(tools);
 
@@ -102,7 +104,7 @@ export function ToolGroup({ tools }: ToolGroupProps): React.ReactElement {
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
-        className="flex items-center gap-1.5 py-1 pl-5 text-xs cursor-pointer transition-colors duration-100 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full text-left"
+        className={`flex items-center gap-1.5 py-1 text-xs cursor-pointer transition-colors duration-100 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full text-left ${standardMode ? '' : 'pl-5'}`}
       >
         <motion.span
           animate={{ rotate: isExpanded ? 90 : 0 }}
