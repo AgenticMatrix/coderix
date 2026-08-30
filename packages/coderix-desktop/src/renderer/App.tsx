@@ -592,14 +592,14 @@ export function App(): React.ReactElement {
           )}
 
           {/* Workspace selector — above the composer input */}
-          <div className="flex items-center px-6 pb-1">
+          <div className="flex items-center pl-11 pr-6 pb-1">
             <button
               type="button"
               onClick={handleProjectSelect}
-              className="inline-flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer max-w-full"
+              className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer max-w-full"
               title={projectPath || '选择项目目录'}
             >
-              <FolderOpen size={12} className="flex-shrink-0" />
+              <FolderOpen size={14} className="flex-shrink-0" />
               <span className="truncate">{projectPath ? projectPath.split('/').pop() || projectPath : '选择目录'}</span>
             </button>
           </div>
