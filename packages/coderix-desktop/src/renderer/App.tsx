@@ -17,6 +17,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { FolderOpen } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
@@ -538,13 +539,12 @@ export function App(): React.ReactElement {
         detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
         statusBarProps={{
+          engine: settings?.engine,
           model: formatModelWithProvider(settings),
           agentStatus,
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
           cost: tokenUsage.totalCost || undefined,
-          projectPath,
-          onSelectProject: handleProjectSelect,
           gitBranch: gitBranch || undefined,
           gitAhead: gitAhead || undefined,
           gitBehind: gitBehind || undefined,
@@ -590,6 +590,19 @@ export function App(): React.ReactElement {
               onResolved={() => setPendingQuestion(null)}
             />
           )}
+
+          {/* Workspace selector — above the composer input */}
+          <div className="flex items-center px-6 pb-1">
+            <button
+              type="button"
+              onClick={handleProjectSelect}
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer max-w-full"
+              title={projectPath || '选择项目目录'}
+            >
+              <FolderOpen size={12} className="flex-shrink-0" />
+              <span className="truncate">{projectPath ? projectPath.split('/').pop() || projectPath : '选择目录'}</span>
+            </button>
+          </div>
 
           {/* Composer — fixed at bottom of chat */}
           <Composer

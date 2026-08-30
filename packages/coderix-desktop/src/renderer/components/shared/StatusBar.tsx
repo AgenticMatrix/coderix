@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Cpu, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, FolderOpen, ChevronDown, Terminal } from 'lucide-react';
+import { Bot, Cpu, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, ChevronDown, Terminal } from 'lucide-react';
 import { Badge } from './Badge';
 import './StatusBar.css';
 
@@ -24,6 +24,8 @@ function useModelList(): string[] {
 }
 
 export interface StatusBarProps {
+  /** Current agent engine id (e.g. "coderix" / "claude-code") */
+  engine?: string;
   /** Current model name */
   model?: string;
   /** Tokens used */
@@ -38,10 +40,6 @@ export interface StatusBarProps {
   gitBehind?: number;
   /** Agent status */
   agentStatus?: 'idle' | 'thinking' | 'executing' | 'waiting' | 'error';
-  /** Current project path */
-  projectPath?: string;
-  /** Select project directory callback */
-  onSelectProject?: () => void;
   /** Whether the terminal panel is open */
   terminalOpen?: boolean;
   /** Toggle the terminal panel */
@@ -69,7 +67,13 @@ const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { label: 
   error: { label: 'Error', color: 'bg-[var(--color-danger)]' },
 };
 
+const ENGINE_LABELS: Record<string, string> = {
+  coderix: 'Coderix',
+  'claude-code': 'Claude Code',
+};
+
 export function StatusBar({
+  engine,
   model = 'sonnet 4.5',
   inputTokens,
   outputTokens,
@@ -78,8 +82,6 @@ export function StatusBar({
   gitAhead = 0,
   gitBehind = 0,
   agentStatus = 'idle',
-  projectPath,
-  onSelectProject,
   terminalOpen = false,
   onToggleTerminal,
   className = '',
@@ -106,6 +108,17 @@ export function StatusBar({
         ${className}
       `}
     >
+      {/* Engine */}
+      {engine && (
+        <>
+          <span className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]" title="当前智能体引擎">
+            <Bot size={12} className="text-[var(--color-text-tertiary)]" />
+            <span className="font-medium">{ENGINE_LABELS[engine] ?? engine}</span>
+          </span>
+          <div className="w-px h-3 bg-[var(--color-separator)]" />
+        </>
+      )}
+
       {/* Model selector */}
       <div ref={modelRef} className="relative">
         <button
@@ -143,22 +156,6 @@ export function StatusBar({
 
       {/* Divider */}
       <div className="w-px h-3 bg-[var(--color-separator)]" />
-
-      {/* Project path — clickable to change */}
-      {onSelectProject && (
-        <>
-          <button
-            type="button"
-            onClick={onSelectProject}
-            className="inline-flex items-center gap-1 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer max-w-[200px]"
-            title={projectPath || '选择项目目录'}
-          >
-            <FolderOpen size={10} className="flex-shrink-0" />
-            <span className="truncate">{projectPath ? projectPath.split('/').pop() || projectPath : '选择目录'}</span>
-          </button>
-          <div className="w-px h-3 bg-[var(--color-separator)]" />
-        </>
-      )}
 
       {/* Token usage */}
       {(inputTokens !== undefined || outputTokens !== undefined) && (
