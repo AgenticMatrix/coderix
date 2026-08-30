@@ -3,9 +3,10 @@
  */
 
 import { app, BrowserWindow } from 'electron';
+import { existsSync } from 'node:fs';
 import { createWindowManager } from './window-manager.js';
 import type { WindowManager } from './window-manager.js';
-import { createIpcBridge } from './ipc-bridge.js';
+import { createIpcBridge, getLastWorkspace } from './ipc-bridge.js';
 import type { IpcBridge } from './ipc-bridge.js';
 import { createFileWatcherManager } from './file-watcher.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -88,7 +89,11 @@ let activeModel = 'deepseek-v4-pro';
 async function bootstrap(): Promise<void> {
   try {
     const initialConfig = loadConfig();
-    activeWorkDir = initialConfig.cwd || process.cwd();
+    // Restore the last-used workspace across restarts. `loadConfig().cwd` is
+    // `process.cwd()` (the app's launch dir, e.g. `packages/coderix-desktop`),
+    // which is never the project the user wants to reopen — fall back to it
+    // only when there's no persisted workspace yet (first launch).
+    activeWorkDir = getLastWorkspace() ?? initialConfig.cwd ?? process.cwd();
     activeModel = initialConfig.model;
 
     // Step 1: Create window manager
@@ -98,6 +103,18 @@ async function bootstrap(): Promise<void> {
     // before QueryEngine is initialized (renderer calls session:create on load)
     const sessionManager = new SessionManager();
     sessionManagerRef = sessionManager;
+
+    // Restore the workspace from the most recently used session so a restart
+    // reopens the project that session was working in (each session remembers
+    // its own workspace), instead of the app's launch directory.
+    try {
+      const latest = sessionManager.list({ limit: 1 })[0];
+      if (latest?.workDir && existsSync(latest.workDir)) {
+        activeWorkDir = latest.workDir;
+      }
+    } catch {
+      // No sessions yet — keep the global last-workspace / launch-dir fallback.
+    }
 
     // Step 3: Create IPC bridge BEFORE window (renderer calls IPC on load)
     fileWatcher = createFileWatcherManager();

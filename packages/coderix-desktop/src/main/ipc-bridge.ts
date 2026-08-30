@@ -557,7 +557,22 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD, async (_event, sessionId: string) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
     const session = sessionManager.resume(sessionId);
-    return { id: session.id, title: session.title, messages: session.messages, turnCount: session.turnCount };
+
+    // Restore the session's workspace so a reloaded conversation opens in the
+    // directory it was created in. `resume` sets it as the active session, so
+    // keep `currentWorkDir` in sync (and reload the engine) when it differs.
+    if (session.cwd) {
+      const sessionCwd = resolve(session.cwd);
+      if (existsSync(sessionCwd) && sessionCwd !== currentWorkDir) {
+        currentWorkDir = sessionCwd;
+        rememberProject(sessionCwd);
+        if (config.reloadQueryEngine) {
+          await config.reloadQueryEngine(sessionCwd);
+        }
+      }
+    }
+
+    return { id: session.id, title: session.title, messages: session.messages, turnCount: session.turnCount, cwd: session.cwd };
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_FORK, async (_event, sessionId: string) => {
@@ -1638,6 +1653,25 @@ function rememberProject(path: string): string[] {
   const next = [path, ...readRecentProjects().filter((p) => p !== path)].slice(0, MAX_RECENT_PROJECTS);
   writeRecentProjects(next);
   return next;
+}
+
+/**
+ * The most recent workspace that should be restored on app startup.
+ *
+ * `recent_projects.json` is the persistence source, but the app's own launch
+ * directory (`process.cwd()`) gets written to it by `project:get` on a fresh
+ * start — in dev that's the `coderix-desktop` package dir, which is never the
+ * workspace the user actually wants. Skip it (and any dir that no longer
+ * exists) so a restart reopens the user's last project instead of the app dir.
+ */
+export function getLastWorkspace(): string | undefined {
+  const launchDir = resolve(process.cwd());
+  for (const p of readRecentProjects()) {
+    if (!p || !existsSync(p)) continue;
+    if (resolve(p) === launchDir) continue;
+    return p;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

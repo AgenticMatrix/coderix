@@ -320,6 +320,13 @@ export function App(): React.ReactElement {
       try {
         if (window.coderixAPI?.session?.load) {
           const session = await window.coderixAPI.session.load(id) as any;
+
+          // Keep the workspace label in sync with the session's own workspace
+          // (the main process already switched `currentWorkDir` on load).
+          if (typeof session?.cwd === 'string' && session.cwd) {
+            setProjectPath(session.cwd);
+          }
+
           if (session?.messages) {
             const chatMsgs = session.messages.map((m: any) => {
               let blocks = m.content || [];
