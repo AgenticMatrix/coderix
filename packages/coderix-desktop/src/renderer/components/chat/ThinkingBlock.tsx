@@ -20,6 +20,15 @@ export function ThinkingBlock({
 
   const text = content ?? '';
 
+  // Collapsed preview shows just the first non-empty line plus a "... N more
+  // lines" hint instead of clamping two lines of raw reasoning.
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  const firstLine = lines[0] ?? '';
+  const remainingLines = Math.max(0, lines.length - 1);
+
   // Empty thinking blocks (a persisted block with no reasoning text) render
   // nothing — no "Thought" label, no brain icon, no copy button. During
   // streaming we still show the "Thinking…" header so the user sees the model
@@ -72,12 +81,18 @@ export function ThinkingBlock({
         </button>
       </div>
 
-      {/* Collapsed preview — a two-line clamp so the user can glimpse the
-          reasoning without expanding. Rendered inline (no box, no gap) right
-          below the header. */}
+      {/* Collapsed preview — one line of reasoning plus a "... N more lines"
+          hint. Rendered inline (no box, no gap) right below the header. */}
       {!isExpanded && text.trim() !== '' && (
-        <div className="text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 pl-5 line-clamp-2">
-          {text}
+        <div className="pl-5">
+          <div className="text-xs text-[var(--color-text-secondary)] font-mono leading-[18px] m-0 truncate">
+            {firstLine}
+          </div>
+          {remainingLines > 0 && (
+            <div className="text-xs text-[var(--color-text-tertiary)] font-mono leading-[18px] m-0">
+              ... {remainingLines} more {remainingLines === 1 ? 'line' : 'lines'}
+            </div>
+          )}
         </div>
       )}
 
