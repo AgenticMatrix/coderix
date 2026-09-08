@@ -119,7 +119,20 @@ function toAnthropicMessages(
             });
           }
           break;
-        // thinking, etc. — not sent to API
+        case 'thinking':
+          // Thinking blocks must be passed back to the API on subsequent turns.
+          // Anthropic — and DeepSeek's Anthropic-compatible endpoint — reject a
+          // request (400 invalid_request_error) when a prior assistant turn's
+          // thinking blocks are dropped in thinking mode: the `signature` is
+          // required for the conversation to continue.
+          if (block.thinking) {
+            content.push({
+              type: 'thinking',
+              thinking: block.thinking,
+              signature: block.signature ?? '',
+            } as Anthropic.ThinkingBlockParam);
+          }
+          break;
       }
     }
 

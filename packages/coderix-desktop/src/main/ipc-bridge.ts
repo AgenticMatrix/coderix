@@ -34,6 +34,7 @@ import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@code
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
 import { loadSettings, loadConfig, writeSessionMeta, sessionDir } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
+import { safeSend } from './safe-send.js';
 
 import type { WindowManager } from './window-manager.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -157,7 +158,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     autoUpdater.on('update-available', (info: { version?: string }) => {
       const mw = getMainWindow(windowManager);
-      mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+      safeSend(mw, IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
         updateAvailable: true,
         version: info?.version,
         currentVersion: app.getVersion(),
@@ -166,7 +167,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     autoUpdater.on('update-not-available', () => {
       const mw = getMainWindow(windowManager);
-      mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+      safeSend(mw, IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
         updateAvailable: false,
         currentVersion: app.getVersion(),
       });
@@ -174,7 +175,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     autoUpdater.on('error', (error: Error) => {
       const mw = getMainWindow(windowManager);
-      mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+      safeSend(mw, IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
         updateAvailable: false,
         error: sanitizeErrorMessage(error.message),
       });
@@ -365,7 +366,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   msg.message.stop_reason ??
                   (msg.message as { stopReason?: string }).stopReason;
                 if (stopReason) {
-                  mainWindow.webContents.send(IPC_CHANNELS.STREAM_DONE, {
+                  safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
                     stopReason,
                     usage: msg.message.usage,
                     model: msg.message.model,
@@ -396,7 +397,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   for (const block of content) {
                     if (block && (block as any).type === 'tool_result') {
                       const tr = block as { type: 'tool_result'; tool_use_id: string; content: unknown; metadata?: Record<string, unknown> };
-                      mainWindow.webContents.send(IPC_CHANNELS.STREAM_TOOL_RESULT, {
+                      safeSend(mainWindow, IPC_CHANNELS.STREAM_TOOL_RESULT, {
                         toolUseId: tr.tool_use_id,
                         toolName: '',
                         result: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
@@ -412,7 +413,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               const deferred = event.deferred as DeferredPermission;
               pendingPermission = deferred;
               pendingToolName = deferred.toolName;
-              mainWindow.webContents.send(IPC_CHANNELS.STATE_PERMISSION_REQ, {
+              safeSend(mainWindow, IPC_CHANNELS.STATE_PERMISSION_REQ, {
                 toolUseId: deferred.toolUseId,
                 toolName: deferred.toolName,
                 command: deferred.command,
@@ -424,7 +425,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             case 'question_required': {
               const deferred = event.deferred as DeferredQuestion;
               pendingQuestion = deferred;
-              mainWindow.webContents.send(IPC_CHANNELS.STATE_QUESTION_REQ, {
+              safeSend(mainWindow, IPC_CHANNELS.STATE_QUESTION_REQ, {
                 toolUseId: deferred.toolUseId,
                 toolName: deferred.toolName,
                 questions: deferred.questions,
@@ -434,7 +435,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             }
             case 'error': {
               const err = event.data as { message?: string; code?: string };
-              mainWindow.webContents.send(IPC_CHANNELS.STREAM_ERROR, {
+              safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
                 message: sanitizeErrorMessage(err?.message ?? 'Unknown error'),
                 code: err?.code ?? 'UNKNOWN',
               });
@@ -442,11 +443,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             }
             case 'cost': {
               const costData = event.data as { totalCost?: number; currency?: string };
-              mainWindow.webContents.send(IPC_CHANNELS.STATE_COST_UPDATE, costData);
+              safeSend(mainWindow, IPC_CHANNELS.STATE_COST_UPDATE, costData);
               break;
             }
             case 'compact': {
-              mainWindow.webContents.send(IPC_CHANNELS.STATE_COMPACT, event.data);
+              safeSend(mainWindow, IPC_CHANNELS.STATE_COMPACT, event.data);
               break;
             }
             case 'done': {
@@ -489,11 +490,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       } catch (err) {
         const rawMessage = err instanceof Error ? err.message : String(err);
         const message = sanitizeErrorMessage(rawMessage);
-        mainWindow.webContents.send(IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME' });
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME' });
       } finally {
         if (controller.signal.aborted) {
           const mw = getMainWindow(windowManager);
-          mw?.webContents.send(IPC_CHANNELS.STREAM_ERROR, {
+          safeSend(mw, IPC_CHANNELS.STREAM_ERROR, {
             message: 'Query interrupted by user',
             code: 'INTERRUPTED',
           });
@@ -763,10 +764,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       cols: opts.cols ?? 120,
       startupCommand: 'coderix\n',
       onData: (data: string) => {
-        mainWindow.webContents.send(`terminal:${terminalId}:data`, data);
+        safeSend(mainWindow, `terminal:${terminalId}:data`, data);
       },
       onExit: (exitCode: number) => {
-        mainWindow.webContents.send(`terminal:${terminalId}:exit`, exitCode);
+        safeSend(mainWindow, `terminal:${terminalId}:exit`, exitCode);
       },
     });
 
@@ -1263,7 +1264,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
       if (updateAvailable) {
         const mw = getMainWindow(windowManager);
-        mw?.webContents.send(IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
+        safeSend(mw, IPC_CHANNELS.APP_UPDATE_AVAILABLE, {
           updateAvailable: true,
           version: updateInfo?.version,
           currentVersion: app.getVersion(),
@@ -1304,19 +1305,19 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   function forwardStreamEvent(mainWindow: BrowserWindow, event: StreamEvent): void {
     switch (event.type) {
       case 'content_block_start':
-        mainWindow.webContents.send(IPC_CHANNELS.STREAM_BLOCK_START, {
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_START, {
           index: event.index,
           content_block: event.content_block,
         });
         break;
       case 'content_block_delta':
-        mainWindow.webContents.send(IPC_CHANNELS.STREAM_BLOCK_DELTA, {
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_DELTA, {
           index: event.index,
           delta: event.delta,
         });
         break;
       case 'content_block_stop':
-        mainWindow.webContents.send(IPC_CHANNELS.STREAM_BLOCK_STOP, {
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_STOP, {
           index: event.index,
         });
         break;
@@ -1328,7 +1329,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         // stop reason so `message_stop` can be forwarded with the real value.
         const delta = event.delta as { stop_reason?: string | null };
         if (delta.stop_reason) lastStopReason = delta.stop_reason;
-        mainWindow.webContents.send(IPC_CHANNELS.STREAM_BLOCK_DELTA, {
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_DELTA, {
           index: -1,
           delta: event.delta,
         });
@@ -1342,7 +1343,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         const message = (event as {
           message?: { stopReason?: string; stop_reason?: string };
         }).message;
-        mainWindow.webContents.send(IPC_CHANNELS.STREAM_DONE, {
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
           stopReason:
             message?.stopReason ?? message?.stop_reason ?? lastStopReason ?? 'end_turn',
         });
@@ -1462,7 +1463,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     lastTokenUsage = usage;
     const mw = getMainWindow(windowManager);
     if (mw) {
-      mw.webContents.send(IPC_CHANNELS.STATE_TOKEN_USAGE, {
+      safeSend(mw, IPC_CHANNELS.STATE_TOKEN_USAGE, {
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
         cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,

@@ -11,6 +11,7 @@ import { BrowserWindow, app, screen } from 'electron';
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { safeSend } from './safe-send.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -250,12 +251,29 @@ export function createWindowManager(): WindowManager {
         this.saveWindowState();
       });
 
-      // Notify renderer on focus
+      // Notify renderer on focus — use safeSend so a crashed/disposed renderer
+      // (blank white window) doesn't throw "Render frame was disposed".
       win.on('focus', () => {
-        win.webContents.send('window:focus', { focused: true });
+        safeSend(win, 'window:focus', { focused: true });
       });
       win.on('blur', () => {
-        win.webContents.send('window:focus', { focused: false });
+        safeSend(win, 'window:focus', { focused: false });
+      });
+
+      // Recover from a renderer crash (the usual cause of a blank white
+      // window) by reloading instead of leaving the user staring at nothing.
+      // Throttle reloads so a deterministically-crashing renderer can't spin
+      // in an endless crash → reload → crash loop.
+      let lastCrashReloadAt = 0;
+      win.webContents.on('render-process-gone', (_event, details) => {
+        console.error(
+          `[Coderix] Renderer process gone (reason=${details.reason}, exitCode=${details.exitCode})`,
+        );
+        const now = Date.now();
+        if (win.isDestroyed() || win.webContents.isDestroyed()) return;
+        if (now - lastCrashReloadAt < 5000) return;
+        lastCrashReloadAt = now;
+        win.webContents.reload();
       });
 
       // Cleanup on close

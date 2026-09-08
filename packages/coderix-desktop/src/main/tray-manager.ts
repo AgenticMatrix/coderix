@@ -8,6 +8,7 @@
 import { Tray, Menu, app, BrowserWindow, nativeImage } from 'electron';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { safeSend } from './safe-send.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,7 +93,7 @@ export function createTrayManager(): TrayManager {
           click: () => {
             const win = BrowserWindow.getAllWindows()[0];
             if (win) {
-              win.webContents.send('state:newSession');
+              safeSend(win, 'state:newSession');
               win.show();
               win.focus();
             }
@@ -107,10 +108,7 @@ export function createTrayManager(): TrayManager {
               type: 'radio',
               checked: mode === 'auto',
               click: () => {
-                BrowserWindow.getAllWindows()[0]?.webContents.send(
-                  'permission:setMode',
-                  'auto',
-                );
+                safeSend(BrowserWindow.getAllWindows()[0], 'permission:setMode', 'auto');
               },
             },
             {
@@ -118,10 +116,7 @@ export function createTrayManager(): TrayManager {
               type: 'radio',
               checked: mode === 'ask',
               click: () => {
-                BrowserWindow.getAllWindows()[0]?.webContents.send(
-                  'permission:setMode',
-                  'ask',
-                );
+                safeSend(BrowserWindow.getAllWindows()[0], 'permission:setMode', 'ask');
               },
             },
             {
@@ -129,10 +124,7 @@ export function createTrayManager(): TrayManager {
               type: 'radio',
               checked: mode === 'plan',
               click: () => {
-                BrowserWindow.getAllWindows()[0]?.webContents.send(
-                  'permission:setMode',
-                  'plan',
-                );
+                safeSend(BrowserWindow.getAllWindows()[0], 'permission:setMode', 'plan');
               },
             },
           ],

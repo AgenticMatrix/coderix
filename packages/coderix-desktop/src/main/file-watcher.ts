@@ -14,6 +14,7 @@
 import { relative } from 'node:path';
 import type { FSWatcher } from 'chokidar';
 import { BrowserWindow } from 'electron';
+import { safeSend } from './safe-send.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,9 +80,7 @@ export function createFileWatcherManager(): FileWatcherManager {
   }
 
   function sendToRenderer(event: FileChangeEvent): void {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('fs:fileChanged', event);
-    }
+    safeSend(mainWindow, 'fs:fileChanged', event);
   }
 
   return {

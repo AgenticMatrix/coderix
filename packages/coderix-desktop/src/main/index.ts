@@ -14,6 +14,7 @@ import { createTerminalManager } from './native-terminal.js';
 import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
+import { safeSend } from './safe-send.js';
 
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
@@ -152,10 +153,7 @@ async function bootstrap(): Promise<void> {
 
     // Step 6: Handle open-file (macOS)
     app.on('open-file', (_event, filePath) => {
-      const win = windowManager?.getMainWindow();
-      if (win) {
-        win.webContents.send('app:openFile', filePath);
-      }
+      safeSend(windowManager?.getMainWindow(), 'app:openFile', filePath);
     });
 
     console.log('[Coderix] Bootstrap complete');
@@ -249,7 +247,7 @@ async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
     toolRegistry.register(
       { name, description, input_schema },
       async (input, ctx) => {
-        const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir });
+        const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir, allowMutation: true });
         return { content: String(result.content ?? ''), isError: result.isError ?? false };
       },
     );

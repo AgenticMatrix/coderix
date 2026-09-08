@@ -56,6 +56,7 @@ interface CoderSettings {
   env?: Record<string, string>;
   web_search?: unknown;
   engine?: string;
+  default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +99,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
         connected: !!(entry.auth_token_env && entry.auth_token_env.length > 0 && !isPlaceholderKey(entry.auth_token_env)),
       })) ?? [],
     defaultModel: qualifyDefaultModel(config),
-    defaultPermissionMode: 'auto',
+    defaultPermissionMode: (config.default_permission_mode as PermissionMode) ?? 'ask',
     theme: (config.theme as Theme) ?? 'light',
     mcpServers: [],
     engine: (config.engine === 'claude-code' ? 'claude-code' : 'coderix'),
@@ -110,6 +111,7 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
     theme: data.theme,
     default_model: data.defaultModel,
     engine: data.engine,
+    default_permission_mode: data.defaultPermissionMode,
     model_list: data.providers.map((p) => ({
       provider: p.name.toLowerCase(),
       base_url: p.baseUrl,

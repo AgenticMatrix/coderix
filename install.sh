@@ -10,6 +10,10 @@
 #   ./install.sh --desktop    # Desktop Electron app only
 #   ./install.sh --all        # Both CLI and Desktop
 #
+#   # Clean reinstall (wipes node_modules + build output, then rebuilds)
+#   ./install.sh --reinstall  # Equivalent to: --reinstall --all
+#   ./install.sh --reinstall --desktop   # Reinstall + rebuild desktop only
+#
 # This script:
 #   1. Checks Node.js >= 22 + pnpm (for monorepo)
 #   2. Installs coderix dependencies
@@ -25,13 +29,22 @@ NC='\033[0m' # No Color
 
 LOCAL_INSTALL=false
 DESKTOP_INSTALL=false
+REINSTALL=false
 for arg in "$@"; do
   case "$arg" in
     --local|--dev) LOCAL_INSTALL=true ;;
     --desktop) DESKTOP_INSTALL=true ;;
     --all) LOCAL_INSTALL=true; DESKTOP_INSTALL=true ;;
+    --reinstall|--force) REINSTALL=true ;;
   esac
 done
+
+# `--reinstall` only makes sense from the repo (it wipes node_modules and
+# rebuilds), so default it to a full local reinstall when no scope was given.
+if $REINSTALL && ! $LOCAL_INSTALL && ! $DESKTOP_INSTALL; then
+  LOCAL_INSTALL=true
+  DESKTOP_INSTALL=true
+fi
 
 echo -e "${CYAN}"
 echo "╔══════════════════════════════════════════════════╗"
@@ -202,6 +215,24 @@ if $LOCAL_INSTALL || $DESKTOP_INSTALL; then
   echo -e "Repo directory: ${GREEN}${REPO_DIR}${NC}"
   echo ""
 
+  # Clean reinstall: wipe previous build output and dependencies so a source
+  # fix (e.g. the desktop white-screen fix) isn't masked by a stale
+  # packages/coderix-desktop/dist/main/index.cjs.
+  if $REINSTALL; then
+    echo -e "${YELLOW}Reinstall requested — cleaning previous build and dependencies...${NC}"
+
+    rm -rf "${REPO_DIR}/packages/coderix-desktop/dist"
+    rm -rf "${REPO_DIR}/packages/coderix-desktop/out"
+
+    rm -rf "${REPO_DIR}/node_modules"
+    for pkg_node_modules in "${REPO_DIR}"/packages/*/node_modules; do
+      [ -d "$pkg_node_modules" ] && rm -rf "$pkg_node_modules"
+    done
+
+    echo -e "${GREEN}Cleanup complete. Reinstalling from scratch...${NC}"
+    echo ""
+  fi
+
   # Install root dependencies
   echo -e "${CYAN}Installing monorepo dependencies...${NC}"
   (cd "${REPO_DIR}" && pnpm install)
@@ -237,6 +268,16 @@ if $LOCAL_INSTALL || $DESKTOP_INSTALL; then
     echo -e "${CYAN}Setting up desktop app...${NC}"
     (cd "${REPO_DIR}/packages/coderix-desktop" && pnpm install 2>/dev/null || true)
     echo -e "${GREEN}Desktop app dependencies installed${NC}"
+
+    # A reinstall rebuilds the Electron bundle so the fresh source lands in
+    # packages/coderix-desktop/dist/main/index.cjs (what the app actually runs).
+    if $REINSTALL; then
+      echo ""
+      echo -e "${CYAN}Rebuilding desktop app (electron-vite build)...${NC}"
+      (cd "${REPO_DIR}/packages/coderix-desktop" && pnpm run build)
+      echo -e "${GREEN}Desktop app rebuilt at packages/coderix-desktop/dist${NC}"
+    fi
+
     echo ""
     echo -e "  Launch CLI:     ${YELLOW}npm run dev:cli${NC}"
     echo -e "  Launch Desktop: ${YELLOW}npm run dev:desk${NC}"

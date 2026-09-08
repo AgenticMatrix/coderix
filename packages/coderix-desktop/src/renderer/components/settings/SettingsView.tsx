@@ -322,7 +322,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                     { mode: 'ask' as PermissionMode, label: '每次操作前询问', desc: '每个工具调用都需要您确认。' },
                     { mode: 'auto' as PermissionMode, label: '自动执行', desc: 'Agent 自动执行所有操作，不询问。推荐。' },
                   ]).map(({ mode, label, desc }) => (
-                    <button key={mode} onClick={() => { setPermissionMode(mode); updateDraft({ defaultPermissionMode: mode }); }} style={S.permBtn(draft.defaultPermissionMode === mode)}>
+                    <button key={mode} onClick={() => { setPermissionMode(mode); updateDraft({ defaultPermissionMode: mode }); window.coderixAPI?.permission?.setMode?.(mode).catch(() => {}); }} style={S.permBtn(draft.defaultPermissionMode === mode)}>
                       <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{label}</div>
                       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
                     </button>
