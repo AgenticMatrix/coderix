@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Cpu, ChevronDown, Check } from 'lucide-react';
 import { useSettingsStore } from '../../store/settingsStore.js';
 import { setSessionModel } from '../../ipc-client.js';
+import { providerLabel, ProviderLogo } from './providerMeta.js';
 import './ModelCascadePicker.css';
 
 export interface ModelCascadePickerProps {
@@ -86,7 +87,8 @@ export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): Rea
                   className={`model-cascade-provider${selectedProvider === p.name.toLowerCase() ? ' active' : ''}`}
                   onClick={() => setSelectedProvider(p.name.toLowerCase())}
                 >
-                  <span className="model-cascade-provider-label">{p.name}</span>
+                  <ProviderLogo provider={p.name} size={18} />
+                  <span className="model-cascade-provider-label">{providerLabel(p.name)}</span>
                 </button>
               ))}
             </div>
