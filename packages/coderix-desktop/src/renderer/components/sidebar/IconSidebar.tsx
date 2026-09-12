@@ -21,7 +21,7 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
   return (
-    <div className="iconSidebar">
+    <div className={`iconSidebar ${standardMode ? '' : 'detailMode'}`}>
       {/* macOS titlebar drag area */}
       <div className="dragArea" />
 
