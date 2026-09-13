@@ -44,6 +44,7 @@ export interface UIState {
   sidebarOpen: boolean;
   detailPanelOpen: boolean;
   terminalOpen: boolean;
+  browserPanelOpen: boolean;
   permissionMode: PermissionMode;
   theme: Theme;
   standardMode: boolean;
@@ -59,6 +60,7 @@ export interface UIState {
   toggleSidebar: () => void;
   toggleDetailPanel: () => void;
   toggleTerminal: () => void;
+  toggleBrowserPanel: () => void;
   setTerminalOpen: (open: boolean) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setTheme: (theme: Theme) => void;
@@ -86,6 +88,7 @@ export const useUIStore = create<UIState>()((set) => ({
   sidebarOpen: true,
   detailPanelOpen: false,
   terminalOpen: false,
+  browserPanelOpen: false,
   permissionMode: 'ask',
   theme: 'light',
   standardMode: loadStandardMode(),
@@ -106,6 +109,10 @@ export const useUIStore = create<UIState>()((set) => ({
 
   toggleTerminal: () => {
     set((state) => ({ terminalOpen: !state.terminalOpen }));
+  },
+
+  toggleBrowserPanel: () => {
+    set((state) => ({ browserPanelOpen: !state.browserPanelOpen }));
   },
 
   setTerminalOpen: (open: boolean) => {

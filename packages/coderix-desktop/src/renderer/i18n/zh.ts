@@ -392,6 +392,17 @@ export const zh = {
 
   // ── 终端 ────────────────────────────────────────────
   'terminal.close': '关闭终端',
+
+  // ── 浏览器侧栏 ─────────────────────────────────────
+  'nav.browser': '浏览器',
+  'browser.newTab': '新建标签页',
+  'browser.closeTab': '关闭标签页',
+  'browser.back': '后退',
+  'browser.forward': '前进',
+  'browser.reload': '刷新',
+  'browser.home': '主页',
+  'browser.searchPlaceholder': '搜索或输入网址',
+  'browser.emptyHint': '打开新标签页开始浏览',
 } as const;
 
 export type ZhDict = typeof zh;

@@ -65,6 +65,22 @@ declare global {
         stageHunk(file: string, hunk: string): Promise<{ status: string; error?: string }>;
         revertHunk(file: string, hunk: string): Promise<{ status: string; error?: string }>;
       };
+      browser: {
+        create(tabId: string, url: string): Promise<void>;
+        destroy(tabId: string): Promise<void>;
+        navigate(tabId: string, url: string): Promise<void>;
+        goBack(tabId: string): Promise<void>;
+        goForward(tabId: string): Promise<void>;
+        reload(tabId: string): Promise<void>;
+        stop(tabId: string): Promise<void>;
+        executeJavaScript(tabId: string, code: string): Promise<unknown>;
+        getPageInfo(tabId: string): Promise<{ url: string; title: string; canGoBack: boolean; canGoForward: boolean; isLoading: boolean }>;
+        setBounds(tabId: string, bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+        show(tabId: string, bounds?: { x: number; y: number; width: number; height: number }): Promise<void>;
+        hide(tabId: string): Promise<void>;
+        onEvent(callback: (event: { tabId: string; type: string; url?: string; title?: string; canGoBack?: boolean; canGoForward?: boolean; errorDescription?: string }) => void): () => void;
+        onOpenNewTab(callback: (url: string) => void): () => void;
+      };
       onStreamEvent(callback: (event: unknown) => void): () => void;
       onPermissionRequest(callback: (req: unknown) => void): () => void;
       onStateChange(callback: (change: unknown) => void): () => void;

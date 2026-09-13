@@ -86,6 +86,22 @@ const CH = {
   GIT_REVERT_HUNK: 'git:revert-hunk',
   GIT_SHOW_FILE: 'git:show-file',
   GIT_COMMIT_BODY: 'git:commit-body',
+
+  // Browser (WebContentsView)
+  BROWSER_CREATE: 'browser:create',
+  BROWSER_DESTROY: 'browser:destroy',
+  BROWSER_NAVIGATE: 'browser:navigate',
+  BROWSER_GO_BACK: 'browser:goBack',
+  BROWSER_GO_FORWARD: 'browser:goForward',
+  BROWSER_RELOAD: 'browser:reload',
+  BROWSER_STOP: 'browser:stop',
+  BROWSER_EXECUTE_JS: 'browser:executeJavaScript',
+  BROWSER_GET_PAGE_INFO: 'browser:getPageInfo',
+  BROWSER_SET_BOUNDS: 'browser:setBounds',
+  BROWSER_SHOW: 'browser:show',
+  BROWSER_HIDE: 'browser:hide',
+  BROWSER_EVENT: 'browser:event',
+  BROWSER_OPEN_NEW_TAB: 'browser:open-new-tab',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -579,6 +595,65 @@ const coderixAPI = {
     /** Revert a specific hunk via git apply --reverse. */
     revertHunk(file: string, hunk: string): Promise<{ status: string; error?: string }> {
       return ipcRenderer.invoke(CH.GIT_REVERT_HUNK, { file, hunk });
+    },
+  },
+
+  // ── Browser (WebContentsView) ──────────────────────────────────────────
+
+  browser: {
+    /** Create (or return existing) a browser tab backed by a WebContentsView. */
+    create(tabId: string, url: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_CREATE, { tabId, url });
+    },
+    /** Destroy a browser tab and free its renderer process. */
+    destroy(tabId: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_DESTROY, { tabId });
+    },
+    navigate(tabId: string, url: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_NAVIGATE, { tabId, url });
+    },
+    goBack(tabId: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_GO_BACK, { tabId });
+    },
+    goForward(tabId: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_GO_FORWARD, { tabId });
+    },
+    reload(tabId: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_RELOAD, { tabId });
+    },
+    stop(tabId: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_STOP, { tabId });
+    },
+    executeJavaScript(tabId: string, code: string): Promise<unknown> {
+      return ipcRenderer.invoke(CH.BROWSER_EXECUTE_JS, { tabId, code });
+    },
+    getPageInfo(tabId: string): Promise<{ url: string; title: string; canGoBack: boolean; canGoForward: boolean; isLoading: boolean }> {
+      return ipcRenderer.invoke(CH.BROWSER_GET_PAGE_INFO, { tabId });
+    },
+    setBounds(tabId: string, bounds: { x: number; y: number; width: number; height: number }): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_SET_BOUNDS, { tabId, bounds });
+    },
+    show(tabId: string, bounds?: { x: number; y: number; width: number; height: number }): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_SHOW, { tabId, bounds });
+    },
+    hide(tabId: string): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_HIDE, { tabId });
+    },
+    /** Subscribe to browser tab events (did-navigate, page-title-updated, …). */
+    onEvent(callback: (event: { tabId: string; type: string; url?: string; title?: string; canGoBack?: boolean; canGoForward?: boolean; errorDescription?: string }) => void): () => void {
+      const handler = (_event: Electron.IpcRendererEvent, data: { tabId: string; type: string; url?: string; title?: string; canGoBack?: boolean; canGoForward?: boolean; errorDescription?: string }) => {
+        callback(data);
+      };
+      ipcRenderer.on(CH.BROWSER_EVENT, handler);
+      return () => ipcRenderer.removeListener(CH.BROWSER_EVENT, handler);
+    },
+    /** Fired when a page requests a new window (target=_blank / window.open). */
+    onOpenNewTab(callback: (url: string) => void): () => void {
+      const handler = (_event: Electron.IpcRendererEvent, url: string) => {
+        callback(url);
+      };
+      ipcRenderer.on(CH.BROWSER_OPEN_NEW_TAB, handler);
+      return () => ipcRenderer.removeListener(CH.BROWSER_OPEN_NEW_TAB, handler);
     },
   },
 

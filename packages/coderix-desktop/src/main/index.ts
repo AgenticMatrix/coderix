@@ -14,6 +14,8 @@ import { createTerminalManager } from './native-terminal.js';
 import type { TerminalManager } from './native-terminal.js';
 import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
+import { createBrowserViewManager } from './browser-view-manager.js';
+import type { BrowserViewManager } from './browser-view-manager.js';
 import { safeSend } from './safe-send.js';
 
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
@@ -79,6 +81,7 @@ let ipcBridge: IpcBridge | null = null;
 let fileWatcher: FileWatcherManager | null = null;
 let terminalManager: TerminalManager | null = null;
 let trayManager: TrayManager | null = null;
+let browserViewManager: BrowserViewManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
@@ -99,6 +102,10 @@ async function bootstrap(): Promise<void> {
 
     // Step 1: Create window manager
     windowManager = createWindowManager();
+
+    // Step 1b: Create browser view manager (WebContentsView tabs) so its IPC
+    // handlers are registered before the renderer loads.
+    browserViewManager = createBrowserViewManager(windowManager);
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
@@ -305,6 +312,7 @@ app.on('before-quit', () => {
   console.log('[Coderix] Shutting down...');
   windowManager?.saveWindowState();
   ipcBridge?.destroy();
+  browserViewManager?.destroy();
   fileWatcher?.destroy();
   terminalManager?.destroyAll();
   trayManager?.destroy();

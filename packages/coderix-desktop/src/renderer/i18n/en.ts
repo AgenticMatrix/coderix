@@ -396,4 +396,15 @@ export const en: Record<TranslationKey, string> = {
 
   // ── 终端 ────────────────────────────────────────────
   'terminal.close': 'Close terminal',
+
+  // ── Browser sidebar ──────────────────────────────────
+  'nav.browser': 'Browser',
+  'browser.newTab': 'New Tab',
+  'browser.closeTab': 'Close tab',
+  'browser.back': 'Back',
+  'browser.forward': 'Forward',
+  'browser.reload': 'Reload',
+  'browser.home': 'Home',
+  'browser.searchPlaceholder': 'Search or enter a URL',
+  'browser.emptyHint': 'Open a new tab to start browsing',
 };

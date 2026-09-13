@@ -102,8 +102,11 @@ export function createWindowManager(): WindowManager {
           ? {
               titleBarStyle: 'hidden' as const,
               trafficLightPosition: { x: 6, y: 11 },
-              vibrancy: 'under-window' as const,
-              visualEffectState: 'active' as const,
+              // NOTE: deliberately NO `vibrancy` here. On macOS, vibrancy makes
+              // the NSVisualEffectView draw over the window's child
+              // WebContentsView, so the embedded browser renders blank. The
+              // frosted-glass sidebar is done with opaque colors + CSS
+              // backdrop-filter, so window vibrancy is unnecessary anyway.
               tabbingIdentifier: 'coderix-main',
             }
           : {

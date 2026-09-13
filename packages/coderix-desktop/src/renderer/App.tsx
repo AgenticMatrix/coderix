@@ -29,6 +29,7 @@ import { QuestionPrompt } from './components/composer/QuestionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
 import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
+import { BrowserPanel } from './components/browser';
 import { GlobalModal } from './components/modals';
 import type { SidebarTab } from './components/sidebar/IconSidebar';
 
@@ -95,11 +96,13 @@ export function App(): React.ReactElement {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const detailPanelOpen = useUIStore((s) => s.detailPanelOpen);
   const terminalOpen = useUIStore((s) => s.terminalOpen);
+  const browserPanelOpen = useUIStore((s) => s.browserPanelOpen);
   const theme = useUIStore((s) => s.theme);
   const standardMode = useUIStore((s) => s.standardMode);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const toggleDetailPanel = useUIStore((s) => s.toggleDetailPanel);
   const toggleTerminal = useUIStore((s) => s.toggleTerminal);
+  const toggleBrowserPanel = useUIStore((s) => s.toggleBrowserPanel);
   const setTheme = useUIStore((s) => s.setTheme);
   const setTerminalOpen = useUIStore((s) => s.setTerminalOpen);
   const gitBranch = useUIStore((s) => s.gitBranch);
@@ -658,6 +661,9 @@ export function App(): React.ReactElement {
         onIconSettings={() => setSettingsOpen(true)}
         detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
+        browserPanel={<BrowserPanel />}
+        browserPanelVisible={browserPanelOpen}
+        onToggleBrowserPanel={toggleBrowserPanel}
         statusBarProps={{
           engine: settings?.engine,
           agentStatus,

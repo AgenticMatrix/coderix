@@ -10,5 +10,8 @@ export type { UIState, PermissionMode, Theme } from './uiStore.js';
 export { useStreamStore } from './streamStore.js';
 export type { StreamState } from './streamStore.js';
 
+export { useBrowserStore } from './browserStore.js';
+export type { BrowserTab } from './browserStore.js';
+
 export type { ChatMessage, SessionSummary, AggregatedTokenUsage } from './types.js';
 export { createId } from './types.js';
