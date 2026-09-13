@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Cpu, ChevronDown, Check } from 'lucide-react';
 import { useSettingsStore } from '../../store/settingsStore.js';
+import type { ProviderConfig } from '../../store/settingsStore.js';
 import { setSessionModel } from '../../ipc-client.js';
 import { providerLabel, ProviderLogo } from './providerMeta.js';
 import './ModelCascadePicker.css';
+
+/**
+ * Stable empty array for the store selector. Returning a fresh `[]` from a
+ * zustand v5 selector makes `useSyncExternalStore` see a "changed" snapshot on
+ * every render (Object.is comparison), which drives an infinite re-render loop
+ * ("Maximum update depth exceeded") while `settings` is still null/loading.
+ */
+const EMPTY_PROVIDERS: ProviderConfig[] = [];
 
 export interface ModelCascadePickerProps {
   /** Current model, "provider/model" or a bare model name. */
@@ -20,7 +29,7 @@ export interface ModelCascadePickerProps {
  * registry.
  */
 export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): React.ReactElement {
-  const providers = useSettingsStore((s) => s.settings?.providers ?? []);
+  const providers = useSettingsStore((s) => s.settings?.providers ?? EMPTY_PROVIDERS);
   const [open, setOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
