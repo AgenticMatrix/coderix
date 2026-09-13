@@ -258,6 +258,38 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             cwd: currentWorkDir,
             model: currentModel,
             abortController: controller,
+            // Forward AskUserQuestion to the renderer through the same
+            // question-request channel the in-process engine uses, so the
+            // Claude Code SDK hook can resolve the tool call with the user's
+            // answers instead of auto-denying it.
+            onAskUserQuestion: (req) => {
+              console.log('[AskUserQuestion] onAskUserQuestion callback invoked', req);
+              let resolveFn!: (answers: Record<string, string | string[]>) => void;
+              const promise = new Promise<Record<string, string | string[]>>((r) => { resolveFn = r; });
+              const deferred: DeferredQuestion = {
+                toolName: 'AskUserQuestion',
+                toolUseId: req.toolUseId,
+                questions: req.questions,
+                resolve: resolveFn,
+                promise,
+              };
+              pendingQuestion = deferred;
+              console.log('[AskUserQuestion] STATE_QUESTION_REQ attempting send. mainWindow:', !!mainWindow, 'destroyed:', mainWindow?.isDestroyed?.(), 'rendererDestroyed:', mainWindow?.webContents?.isDestroyed?.());
+              safeSend(mainWindow, IPC_CHANNELS.STATE_QUESTION_REQ, {
+                toolUseId: req.toolUseId,
+                toolName: 'AskUserQuestion',
+                questions: req.questions,
+              });
+              // Resolve empty if the turn is aborted while the question is open,
+              // so the hook never leaves the Claude Code subprocess hanging.
+              controller.signal.addEventListener('abort', () => {
+                if (pendingQuestion === deferred) {
+                  pendingQuestion = null;
+                  resolveFn({});
+                }
+              }, { once: true });
+              return promise;
+            },
           })
         : queryEngine!.submitMessage(userInput);
 

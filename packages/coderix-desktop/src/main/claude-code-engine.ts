@@ -12,7 +12,7 @@
  */
 
 import { query as claudeQuery } from '@anthropic-ai/claude-agent-sdk';
-import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, HookCallback } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent } from '@coderix/core';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -33,6 +33,76 @@ export interface ClaudeCodeQueryOptions {
   cwd: string;
   model?: string;
   abortController: AbortController;
+  /**
+   * When provided, the model's `AskUserQuestion` tool calls are forwarded here
+   * instead of being auto-denied. Returns the user's answers keyed by the
+   * question `header` (values are string, or string[] for multi-select).
+   */
+  onAskUserQuestion?: (req: AskUserQuestionRequest) => Promise<Record<string, string | string[]>>;
+}
+
+/** One question from the model's `AskUserQuestion` tool input. */
+export interface AskUserQuestionRequest {
+  toolUseId: string;
+  questions: Array<{
+    header: string;
+    question: string;
+    options?: Array<{ label: string; description: string }>;
+    multiSelect?: boolean;
+  }>;
+}
+
+/**
+ * Build a `PreToolUse` hook that intercepts `AskUserQuestion`. Without this,
+ * the tool is marked `requiresUserInteraction`, so in `bypassPermissions` mode
+ * the SDK auto-denies it and the user never sees the question. The hook pauses
+ * the tool call until the host answers (via `onAskUserQuestion`), then injects
+ * the answers as `updatedInput.answers` — the field the Claude Code tool reads
+ * to short-circuit its interactive prompt (question text → answer string,
+ * multi-select comma-joined).
+ */
+function buildAskUserQuestionHook(
+  onAsk: (req: AskUserQuestionRequest) => Promise<Record<string, string | string[]>>,
+  abortController: AbortController,
+): HookCallback {
+  return async (input) => {
+    const i = input as unknown as { tool_input?: unknown; tool_use_id?: string };
+    const toolInput = (i.tool_input as Record<string, unknown>) || {};
+    const questions = (toolInput.questions as AskUserQuestionRequest['questions']) || [];
+    console.log('[AskUserQuestion] PreToolUse hook FIRED', {
+      tool_use_id: i.tool_use_id,
+      tool_input: toolInput,
+    });
+
+    // Wait for the host to answer (or the turn to be aborted).
+    const byHeader = await new Promise<Record<string, string | string[]>>((resolve) => {
+      let settled = false;
+      const done = (v: Record<string, string | string[]>): void => {
+        if (settled) return;
+        settled = true;
+        resolve(v);
+      };
+      onAsk({ toolUseId: i.tool_use_id ?? '', questions }).then(done, () => done({}));
+      abortController.signal.addEventListener('abort', () => done({}), { once: true });
+    });
+    console.log('[AskUserQuestion] resolved answers (byHeader):', byHeader);
+
+    // The host answers keyed by `header`; Claude Code keys by question text.
+    const answers: Record<string, string> = {};
+    for (const q of questions) {
+      const v = byHeader[q.header];
+      if (v === undefined || v === null) continue;
+      answers[q.question] = Array.isArray(v) ? v.join(', ') : v;
+    }
+
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { ...toolInput, answers },
+      },
+    };
+  };
 }
 
 /**
@@ -101,7 +171,7 @@ function resolveClaudeCodeExecutable(): string | undefined {
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, abortController } = opts;
+  const { prompt, sessionId, cwd, model, abortController, onAskUserQuestion } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -128,6 +198,16 @@ export async function* runClaudeCodeQuery(
   };
   if (model) options.model = model;
   if (resume) options.resume = resume;
+  if (onAskUserQuestion) {
+    options.hooks = {
+      PreToolUse: [
+        { matcher: 'AskUserQuestion', hooks: [buildAskUserQuestionHook(onAskUserQuestion, abortController)] },
+      ],
+    };
+    console.log('[AskUserQuestion] registered PreToolUse hook (matcher: AskUserQuestion)');
+  } else {
+    console.log('[AskUserQuestion] onAskUserQuestion NOT provided — hook NOT registered');
+  }
 
   const stream = claudeQuery({ prompt, options });
 
