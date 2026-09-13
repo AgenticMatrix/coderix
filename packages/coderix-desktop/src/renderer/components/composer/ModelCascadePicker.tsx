@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../store/settingsStore.js';
 import type { ProviderConfig } from '../../store/settingsStore.js';
 import { setSessionModel } from '../../ipc-client.js';
 import { providerLabel, ProviderLogo } from './providerMeta.js';
+import { useT } from '../../i18n/index.js';
 import './ModelCascadePicker.css';
 
 /**
@@ -29,6 +30,7 @@ export interface ModelCascadePickerProps {
  * registry.
  */
 export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): React.ReactElement {
+  const t = useT();
   const providers = useSettingsStore((s) => s.settings?.providers ?? EMPTY_PROVIDERS);
   const [open, setOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
@@ -77,16 +79,16 @@ export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): Rea
         type="button"
         className="model-picker-btn"
         onClick={toggleOpen}
-        title="切换模型"
+        title={t('modelpicker.switch')}
       >
         <Cpu size={13} />
-        <span className="model-cascade-label">{model || '未配置模型'}</span>
+        <span className="model-cascade-label">{model || t('modelpicker.unconfigured')}</span>
         <ChevronDown size={10} />
       </button>
 
       {open && (
         <div className="model-cascade-popup">
-          <div className="model-cascade-header">切换模型</div>
+          <div className="model-cascade-header">{t('modelpicker.switch')}</div>
           <div className="model-cascade-body">
             <div className="model-cascade-providers">
               {providers.map((p) => (
@@ -103,7 +105,7 @@ export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): Rea
             </div>
             <div className="model-cascade-models">
               {providerModels.length === 0 ? (
-                <div className="model-cascade-empty">该 provider 暂无模型</div>
+                <div className="model-cascade-empty">{t('modelpicker.noModels')}</div>
               ) : (
                 providerModels.map((m) => {
                   const active = selectedProvider

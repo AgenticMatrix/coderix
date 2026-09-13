@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Folder, FolderOpen, File, FileCode, FileText, FileJson, FileImage, FileType, Cog, Globe, Terminal, Package } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { useT } from '../../i18n/index.js';
 
 interface FileNode {
   name: string;
@@ -180,6 +181,7 @@ export interface FileExplorerProps {
 export function FileExplorer({ fileTree, projectPath }: FileExplorerProps): React.ReactElement {
   const [tree, setTree] = useState<FileNode[]>(fileTree ?? []);
   const [loading, setLoading] = useState(!fileTree);
+  const t = useT();
 
   const loadDir = useCallback(async (dirPath: string, parentNode?: FileNode) => {
     const api = window.coderixAPI?.fs;
@@ -259,13 +261,13 @@ export function FileExplorer({ fileTree, projectPath }: FileExplorerProps): Reac
   }, [projectPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
-    return <div className="p-4 text-xs text-center text-[var(--color-text-tertiary)]">Loading files...</div>;
+    return <div className="p-4 text-xs text-center text-[var(--color-text-tertiary)]">{t('explorer.loading')}</div>;
   }
 
   return (
     <div className="py-1">
       {tree.length === 0 ? (
-        <div className="p-4 text-xs text-center text-[var(--color-text-tertiary)]">No files found</div>
+        <div className="p-4 text-xs text-center text-[var(--color-text-tertiary)]">{t('explorer.noFiles')}</div>
       ) : (
         tree.map((node) => (
           <TreeNode key={node.path} node={node} onToggle={handleToggle} onFileClick={handleFileClick} />

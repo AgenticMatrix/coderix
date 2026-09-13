@@ -4,6 +4,7 @@ import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
 import { IconSidebar } from '../sidebar/IconSidebar';
 import type { SidebarTab } from '../sidebar/IconSidebar';
+import { useT } from '../../i18n/index.js';
 
 export interface AppLayoutProps {
   sidebar: ReactNode;
@@ -62,6 +63,7 @@ export function AppLayout({
   onIconTabChange,
   onIconSettings,
 }: AppLayoutProps): React.ReactElement {
+  const t = useT();
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
       <IconSidebar activeTab={iconActiveTab} onTabChange={onIconTabChange} onSettings={onIconSettings} />
@@ -89,8 +91,8 @@ export function AppLayout({
                        text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
                        hover:bg-[var(--color-bg-tertiary)] transition-colors"
             onClick={() => window.dispatchEvent(new CustomEvent('coderix:toggle-sidebar'))}
-            title="Toggle Sidebar (⌘B)"
-            aria-label="Toggle Sidebar"
+            title={t('nav.toggleSidebar')}
+            aria-label={t('nav.toggleSidebar')}
           >
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
               <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />

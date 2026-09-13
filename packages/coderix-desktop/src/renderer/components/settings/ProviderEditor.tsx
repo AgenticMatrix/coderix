@@ -10,6 +10,7 @@ import {
 } from '../../store/settingsStore.js';
 import { PROVIDER_DOCS, providerLabel, ProviderLogo } from './providerMeta.js';
 import { testConnection } from '../../ipc-client.js';
+import { useT } from '../../i18n/index.js';
 
 interface ProviderEditorProps {
   provider: ProviderConfig;
@@ -58,6 +59,7 @@ const labelStyle: React.CSSProperties = {
  * immediately via `onChange`; persistence happens via the top-level 保存 button.
  */
 export default function ProviderEditor({ provider, isNew, onChange, onBack, onDelete }: ProviderEditorProps) {
+  const t = useT();
   const [name, setName] = useState(provider.name);
   const [baseUrl, setBaseUrl] = useState(provider.baseUrl);
   const [apiKey, setApiKey] = useState(provider.apiKey);
@@ -111,13 +113,13 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
     if (!baseUrl.trim()) {
       setTestState('done');
       setTestOk(false);
-      setTestMessage('请先填写 Base URL');
+      setTestMessage(t('provider.needBaseUrl'));
       setTestModels([]);
       return;
     }
     setTestState('testing');
     setTestOk(null);
-    setTestMessage('正在测试连接…');
+    setTestMessage(t('provider.testingConn'));
     setTestModels([]);
     try {
       const result = await testConnection(baseUrl, apiKey);
@@ -185,13 +187,13 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
         <button
           type="button"
           onClick={onBack}
-          title="返回"
+          title={t('provider.back')}
           className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
         >
           <ArrowLeft size={16} />
         </button>
         <ProviderLogo provider={slug || 'custom'} size={28} />
-        <span className="flex-1 text-base font-semibold">{isNew ? '新增 Provider' : providerLabel(provider.name)}</span>
+        <span className="flex-1 text-base font-semibold">{isNew ? t('provider.add') : providerLabel(provider.name)}</span>
         {!isNew && onDelete && (
           confirmDeleteProvider ? (
             <div className="flex items-center gap-2">
@@ -200,21 +202,21 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 onClick={onDelete}
                 className="rounded-[var(--radius-md)] bg-[var(--color-danger)] px-3 py-1 text-xs font-medium text-white"
               >
-                确认删除
+                {t('provider.deleteConfirm')}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmDeleteProvider(false)}
                 className="rounded-[var(--radius-md)] border border-[var(--color-separator)] px-3 py-1 text-xs text-[var(--color-text-secondary)]"
               >
-                取消
+                {t('common.cancel')}
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => setConfirmDeleteProvider(true)}
-              title="删除该 Provider"
+              title={t('provider.deleteProvider')}
               className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-danger-muted)] hover:text-[var(--color-danger)] transition-colors"
             >
               <Trash2 size={16} />
@@ -228,7 +230,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
         {/* Provider config */}
         <section>
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Provider 配置</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">{t('provider.config')}</h3>
             {docsUrl && (
               <a
                 href={docsUrl}
@@ -236,7 +238,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline"
               >
-                参考文档
+                {t('provider.docs')}
                 <ExternalLink size={13} />
               </a>
             )}
@@ -252,7 +254,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
           >
             {isNew && (
               <>
-                <label style={labelStyle}>Provider 名称</label>
+                <label style={labelStyle}>{t('provider.name')}</label>
                 <select
                   value={PROVIDER_CATALOG[slug] ? slug : '__custom__'}
                   onChange={(e) => pickCatalogProvider(e.target.value)}
@@ -261,11 +263,11 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   {Object.keys(PROVIDER_CATALOG).map((k) => (
                     <option key={k} value={k}>{providerLabel(k)}</option>
                   ))}
-                  <option value="__custom__">自定义 Provider…</option>
+                  <option value="__custom__">{t('provider.custom')}</option>
                 </select>
                 {!PROVIDER_CATALOG[slug] && (
                   <>
-                    <label style={labelStyle}>自定义名称 (provider slug)</label>
+                    <label style={labelStyle}>{t('provider.customName')}</label>
                     <input
                       style={inputStyle}
                       value={name}
@@ -273,14 +275,14 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                         setName(e.target.value);
                         emit({ name: e.target.value.trim().toLowerCase() });
                       }}
-                      placeholder="例如 cohere"
+                      placeholder={t('provider.customNamePlaceholder')}
                     />
                   </>
                 )}
               </>
             )}
 
-            <label style={{ ...labelStyle, marginTop: isNew ? '12px' : '0' }}>接口地址 (Base URL)</label>
+            <label style={{ ...labelStyle, marginTop: isNew ? '12px' : '0' }}>{t('provider.baseUrl')}</label>
             <input
               style={inputStyle}
               value={baseUrl}
@@ -292,7 +294,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
               placeholder="https://…"
             />
 
-            <label style={labelStyle}>API Key</label>
+            <label style={labelStyle}>{t('provider.apiKey')}</label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
                 style={{ ...inputStyle, flex: 1 }}
@@ -318,7 +320,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   fontSize: 'var(--text-xs)',
                 }}
               >
-                {showKey ? '隐藏' : '显示'}
+                {showKey ? t('provider.hideKey') : t('provider.showKey')}
               </button>
             </div>
 
@@ -338,7 +340,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   opacity: testState === 'testing' ? 0.6 : 1,
                 }}
               >
-                {testState === 'testing' ? '测试中…' : '测试连接'}
+                {testState === 'testing' ? t('provider.testing') : t('provider.testConn')}
               </button>
               {testMessage && testState === 'done' && (
                 <span
@@ -355,7 +357,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
             {testModels.length > 0 && (
               <div style={{ marginTop: '14px' }}>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
-                  检测到 {testModels.length} 个模型（双击加入模型列表）
+                  {t('provider.detectedModels', { n: testModels.length })}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {testModels.map((m) => {
@@ -363,7 +365,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                     return (
                       <span
                         key={m}
-                        title={added ? '已加入模型列表' : '双击加入模型列表'}
+                        title={added ? t('provider.alreadyAdded') : t('provider.dblclickAdd')}
                         onDoubleClick={() => addDetectedModel(m)}
                         style={{
                           padding: '4px 10px',
@@ -389,7 +391,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
 
         {/* Models */}
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">模型</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">{t('provider.models')}</h3>
           <div
             style={{
               padding: '16px',
@@ -399,7 +401,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
               marginTop: '8px',
             }}
           >
-            <label style={{ ...labelStyle, marginTop: 0 }}>选择模型</label>
+            <label style={{ ...labelStyle, marginTop: 0 }}>{t('provider.selectModel')}</label>
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -412,7 +414,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   cursor: 'pointer',
                 }}
               >
-                <span>{selected?.name ?? (adding ? '新增模型…' : '')}</span>
+                <span>{selected?.name ?? (adding ? t('provider.addModelPlaceholder') : '')}</span>
                 <ChevronDown size={16} style={{ color: 'var(--color-text-tertiary)' }} />
               </button>
               {open && (
@@ -433,7 +435,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 >
                   {models.length === 0 ? (
                     <div style={{ padding: '10px 12px', fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
-                      该 provider 还没有模型。
+                      {t('provider.noModels')}
                     </div>
                   ) : (
                     models.map((m, i) => (
@@ -458,20 +460,20 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                               onClick={() => deleteModel(i)}
                               className="text-xs text-[var(--color-danger)]"
                             >
-                              删除
+                              {t('common.delete')}
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteIndex(null)}
                               className="text-xs text-[var(--color-text-secondary)]"
                             >
-                              取消
+                              {t('common.cancel')}
                             </button>
                           </span>
                         ) : (
                           <button
                             type="button"
-                            title="删除"
+                            title={t('common.delete')}
                             onClick={(e) => {
                               e.stopPropagation();
                               setConfirmDeleteIndex(i);
@@ -500,7 +502,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                     }}
                   >
                     <Plus size={14} />
-                    新增模型
+                    {t('provider.addModel')}
                   </button>
                 </div>
               )}
@@ -508,7 +510,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
 
             {adding && (
               <label style={labelStyle}>
-                模型标识 (model name)
+                {t('provider.modelName')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   value={fields.name}
@@ -520,7 +522,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <label style={labelStyle}>
-                温度
+                {t('provider.temperature')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
@@ -532,7 +534,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 />
               </label>
               <label style={labelStyle}>
-                最大 Tokens
+                {t('provider.maxTokens')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
@@ -544,7 +546,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 />
               </label>
               <label style={labelStyle}>
-                Top P
+                {t('provider.topP')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
@@ -558,7 +560,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
             </div>
 
             <label style={labelStyle}>
-              最大上下文窗口 (tokens)
+              {t('provider.maxContext')}
               <input
                 style={{ ...inputStyle, marginTop: '4px' }}
                 type="number"
@@ -570,11 +572,11 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
             </label>
 
             <div style={{ marginTop: '12px', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-              价格（$/Mtokens）
+              {t('provider.pricing')}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <label style={labelStyle}>
-                缓存
+                {t('provider.cache')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
@@ -585,7 +587,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 />
               </label>
               <label style={labelStyle}>
-                输入
+                {t('provider.input')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
@@ -596,7 +598,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 />
               </label>
               <label style={labelStyle}>
-                输出
+                {t('provider.output')}
                 <input
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
@@ -627,7 +629,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   opacity: fields.name.trim() ? 1 : 0.5,
                 }}
               >
-                添加模型
+                {t('provider.addModelBtn')}
               </button>
             )}
           </div>

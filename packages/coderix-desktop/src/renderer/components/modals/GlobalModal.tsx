@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Wrench } from 'lucide-react';
 import type { PermissionRequest } from '../../types';
 import { approvePermission, approvePermissionSession, approvePermissionAlways, denyPermission } from '../../ipc-client';
+import { useT } from '../../i18n/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +31,7 @@ export function Modal({
   title,
   children,
 }: ModalProps): React.ReactElement | null {
+  const t = useT();
   if (!open) return null;
 
   return (
@@ -62,7 +64,7 @@ export function Modal({
               <button
                 onClick={onClose}
                 className="w-6 h-6 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
-                aria-label="Close"
+                aria-label={t('common.close')}
               >
                 <X size={14} />
               </button>
@@ -90,6 +92,7 @@ function PermissionModal({
   pending: PendingPermission;
   onResolved: () => void;
 }): React.ReactElement {
+  const t = useT();
   const [processing, setProcessing] = useState<string | null>(null);
 
   const handleApprove = useCallback(async () => {
@@ -153,10 +156,10 @@ function PermissionModal({
         <AlertTriangle size={16} className="text-[var(--color-warning)] flex-shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-medium text-[var(--color-warning)]">
-            Agent 需要您的确认
+            {t('perm.agentNeedsConfirm')}
           </p>
           <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-            {request.message ?? `${request.toolName} 正在请求权限`}
+            {request.message ?? t('perm.requesting', { tool: request.toolName })}
           </p>
         </div>
       </div>
@@ -173,7 +176,7 @@ function PermissionModal({
         {request.toolInput && Object.keys(request.toolInput).length > 0 && (
           <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-bg-tertiary)] border border-[var(--color-separator)]">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1.5">
-              Parameters
+              {t('perm.parameters')}
             </div>
             <pre className="text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-all m-0">
               {JSON.stringify(request.toolInput, null, 2)}
@@ -190,21 +193,21 @@ function PermissionModal({
             disabled={processing !== null}
             className="flex-1 px-3 py-2 text-sm font-medium rounded-[var(--radius-md)] bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors"
           >
-            {processing === 'once' ? 'Approving…' : 'Allow once'}
+            {processing === 'once' ? t('perm.approving') : t('perm.allowOnce')}
           </button>
           <button
             onClick={handleApproveSession}
             disabled={processing !== null}
             className="flex-1 px-3 py-2 text-sm font-medium rounded-[var(--radius-md)] border border-[var(--color-brand)]/40 bg-[var(--color-brand)]/10 text-[var(--color-brand)] hover:bg-[var(--color-brand)]/20 disabled:opacity-50 transition-colors"
           >
-            {processing === 'session' ? 'Approving…' : 'Allow this session'}
+            {processing === 'session' ? t('perm.approving') : t('perm.allowSession')}
           </button>
           <button
             onClick={handleApproveAlways}
             disabled={processing !== null}
             className="flex-1 px-3 py-2 text-sm font-medium rounded-[var(--radius-md)] border border-[var(--color-brand)]/25 bg-[var(--color-brand)]/5 text-[var(--color-text-secondary)] hover:bg-[var(--color-brand)]/10 hover:text-[var(--color-text-primary)] disabled:opacity-50 transition-colors"
           >
-            {processing === 'always' ? 'Approving…' : 'Always allow'}
+            {processing === 'always' ? t('perm.approving') : t('perm.alwaysAllow')}
           </button>
         </div>
         <button
@@ -212,7 +215,7 @@ function PermissionModal({
           disabled={processing !== null}
           className="px-4 py-2 text-sm font-medium rounded-[var(--radius-md)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] disabled:opacity-50 transition-colors"
         >
-          {processing === 'deny' ? 'Denying…' : 'Deny'}
+          {processing === 'deny' ? t('perm.denying') : t('perm.deny')}
         </button>
       </div>
     </div>
@@ -226,6 +229,7 @@ PermissionModal.displayName = 'PermissionModal';
 // ---------------------------------------------------------------------------
 
 export function GlobalModal(): React.ReactElement {
+  const t = useT();
   const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
 
   useEffect(() => {
@@ -258,7 +262,7 @@ export function GlobalModal(): React.ReactElement {
     <Modal
       open={pendingPermissions.length > 0}
       onClose={handleResolved}
-      title="Permission Required"
+      title={t('perm.required')}
     >
       <PermissionModal pending={current} onResolved={handleResolved} />
     </Modal>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { SessionSummary } from './types.js';
 import { listSessions, getSession, forkSession as ipcForkSession, deleteSession as ipcDeleteSession } from '../ipc-client.js';
+import { t } from '../i18n/index.js';
 
 export interface SessionState {
   sessions: SessionSummary[];
@@ -127,7 +128,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       if (!window.coderixAPI) {
         throw new Error('coderixAPI not available');
       }
-      const result = await window.coderixAPI.session.create({ title: '新对话' });
+      const result = await window.coderixAPI.session.create({ title: t('session.newSession') });
       const newSession: SessionSummary = {
         id: result.id,
         title: result.title,

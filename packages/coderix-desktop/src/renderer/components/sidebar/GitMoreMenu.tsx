@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { ArrowUp, ArrowDown, Download, RotateCcw, GitBranch, Archive, Ellipsis } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { useT } from '../../i18n/index.js';
 
 interface Props {
   onPush: () => void;
@@ -14,6 +15,7 @@ interface Props {
 
 export function GitMoreMenu({ onPush, onPull, onFetch, onDiscardAll, onBranches, onStash, hasChanges }: Props): React.ReactElement {
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -22,7 +24,7 @@ export function GitMoreMenu({ onPush, onPull, onFetch, onDiscardAll, onBranches,
       <button
         onClick={() => setOpen(!open)}
         className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]"
-        title="More"
+        title={t('git.more')}
       >
         <Ellipsis size={12} />
       </button>
@@ -30,14 +32,14 @@ export function GitMoreMenu({ onPush, onPull, onFetch, onDiscardAll, onBranches,
         <>
           <div className="fixed inset-0 z-40" onClick={close} />
           <div className="absolute right-0 top-full mt-1 w-44 rounded-[var(--radius-md)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] shadow-lg z-50 py-1">
-            <MenuItem icon={<ArrowUp size={12} />} label="Push" shortcut="..." onClick={() => { onPush(); close(); }} />
-            <MenuItem icon={<ArrowDown size={12} />} label="Pull" shortcut="..." onClick={() => { onPull(); close(); }} />
-            <MenuItem icon={<Download size={12} />} label="Fetch" shortcut="..." onClick={() => { onFetch(); close(); }} />
+            <MenuItem icon={<ArrowUp size={12} />} label={t('git.push')} shortcut="..." onClick={() => { onPush(); close(); }} />
+            <MenuItem icon={<ArrowDown size={12} />} label={t('git.pull')} shortcut="..." onClick={() => { onPull(); close(); }} />
+            <MenuItem icon={<Download size={12} />} label={t('git.fetch')} shortcut="..." onClick={() => { onFetch(); close(); }} />
             <div className="border-t border-[var(--color-separator)] my-1" />
-            <MenuItem icon={<RotateCcw size={12} />} label="Discard All Changes" danger disabled={!hasChanges} onClick={() => { onDiscardAll(); close(); }} />
+            <MenuItem icon={<RotateCcw size={12} />} label={t('git.discardAll')} danger disabled={!hasChanges} onClick={() => { onDiscardAll(); close(); }} />
             <div className="border-t border-[var(--color-separator)] my-1" />
-            <MenuItem icon={<GitBranch size={12} />} label="Branches..." onClick={() => { onBranches(); close(); }} />
-            <MenuItem icon={<Archive size={12} />} label="Stashes..." onClick={() => { onStash(); close(); }} />
+            <MenuItem icon={<GitBranch size={12} />} label={t('git.branches')} onClick={() => { onBranches(); close(); }} />
+            <MenuItem icon={<Archive size={12} />} label={t('git.stashes')} onClick={() => { onStash(); close(); }} />
             {/* Phase 3: Tag management */}
           </div>
         </>

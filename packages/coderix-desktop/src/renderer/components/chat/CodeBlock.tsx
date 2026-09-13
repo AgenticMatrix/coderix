@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Copy, Check, FileOutput } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 interface CodeBlockProps {
   code: string;
@@ -13,6 +14,7 @@ export function CodeBlock({ code, language, maxLines, filePath }: CodeBlockProps
   const [copied, setCopied] = useState(false);
   const [applied, setApplied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
 
   const lines = code.split('\n');
   const truncated = maxLines && !expanded && lines.length > maxLines;
@@ -27,7 +29,7 @@ export function CodeBlock({ code, language, maxLines, filePath }: CodeBlockProps
   }, [code]);
 
   const handleApply = useCallback(async () => {
-    const target = filePath || window.prompt('File path to apply to:');
+    const target = filePath || window.prompt(t('code.filePathPrompt'));
     if (!target || !target.trim()) return;
     const api = window.coderixAPI?.fs;
     if (!api) return;
@@ -36,7 +38,7 @@ export function CodeBlock({ code, language, maxLines, filePath }: CodeBlockProps
       setApplied(true);
       setTimeout(() => setApplied(false), 2000);
     } catch (e) {
-      alert('Failed to write: ' + (e as Error).message);
+      alert(t('code.failedWrite') + (e as Error).message);
     }
   }, [code, filePath]);
 
@@ -54,18 +56,18 @@ export function CodeBlock({ code, language, maxLines, filePath }: CodeBlockProps
           <button
             onClick={handleApply}
             className="flex items-center gap-1 text-[11px] text-[var(--color-link)] hover:text-[var(--color-brand)] transition-colors px-1.5 py-0.5 rounded"
-            title={applied ? 'Applied!' : 'Apply to file'}
+            title={applied ? t('code.appliedTitle') : t('code.applyToFile')}
           >
             {applied ? <Check size={12} /> : <FileOutput size={12} />}
-            {applied ? 'Applied' : detectedFile || 'Apply'}
+            {applied ? t('code.applied') : detectedFile || t('code.apply')}
           </button>
           <button
             onClick={handleCopy}
             className="flex items-center gap-1 text-[11px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors px-1.5 py-0.5 rounded"
-            title="Copy code"
+            title={t('code.copyCode')}
           >
             {copied ? <Check size={12} /> : <Copy size={12} />}
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('code.copied') : t('common.copy')}
           </button>
         </div>
       </div>
@@ -94,7 +96,7 @@ export function CodeBlock({ code, language, maxLines, filePath }: CodeBlockProps
           className="block w-full px-3 py-1.5 text-xs text-[var(--color-link)] bg-[var(--color-bg-secondary)] border-t border-[var(--color-separator)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
           onClick={() => setExpanded(true)}
         >
-          Show all {lines.length} lines...
+          {t('code.showAll', { n: lines.length })}
         </button>
       )}
     </div>

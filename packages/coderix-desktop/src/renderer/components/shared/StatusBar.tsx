@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal } from 'lucide-react';
 import { Badge } from './Badge';
+import { useT, type TranslationKey } from '../../i18n/index.js';
 import './StatusBar.css';
 
 export interface StatusBarProps {
@@ -37,12 +38,12 @@ function formatCost(cost: number): string {
   return '<$0.01';
 }
 
-const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { label: string; color: string }> = {
-  idle: { label: 'Idle', color: 'bg-[var(--color-text-tertiary)]' },
-  thinking: { label: 'Thinking…', color: 'bg-[var(--color-info)] animate-pulse' },
-  executing: { label: 'Executing…', color: 'bg-[var(--color-warning)] animate-pulse' },
-  waiting: { label: 'Waiting for input…', color: 'bg-[var(--color-warning)]' },
-  error: { label: 'Error', color: 'bg-[var(--color-danger)]' },
+const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKey: TranslationKey; color: string }> = {
+  idle: { labelKey: 'status.idle', color: 'bg-[var(--color-text-tertiary)]' },
+  thinking: { labelKey: 'status.thinking', color: 'bg-[var(--color-info)] animate-pulse' },
+  executing: { labelKey: 'status.executing', color: 'bg-[var(--color-warning)] animate-pulse' },
+  waiting: { labelKey: 'status.waiting', color: 'bg-[var(--color-warning)]' },
+  error: { labelKey: 'status.error', color: 'bg-[var(--color-danger)]' },
 };
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -63,6 +64,7 @@ export function StatusBar({
   onToggleTerminal,
   className = '',
 }: StatusBarProps): React.ReactElement {
+  const t = useT();
   const status = statusConfig[agentStatus];
 
   return (
@@ -77,7 +79,7 @@ export function StatusBar({
       {/* Engine */}
       {engine && (
         <>
-          <span className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]" title="当前智能体引擎">
+          <span className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]" title={t('status.engine')}>
             <Bot size={12} className="text-[var(--color-text-tertiary)]" />
             <span className="font-medium">{ENGINE_LABELS[engine] ?? engine}</span>
           </span>
@@ -119,7 +121,7 @@ export function StatusBar({
 
       {/* Agent status */}
       <Badge variant={agentStatus === 'error' ? 'danger' : agentStatus === 'executing' ? 'warning' : 'default'} dot size="sm">
-        {status.label}
+        {t(status.labelKey)}
       </Badge>
 
       {/* Spacer */}
@@ -151,7 +153,7 @@ export function StatusBar({
       {/* Command palette hint */}
       <span className="inline-flex items-center gap-1 text-[var(--color-text-tertiary)]">
         <Command size={10} />
-        <span>K commands</span>
+        <span>{t('status.commands')}</span>
       </span>
 
       {/* Terminal toggle */}
@@ -164,11 +166,11 @@ export function StatusBar({
             className={`inline-flex items-center gap-1 transition-colors cursor-pointer ${
               terminalOpen ? 'text-[var(--color-brand)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
             }`}
-            title={terminalOpen ? 'Hide Terminal (⌘`)' : 'Toggle Terminal (⌘`)'}
-            aria-label="Toggle Terminal"
+            title={terminalOpen ? t('status.hideTerminal') : t('status.toggleTerminal')}
+            aria-label={t('status.toggleTerminal')}
           >
             <Terminal size={12} />
-            <span>Terminal</span>
+            <span>{t('status.terminal')}</span>
           </button>
         </>
       )}

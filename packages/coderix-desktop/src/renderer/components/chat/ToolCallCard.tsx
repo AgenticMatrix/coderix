@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wrench, CheckCircle2, XCircle, Loader2, ChevronRight, Clock } from 'lucide-react';
+import { useT, type TranslationKey } from '../../i18n/index.js';
 import './ToolCallCard.css';
 
 export interface ToolCallCardProps {
@@ -20,31 +21,31 @@ export interface ToolCallCardProps {
 
 const stateConfig: Record<ToolCallCardProps['state'], {
   icon: React.ReactNode;
-  label: string;
+  labelKey: TranslationKey;
   color: string;
   bgClass: string;
 }> = {
   pending: {
     icon: <Clock size={13} />,
-    label: 'Pending',
+    labelKey: 'tool.pending',
     color: 'text-[var(--color-text-tertiary)]',
     bgClass: 'border-[var(--color-separator)]',
   },
   executing: {
     icon: <Loader2 size={13} className="animate-spin" />,
-    label: 'Executing…',
+    labelKey: 'tool.executing',
     color: 'text-[var(--color-info)]',
     bgClass: 'border-[var(--color-info)]/30',
   },
   done: {
     icon: <CheckCircle2 size={13} />,
-    label: 'Done',
+    labelKey: 'tool.done',
     color: 'text-[var(--color-success)]',
     bgClass: 'border-[var(--color-success)]/20',
   },
   error: {
     icon: <XCircle size={13} />,
-    label: 'Error',
+    labelKey: 'tool.error',
     color: 'text-[var(--color-danger)]',
     bgClass: 'border-[var(--color-danger)]/20',
   },
@@ -70,6 +71,7 @@ export function ToolCallCard({
   toolId,
 }: ToolCallCardProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
+  const t = useT();
 
   const cfg = stateConfig[state];
 
@@ -105,7 +107,7 @@ export function ToolCallCard({
           </span>
         )}
         <span className={`text-[11px] font-medium ${cfg.color}`}>
-          {cfg.label}
+          {t(cfg.labelKey)}
         </span>
       </motion.button>
 
@@ -124,7 +126,7 @@ export function ToolCallCard({
               {toolInput && Object.keys(toolInput).length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-                    Parameters
+                    {t('tool.parameters')}
                   </div>
                   <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs">
                     {Object.entries(toolInput).map(([key, value]) => (
@@ -143,7 +145,7 @@ export function ToolCallCard({
               {toolResult && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-                    Result
+                    {t('tool.result')}
                   </div>
                   <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 max-h-48 overflow-y-auto">
                     {toolResult}

@@ -6,6 +6,7 @@ import { FileExplorer } from './FileExplorer';
 import { GitPanel } from './GitPanel';
 import type { SidebarTab } from './IconSidebar';
 import { IconButton } from '../shared/IconButton';
+import { useT } from '../../i18n/index.js';
 import './Sidebar.css';
 
 export interface SidebarProps {
@@ -35,6 +36,7 @@ export function Sidebar({
   onTabChange,
 }: SidebarProps): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState('');
+  const t = useT();
 
   return (
     <div className="h-full flex flex-col">
@@ -45,7 +47,7 @@ export function Sidebar({
             <Search size={12} className="absolute left-2 top-0 bottom-0 my-auto pointer-events-none text-[var(--color-text-tertiary)]" />
             <input
               type="text"
-              placeholder="Search sessions..."
+              placeholder={t('session.search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="
@@ -59,7 +61,7 @@ export function Sidebar({
             />
           </div>
           <IconButton
-            label="New session"
+            label={t('session.new')}
             icon={<Plus size={14} />}
             size="sm"
             onClick={onNewSession}

@@ -5,6 +5,8 @@ import { useUIStore, type PermissionMode, type Theme } from '../../store/uiStore
 import { useSettingsStore, type SettingsData, type ProviderConfig, type AgentEngine } from '../../store/settingsStore.js';
 import ProviderEditor from './ProviderEditor.js';
 import { providerLabel, ProviderLogo } from './providerMeta.js';
+import { useT, type TranslationKey } from '../../i18n/index.js';
+import type { Language } from '../../i18n/types.js';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -17,16 +19,16 @@ function qualifiedModelName(provider: string, model: string): string {
 
 interface NavItem {
   id: SettingsTab;
-  label: string;
+  labelKey: TranslationKey;
   icon: LucideIcon;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'model', label: '模型', icon: Bot },
-  { id: 'engine', label: '智能体引擎', icon: Cpu },
-  { id: 'appearance', label: '外观', icon: Palette },
-  { id: 'permissions', label: '权限', icon: ShieldCheck },
-  { id: 'update', label: '更新', icon: RefreshCw },
+  { id: 'model', labelKey: 'settings.model', icon: Bot },
+  { id: 'engine', labelKey: 'settings.engine', icon: Cpu },
+  { id: 'appearance', labelKey: 'settings.general', icon: Palette },
+  { id: 'permissions', labelKey: 'settings.permissions', icon: ShieldCheck },
+  { id: 'update', labelKey: 'settings.update', icon: RefreshCw },
 ];
 
 // ── Component ──────────────────────────────────────────────
@@ -36,13 +38,16 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
   const [draft, setDraft] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [saveError, setSaveError] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateMsg, setUpdateMsg] = useState('');
+  const [updateIsNew, setUpdateIsNew] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const { setTheme, setPermissionMode } = useUIStore();
+  const { setTheme, setPermissionMode, setLanguage } = useUIStore();
   const { settings, loading, load, save } = useSettingsStore();
+  const t = useT();
 
   // Reload from file every time settings panel opens
   useEffect(() => { load(); }, [load]);
@@ -75,16 +80,18 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
     if (!draft) return;
     setSaving(true);
     setSaveMsg('');
+    setSaveError(false);
     try {
       await save(draft);
-      setSaveMsg('已保存');
+      setSaveMsg(t('common.saved'));
       setTimeout(() => setSaveMsg(''), 2000);
     } catch (e) {
-      setSaveMsg('保存失败: ' + (e as Error).message);
+      setSaveMsg(t('common.saveFailed') + ': ' + (e as Error).message);
+      setSaveError(true);
     } finally {
       setSaving(false);
     }
-  }, [draft, save]);
+  }, [draft, save, t]);
 
   const addProvider = () => {
     if (!draft) return;
@@ -118,23 +125,25 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
     if (!window.coderixAPI?.app?.checkUpdate) return;
     setCheckingUpdate(true);
     setUpdateMsg('');
+    setUpdateIsNew(false);
     try {
       const result = await window.coderixAPI.app.checkUpdate();
       if (result.updateAvailable) {
-        setUpdateMsg(`发现新版本 ${result.version ?? ''}`.trim());
+        setUpdateMsg(t('update.newVersion', { version: result.version ?? '' }));
+        setUpdateIsNew(true);
       } else if (result.error) {
         setUpdateMsg(result.error);
       } else if (result.skipped) {
-        setUpdateMsg('开发环境未执行更新检查');
+        setUpdateMsg(t('update.devSkipped'));
       } else {
-        setUpdateMsg('已是最新版本');
+        setUpdateMsg(t('update.latest'));
       }
     } catch (err) {
       setUpdateMsg((err as Error).message);
     } finally {
       setCheckingUpdate(false);
     }
-  }, []);
+  }, [t]);
 
   // ── Inline styles (form controls keep the warm Coderix tokens) ──
   const S = {
@@ -178,16 +187,16 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
     <div className="flex h-full flex-col bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]">
       {/* Header */}
       <header className="flex flex-shrink-0 items-center justify-between border-b border-[var(--color-separator)] px-5 py-3">
-        <h2 className="text-base font-semibold">设置</h2>
+        <h2 className="text-base font-semibold">{t('settings.title')}</h2>
         <div className="flex items-center gap-2">
           {saveMsg && (
-            <span className="text-xs" style={{ color: saveMsg.includes('失败') ? 'var(--color-danger)' : 'var(--color-success)' }}>{saveMsg}</span>
+            <span className="text-xs" style={{ color: saveError ? 'var(--color-danger)' : 'var(--color-success)' }}>{saveMsg}</span>
           )}
-          <button onClick={handleSave} disabled={saving} style={{ ...S.saveBtn, opacity: saving ? 0.6 : 1 }}>{saving ? '保存中...' : '保存'}</button>
+          <button onClick={handleSave} disabled={saving} style={{ ...S.saveBtn, opacity: saving ? 0.6 : 1 }}>{saving ? t('common.saving') : t('common.save')}</button>
           {onClose && (
             <button
               onClick={onClose}
-              aria-label="关闭"
+              aria-label={t('common.close')}
               className="ml-1 flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
             >
               <X size={16} />
@@ -197,7 +206,7 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
       </header>
 
       {loading || !draft ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-text-tertiary)]">加载设置中...</div>
+        <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-text-tertiary)]">{t('settings.loading')}</div>
       ) : (
         <div className="flex min-h-0 flex-1">
           {/* Sidebar — left menu */}
@@ -217,7 +226,7 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
                     }`}
                   >
                     <Icon size={16} className="flex-shrink-0" />
-                    {item.label}
+                    {t(item.labelKey)}
                   </button>
                 );
               })}
@@ -237,11 +246,11 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
             ) : (
               <div className="space-y-5">
                 <div>
-                  <h3 style={sectionTitle}>默认模型</h3>
-                  <p style={sectionDesc}>选择全局默认模型，先选 Provider，再选具体模型。</p>
+                  <h3 style={sectionTitle}>{t('model.default')}</h3>
+                  <p style={sectionDesc}>{t('model.defaultDesc')}</p>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
                     <label style={{ ...S.label, marginTop: 0 }}>
-                      Provider
+                      {t('model.provider')}
                       <select
                         value={defaultSel.provider}
                         onChange={(e) => {
@@ -251,21 +260,21 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
                         }}
                         style={{ ...S.select, marginTop: '4px' }}
                       >
-                        <option value="">未选择</option>
+                        <option value="">{t('model.unselected')}</option>
                         {draft.providers.filter((p) => p.models.length > 0).map((p) => (
-                          <option key={p.name} value={p.name}>{p.name ? providerLabel(p.name) : '未命名 Provider'}</option>
+                          <option key={p.name} value={p.name}>{p.name ? providerLabel(p.name) : t('model.unnamedProvider')}</option>
                         ))}
                       </select>
                     </label>
                     <label style={{ ...S.label, marginTop: 0 }}>
-                      模型
+                      {t('model.model')}
                       <select
                         value={defaultSel.model}
                         onChange={(e) => updateDraft({ defaultModel: qualifiedModelName(defaultSel.provider, e.target.value) })}
                         disabled={!defaultSel.provider}
                         style={{ ...S.select, marginTop: '4px', opacity: defaultSel.provider ? 1 : 0.5 }}
                       >
-                        <option value="">未选择</option>
+                        <option value="">{t('model.unselected')}</option>
                         {defaultProviderModels.map((m) => (
                           <option key={m.name} value={m.name}>{m.name}</option>
                         ))}
@@ -275,8 +284,8 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
                 </div>
 
                 <div>
-                  <h3 style={sectionTitle}>大模型配置</h3>
-                  <p style={sectionDesc}>管理 Provider 与模型。</p>
+                  <h3 style={sectionTitle}>{t('model.config')}</h3>
+                  <p style={sectionDesc}>{t('model.configDesc')}</p>
                   <div className="mt-2 space-y-2">
                     {draft.providers.map((p, i) => (
                       <button
@@ -287,14 +296,14 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
                       >
                         <ProviderLogo provider={p.name} size={28} />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">{p.name ? providerLabel(p.name) : '未命名 Provider'}</span>
-                          <span className="block text-xs text-[var(--color-text-secondary)]">{p.models.length} 个模型</span>
+                          <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">{p.name ? providerLabel(p.name) : t('model.unnamedProvider')}</span>
+                          <span className="block text-xs text-[var(--color-text-secondary)]">{t('model.count', { n: p.models.length })}</span>
                         </span>
-                        <span style={S.badge(p.connected)}>{p.connected ? '已配置' : '未配置'}</span>
+                        <span style={S.badge(p.connected)}>{p.connected ? t('model.configured') : t('model.unconfigured')}</span>
                         <ChevronRight size={16} className="text-[var(--color-text-tertiary)]" />
                       </button>
                     ))}
-                    <button style={S.addBtn} onClick={addProvider}><Plus size={16} />新增 Provider</button>
+                    <button style={S.addBtn} onClick={addProvider}><Plus size={16} />{t('model.addProvider')}</button>
                   </div>
                 </div>
               </div>
@@ -303,12 +312,12 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
             {activeTab === 'engine' && (
               <div className="space-y-5">
                 <div>
-                  <h3 style={sectionTitle}>智能体引擎</h3>
-                  <p style={sectionDesc}>选择执行对话的底层引擎，保存后自动重载配置并生效。</p>
+                  <h3 style={sectionTitle}>{t('settings.engine')}</h3>
+                  <p style={sectionDesc}>{t('engine.desc')}</p>
                 </div>
                 {([
-                  { id: 'coderix' as AgentEngine, title: 'Coderix', desc: '内置引擎，复用当前模型 Provider、权限与工具体系。', badge: '内置' },
-                  { id: 'claude-code' as AgentEngine, title: 'Claude Code', desc: '使用官方 Claude Code SDK，由本机 claude CLI 驱动（需已安装并登录）。', badge: 'SDK' },
+                  { id: 'coderix' as AgentEngine, title: 'Coderix', desc: t('engine.coderixDesc'), badge: t('engine.builtin') },
+                  { id: 'claude-code' as AgentEngine, title: 'Claude Code', desc: t('engine.claudeCodeDesc'), badge: t('engine.sdk') },
                 ]).map(({ id, title, desc, badge }) => (
                   <button key={id} onClick={() => updateDraft({ engine: id })} style={S.engineBtn((draft.engine ?? 'coderix') === id)}>
                     <Cpu size={18} className="flex-shrink-0" style={{ color: (draft.engine ?? 'coderix') === id ? 'var(--color-brand)' : 'var(--color-text-tertiary)' }} />
@@ -327,14 +336,36 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
             {activeTab === 'appearance' && (
               <div className="space-y-5">
                 <div>
-                  <h3 style={sectionTitle}>外观</h3>
-                  <p style={sectionDesc}>选择应用的主题样式。</p>
+                  <h3 style={sectionTitle}>{t('general.theme')}</h3>
+                  <p style={sectionDesc}>{t('general.themeDesc')}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  {(['light', 'dark'] as Theme[]).map(t => (
-                    <button key={t} onClick={() => { setTheme(t); updateDraft({ theme: t }); }} style={S.themeBtn(draft.theme === t, t)}>
-                      {t === 'light' ? <Sun size={16} /> : <Moon size={16} />}
-                      <span>{t === 'light' ? '浅色' : '深色'}</span>
+                  {(['light', 'dark'] as Theme[]).map(tm => (
+                    <button key={tm} onClick={() => { setTheme(tm); updateDraft({ theme: tm }); }} style={S.themeBtn(draft.theme === tm, tm)}>
+                      {tm === 'light' ? <Sun size={16} /> : <Moon size={16} />}
+                      <span>{tm === 'light' ? t('general.light') : t('general.dark')}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: '24px' }}>
+                  <h3 style={sectionTitle}>{t('general.language')}</h3>
+                  <p style={sectionDesc}>{t('general.languageDesc')}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {(['zh', 'en'] as Language[]).map(lang => (
+                    <button
+                      key={lang}
+                      onClick={() => { setLanguage(lang); updateDraft({ language: lang }); }}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '10px 20px', borderRadius: 'var(--radius-lg)',
+                        border: draft.language === lang ? '2px solid var(--color-brand)' : '1px solid var(--color-separator)',
+                        background: 'var(--color-bg-secondary)', color: 'var(--color-text-primary)',
+                        cursor: 'pointer', fontSize: 'var(--text-sm)', fontWeight: draft.language === lang ? 600 : 400, minWidth: '120px',
+                      }}
+                    >
+                      {lang === 'zh' ? '中文' : 'English'}
                     </button>
                   ))}
                 </div>
@@ -344,14 +375,14 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
             {activeTab === 'permissions' && (
               <div className="space-y-5">
                 <div>
-                  <h3 style={sectionTitle}>权限</h3>
-                  <p style={sectionDesc}>控制 Agent 执行工具操作时的默认行为。</p>
+                  <h3 style={sectionTitle}>{t('settings.permissions')}</h3>
+                  <p style={sectionDesc}>{t('permissions.desc')}</p>
                 </div>
                 <div>
                   {([
-                    { mode: 'plan' as PermissionMode, label: '先出计划再执行', desc: 'Agent 先制定计划，您审批后再执行。' },
-                    { mode: 'ask' as PermissionMode, label: '每次操作前询问', desc: '每个工具调用都需要您确认。' },
-                    { mode: 'auto' as PermissionMode, label: '自动执行', desc: 'Agent 自动执行所有操作，不询问。推荐。' },
+                    { mode: 'plan' as PermissionMode, label: t('permissions.plan'), desc: t('permissions.planDesc') },
+                    { mode: 'ask' as PermissionMode, label: t('permissions.ask'), desc: t('permissions.askDesc') },
+                    { mode: 'auto' as PermissionMode, label: t('permissions.auto'), desc: t('permissions.autoDesc') },
                   ]).map(({ mode, label, desc }) => (
                     <button key={mode} onClick={() => { setPermissionMode(mode); window.coderixAPI?.permission?.setMode?.(mode).catch(() => {}); if (projectPath) { updateDraft({ projectPermissions: { ...draft.projectPermissions, [projectPath]: mode } }); } else { updateDraft({ defaultPermissionMode: mode }); } }} style={S.permBtn(currentPerm === mode)}>
                       <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{label}</div>
@@ -365,20 +396,20 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
             {activeTab === 'update' && (
               <div className="space-y-5">
                 <div>
-                  <h3 style={sectionTitle}>更新</h3>
-                  <p style={sectionDesc}>检查应用更新与当前版本信息。</p>
+                  <h3 style={sectionTitle}>{t('settings.update')}</h3>
+                  <p style={sectionDesc}>{t('update.desc')}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                   <button onClick={handleCheckUpdate} disabled={checkingUpdate} style={{ ...S.saveBtn, opacity: checkingUpdate ? 0.6 : 1 }}>
-                    {checkingUpdate ? '检查中...' : '检查更新'}
+                    {checkingUpdate ? t('update.checking') : t('update.check')}
                   </button>
                   {appVersion && (
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
-                      版本 {appVersion}
+                      {t('update.version', { version: appVersion })}
                     </span>
                   )}
                   {updateMsg && (
-                    <span style={{ fontSize: 'var(--text-xs)', color: updateMsg.includes('发现') ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
+                    <span style={{ fontSize: 'var(--text-xs)', color: updateIsNew ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>
                       {updateMsg}
                     </span>
                   )}

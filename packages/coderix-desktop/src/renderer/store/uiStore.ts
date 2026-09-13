@@ -1,9 +1,22 @@
 import { create } from 'zustand';
+import type { Language } from '../i18n/types.js';
 
 export type PermissionMode = 'plan' | 'ask' | 'auto';
 export type Theme = 'dark' | 'light';
 
 const STANDARD_MODE_KEY = 'coderix-standard-mode';
+const LANGUAGE_KEY = 'coderix-language';
+
+function loadLanguage(): Language {
+  try {
+    const stored = localStorage.getItem(LANGUAGE_KEY);
+    if (stored === 'en' || stored === 'zh') return stored;
+    return 'zh';
+  } catch {
+    // localStorage unavailable (e.g. strict privacy mode) — default to Chinese.
+    return 'zh';
+  }
+}
 
 function loadStandardMode(): boolean {
   try {
@@ -34,6 +47,7 @@ export interface UIState {
   permissionMode: PermissionMode;
   theme: Theme;
   standardMode: boolean;
+  language: Language;
   notifications: AppNotification[];
   // Git state (written by GitPanel, read by StatusBar and FileExplorer)
   gitBranch: string;
@@ -49,6 +63,7 @@ export interface UIState {
   setPermissionMode: (mode: PermissionMode) => void;
   setTheme: (theme: Theme) => void;
   toggleStandardMode: () => void;
+  setLanguage: (language: Language) => void;
   addNotification: (n: Omit<AppNotification, 'id'>) => void;
   removeNotification: (id: string) => void;
   setGitBranch: (branch: string, ahead?: number, behind?: number) => void;
@@ -74,6 +89,7 @@ export const useUIStore = create<UIState>()((set) => ({
   permissionMode: 'ask',
   theme: 'light',
   standardMode: loadStandardMode(),
+  language: loadLanguage(),
   notifications: [],
   gitBranch: '',
   gitAhead: 0,
@@ -116,6 +132,16 @@ export const useUIStore = create<UIState>()((set) => ({
       }
       return { standardMode };
     });
+  },
+
+  setLanguage: (language) => {
+    set({ language });
+    try {
+      localStorage.setItem(LANGUAGE_KEY, language);
+    } catch {
+      // localStorage unavailable — keep the in-memory value only.
+    }
+    document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en-US';
   },
 
   addNotification: (n) => {

@@ -7,6 +7,7 @@ import {
   approvePermissionAlways,
   denyPermission,
 } from '../../ipc-client';
+import { useT } from '../../i18n/index.js';
 
 export interface PermissionPromptProps {
   request: PermissionRequest;
@@ -22,6 +23,7 @@ export function PermissionPrompt({
   const [processing, setProcessing] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState(0);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const t = useT();
 
   const handleChoice = useCallback(
     async (key: string) => {
@@ -114,11 +116,11 @@ export function PermissionPrompt({
         >
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-              Permission Required
+              {t('perm.required')}
             </div>
             <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
               {request.toolName}
-              {request.message ? ` — ${request.message}` : ' needs permission'}
+              {request.message ? ` — ${request.message}` : ' ' + t('perm.needsPermission')}
             </div>
           </div>
           <button
@@ -150,10 +152,10 @@ export function PermissionPrompt({
 
             let label: string;
             switch (key) {
-              case 'once': label = 'Allow once'; break;
-              case 'session': label = 'Allow this session'; break;
-              case 'always': label = 'Always allow'; break;
-              case 'deny': label = 'Deny'; break;
+              case 'once': label = t('perm.allowOnce'); break;
+              case 'session': label = t('perm.allowSession'); break;
+              case 'always': label = t('perm.alwaysAllow'); break;
+              case 'deny': label = t('perm.deny'); break;
             }
 
             return (
@@ -182,7 +184,7 @@ export function PermissionPrompt({
                   transition: 'background 0.15s, border-color 0.15s',
                 }}
               >
-                {processing === key ? 'Processing…' : label}
+                {processing === key ? t('perm.processing') : label}
               </button>
             );
           })}

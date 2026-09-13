@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MessageSquare, X, Check } from 'lucide-react';
 import type { QuestionRequest } from '../../types';
 import { answerQuestion } from '../../ipc-client';
+import { useT } from '../../i18n/index.js';
 
 interface QuestionPromptProps {
   request: QuestionRequest;
@@ -9,6 +10,7 @@ interface QuestionPromptProps {
 }
 
 export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): React.ReactElement {
+  const t = useT();
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -69,7 +71,7 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
                 {request.toolName}
               </div>
               <div className="text-xs text-[var(--color-text-tertiary)] truncate">
-                需要你补充 {questions.length || 1} 个回答
+                {t('question.needAnswer', { n: questions.length || 1 })}
               </div>
             </div>
           </div>
@@ -78,7 +80,7 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
             onClick={handleDismiss}
             disabled={submitting}
             className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
-            aria-label="Close question prompt"
+            aria-label={t('question.close')}
           >
             <X size={14} />
           </button>
@@ -134,7 +136,7 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
                     onChange={(e) => updateText(question.header, e.target.value)}
                     rows={3}
                     className="w-full rounded-[var(--radius-md)] border border-[var(--color-separator)] bg-[var(--color-bg-primary)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none resize-y"
-                    placeholder="输入你的回答..."
+                    placeholder={t('question.placeholder')}
                   />
                 )}
               </div>
@@ -144,7 +146,7 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
 
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-[var(--color-separator)] bg-[var(--color-bg-primary)]">
           <span className="text-xs text-[var(--color-text-tertiary)]">
-            已填写 {filledCount}/{questions.length || 1}
+            {t('question.filled', { filled: filledCount, total: questions.length || 1 })}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -153,7 +155,7 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
               disabled={submitting}
               className="px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors disabled:opacity-50"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -161,7 +163,7 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
               disabled={submitting}
               className="px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-brand)] text-sm font-medium text-white hover:bg-[var(--color-brand-hover)] transition-colors disabled:opacity-50"
             >
-              {submitting ? '提交中...' : '提交'}
+              {submitting ? t('question.submitting') : t('question.submit')}
             </button>
           </div>
         </div>

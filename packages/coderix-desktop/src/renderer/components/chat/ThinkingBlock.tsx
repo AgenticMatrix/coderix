@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, ChevronRight } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export interface ThinkingBlockProps {
   /** The thinking content */
@@ -17,6 +18,7 @@ export function ThinkingBlock({
   isStreaming = false,
 }: ThinkingBlockProps): React.ReactElement | null {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const t = useT();
 
   const text = content ?? '';
 
@@ -57,7 +59,7 @@ export function ThinkingBlock({
           </motion.span>
           <Brain size={13} className="text-[var(--color-info)] flex-shrink-0" />
           <span className="text-left">
-            {isStreaming ? 'Thinking' : 'Thought'}
+            {isStreaming ? t('thinking.thinking') : t('thinking.thought')}
           </span>
           {isStreaming && (
             <span className="inline-flex gap-0.5">
@@ -90,7 +92,7 @@ export function ThinkingBlock({
           </div>
           {remainingLines > 0 && (
             <div className="text-xs text-[var(--color-text-tertiary)] font-mono leading-[18px] m-0">
-              ... {remainingLines} more {remainingLines === 1 ? 'line' : 'lines'}
+              {t(remainingLines === 1 ? 'thinking.moreLine' : 'thinking.moreLines', { n: remainingLines })}
             </div>
           )}
         </div>

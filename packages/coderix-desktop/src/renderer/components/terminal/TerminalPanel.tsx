@@ -4,6 +4,7 @@ import Terminal, {
   resizeTerminal,
 } from './Terminal.js';
 import type { Terminal as XTerm } from 'xterm';
+import { useT } from '../../i18n/index.js';
 
 export interface TerminalPanelProps {
   /** Whether the panel is open (visible) */
@@ -31,6 +32,7 @@ export default function TerminalPanel({
   const [term, setTerm] = useState<XTerm | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const ptyIdRef = useRef<string | null>(null);
+  const t = useT();
 
   const handleReady = useCallback(async (t: XTerm) => {
     termRef.current = t;
@@ -117,7 +119,7 @@ export default function TerminalPanel({
               textTransform: 'uppercase',
             }}
           >
-            Terminal
+            {t('status.terminal')}
           </span>
           <button
             onClick={onToggle}
@@ -131,8 +133,8 @@ export default function TerminalPanel({
               borderRadius: 'var(--radius-sm, 4px)',
               lineHeight: 1,
             }}
-            title="Close terminal (Ctrl+`)"
-            aria-label="Close terminal"
+            title={t('terminal.close')}
+            aria-label={t('terminal.close')}
           >
             ×
           </button>

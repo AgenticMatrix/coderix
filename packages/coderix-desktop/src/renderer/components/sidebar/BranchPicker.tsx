@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GitBranch, Plus, Trash2, Check, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { t, useT } from '../../i18n/index.js';
 
 interface Branch {
   name: string;
@@ -19,6 +20,7 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
   const [newBranch, setNewBranch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const addNotification = useUIStore((s) => s.addNotification);
+  const tr = useT();
 
   const api = (window as any).coderixAPI?.git;
 
@@ -37,10 +39,10 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
   const handleCheckout = async (branch: string) => {
     const r = await api?.checkout({ branch });
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: `Switched to ${branch}` });
+      addNotification({ type: 'success', message: t('git.switchedTo', { branch }) });
       onClose();
     } else {
-      addNotification({ type: 'error', message: 'Checkout failed', detail: r?.error });
+      addNotification({ type: 'error', message: t('git.checkoutFailed'), detail: r?.error });
     }
   };
 
@@ -48,20 +50,20 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
     if (!newBranch.trim()) return;
     const r = await api?.checkout({ branch: newBranch.trim(), create: true });
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: `Created and switched to ${newBranch.trim()}` });
+      addNotification({ type: 'success', message: t('git.createdBranch', { branch: newBranch.trim() }) });
       onClose();
     } else {
-      addNotification({ type: 'error', message: 'Create branch failed', detail: r?.error });
+      addNotification({ type: 'error', message: t('git.createBranchFailed'), detail: r?.error });
     }
   };
 
   const handleDelete = async (branch: string) => {
     const r = await api?.branchDelete(branch);
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: `Deleted ${branch}` });
+      addNotification({ type: 'success', message: t('git.deletedBranch', { branch }) });
       load();
     } else {
-      addNotification({ type: 'error', message: `Delete failed`, detail: r?.error });
+      addNotification({ type: 'error', message: t('git.deleteFailed'), detail: r?.error });
     }
   };
 
@@ -69,7 +71,7 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
         <div className="bg-[var(--color-bg-primary)] rounded-[var(--radius-md)] shadow-xl border border-[var(--color-separator)] w-72 p-4 text-center text-xs text-[var(--color-text-tertiary)]" onClick={e => e.stopPropagation()}>
-          Loading branches...
+          {tr('git.loadingBranches')}
         </div>
       </div>
     );
@@ -80,8 +82,8 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
       <div className="bg-[var(--color-bg-primary)] rounded-[var(--radius-md)] shadow-xl border border-[var(--color-separator)] w-72 max-h-96 flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-separator)] flex-shrink-0">
-          <span className="text-xs font-semibold text-[var(--color-text-primary)]">Branches</span>
-          <button onClick={() => setShowCreate(!showCreate)} className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]" title="Create branch">
+          <span className="text-xs font-semibold text-[var(--color-text-primary)]">{tr('git.branchTitle')}</span>
+          <button onClick={() => setShowCreate(!showCreate)} className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]" title={tr('git.createBranch')}>
             <Plus size={14} />
           </button>
         </div>
@@ -91,7 +93,7 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
           <div className="px-3 py-2 border-b border-[var(--color-separator)] flex gap-1.5">
             <input
               type="text" value={newBranch} onChange={e => setNewBranch(e.target.value)}
-              placeholder="New branch name..." autoFocus
+              placeholder={tr('git.newBranchName')} autoFocus
               className="flex-1 h-7 px-2 rounded-[var(--radius-md)] border border-[var(--color-separator)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)] text-xs outline-none"
               onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setShowCreate(false); }}
             />
@@ -119,7 +121,7 @@ export function BranchPicker({ onClose }: Props): React.ReactElement {
               {!b.current && (
                 <button onClick={e => { e.stopPropagation(); handleDelete(b.name); }}
                   className="p-0.5 rounded hover:bg-[var(--color-bg-primary)] text-[var(--color-text-tertiary)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Delete branch"
+                  title={tr('git.deleteBranch')}
                 >
                   <Trash2 size={11} />
                 </button>

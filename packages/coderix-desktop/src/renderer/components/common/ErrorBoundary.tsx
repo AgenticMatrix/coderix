@@ -1,4 +1,5 @@
 import React, { Component, type ReactNode } from 'react';
+import { t } from '../../i18n/index.js';
 
 interface Props {
   children: ReactNode;
@@ -40,7 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}>
           <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
-            Something went wrong
+            {t('error.title')}
           </h2>
           <p style={{
             fontSize: '13px',
@@ -49,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
             maxWidth: '400px',
             textAlign: 'center',
           }}>
-            {this.state.error?.message ?? 'An unexpected error occurred'}
+            {this.state.error?.message ?? t('error.unexpected')}
           </p>
           <button
             onClick={this.handleRetry}
@@ -64,7 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
               fontWeight: 500,
             }}
           >
-            Try Again
+            {t('error.retry')}
           </button>
         </div>
       );

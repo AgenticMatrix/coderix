@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getConfig, setConfig } from '../ipc-client.js';
 import type { PermissionMode, Theme } from './uiStore.js';
+import type { Language } from '../i18n/types.js';
 
 // ---------------------------------------------------------------------------
 // UI-side settings shape (SettingsView tabs)
@@ -31,6 +32,7 @@ export interface SettingsData {
   defaultPermissionMode: PermissionMode;
   projectPermissions: Record<string, PermissionMode>;
   theme: Theme;
+  language: Language;
   mcpServers: Array<{ name: string; url: string; enabled: boolean }>;
   engine: AgentEngine;
 }
@@ -69,6 +71,7 @@ interface CoderSettings {
   model_list?: CoreModelEntry[];
   default_model?: string;
   theme?: string;
+  language?: string;
   max_tokens?: number;
   env?: Record<string, string>;
   web_search?: unknown;
@@ -128,6 +131,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
     defaultPermissionMode: (config.default_permission_mode as PermissionMode) ?? 'ask',
     projectPermissions: (config.project_permissions as Record<string, PermissionMode> | undefined) ?? {},
     theme: (config.theme as Theme) ?? 'light',
+    language: config.language === 'en' || config.language === 'zh' ? config.language : 'zh',
     mcpServers: [],
     engine: (config.engine === 'claude-code' ? 'claude-code' : 'coderix'),
   };
@@ -136,6 +140,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
 function uiToSettings(data: SettingsData): Partial<CoderSettings> {
   return {
     theme: data.theme,
+    language: data.language,
     default_model: data.defaultModel,
     engine: data.engine,
     default_permission_mode: data.defaultPermissionMode,
@@ -283,6 +288,7 @@ export const useSettingsStore = create<SettingsStore>()((set) => ({
             defaultPermissionMode: 'auto',
             projectPermissions: {},
             theme: 'light',
+            language: 'zh',
             mcpServers: [],
             engine: 'coderix',
           },

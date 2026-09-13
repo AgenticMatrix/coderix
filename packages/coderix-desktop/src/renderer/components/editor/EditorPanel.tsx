@@ -2,8 +2,10 @@ import React, { useRef, useCallback } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { X } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore.js';
+import { useT } from '../../i18n/index.js';
 
 export function EditorPanel(): React.ReactElement {
+  const t = useT();
   const { files, activeFile, setActiveFile, closeFile } = useEditorStore();
   const editorRef = useRef<any>(null);
 
@@ -16,7 +18,7 @@ export function EditorPanel(): React.ReactElement {
   if (files.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
-        点击文件开始编辑
+        {t('editor.clickToEdit')}
       </div>
     );
   }

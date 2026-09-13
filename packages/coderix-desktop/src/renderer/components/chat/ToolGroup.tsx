@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { useUIStore } from '../../store/uiStore';
+import { useT, type TranslationKey } from '../../i18n/index.js';
 import { ToolRenderer } from './ToolRenderer';
 
 export interface ToolGroupProps {
@@ -18,43 +19,45 @@ export interface ToolGroupProps {
  */
 const TOOL_CATEGORY: Record<
   string,
-  { verb: string; singular: string; plural: string }
+  { verb: TranslationKey; singular: TranslationKey; plural: TranslationKey }
 > = {
   // Shell / commands
-  bash: { verb: 'run', singular: 'command', plural: 'commands' },
+  bash: { verb: 'toolcat.run', singular: 'toolcat.command', plural: 'toolcat.commands' },
   // File I/O
-  read: { verb: 'read', singular: 'file', plural: 'files' },
-  write: { verb: 'edit', singular: 'file', plural: 'files' },
-  update: { verb: 'edit', singular: 'file', plural: 'files' },
-  NotebookEdit: { verb: 'edit', singular: 'notebook', plural: 'notebooks' },
+  read: { verb: 'toolcat.read', singular: 'toolcat.file', plural: 'toolcat.files' },
+  write: { verb: 'toolcat.edit', singular: 'toolcat.file', plural: 'toolcat.files' },
+  update: { verb: 'toolcat.edit', singular: 'toolcat.file', plural: 'toolcat.files' },
+  NotebookEdit: { verb: 'toolcat.edit', singular: 'toolcat.notebook', plural: 'toolcat.notebooks' },
   // Search / fetch
-  glob: { verb: 'search', singular: 'pattern', plural: 'patterns' },
-  grep: { verb: 'search', singular: 'pattern', plural: 'patterns' },
-  WebFetch: { verb: 'fetch', singular: 'page', plural: 'pages' },
-  WebSearch: { verb: 'search', singular: 'query', plural: 'queries' },
+  glob: { verb: 'toolcat.search', singular: 'toolcat.pattern', plural: 'toolcat.patterns' },
+  grep: { verb: 'toolcat.search', singular: 'toolcat.pattern', plural: 'toolcat.patterns' },
+  WebFetch: { verb: 'toolcat.fetch', singular: 'toolcat.page', plural: 'toolcat.pages' },
+  WebSearch: { verb: 'toolcat.search', singular: 'toolcat.query', plural: 'toolcat.queries' },
   // Background tasks
-  TaskCreate: { verb: 'create', singular: 'task', plural: 'tasks' },
-  TaskList: { verb: 'list', singular: 'task', plural: 'tasks' },
-  TaskGet: { verb: 'get', singular: 'task', plural: 'tasks' },
-  TaskUpdate: { verb: 'update', singular: 'task', plural: 'tasks' },
-  TaskStop: { verb: 'stop', singular: 'task', plural: 'tasks' },
-  TaskOutput: { verb: 'read', singular: 'task output', plural: 'task outputs' },
+  TaskCreate: { verb: 'toolcat.create', singular: 'toolcat.task', plural: 'toolcat.tasks' },
+  TaskList: { verb: 'toolcat.list', singular: 'toolcat.task', plural: 'toolcat.tasks' },
+  TaskGet: { verb: 'toolcat.get', singular: 'toolcat.task', plural: 'toolcat.tasks' },
+  TaskUpdate: { verb: 'toolcat.update', singular: 'toolcat.task', plural: 'toolcat.tasks' },
+  TaskStop: { verb: 'toolcat.stop', singular: 'toolcat.task', plural: 'toolcat.tasks' },
+  TaskOutput: { verb: 'toolcat.read', singular: 'toolcat.taskOutput', plural: 'toolcat.taskOutputs' },
   // Interaction
-  skill: { verb: 'use', singular: 'skill', plural: 'skills' },
-  AskUserQuestion: { verb: 'ask', singular: 'question', plural: 'questions' },
-  Listen: { verb: 'listen', singular: 'time', plural: 'times' },
+  skill: { verb: 'toolcat.use', singular: 'toolcat.skill', plural: 'toolcat.skills' },
+  AskUserQuestion: { verb: 'toolcat.ask', singular: 'toolcat.question', plural: 'toolcat.questions' },
+  Listen: { verb: 'toolcat.listen', singular: 'toolcat.time', plural: 'toolcat.times' },
   // Plan mode / worktree
-  EnterPlanMode: { verb: 'enter', singular: 'plan mode', plural: 'plan modes' },
-  ExitPlanMode: { verb: 'exit', singular: 'plan mode', plural: 'plan modes' },
-  EnterWorktree: { verb: 'enter', singular: 'worktree', plural: 'worktrees' },
-  ExitWorktree: { verb: 'exit', singular: 'worktree', plural: 'worktrees' },
+  EnterPlanMode: { verb: 'toolcat.enter', singular: 'toolcat.planMode', plural: 'toolcat.planModes' },
+  ExitPlanMode: { verb: 'toolcat.exit', singular: 'toolcat.planMode', plural: 'toolcat.planModes' },
+  EnterWorktree: { verb: 'toolcat.enter', singular: 'toolcat.worktree', plural: 'toolcat.worktrees' },
+  ExitWorktree: { verb: 'toolcat.exit', singular: 'toolcat.worktree', plural: 'toolcat.worktrees' },
 };
 
-function buildToolSummary(tools: StreamBlock[]): string {
-  const grouped = new Map<
-    string,
-    { verb: string; singular: string; plural: string; count: number }
-  >();
+type ToolCategory = { verb: TranslationKey; singular: TranslationKey; plural: TranslationKey };
+
+function buildToolSummary(
+  tools: StreamBlock[],
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+): string {
+  const grouped = new Map<string, ToolCategory & { count: number }>();
   let other = 0;
 
   for (const tool of tools) {
@@ -74,15 +77,17 @@ function buildToolSummary(tools: StreamBlock[]): string {
 
   const parts: string[] = [];
   for (const { verb, singular, plural, count } of grouped.values()) {
-    parts.push(`${verb} ${count} ${count === 1 ? singular : plural}`);
+    const noun = t(count === 1 ? singular : plural, { n: count });
+    parts.push(`${t(verb)} ${count} ${noun}`);
   }
   if (other > 0) {
-    parts.push(`run ${other} ${other === 1 ? 'tool' : 'tools'}`);
+    const noun = t(other === 1 ? 'toolcat.tool' : 'toolcat.tools', { n: other });
+    parts.push(`${t('toolcat.run')} ${other} ${noun}`);
   }
 
   if (parts.length === 0) {
     const count = tools.length;
-    return count === 1 ? '1 tool used' : `${count} tools used`;
+    return count === 1 ? t('toolcat.toolUsedOne') : t('toolcat.toolUsed', { n: count });
   }
   return parts.join(', ');
 }
@@ -96,8 +101,9 @@ function buildToolSummary(tools: StreamBlock[]): string {
 export function ToolGroup({ tools }: ToolGroupProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const standardMode = useUIStore((s) => s.standardMode);
+  const t = useT();
 
-  const label = buildToolSummary(tools);
+  const label = buildToolSummary(tools, t);
 
   return (
     <div className="mt-1 mb-2">
@@ -129,7 +135,7 @@ export function ToolGroup({ tools }: ToolGroupProps): React.ReactElement {
               {tools.map((tool, idx) => (
                 <ToolRenderer
                   key={tool.toolId ?? `tool-${idx}`}
-                  toolName={tool.toolName ?? 'Unknown'}
+                  toolName={tool.toolName ?? t('common.unknown')}
                   toolInput={tool.toolInput}
                   state={tool.state}
                   toolId={tool.toolId}

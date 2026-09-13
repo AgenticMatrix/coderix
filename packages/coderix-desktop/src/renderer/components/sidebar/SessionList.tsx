@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MessageSquare, Trash2 } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore.js';
+import { useT, formatRelativeTime } from '../../i18n/index.js';
 
 export interface SessionListProps {
   activeSessionId?: string;
@@ -9,21 +10,12 @@ export interface SessionListProps {
   searchQuery?: string;
 }
 
-function formatTimeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  const minutes = Math.floor(diff / 60000);
-  return `${minutes}m ago`;
-}
-
 export function SessionList({
   activeSessionId,
   onSessionSelect,
   searchQuery = '',
 }: SessionListProps): React.ReactElement {
+  const t = useT();
   const sessions = useSessionStore((s) => s.sessions);
   const isLoading = useSessionStore((s) => s.isLoading);
   const deleteSession = useSessionStore((s) => s.deleteSession);
@@ -40,14 +32,14 @@ export function SessionList({
   };
 
   const handleClearAll = async () => {
-    if (!confirm('确定要删除所有会话？')) return;
+    if (!confirm(t('session.confirmClear'))) return;
     for (const s of sessions) {
       try { await deleteSession(s.id); } catch { /* ignore */ }
     }
   };
 
   if (isLoading) {
-    return <div className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">加载中...</div>;
+    return <div className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">{t('session.loading')}</div>;
   }
 
   const filtered = sessions.filter((s) =>
@@ -63,7 +55,7 @@ export function SessionList({
             onClick={handleClearAll}
             className="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] transition-colors"
           >
-            清除全部 ({sessions.length})
+            {t('session.clearAll', { n: sessions.length })}
           </button>
         </div>
       )}
@@ -71,7 +63,7 @@ export function SessionList({
       <div className="flex-1 overflow-y-auto py-1">
         {filtered.length === 0 ? (
           <div className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
-            {searchQuery ? '未找到会话' : '点击 + 开始新会话'}
+            {searchQuery ? t('session.notFound') : t('session.empty')}
           </div>
         ) : (
           filtered.map((session) => {
@@ -105,15 +97,15 @@ export function SessionList({
                       {session.title}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
-                      <span>{formatTimeAgo(session.updatedAt)}</span>
+                      <span>{formatRelativeTime(session.updatedAt)}</span>
                       <span>·</span>
-                      <span>{session.turnCount} turns</span>
+                      <span>{t('session.turns', { n: session.turnCount })}</span>
                     </div>
                   </div>
                   <button
                     onClick={(e) => handleDelete(e, session.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--color-bg-primary)]"
-                    title="删除会话"
+                    title={t('session.delete')}
                   >
                     <Trash2 size={12} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)]" />
                   </button>

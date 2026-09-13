@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolRenderer } from './ToolRenderer';
 import { CodeBlock } from './CodeBlock';
+import { useT } from '../../i18n/index.js';
 import type { StreamBlock } from '../../types';
 
 export interface ContentBlockRendererProps {
@@ -26,6 +27,7 @@ export function ContentBlockRenderer({
   block,
   isStreaming = false,
 }: ContentBlockRendererProps): React.ReactElement | null {
+  const t = useT();
   switch (block.type) {
     case 'text':
       return (
@@ -173,7 +175,7 @@ export function ContentBlockRenderer({
     case 'tool_use':
       return (
         <ToolRenderer
-          toolName={block.toolName ?? 'Unknown'}
+          toolName={block.toolName ?? t('common.unknown')}
           toolInput={block.toolInput}
           state={block.state}
           toolId={block.toolId}
@@ -195,7 +197,7 @@ export function ContentBlockRenderer({
       return (
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)] mb-1">
-            Output
+            {t('tool.output')}
           </div>
           <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
             {block.content ?? ''}

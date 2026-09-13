@@ -3,6 +3,7 @@ import { X, FileText, Plus, RotateCcw, Bot } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useEditorStore } from '../../store/editorStore.js';
 import { EditorPanel } from '../editor/EditorPanel.js';
+import { useT } from '../../i18n/index.js';
 
 export interface DiffData {
   file: string;
@@ -48,6 +49,7 @@ function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert 
   onStage: (i: number) => void;
   onRevert: (i: number) => void;
 }): React.ReactElement {
+  const t = useT();
   // Parse hunk headers to get line number ranges: @@ -oldStart,oldCount +newStart,newCount @@
   const hunkRanges = hunks.map(h => {
     const m = h.header.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
@@ -58,7 +60,7 @@ function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert 
   const rows: React.ReactNode[] = [];
   rows.push(
     <div key="meta" className="px-3 py-1 text-[10px] text-[var(--color-text-tertiary)] border-b border-[var(--color-separator)]/50">
-      {contentLines.length} lines · {hunks.length} change{hunks.length !== 1 ? 's' : ''}
+      {t('detail.linesChanges', { lines: contentLines.length, changes: hunks.length })}
     </div>
   );
 
@@ -90,9 +92,9 @@ function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert 
           <div className="flex-1 px-3 whitespace-pre text-[10px]" style={{ color: '#2196f3', minHeight: '20px' }}>{hunk.header}</div>
           <div className="flex-shrink-0 pr-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
             <button onClick={() => onStage(hunkIdx)} disabled={stagingHunks.has(hunkIdx)}
-              className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(76,175,80,0.15)', color: '#4caf50' }}><Plus size={10} /> Stage</button>
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(76,175,80,0.15)', color: '#4caf50' }}><Plus size={10} /> {t('detail.stage')}</button>
             <button onClick={() => onRevert(hunkIdx)} disabled={stagingHunks.has(hunkIdx)}
-              className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(244,67,54,0.1)', color: '#f44336' }}><RotateCcw size={10} /> Revert</button>
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(244,67,54,0.1)', color: '#f44336' }}><RotateCcw size={10} /> {t('detail.revert')}</button>
           </div>
         </div>
       );
@@ -162,6 +164,7 @@ function lineColor(line: string): { bg: string; fg: string } {
 }
 
 export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose?: () => void }): React.ReactElement | null {
+  const t = useT();
   const [stagingHunks, setStagingHunks] = useState<Set<number>>(new Set());
   const [reviewing, setReviewing] = useState(false);
   const editorFiles = useEditorStore((s) => s.files);
@@ -177,7 +180,7 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
   if (!data) {
     return (
       <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
-        点击文件查看 diff
+        {t('detail.clickToDiff')}
       </div>
     );
   }
@@ -190,10 +193,10 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
     const patch = buildHunkPatch(meta, hunks[index]);
     const r = await api?.stageHunk(data.file, patch);
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: 'Hunk staged' });
+      addNotification({ type: 'success', message: t('detail.hunkStaged') });
       setStagingHunks(prev => new Set(prev).add(index));
     } else {
-      addNotification({ type: 'error', message: 'Stage hunk failed', detail: r?.error });
+      addNotification({ type: 'error', message: t('detail.stageHunkFailed'), detail: r?.error });
     }
   };
 
@@ -204,8 +207,8 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
     let collected = '';
     const unsub = fullApi.onStreamEvent((evt: any) => {
       if (evt.type === 'blockDelta' && evt.delta) { collected += evt.delta; }
-      else if (evt.type === 'done') { unsub(); setReviewing(false); addNotification({ type: 'info', message: 'Code review completed — check chat' }); }
-      else if (evt.type === 'error') { unsub(); setReviewing(false); addNotification({ type: 'error', message: 'Review failed', detail: evt.message }); }
+      else if (evt.type === 'done') { unsub(); setReviewing(false); addNotification({ type: 'info', message: t('detail.reviewCompleted') }); }
+      else if (evt.type === 'error') { unsub(); setReviewing(false); addNotification({ type: 'error', message: t('detail.reviewFailed'), detail: evt.message }); }
     });
     try { await fullApi.query.submit(prompt); } catch (e) { unsub(); setReviewing(false); }
   };
@@ -214,10 +217,10 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
     const patch = buildHunkPatch(meta, hunks[index]);
     const r = await api?.revertHunk(data.file, patch);
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: 'Hunk reverted' });
+      addNotification({ type: 'success', message: t('detail.hunkReverted') });
       setStagingHunks(prev => new Set(prev).add(index));
     } else {
-      addNotification({ type: 'error', message: 'Revert hunk failed', detail: r?.error });
+      addNotification({ type: 'error', message: t('detail.revertHunkFailed'), detail: r?.error });
     }
   };
 
@@ -228,11 +231,11 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
         <div className="flex items-center gap-1.5 min-w-0">
           <FileText size={12} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
           <span className="text-xs font-medium truncate">{fileName}</span>
-          {hunks.length > 0 && <span className="text-[10px] text-[var(--color-text-tertiary)]">{hunks.length} hunk{hunks.length !== 1 ? 's' : ''}</span>}
+          {hunks.length > 0 && <span className="text-[10px] text-[var(--color-text-tertiary)]">{t('detail.hunks', { n: hunks.length })}</span>}
           <button onClick={handleAiReview} disabled={reviewing}
             className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] hover:text-[var(--color-brand)] disabled:opacity-30 transition-colors"
-            title="AI Code Review"
-          ><Bot size={11} /> Review</button>
+            title={t('detail.aiReview')}
+          ><Bot size={11} /> {t('detail.review')}</button>
         </div>
         {onClose && (
           <button onClick={onClose} className="p-1 rounded hover:bg-[var(--color-bg-tertiary)]">
@@ -265,9 +268,9 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
                   <div className="flex-1 px-3 whitespace-pre" style={{ color: '#2196f3', minHeight: '20px' }}>{hunk.header}</div>
                   <div className="flex-shrink-0 pr-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
                     <button onClick={() => handleStageHunk(hi)} disabled={stagingHunks.has(hi)}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(76,175,80,0.15)', color: '#4caf50' }}><Plus size={10} /> Stage</button>
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(76,175,80,0.15)', color: '#4caf50' }}><Plus size={10} /> {t('detail.stage')}</button>
                     <button onClick={() => handleRevertHunk(hi)} disabled={stagingHunks.has(hi)}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(244,67,54,0.1)', color: '#f44336' }}><RotateCcw size={10} /> Revert</button>
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(244,67,54,0.1)', color: '#f44336' }}><RotateCcw size={10} /> {t('detail.revert')}</button>
                   </div>
                 </div>
                 {hunk.lines.map((line, li) => {
@@ -277,7 +280,7 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
               </div>
             ))}
             {hunks.length === 0 && meta.length === 0 && (
-              <div className="px-3 py-4 text-center text-[var(--color-text-tertiary)] italic">Empty diff</div>
+              <div className="px-3 py-4 text-center text-[var(--color-text-tertiary)] italic">{t('detail.emptyDiff')}</div>
             )}
           </>
         )}

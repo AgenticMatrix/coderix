@@ -5,6 +5,7 @@ import { GitMoreMenu } from './GitMoreMenu';
 import { BranchPicker } from './BranchPicker';
 import { StashPicker } from './StashPicker';
 import { Sparkles } from 'lucide-react';
+import { t, useT } from '../../i18n/index.js';
 
 interface GitFile { file: string; type: string; code: string; }
 interface GitCommit { hash: string; message: string; author?: string; date?: string; dateAbsolute?: string; graph?: string; refs?: string; }
@@ -45,6 +46,7 @@ export function GitPanel({ projectPath }: { projectPath?: string }): React.React
   const [msgHistory, setMsgHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('coderix-commit-msgs') || '[]'); } catch { return []; }
   });
+  const tr = useT();
 
   function emitDiff(file: string, diff: string, content?: string) {
   window.dispatchEvent(new CustomEvent('coderix:open-diff', { detail: { file, diff, content } }));
@@ -92,7 +94,7 @@ const api = window.coderixAPI?.git;
       if (!silent) {
         addNotification({
           type: 'error',
-          message: 'Failed to get git status',
+          message: t('git.failedStatus'),
           detail: (e as Error).message,
         });
       }
@@ -117,8 +119,8 @@ const api = window.coderixAPI?.git;
     if (r.status === 'error') {
       addNotification({
         type: 'error',
-        message: amend ? 'Failed to amend' : 'Failed to commit',
-        detail: r.error || 'Unknown error',
+        message: amend ? t('git.failedAmend') : t('git.failedCommit'),
+        detail: r.error || t('git.unknownError'),
       });
       return;
     }
@@ -126,7 +128,7 @@ const api = window.coderixAPI?.git;
     const history = [commitMsg.trim(), ...msgHistory.filter(m => m !== commitMsg.trim())].slice(0, 20);
     setMsgHistory(history);
     try { localStorage.setItem('coderix-commit-msgs', JSON.stringify(history)); } catch { /* ignore */ }
-    addNotification({ type: 'success', message: amend ? 'Amended successfully' : 'Committed successfully' });
+    addNotification({ type: 'success', message: amend ? t('git.amended') : t('git.committed') });
     setCommitMsg('');
     setAmend(false);
     load();
@@ -140,7 +142,7 @@ const api = window.coderixAPI?.git;
       // Get diff of staged changes (or all changes if nothing staged)
       const filesToDiff = staged.length > 0 ? staged : unstaged;
       if (filesToDiff.length === 0) {
-        addNotification({ type: 'warning', message: 'No changes to generate commit message for' });
+        addNotification({ type: 'warning', message: t('git.noChangesMsg') });
         setAiGenerating(false);
         return;
       }
@@ -152,7 +154,7 @@ const api = window.coderixAPI?.git;
         if (r.diff) diffText += r.diff.slice(0, 2000) + '\n';
       }
       if (!diffText.trim()) {
-        addNotification({ type: 'warning', message: 'No diff content available' });
+        addNotification({ type: 'warning', message: t('git.noDiff') });
         setAiGenerating(false);
         return;
       }
@@ -162,7 +164,7 @@ const api = window.coderixAPI?.git;
       // Submit query and listen for stream events
       const fullApi = (window as any).coderixAPI;
       if (!fullApi?.query?.submit) {
-        addNotification({ type: 'error', message: 'AI query not available' });
+        addNotification({ type: 'error', message: t('git.aiNotAvailable') });
         setAiGenerating(false);
         return;
       }
@@ -176,43 +178,43 @@ const api = window.coderixAPI?.git;
           const msg = collected.replace(/^```[a-z]*\n?/i, '').replace(/\n```$/i, '').trim();
           if (msg) {
             setCommitMsg(msg);
-            addNotification({ type: 'success', message: 'Commit message generated' });
+            addNotification({ type: 'success', message: t('git.commitMsgGenerated') });
           } else {
-            addNotification({ type: 'warning', message: 'AI did not return a message' });
+            addNotification({ type: 'warning', message: t('git.aiNoReturn') });
           }
           setAiGenerating(false);
         } else if (evt.type === 'error') {
           unsub();
-          addNotification({ type: 'error', message: 'AI generation failed', detail: evt.message });
+          addNotification({ type: 'error', message: t('git.aiFailed'), detail: evt.message });
           setAiGenerating(false);
         }
       });
 
       await fullApi.query.submit(prompt);
     } catch (e) {
-      addNotification({ type: 'error', message: 'AI generation failed', detail: (e as Error).message });
+      addNotification({ type: 'error', message: t('git.aiFailed'), detail: (e as Error).message });
       setAiGenerating(false);
     }
   }, [api, aiGenerating, staged, unstaged, addNotification]);
 
   const handleStage = useCallback(async (file: string) => {
     const r = await api?.stage(file);
-    if (r?.status === 'error') addNotification({ type: 'error', message: `Failed to stage ${file}`, detail: (r as any).error });
+    if (r?.status === 'error') addNotification({ type: 'error', message: t('git.failedStage', { file }), detail: (r as any).error });
     load();
   }, [api, load, addNotification]);
   const handleUnstage = useCallback(async (file: string) => {
     const r = await api?.unstage(file);
-    if (r?.status === 'error') addNotification({ type: 'error', message: `Failed to unstage ${file}`, detail: (r as any).error });
+    if (r?.status === 'error') addNotification({ type: 'error', message: t('git.failedUnstage', { file }), detail: (r as any).error });
     load();
   }, [api, load, addNotification]);
   const handleStageAll = useCallback(async () => {
     const r = await api?.stage(undefined, true);
-    if (r?.status === 'error') addNotification({ type: 'error', message: 'Failed to stage all files', detail: (r as any).error });
+    if (r?.status === 'error') addNotification({ type: 'error', message: t('git.failedStageAll'), detail: (r as any).error });
     load();
   }, [api, load, addNotification]);
   const handleUnstageAll = useCallback(async () => {
     const r = await api?.unstage(undefined, true);
-    if (r?.status === 'error') addNotification({ type: 'error', message: 'Failed to unstage all files', detail: (r as any).error });
+    if (r?.status === 'error') addNotification({ type: 'error', message: t('git.failedUnstageAll'), detail: (r as any).error });
     load();
   }, [api, load, addNotification]);
 
@@ -220,29 +222,29 @@ const api = window.coderixAPI?.git;
   const handlePush = useCallback(async () => {
     const r = await api?.push();
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: r.output || 'Pushed successfully' });
+      addNotification({ type: 'success', message: r.output || t('git.pushed') });
     } else {
-      addNotification({ type: 'error', message: 'Push failed', detail: r?.error || 'Unknown error' });
+      addNotification({ type: 'error', message: t('git.pushFailed'), detail: r?.error || t('git.unknownError') });
     }
   }, [api, addNotification]);
 
   const handlePull = useCallback(async () => {
     const r = await api?.pull();
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: r.output || 'Pulled successfully' });
+      addNotification({ type: 'success', message: r.output || t('git.pulled') });
       load();
     } else {
-      addNotification({ type: 'error', message: 'Pull failed', detail: r?.error || 'Unknown error' });
+      addNotification({ type: 'error', message: t('git.pullFailed'), detail: r?.error || t('git.unknownError') });
     }
   }, [api, addNotification, load]);
 
   const handleFetch = useCallback(async () => {
     const r = await api?.fetch();
     if (r?.status === 'ok') {
-      addNotification({ type: 'info', message: r.output || 'Fetch completed' });
+      addNotification({ type: 'info', message: r.output || t('git.fetched') });
       load();
     } else {
-      addNotification({ type: 'error', message: 'Fetch failed', detail: r?.error || 'Unknown error' });
+      addNotification({ type: 'error', message: t('git.fetchFailed'), detail: r?.error || t('git.unknownError') });
     }
   }, [api, addNotification, load]);
 
@@ -251,11 +253,11 @@ const api = window.coderixAPI?.git;
     for (const f of unstaged) {
       const r = await api?.discard(f.file);
       if (r?.status === 'error') {
-        addNotification({ type: 'error', message: `Failed to discard ${f.file}`, detail: (r as any).error });
+        addNotification({ type: 'error', message: t('git.failedDiscard', { file: f.file }), detail: (r as any).error });
         return;
       }
     }
-    addNotification({ type: 'success', message: 'All changes discarded' });
+    addNotification({ type: 'success', message: t('git.allDiscarded') });
     load();
   }, [api, addNotification, load, unstaged]);
 
@@ -268,10 +270,10 @@ const api = window.coderixAPI?.git;
   const handleDiscardFile = useCallback(async (file: string) => {
     const r = await api?.discard(file);
     if (r?.status === 'ok') {
-      addNotification({ type: 'success', message: `Discarded ${file.split('/').pop()}` });
+      addNotification({ type: 'success', message: t('git.discarded', { file: file.split('/').pop() ?? file }) });
       load();
     } else {
-      addNotification({ type: 'error', message: `Failed to discard ${file}`, detail: (r as any)?.error });
+      addNotification({ type: 'error', message: t('git.failedDiscard', { file }), detail: (r as any)?.error });
     }
   }, [api, addNotification, load]);
 
@@ -299,7 +301,7 @@ const api = window.coderixAPI?.git;
     }
   }, [api, expandedCommit]);
   if (loading) {
-    return <div className="flex flex-col h-full text-xs"><div className="p-4 text-center text-[var(--color-text-tertiary)]">Loading...</div></div>;
+    return <div className="flex flex-col h-full text-xs"><div className="p-4 text-center text-[var(--color-text-tertiary)]">{tr('common.loading')}</div></div>;
   }
 
   return (
@@ -307,9 +309,9 @@ const api = window.coderixAPI?.git;
     <div className="flex flex-col h-full text-xs">
       {/* ── Header bar ────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 h-[35px] border-b border-[var(--color-separator)] flex-shrink-0">
-        <span className="font-semibold text-[11px] text-[var(--color-text-secondary)] uppercase tracking-wide">Source Control</span>
+        <span className="font-semibold text-[11px] text-[var(--color-text-secondary)] uppercase tracking-wide">{tr('git.sourceControl')}</span>
         <div className="flex items-center gap-0.5">
-          <button onClick={() => load()} className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]" title="Refresh"><RefreshCw size={12} /></button>
+          <button onClick={() => load()} className="p-1 rounded hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)]" title={tr('git.refresh')}><RefreshCw size={12} /></button>
           <GitMoreMenu
             onPush={handlePush}
             onPull={handlePull}
@@ -328,7 +330,7 @@ const api = window.coderixAPI?.git;
           <textarea
             value={commitMsg}
             onChange={(e) => setCommitMsg(e.target.value)}
-            placeholder="Message (⌘Enter to commit)"
+            placeholder={tr('git.commitPlaceholder')}
             className="flex-1 min-h-[28px] max-h-[120px] px-2 py-1 rounded-[var(--radius-md)] border border-[var(--color-separator)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)] text-xs outline-none resize-none"
             rows={1}
             onKeyDown={(e) => {
@@ -347,7 +349,7 @@ const api = window.coderixAPI?.git;
             onClick={handleAiGenerate}
             disabled={aiGenerating || (staged.length === 0 && unstaged.length === 0)}
             className="h-7 w-7 rounded-[var(--radius-md)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:text-[var(--color-brand)] hover:bg-[var(--color-brand)]/10 disabled:opacity-30 flex items-center justify-center flex-shrink-0 transition-colors"
-            title="AI Generate (✨)"
+            title={tr('git.aiGenerate')}
           >
             <Sparkles size={14} />
           </button>
@@ -355,7 +357,7 @@ const api = window.coderixAPI?.git;
             onClick={handleCommit}
             disabled={!commitMsg.trim() || (staged.length === 0 && unstaged.length === 0)}
             className="h-7 w-7 rounded-[var(--radius-md)] bg-[var(--color-brand)] text-white disabled:opacity-30 flex items-center justify-center flex-shrink-0"
-            title="Commit (⌘Enter)"
+            title={tr('git.commit')}
           >
             <Check size={14} strokeWidth={2.5} />
           </button>
@@ -364,12 +366,12 @@ const api = window.coderixAPI?.git;
         <div className="flex items-center gap-3 mt-1">
           <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-tertiary)] cursor-pointer select-none">
             <input type="checkbox" checked={amend} onChange={e => setAmend(e.target.checked)} />
-            Amend
+            {tr('git.amend')}
           </label>
           {msgHistory.length > 0 && (
             <div className="relative">
               <button onClick={() => setShowHistory(!showHistory)} className="text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-link)]">
-                History ({msgHistory.length})
+                {tr('git.history', { n: msgHistory.length })}
               </button>
               {showHistory && (
                 <div className="absolute bottom-full left-0 mb-1 w-64 max-h-32 overflow-y-auto rounded-[var(--radius-md)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] shadow-lg z-50">
@@ -388,7 +390,7 @@ const api = window.coderixAPI?.git;
           <GitBranch size={10} />
           <span className="font-mono">{branch || '...'}</span>
           {files.length > 0 && (
-            <span className="text-[var(--color-text-tertiary)] ml-1">· {files.length} file{files.length !== 1 ? 's' : ''}</span>
+            <span className="text-[var(--color-text-tertiary)] ml-1">· {tr('git.files', { n: files.length })}</span>
           )}
         </div>
       </div>
@@ -397,39 +399,39 @@ const api = window.coderixAPI?.git;
       <div className="flex-1 overflow-y-auto">
         {/* ── Staged Changes ──────────────────────────── */}
         <SectionHeader
-          title="Staged Changes"
+          title={tr('git.stagedChanges')}
           count={staged.length}
           open={stagedOpen}
           onToggle={() => setStagedOpen(!stagedOpen)}
-          actions={staged.length > 0 ? [{ label: 'Unstage All', onClick: handleUnstageAll }] : []}
+          actions={staged.length > 0 ? [{ label: tr('git.unstageAll'), onClick: handleUnstageAll }] : []}
         />
         {stagedOpen && staged.map((f, i) => (
-          <FileRow key={`s-${i}`} file={f} onClick={() => handleViewDiff(f.file, true)} actionLabel="−" actionTitle="Unstage" onAction={() => handleUnstage(f.file)}
+          <FileRow key={`s-${i}`} file={f} onClick={() => handleViewDiff(f.file, true)} actionLabel="−" actionTitle={tr('git.unstage')} onAction={() => handleUnstage(f.file)}
             contextActions={[
-              { label: 'Unstage', onClick: () => handleUnstage(f.file) },
-              { label: 'Discard', danger: true, onClick: () => handleDiscardFile(f.file) },
-              { label: 'Copy Relative Path', onClick: () => handleCopyPath(f.file) },
+              { label: tr('git.unstage'), onClick: () => handleUnstage(f.file) },
+              { label: tr('git.discard'), danger: true, onClick: () => handleDiscardFile(f.file) },
+              { label: tr('git.copyRelPath'), onClick: () => handleCopyPath(f.file) },
             ]}
           />
         ))}
 
         {/* ── Changes (unstaged) ──────────────────────── */}
         <SectionHeader
-          title="Changes"
+          title={tr('git.changes')}
           count={unstaged.length}
           open={changesOpen}
           onToggle={() => setChangesOpen(!changesOpen)}
-          actions={unstaged.length > 0 ? [{ label: 'Stage All', onClick: handleStageAll }] : []}
+          actions={unstaged.length > 0 ? [{ label: tr('git.stageAll'), onClick: handleStageAll }] : []}
         />
         {changesOpen && (unstaged.length === 0 ? (
-          <div className="px-5 py-4 text-center text-[var(--color-text-tertiary)] italic">No changes</div>
+          <div className="px-5 py-4 text-center text-[var(--color-text-tertiary)] italic">{tr('git.noChanges')}</div>
         ) : (
           unstaged.map((f, i) => (
-            <FileRow key={`u-${i}`} file={f} onClick={() => handleViewDiff(f.file)} actionLabel="＋" actionTitle="Stage" onAction={() => handleStage(f.file)}
+            <FileRow key={`u-${i}`} file={f} onClick={() => handleViewDiff(f.file)} actionLabel="＋" actionTitle={tr('git.stage')} onAction={() => handleStage(f.file)}
               contextActions={[
-                { label: 'Stage', onClick: () => handleStage(f.file) },
-                { label: 'Discard', danger: true, onClick: () => handleDiscardFile(f.file) },
-                { label: 'Copy Relative Path', onClick: () => handleCopyPath(f.file) },
+                { label: tr('git.stage'), onClick: () => handleStage(f.file) },
+                { label: tr('git.discard'), danger: true, onClick: () => handleDiscardFile(f.file) },
+                { label: tr('git.copyRelPath'), onClick: () => handleCopyPath(f.file) },
               ]}
             />
           ))
@@ -437,7 +439,7 @@ const api = window.coderixAPI?.git;
 
         {/* ── Commits (with graph) ──────────────────── */}
         <SectionHeader
-          title="Commits"
+          title={tr('git.commits')}
           count={commits.length}
           open={commitsOpen}
           onToggle={() => setCommitsOpen(!commitsOpen)}
@@ -482,7 +484,7 @@ const api = window.coderixAPI?.git;
               {isOpen && (
                 <div className="pl-8 pr-2 pb-2">
                   {loadingCommit ? (
-                    <div className="text-[var(--color-text-tertiary)] py-1">Loading...</div>
+                    <div className="text-[var(--color-text-tertiary)] py-1">{tr('common.loading')}</div>
                   ) : commitDetail?.files?.length ? (
                     commitDetail.files.map((f, i) => {
                       const cfg = TYPE_CFG[f.type] || TYPE_CFG.M;
@@ -509,7 +511,7 @@ const api = window.coderixAPI?.git;
                       );
                     })
                   ) : (
-                    <div className="text-[var(--color-text-tertiary)] py-1 text-[10px]">No changed files</div>
+                    <div className="text-[var(--color-text-tertiary)] py-1 text-[10px]">{tr('git.noChangedFiles')}</div>
                   )}
                 </div>
               )}

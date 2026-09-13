@@ -4,6 +4,9 @@ import {
   Clock, ChevronRight, CheckCircle2, XCircle, Loader2, Copy, Check,
 } from 'lucide-react';
 import type { StreamBlock } from '../../types';
+import { useT, type TranslationKey } from '../../i18n/index.js';
+
+type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 // ── Tool Display Config ────────────────────────────────────
 // Each tool gets a display name + a `content` builder so the collapsed
@@ -11,7 +14,7 @@ import type { StreamBlock } from '../../types';
 
 interface ToolDisplayConfig {
   name: string;
-  content: (input: Record<string, unknown>) => string;
+  content: (input: Record<string, unknown>, t: TFn) => string;
 }
 
 function truncate(text: string, max = 60): string {
@@ -92,10 +95,10 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
   },
   todowrite: {
     name: 'TodoWrite',
-    content: (i) => {
+    content: (i, t) => {
       const todos = i.newTodos || i.todos;
       const n = Array.isArray(todos) ? todos.length : 0;
-      return n ? `${n} items` : '';
+      return n ? t('tool.nItems', { n }) : '';
     },
   },
   skill: {
@@ -167,14 +170,14 @@ function getToolConfig(toolName: string): ToolDisplayConfig {
 interface StateConfig {
   icon: React.ReactNode;
   className: string;
-  label: string;
+  labelKey: TranslationKey;
 }
 
 const stateConfigs: Record<string, StateConfig> = {
-  pending: { icon: <Clock size={12} />, className: 'pending', label: 'Pending' },
-  executing: { icon: <Loader2 size={12} className="animate-spin" />, className: 'executing', label: 'Running' },
-  done: { icon: <CheckCircle2 size={12} />, className: 'done', label: 'Done' },
-  error: { icon: <XCircle size={12} />, className: 'error', label: 'Error' },
+  pending: { icon: <Clock size={12} />, className: 'pending', labelKey: 'tool.pending' },
+  executing: { icon: <Loader2 size={12} className="animate-spin" />, className: 'executing', labelKey: 'tool.running' },
+  done: { icon: <CheckCircle2 size={12} />, className: 'done', labelKey: 'tool.done' },
+  error: { icon: <XCircle size={12} />, className: 'error', labelKey: 'tool.error' },
 };
 
 // ── Helpers ────────────────────────────────────────────────
@@ -221,9 +224,10 @@ export function ToolRenderer({
 }: ToolRendererProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const t = useT();
 
   const config = getToolConfig(toolName);
-  const labelContent = config.content(toolInput);
+  const labelContent = config.content(toolInput, t);
   const sc = stateConfigs[state] ?? stateConfigs.pending;
 
   const lower = toolName.toLowerCase();
@@ -231,7 +235,7 @@ export function ToolRenderer({
   const isFileTool = ['read', 'write', 'edit', 'update', 'notebookedit', 'multiedit'].includes(lower);
   const isWrite = lower === 'write';
   const writeStats = isWrite && toolMetadata
-    ? `${toolMetadata.addedLines ?? 0} added, ${toolMetadata.removedLines ?? 0} removed`
+    ? t('tool.addedRemoved', { added: Number(toolMetadata.addedLines ?? 0), removed: Number(toolMetadata.removedLines ?? 0) })
     : undefined;
   const writeContent = typeof toolInput.content === 'string' ? toolInput.content : '';
 
@@ -253,7 +257,7 @@ export function ToolRenderer({
       type="button"
       className="p-0.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-[var(--radius-xs)] transition-colors"
       onClick={(e) => { e.stopPropagation(); handleCopy(key, content); }}
-      title="Copy"
+      title={t('tool.copy')}
     >
       {copiedKey === key ? <Check size={12} /> : <Copy size={12} />}
     </button>
@@ -296,7 +300,7 @@ export function ToolRenderer({
           'text-[var(--color-danger)]'
         }`}>
           {sc.icon}
-          <span>{sc.label}</span>
+          <span>{t(sc.labelKey)}</span>
         </span>
       </motion.button>
 
@@ -317,7 +321,7 @@ export function ToolRenderer({
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                        Command
+                        {t('tool.command')}
                       </div>
                       {copyBtn('command', String(toolInput.command))}
                     </div>
@@ -355,7 +359,7 @@ export function ToolRenderer({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                      Result
+                      {t('tool.result')}
                     </div>
                     {copyBtn('result', toolResult)}
                   </div>

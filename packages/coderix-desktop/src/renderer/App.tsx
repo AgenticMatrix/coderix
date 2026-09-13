@@ -35,6 +35,7 @@ import type { SidebarTab } from './components/sidebar/IconSidebar';
 import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';
 import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
+import { useT } from './i18n/index.js';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import {
   submitQuery,
@@ -108,6 +109,7 @@ export function App(): React.ReactElement {
   // ── Settings state ─────────────────────────────────────────────────────
   const settings = useSettingsStore((s) => s.settings);
   const loadSettings = useSettingsStore((s) => s.load);
+  const t = useT();
 
   // ── Chat State ──────────────────────────────────────────────────────────
   const messages = useChatStore((s) => s.messages);
@@ -241,6 +243,13 @@ export function App(): React.ReactElement {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // ── Language sync from persisted settings ──────────────────────────────
+  useEffect(() => {
+    if (settings?.language) {
+      useUIStore.getState().setLanguage(settings.language);
+    }
+  }, [settings?.language]);
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
@@ -625,7 +634,7 @@ export function App(): React.ReactElement {
 
   // Workspace display name — the last path segment (folder name). Defaults to
   // the folder name so the menu header reads like the project's name.
-  const workspaceName = projectPath ? getFolderName(projectPath) : '选择目录';
+  const workspaceName = projectPath ? getFolderName(projectPath) : t('workspace.chooseDir');
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -707,7 +716,7 @@ export function App(): React.ReactElement {
               type="button"
               onClick={toggleWorkspaceMenu}
               className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer max-w-full"
-              title={projectPath || '选择项目目录'}
+              title={projectPath || t('workspace.chooseProject')}
             >
               <FolderOpen size={14} className="flex-shrink-0" />
               <span className="truncate">{workspaceName}</span>
@@ -745,12 +754,12 @@ export function App(): React.ReactElement {
                   className="w-full text-left px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] flex items-center gap-2"
                 >
                   <Plus size={12} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
-                  <span>选择新目录…</span>
+                  <span>{t('workspace.chooseNewDir')}</span>
                 </button>
               </div>
             )}
 
-            <ModelCascadePicker model={settings?.defaultModel || '未配置模型'} />
+            <ModelCascadePicker model={settings?.defaultModel || t('modelpicker.unconfigured')} />
           </div>
 
           {/* Composer — fixed at bottom of chat */}

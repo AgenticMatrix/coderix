@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useT } from '../../i18n/index.js';
 
 export interface SpinnerProps {
   /** Size preset */
@@ -31,6 +32,7 @@ export function Spinner({
   const sw = strokeWidth[size];
   const radius = (px - sw) / 2;
   const circumference = 2 * Math.PI * radius;
+  const t = useT();
 
   return (
     <motion.svg
@@ -41,7 +43,7 @@ export function Spinner({
       animate={{ rotate: 360 }}
       transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
       role="status"
-      aria-label="Loading"
+      aria-label={t('common.loading')}
     >
       <circle
         cx={px / 2}

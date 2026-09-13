@@ -4,6 +4,7 @@ import { ChevronDown, Zap } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { ContentBlockRenderer } from './ContentBlockRenderer';
 import { ToolGroup } from './ToolGroup';
+import { useT } from '../../i18n/index.js';
 import './ChatView.css';
 
 export interface ChatViewMessage {
@@ -130,6 +131,7 @@ export function ChatView({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const prevMessageCountRef = useRef(messages.length);
   const userScrolledUpRef = useRef(false);
+  const t = useT();
 
   const scrollToBottom = useCallback(
     (smooth = true) => {
@@ -195,10 +197,9 @@ export function ChatView({
           <div className="chat-empty-icon">
             <Zap size={24} className="text-[var(--color-brand)]" />
           </div>
-          <h3 className="chat-empty-title">Ask Coderix anything</h3>
+          <h3 className="chat-empty-title">{t('chat.emptyTitle')}</h3>
           <p className="chat-empty-subtitle">
-            I can help with code review, debugging, refactoring, and more.
-            Start by typing a message below.
+            {t('chat.emptySubtitle')}
           </p>
         </div>
       </div>
@@ -272,7 +273,7 @@ export function ChatView({
             className="scroll-bottom-btn"
           >
             <ChevronDown size={14} />
-            Scroll to bottom
+            {t('chat.scrollToBottom')}
           </motion.button>
         )}
       </AnimatePresence>
