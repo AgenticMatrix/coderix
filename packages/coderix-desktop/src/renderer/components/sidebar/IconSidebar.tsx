@@ -47,11 +47,11 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
       {/* Bottom actions */}
       <div className={styles.bottomActions}>
         <button
-          className={`${styles.iconButton} ${standardMode ? styles.active : ''}`}
+          className={`${styles.iconButton} ${standardMode ? '' : styles.active}`}
           onClick={toggleStandardMode}
           title={standardMode ? '切换到详细模式' : '切换到标准模式'}
         >
-          <Brain size={20} strokeWidth={standardMode ? 2.5 : 2} />
+          <Brain size={20} strokeWidth={standardMode ? 2 : 2.5} />
           <span className="tooltip">{standardMode ? '详细模式' : '标准模式'}</span>
         </button>
         <button className={styles.iconButton} onClick={toggleTheme} title={theme === 'light' ? 'Switch to Dark' : 'Switch to Light'}>
