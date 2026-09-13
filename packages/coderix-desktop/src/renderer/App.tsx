@@ -813,7 +813,7 @@ export function App(): React.ReactElement {
           >
             {/* Settings fills the modal; its internal content pane scrolls */}
             <div style={{ flex: 1, minHeight: 0 }}>
-              <SettingsView onClose={() => setSettingsOpen(false)} />
+              <SettingsView onClose={() => setSettingsOpen(false)} projectPath={projectPath} />
             </div>
           </div>
         </div>,

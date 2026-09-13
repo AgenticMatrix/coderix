@@ -22,7 +22,7 @@ import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/co
 import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
-import { PermissionMode, loadSettings } from '../../../../packages/coderix-core/src/index.js';
+import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
 import { loadConfig } from '../../../../packages/coderix-core/src/config.js';
 
 // Tool schema + executor imports (avoid index.ts → renderers → React/ink)
@@ -265,8 +265,7 @@ async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
 
   await ipcBridge.initEngine(config);
   const settings = loadSettings();
-  const permMode: PermissionMode = (settings.default_permission_mode as PermissionMode)
-    ?? PermissionMode.ASK;
+  const permMode: PermissionMode = resolvePermissionMode(settings, activeWorkDir) as PermissionMode;
   if (ipcBridge.queryEngine) {
     ipcBridge.queryEngine.setPermissionMode(permMode);
     console.log(`[Coderix] Permission mode set to: ${permMode}`);

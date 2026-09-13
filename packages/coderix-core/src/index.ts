@@ -186,7 +186,7 @@ export { runChromeMcpServer } from './mcp/builtin/chrome-mcp/index.js';
 export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js';
 
 // ── Config ─────────────────────────────────────────────────────────
-export { loadSettings, saveSettings, loadConfig, inferProvider, getMaxToolConcurrency, detectProtocol } from './config.js';
+export { loadSettings, saveSettings, loadConfig, inferProvider, getMaxToolConcurrency, detectProtocol, resolvePermissionMode } from './config.js';
 export type {
   CoderSettings, AppConfig, ModelItem, ModelEntry, ModelPrice,
   WebSearchConfig, WebBridgeConfig, PermissionRuleEntry, AgentEngine,

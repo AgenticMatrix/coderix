@@ -29,6 +29,7 @@ export interface SettingsData {
   providers: ProviderConfig[];
   defaultModel: string;
   defaultPermissionMode: PermissionMode;
+  projectPermissions: Record<string, PermissionMode>;
   theme: Theme;
   mcpServers: Array<{ name: string; url: string; enabled: boolean }>;
   engine: AgentEngine;
@@ -73,6 +74,7 @@ interface CoderSettings {
   web_search?: unknown;
   engine?: string;
   default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
+  project_permissions?: Record<string, 'auto' | 'ask' | 'plan' | 'low'>;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +126,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
       })) ?? [],
     defaultModel: qualifyDefaultModel(config),
     defaultPermissionMode: (config.default_permission_mode as PermissionMode) ?? 'ask',
+    projectPermissions: (config.project_permissions as Record<string, PermissionMode> | undefined) ?? {},
     theme: (config.theme as Theme) ?? 'light',
     mcpServers: [],
     engine: (config.engine === 'claude-code' ? 'claude-code' : 'coderix'),
@@ -136,6 +139,7 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
     default_model: data.defaultModel,
     engine: data.engine,
     default_permission_mode: data.defaultPermissionMode,
+    project_permissions: data.projectPermissions,
     model_list: data.providers.map((p) => ({
       provider: p.name.toLowerCase(),
       base_url: p.baseUrl,
@@ -277,6 +281,7 @@ export const useSettingsStore = create<SettingsStore>()((set) => ({
             providers: [],
             defaultModel: '',
             defaultPermissionMode: 'auto',
+            projectPermissions: {},
             theme: 'light',
             mcpServers: [],
             engine: 'coderix',

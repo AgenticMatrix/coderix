@@ -32,7 +32,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection } from '@coderix/core';
+import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 import { safeSend } from './safe-send.js';
 
@@ -141,6 +141,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   let activeAbortController: AbortController | null = null;
   let pendingPermission: DeferredPermission | null = null;
   let pendingToolName: string | null = null;
+  let pendingPermissionIsClaudeCode = false;
   let pendingQuestion: DeferredQuestion | null = null;
   let updateListenersBound = false;
   let permissionsState: {
@@ -256,6 +257,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             prompt: userInput,
             sessionId: sessionManager.getActive()?.id ?? '',
             cwd: currentWorkDir,
+            permissionMode: resolvePermissionMode(loadSettings(), currentWorkDir) as PermissionMode,
             model: currentModel,
             abortController: controller,
             // Forward AskUserQuestion to the renderer through the same
@@ -289,6 +291,45 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 }
               }, { once: true });
               return promise;
+            },
+            // Forward Claude Code's `can_use_tool` permission prompts to the
+            // same renderer permission UI the in-process engine uses, so the
+            // "ask" permission mode actually prompts instead of auto-denying.
+            onPermissionRequest: (req) => {
+              return new Promise<{ behavior: 'allow' | 'deny'; message?: string }>((resolve) => {
+                let settled = false;
+                const done = (allowed: boolean): void => {
+                  if (settled) return;
+                  settled = true;
+                  resolve({ behavior: allowed ? 'allow' : 'deny', message: allowed ? undefined : '已拒绝' });
+                };
+                const deferred: DeferredPermission = {
+                  toolName: req.toolName,
+                  command: req.title ?? req.displayName ?? req.toolName,
+                  description: req.description ?? req.title ?? `${req.toolName} 请求权限`,
+                  toolUseId: req.toolUseId,
+                  toolInput: req.input ?? {},
+                  resolve: done,
+                  promise: new Promise<boolean>(() => {}),
+                };
+                pendingPermission = deferred;
+                pendingToolName = deferred.toolName;
+                pendingPermissionIsClaudeCode = true;
+                safeSend(mainWindow, IPC_CHANNELS.STATE_PERMISSION_REQ, {
+                  toolUseId: req.toolUseId,
+                  toolName: req.toolName,
+                  command: deferred.command,
+                  description: deferred.description,
+                });
+                controller.signal.addEventListener('abort', () => {
+                  if (pendingPermission === deferred) {
+                    pendingPermission = null;
+                    pendingToolName = null;
+                    pendingPermissionIsClaudeCode = false;
+                    done(false);
+                  }
+                }, { once: true });
+              });
             },
           })
         : queryEngine!.submitMessage(userInput);
@@ -682,6 +723,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       pendingPermission.resolve(true);
       pendingPermission = null;
       pendingToolName = null;
+      pendingPermissionIsClaudeCode = false;
     }
     return { status: 'approved' };
   });
@@ -689,10 +731,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE_SESSION, async (_event, toolUseId: string) => {
     if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
       const toolName = pendingToolName;
+      const isClaudeCode = pendingPermissionIsClaudeCode;
       pendingPermission.resolve(true);
       pendingPermission = null;
       pendingToolName = null;
-      if (toolName && queryEngine) {
+      pendingPermissionIsClaudeCode = false;
+      if (toolName && queryEngine && !isClaudeCode) {
         queryEngine.addPermissionRule(toolName, undefined, 'allow');
       }
     }
@@ -702,10 +746,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE_ALWAYS, async (_event, toolUseId: string) => {
     if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
       const toolName = pendingToolName;
+      const isClaudeCode = pendingPermissionIsClaudeCode;
       pendingPermission.resolve(true);
       pendingPermission = null;
       pendingToolName = null;
-      if (toolName && queryEngine) {
+      pendingPermissionIsClaudeCode = false;
+      if (toolName && queryEngine && !isClaudeCode) {
         queryEngine.persistPermissionRule(toolName, undefined, 'allow');
       }
     }
@@ -717,6 +763,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       pendingPermission.resolve(false);
       pendingPermission = null;
       pendingToolName = null;
+      pendingPermissionIsClaudeCode = false;
     }
     return { status: 'denied' };
   });
@@ -737,6 +784,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       if (queryEngine) {
         queryEngine.setPermissionMode(mode as PermissionMode);
       }
+      // Persist as a per-project override so the Claude Code SDK engine (which
+      // spawns a fresh CLI each turn) picks it up on the next message.
+      const settings = loadSettings();
+      settings.project_permissions = { ...(settings.project_permissions ?? {}), [currentWorkDir]: mode };
+      saveSettings(settings);
     }
     return { mode };
   });

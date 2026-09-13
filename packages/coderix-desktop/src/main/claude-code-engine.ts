@@ -6,14 +6,16 @@
  * `QueryEngineEvent` shape the in-process Coderix engine produces. The
  * ipc-bridge streaming loop therefore consumes both engines identically.
  *
- * Tools run in `bypassPermissions` mode (matching the agentstation-app SDK
- * runtime) so Claude Code drives its own tool loop without prompting through
- * the Coderix permission UI.
+ * Tools run under the permission mode resolved for the current project (mapped
+ * from Coderix's plan/ask/auto/low onto the SDK's PermissionMode) rather than a
+ * fixed `bypassPermissions`, so the Coderix permission setting actually applies
+ * to Claude Code.
  */
 
 import { query as claudeQuery } from '@anthropic-ai/claude-agent-sdk';
-import type { Options, HookCallback } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, HookCallback, PermissionMode as SdkPermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent } from '@coderix/core';
+import { PermissionMode } from '@coderix/core';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,6 +33,8 @@ export interface ClaudeCodeQueryOptions {
   /** Coderix session id — used as the resume key across turns. */
   sessionId: string;
   cwd: string;
+  /** Coderix permission mode for this turn (plan/ask/auto/low). Defaults to 'ask'. */
+  permissionMode?: PermissionMode;
   model?: string;
   abortController: AbortController;
   /**
@@ -39,6 +43,12 @@ export interface ClaudeCodeQueryOptions {
    * question `header` (values are string, or string[] for multi-select).
    */
   onAskUserQuestion?: (req: AskUserQuestionRequest) => Promise<Record<string, string | string[]>>;
+  /**
+   * When provided, Claude Code's permission prompts (`can_use_tool`) are
+   * forwarded here instead of being auto-denied. Resolves once the host answers
+   * allow/deny.
+   */
+  onPermissionRequest?: (req: ClaudePermissionRequest) => Promise<ClaudePermissionResponse>;
 }
 
 /** One question from the model's `AskUserQuestion` tool input. */
@@ -50,6 +60,21 @@ export interface AskUserQuestionRequest {
     options?: Array<{ label: string; description: string }>;
     multiSelect?: boolean;
   }>;
+}
+
+/** A permission prompt surfaced by Claude Code's `can_use_tool`. */
+export interface ClaudePermissionRequest {
+  toolUseId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  title?: string;
+  displayName?: string;
+  description?: string;
+}
+
+export interface ClaudePermissionResponse {
+  behavior: 'allow' | 'deny';
+  message?: string;
 }
 
 /**
@@ -168,10 +193,32 @@ function resolveClaudeCodeExecutable(): string | undefined {
   return undefined;
 }
 
+/**
+ * Map a Coderix permission mode onto the SDK's `PermissionMode`.
+ *
+ *   plan → plan                (planning mode, no tool execution)
+ *   ask  → default             (standard, prompt before dangerous operations)
+ *   auto → bypassPermissions   (skip all permission checks)
+ *   low  → dontAsk             (don't prompt, deny unless pre-approved)
+ */
+function mapPermissionMode(mode: PermissionMode): SdkPermissionMode {
+  switch (mode) {
+    case 'plan':
+      return 'plan';
+    case 'auto':
+      return 'bypassPermissions';
+    case 'low':
+      return 'dontAsk';
+    case 'ask':
+    default:
+      return 'default';
+  }
+}
+
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, abortController, onAskUserQuestion } = opts;
+  const { prompt, sessionId, cwd, model, permissionMode, abortController, onAskUserQuestion, onPermissionRequest } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -187,10 +234,11 @@ export async function* runClaudeCodeQuery(
     return;
   }
 
+  const sdkMode = mapPermissionMode(permissionMode ?? PermissionMode.ASK);
   const options: Options = {
     cwd,
-    permissionMode: 'bypassPermissions',
-    allowDangerouslySkipPermissions: true,
+    permissionMode: sdkMode,
+    allowDangerouslySkipPermissions: sdkMode === 'bypassPermissions',
     includePartialMessages: true,
     abortController,
     settingSources: ['user', 'project'],
@@ -207,6 +255,26 @@ export async function* runClaudeCodeQuery(
     console.log('[AskUserQuestion] registered PreToolUse hook (matcher: AskUserQuestion)');
   } else {
     console.log('[AskUserQuestion] onAskUserQuestion NOT provided — hook NOT registered');
+  }
+  if (onPermissionRequest) {
+    options.canUseTool = async (toolName, input, { signal, toolUseID, title, displayName, description }) => {
+      const res = await new Promise<ClaudePermissionResponse>((resolve) => {
+        let settled = false;
+        const done = (v: ClaudePermissionResponse): void => {
+          if (settled) return;
+          settled = true;
+          resolve(v);
+        };
+        onPermissionRequest({ toolUseId: toolUseID, toolName, input, title, displayName, description })
+          .then(done, () => done({ behavior: 'deny', message: 'Permission request failed' }));
+        signal.addEventListener('abort', () => done({ behavior: 'deny', message: 'Aborted' }), { once: true });
+      });
+      if (res.behavior === 'allow') {
+        return { behavior: 'allow' };
+      }
+      return { behavior: 'deny', message: res.message ?? 'Denied by user' };
+    };
+    console.log('[Permission] canUseTool registered');
   }
 
   const stream = claudeQuery({ prompt, options });

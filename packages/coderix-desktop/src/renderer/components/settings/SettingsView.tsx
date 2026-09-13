@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
 
 // ── Component ──────────────────────────────────────────────
 
-export default function SettingsView({ onClose }: { onClose?: () => void }): React.ReactElement {
+export default function SettingsView({ onClose, projectPath }: { onClose?: () => void; projectPath?: string }): React.ReactElement {
   const [activeTab, setActiveTab] = useState<SettingsTab>('model');
   const [draft, setDraft] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
@@ -167,6 +167,12 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
     return { provider: '', model: '' };
   })();
   const defaultProviderModels = draft ? (draft.providers.find((p) => p.name === defaultSel.provider)?.models ?? []) : [];
+
+  // Effective permission mode for the current project: a per-project override
+  // wins, falling back to the global default.
+  const currentPerm: PermissionMode = projectPath
+    ? (draft?.projectPermissions?.[projectPath] ?? draft?.defaultPermissionMode ?? 'ask')
+    : (draft?.defaultPermissionMode ?? 'ask');
 
   return (
     <div className="flex h-full flex-col bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]">
@@ -347,7 +353,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                     { mode: 'ask' as PermissionMode, label: '每次操作前询问', desc: '每个工具调用都需要您确认。' },
                     { mode: 'auto' as PermissionMode, label: '自动执行', desc: 'Agent 自动执行所有操作，不询问。推荐。' },
                   ]).map(({ mode, label, desc }) => (
-                    <button key={mode} onClick={() => { setPermissionMode(mode); updateDraft({ defaultPermissionMode: mode }); window.coderixAPI?.permission?.setMode?.(mode).catch(() => {}); }} style={S.permBtn(draft.defaultPermissionMode === mode)}>
+                    <button key={mode} onClick={() => { setPermissionMode(mode); window.coderixAPI?.permission?.setMode?.(mode).catch(() => {}); if (projectPath) { updateDraft({ projectPermissions: { ...draft.projectPermissions, [projectPath]: mode } }); } else { updateDraft({ defaultPermissionMode: mode }); } }} style={S.permBtn(currentPerm === mode)}>
                       <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{label}</div>
                       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
                     </button>
