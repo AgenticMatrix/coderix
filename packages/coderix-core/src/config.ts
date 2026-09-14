@@ -391,6 +391,76 @@ function resolveModel(settings: CoderSettings): {
   );
 }
 
+/** A model resolved by name (independent of `default_model`). Used by the
+ *  protocol conversion gateway to map a model name back to its endpoint. */
+export interface ResolvedModel {
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  proxy?: string;
+  maxTokens?: number;
+  provider: string;
+  protocol: 'anthropic' | 'openai';
+}
+
+/**
+ * Resolve a specific model by name — either the bare model name (e.g.
+ * `Atria-Dawn-Preview`) or the `"provider/model-name"` form — across
+ * `model_list`. Unlike `resolveModel`, this is independent of `default_model`;
+ * the protocol conversion gateway uses it to recover a model's endpoint/auth
+ * from the name carried in the gateway path.
+ */
+export function resolveModelByName(name: string): ResolvedModel | undefined {
+  if (!name) return undefined;
+  const settings = loadSettings();
+  if (!settings.model_list || settings.model_list.length === 0) return undefined;
+
+  const modelName = (m: string | ModelItem): string =>
+    typeof m === 'string' ? m : m.name;
+
+  const parts = name.split('/');
+  const providerName = parts[0]!;
+  const preferredName = parts.length > 1 ? parts[1] : undefined;
+
+  const pick = (entry: ModelEntry, target: string | undefined): ResolvedModel | undefined => {
+    const found = target
+      ? entry.model.find(m => modelName(m) === target)
+      : entry.model[0];
+    if (!found) return undefined;
+    const selectedModel = modelName(found);
+    return {
+      model: selectedModel,
+      baseUrl: entry.base_url ?? '',
+      apiKey: entry.auth_token_env ?? '',
+      proxy: entry.proxy,
+      maxTokens: entry.max_tokens,
+      provider: entry.provider ?? inferProvider(selectedModel),
+      protocol: entry.protocol ?? detectProtocol(entry.base_url ?? ''),
+    };
+  };
+
+  // 1. Exact provider match ("provider/model-name").
+  if (preferredName) {
+    const entry = settings.model_list.find(m => m.provider === providerName);
+    if (entry) {
+      const r = pick(entry, preferredName);
+      if (r) return r;
+    }
+  }
+
+  // 2. Bare model name — locate across all providers (mirrors resolveModel's
+  //    fallback for sessions that stored the bare name).
+  const bare = preferredName ?? providerName;
+  for (const e of settings.model_list) {
+    if (e.model.length > 0 && e.model.some(m => modelName(m) === bare)) {
+      const r = pick(e, bare);
+      if (r) return r;
+    }
+  }
+
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Public API — loadConfig
 // ---------------------------------------------------------------------------

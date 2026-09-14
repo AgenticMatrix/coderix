@@ -22,6 +22,7 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { extractOpenUrl } from './open-url.js';
+import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -41,6 +42,13 @@ export interface ClaudeCodeQueryOptions {
   baseUrl?: string;
   /** Resolved API key / auth token for the active model. */
   apiKey?: string;
+  /**
+   * Wire protocol of the active model's endpoint. The `claude` CLI only speaks
+   * the Anthropic Messages API, so an `openai` protocol model (e.g. a relay
+   * whose base_url ends in `/v1`) is repointed at the in-process protocol
+   * gateway, which converts anthropic → openai on the wire.
+   */
+  protocol?: 'anthropic' | 'openai';
   abortController: AbortController;
   /**
    * When provided, the model's `AskUserQuestion` tool calls are forwarded here
@@ -254,7 +262,7 @@ function mapPermissionMode(mode: PermissionMode): SdkPermissionMode {
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
+  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -288,7 +296,7 @@ export async function* runClaudeCodeQuery(
   if (baseUrl || apiKey) {
     options.env = {
       ...process.env,
-      ...(baseUrl ? { ANTHROPIC_BASE_URL: baseUrl } : {}),
+      ...(baseUrl ? { ANTHROPIC_BASE_URL: resolveClaudeCodeBaseUrl(model ?? '', baseUrl, protocol ?? 'anthropic') } : {}),
       ...(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {}),
     };
   }

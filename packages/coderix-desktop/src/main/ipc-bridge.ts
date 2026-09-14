@@ -278,6 +278,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             model: currentModel,
             baseUrl: activeConfig.baseUrl,
             apiKey: activeConfig.apiKey,
+            protocol: activeConfig.protocol,
             abortController: controller,
             // Forward AskUserQuestion to the renderer through the same
             // question-request channel the in-process engine uses, so the

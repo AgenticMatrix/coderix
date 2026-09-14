@@ -18,6 +18,7 @@ import { createBrowserViewManager } from './browser-view-manager.js';
 import type { BrowserViewManager } from './browser-view-manager.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
+import { startProtocolGateway } from './protocol-gateway/server.js';
 
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
@@ -26,7 +27,7 @@ import { SessionManager } from '../../../../packages/coderix-core/src/core/sessi
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
 import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
-import { loadConfig } from '../../../../packages/coderix-core/src/config.js';
+import { loadConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
 
 // Tool schema + executor imports (avoid index.ts → renderers → React/ink)
 import { schema as bashSchema } from '../../../../packages/coderix-core/src/tools/bash/schema.js';
@@ -86,6 +87,7 @@ let browserViewManager: BrowserViewManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
+let protocolGateway: ReturnType<typeof startProtocolGateway> | null = null;
 
 // ---------------------------------------------------------------------------
 // Bootstrap sequence — create window FIRST before any heavy init
@@ -100,6 +102,17 @@ async function bootstrap(): Promise<void> {
     // only when there's no persisted workspace yet (first launch).
     activeWorkDir = getLastWorkspace() ?? initialConfig.cwd ?? process.cwd();
     activeModel = initialConfig.model;
+
+    // Start the loopback protocol-conversion gateway so the claude-code engine
+    // can drive OpenAI-compatible models (anthropic → openai on the wire). The
+    // resolver maps a model name (the gateway path segment) back to its
+    // endpoint/auth from ~/.coderix/settings.json.
+    protocolGateway = startProtocolGateway((name) => {
+      const m = resolveModelByName(name);
+      return m
+        ? { baseUrl: m.baseUrl, apiKey: m.apiKey, protocol: m.protocol, maxTokens: m.maxTokens }
+        : undefined;
+    });
 
     // Step 1: Create window manager
     windowManager = createWindowManager();
@@ -332,6 +345,7 @@ app.on('before-quit', () => {
   fileWatcher?.destroy();
   terminalManager?.destroyAll();
   trayManager?.destroy();
+  protocolGateway?.close();
   console.log('[Coderix] Shutdown complete');
 });
 
