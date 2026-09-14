@@ -6,7 +6,7 @@ import { app, BrowserWindow } from 'electron';
 import { existsSync } from 'node:fs';
 import { createWindowManager } from './window-manager.js';
 import type { WindowManager } from './window-manager.js';
-import { createIpcBridge, getLastWorkspace } from './ipc-bridge.js';
+import { createIpcBridge, getLastWorkspace, IPC_CHANNELS } from './ipc-bridge.js';
 import type { IpcBridge } from './ipc-bridge.js';
 import { createFileWatcherManager } from './file-watcher.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -17,6 +17,7 @@ import type { TrayManager } from './tray-manager.js';
 import { createBrowserViewManager } from './browser-view-manager.js';
 import type { BrowserViewManager } from './browser-view-manager.js';
 import { safeSend } from './safe-send.js';
+import { extractOpenUrl } from './open-url.js';
 
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
@@ -249,6 +250,21 @@ async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
     toolRegistry.register(
       { name, description, input_schema },
       async (input, ctx) => {
+        // Intercept `open <url>` / `xdg-open` / `start` commands so the model's
+        // "open this in the browser" opens the embedded browser instead of the
+        // OS default (Chrome). Mirrors the claude-code engine's PreToolUse hook,
+        // but lives in the executor wrapper so it also covers the in-process
+        // Coderix engine (the default engine).
+        if (name === 'bash') {
+          const url = extractOpenUrl(
+            (input as { command?: string } | undefined)?.command ?? '',
+            ctx.cwd ?? activeWorkDir,
+          );
+          if (url) {
+            safeSend(windowManager?.getMainWindow() ?? null, IPC_CHANNELS.BROWSER_OPEN_URL, { url });
+            return { content: `Opened in the embedded browser: ${url}`, isError: false };
+          }
+        }
         const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir, allowMutation: true });
         return { content: String(result.content ?? ''), isError: result.isError ?? false };
       },

@@ -80,6 +80,7 @@ declare global {
         hide(tabId: string): Promise<void>;
         onEvent(callback: (event: { tabId: string; type: string; url?: string; title?: string; canGoBack?: boolean; canGoForward?: boolean; errorDescription?: string }) => void): () => void;
         onOpenNewTab(callback: (url: string) => void): () => void;
+        onOpenUrl(callback: (url: string) => void): () => void;
       };
       onStreamEvent(callback: (event: unknown) => void): () => void;
       onPermissionRequest(callback: (req: unknown) => void): () => void;

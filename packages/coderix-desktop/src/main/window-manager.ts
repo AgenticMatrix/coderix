@@ -263,6 +263,35 @@ export function createWindowManager(): WindowManager {
         safeSend(win, 'window:focus', { focused: false });
       });
 
+      // Route link clicks (target=_blank / window.open) to the embedded browser
+      // instead of spawning a separate BrowserWindow. The URL is opened in the
+      // right-hand browser panel via the `browser:open-url` push channel (kept in
+      // sync with ipc-bridge.ts / preload).
+      win.webContents.setWindowOpenHandler(({ url }) => {
+        if (url && /^https?:\/\//i.test(url)) {
+          safeSend(win, 'browser:open-url', { url });
+        }
+        return { action: 'deny' };
+      });
+
+      // Never let a user-initiated navigation (a plain `<a>` click) take the app
+      // window away from the Coderix UI — redirect external http(s) URLs to the
+      // embedded browser instead. Same-origin navigation (the dev server URL or
+      // `file://`) is allowed so Vite full-reloads keep working; our own
+      // `loadURL`/`loadFile` bootstrap does not emit this event at all.
+      win.webContents.on('will-navigate', (event, url) => {
+        const devUrl = process.env['ELECTRON_RENDERER_URL'];
+        const ownOrigin =
+          (devUrl !== undefined &&
+            (url === devUrl || url.startsWith(devUrl.endsWith('/') ? devUrl : `${devUrl}/`))) ||
+          url.startsWith('file://');
+        if (ownOrigin) return;
+        event.preventDefault();
+        if (/^https?:\/\//i.test(url)) {
+          safeSend(win, 'browser:open-url', { url });
+        }
+      });
+
       // Recover from a renderer crash (the usual cause of a blank white
       // window) by reloading instead of leaving the user staring at nothing.
       // Throttle reloads so a deterministically-crashing renderer can't spin

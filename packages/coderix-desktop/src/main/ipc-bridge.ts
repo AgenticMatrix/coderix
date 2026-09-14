@@ -114,6 +114,7 @@ export const IPC_CHANNELS = {
   FS_FILE_CHANGED: 'fs:fileChanged',
   WINDOW_FOCUS: 'window:focus',
   APP_UPDATE_AVAILABLE: 'app:updateAvailable',
+  BROWSER_OPEN_URL: 'browser:open-url',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -330,6 +331,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   }
                 }, { once: true });
               });
+            },
+            // Redirect browser-open commands (`open <url>`, `xdg-open`, …) to the
+            // embedded browser instead of the OS default browser.
+            onOpenUrl: (url) => {
+              safeSend(mainWindow, IPC_CHANNELS.BROWSER_OPEN_URL, { url });
             },
           })
         : queryEngine!.submitMessage(userInput);

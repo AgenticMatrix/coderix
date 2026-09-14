@@ -13,7 +13,7 @@
  */
 
 import { query as claudeQuery } from '@anthropic-ai/claude-agent-sdk';
-import type { Options, HookCallback, PermissionMode as SdkPermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent } from '@coderix/core';
 import { PermissionMode } from '@coderix/core';
 import { createRequire } from 'node:module';
@@ -21,6 +21,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { extractOpenUrl } from './open-url.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -49,6 +50,13 @@ export interface ClaudeCodeQueryOptions {
    * allow/deny.
    */
   onPermissionRequest?: (req: ClaudePermissionRequest) => Promise<ClaudePermissionResponse>;
+  /**
+   * When provided, a URL the model tried to open in the system browser (via a
+   * `Bash` `open` / `xdg-open` / `start` command) is forwarded here instead, so
+   * the host can open it in Coderix's embedded browser rather than the OS
+   * default (e.g. Google Chrome).
+   */
+  onOpenUrl?: (url: string) => void;
 }
 
 /** One question from the model's `AskUserQuestion` tool input. */
@@ -125,6 +133,30 @@ function buildAskUserQuestionHook(
         hookEventName: 'PreToolUse',
         permissionDecision: 'allow',
         updatedInput: { ...toolInput, answers },
+      },
+    };
+  };
+}
+
+/**
+ * Build a `PreToolUse` hook for the `Bash` tool that redirects browser-open
+ * commands to the embedded browser. Non-open commands are left untouched (the
+ * hook returns no opinion, so the normal `canUseTool` permission flow applies).
+ */
+function buildOpenUrlHook(onOpenUrl: (url: string) => void, cwd: string): HookCallback {
+  return async (input) => {
+    const i = input as unknown as { tool_input?: unknown };
+    const toolInput = (i.tool_input as Record<string, unknown>) || {};
+    const command = typeof toolInput.command === 'string' ? toolInput.command : '';
+    const url = extractOpenUrl(command, cwd);
+    if (!url) return {};
+
+    onOpenUrl(url);
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: `Opened in the embedded browser: ${url}`,
       },
     };
   };
@@ -218,7 +250,7 @@ function mapPermissionMode(mode: PermissionMode): SdkPermissionMode {
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, permissionMode, abortController, onAskUserQuestion, onPermissionRequest } = opts;
+  const { prompt, sessionId, cwd, model, permissionMode, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -246,15 +278,25 @@ export async function* runClaudeCodeQuery(
   };
   if (model) options.model = model;
   if (resume) options.resume = resume;
+  const preToolUseHooks: HookCallbackMatcher[] = [];
   if (onAskUserQuestion) {
-    options.hooks = {
-      PreToolUse: [
-        { matcher: 'AskUserQuestion', hooks: [buildAskUserQuestionHook(onAskUserQuestion, abortController)] },
-      ],
-    };
+    preToolUseHooks.push({
+      matcher: 'AskUserQuestion',
+      hooks: [buildAskUserQuestionHook(onAskUserQuestion, abortController)],
+    });
     console.log('[AskUserQuestion] registered PreToolUse hook (matcher: AskUserQuestion)');
   } else {
     console.log('[AskUserQuestion] onAskUserQuestion NOT provided — hook NOT registered');
+  }
+  if (onOpenUrl) {
+    preToolUseHooks.push({
+      matcher: 'Bash',
+      hooks: [buildOpenUrlHook(onOpenUrl, cwd)],
+    });
+    console.log('[OpenUrl] registered PreToolUse hook (matcher: Bash)');
+  }
+  if (preToolUseHooks.length > 0) {
+    options.hooks = { PreToolUse: preToolUseHooks };
   }
   if (onPermissionRequest) {
     options.canUseTool = async (toolName, input, { signal, toolUseID, title, displayName, description }) => {
@@ -270,7 +312,10 @@ export async function* runClaudeCodeQuery(
         signal.addEventListener('abort', () => done({ behavior: 'deny', message: 'Aborted' }), { once: true });
       });
       if (res.behavior === 'allow') {
-        return { behavior: 'allow' };
+        // The Claude Code CLI (2.1.x) validates this result with a schema that
+        // requires `updatedInput` to be a record even for a plain allow. Echo the
+        // original input back unchanged so the shape passes validation.
+        return { behavior: 'allow', updatedInput: input };
       }
       return { behavior: 'deny', message: res.message ?? 'Denied by user' };
     };

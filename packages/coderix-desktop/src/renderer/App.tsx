@@ -33,7 +33,8 @@ import { BrowserPanel } from './components/browser';
 import { GlobalModal } from './components/modals';
 import type { SidebarTab } from './components/sidebar/IconSidebar';
 
-import { useUIStore, useChatStore, useSessionStore, useStreamStore } from './store';
+import { useUIStore, useChatStore, useSessionStore, useStreamStore, useBrowserStore } from './store';
+import { HOME_URL } from './store/browserStore.js';
 import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
@@ -307,6 +308,32 @@ export function App(): React.ReactElement {
     window.addEventListener('coderix:toggle-sidebar', handleToggleSidebar);
     return () => window.removeEventListener('coderix:toggle-sidebar', handleToggleSidebar);
   }, [toggleSidebar]);
+
+  // ── Open agent-requested URLs in the embedded browser ────────────────────
+  // When Claude Code runs `open <url>` / `xdg-open <url>` / `start <url>`, the
+  // main process redirects it here (via `browser:open-url`) instead of the OS
+  // default browser. Open the browser panel and show the URL in a tab.
+  useEffect(() => {
+    const a = window.coderixAPI?.browser;
+    if (!a?.onOpenUrl) return;
+    return a.onOpenUrl((url) => {
+      if (!url) return;
+      const browserStore = useBrowserStore.getState();
+      const active = browserStore.tabs.find((t) => t.id === browserStore.activeTabId);
+      // Reuse the active tab if it is still on the default home page (fresh);
+      // otherwise open a new tab so we don't clobber the user's browsing.
+      if (active && (active.url === '' || active.url === HOME_URL)) {
+        browserStore.updateTab(active.id, { url, title: '', loadError: undefined });
+        a.navigate(active.id, url).catch(() => {});
+      } else {
+        browserStore.openTab(url);
+      }
+      // Reveal the panel if it isn't already visible.
+      if (!useUIStore.getState().browserPanelOpen) {
+        useUIStore.getState().toggleBrowserPanel();
+      }
+    });
+  }, []);
 
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(

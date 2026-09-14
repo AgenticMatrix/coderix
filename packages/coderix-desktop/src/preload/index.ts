@@ -102,6 +102,7 @@ const CH = {
   BROWSER_HIDE: 'browser:hide',
   BROWSER_EVENT: 'browser:event',
   BROWSER_OPEN_NEW_TAB: 'browser:open-new-tab',
+  BROWSER_OPEN_URL: 'browser:open-url',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -654,6 +655,14 @@ const coderixAPI = {
       };
       ipcRenderer.on(CH.BROWSER_OPEN_NEW_TAB, handler);
       return () => ipcRenderer.removeListener(CH.BROWSER_OPEN_NEW_TAB, handler);
+    },
+    /** Fired when the agent asked to open a URL in the embedded browser. */
+    onOpenUrl(callback: (url: string) => void): () => void {
+      const handler = (_event: Electron.IpcRendererEvent, data: { url: string }) => {
+        callback(data?.url ?? '');
+      };
+      ipcRenderer.on(CH.BROWSER_OPEN_URL, handler);
+      return () => ipcRenderer.removeListener(CH.BROWSER_OPEN_URL, handler);
     },
   },
 
