@@ -384,7 +384,20 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
                     { mode: 'ask' as PermissionMode, label: t('permissions.ask'), desc: t('permissions.askDesc') },
                     { mode: 'auto' as PermissionMode, label: t('permissions.auto'), desc: t('permissions.autoDesc') },
                   ]).map(({ mode, label, desc }) => (
-                    <button key={mode} onClick={() => { setPermissionMode(mode); window.coderixAPI?.permission?.setMode?.(mode).catch(() => {}); if (projectPath) { updateDraft({ projectPermissions: { ...draft.projectPermissions, [projectPath]: mode } }); } else { updateDraft({ defaultPermissionMode: mode }); } }} style={S.permBtn(currentPerm === mode)}>
+                    <button key={mode} onClick={() => {
+                      setPermissionMode(mode);
+                      window.coderixAPI?.permission?.setMode?.(mode).catch(() => {});
+                      // Keep the local draft in sync with what the main process
+                      // just persisted to ~/.coderix/settings.json: the global
+                      // default always updates, plus the current project's
+                      // override when a project is open.
+                      updateDraft({
+                        defaultPermissionMode: mode,
+                        projectPermissions: projectPath
+                          ? { ...draft.projectPermissions, [projectPath]: mode }
+                          : draft.projectPermissions,
+                      });
+                    }} style={S.permBtn(currentPerm === mode)}>
                       <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{label}</div>
                       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
                     </button>

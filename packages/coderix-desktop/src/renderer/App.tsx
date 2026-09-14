@@ -106,6 +106,7 @@ export function App(): React.ReactElement {
   const toggleBrowserPanel = useUIStore((s) => s.toggleBrowserPanel);
   const setTheme = useUIStore((s) => s.setTheme);
   const setTerminalOpen = useUIStore((s) => s.setTerminalOpen);
+  const setPermissionMode = useUIStore((s) => s.setPermissionMode);
   const gitBranch = useUIStore((s) => s.gitBranch);
   const gitAhead = useUIStore((s) => s.gitAhead);
   const gitBehind = useUIStore((s) => s.gitBehind);
@@ -155,6 +156,18 @@ export function App(): React.ReactElement {
   useEffect(() => {
     loadSettings().catch((err) => console.error('[App] Failed to load settings:', err));
   }, [loadSettings]);
+
+  // Hydrate the transient UI permission mode from the persisted settings
+  // (~/.coderix/settings.json). Without this, useUIStore.permissionMode keeps
+  // its hardcoded 'ask' default across restarts, so the auto-approve gate below
+  // (onPermissionRequest) would always prompt even when the user saved 'auto'.
+  useEffect(() => {
+    if (!settings) return;
+    const effective = projectPath
+      ? (settings.projectPermissions?.[projectPath] ?? settings.defaultPermissionMode)
+      : settings.defaultPermissionMode;
+    setPermissionMode(effective);
+  }, [settings, projectPath, setPermissionMode]);
 
   useEffect(() => {
     getProjectDirectory()

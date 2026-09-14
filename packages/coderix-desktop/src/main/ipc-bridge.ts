@@ -814,9 +814,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       if (queryEngine) {
         queryEngine.setPermissionMode(mode as PermissionMode);
       }
-      // Persist as a per-project override so the Claude Code SDK engine (which
-      // spawns a fresh CLI each turn) picks it up on the next message.
+      // ~/.coderix/settings.json is the single source of truth for permission
+      // settings, shared by the desktop, the protocol gateway, and the CLI.
+      // Persist BOTH the global default (what the CLI and the gateway read via
+      // `default_permission_mode`) and the current project's override (what the
+      // desktop's resolvePermissionMode reads). Writing only the project override
+      // left the CLI/gateway on their stale 'ask' default after every restart.
       const settings = loadSettings();
+      settings.default_permission_mode = mode;
       settings.project_permissions = { ...(settings.project_permissions ?? {}), [currentWorkDir]: mode };
       saveSettings(settings);
     }
