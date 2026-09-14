@@ -689,7 +689,7 @@ export function App(): React.ReactElement {
         detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
         browserPanel={<BrowserPanel />}
-        browserPanelVisible={browserPanelOpen}
+        browserPanelVisible={browserPanelOpen && !settingsOpen}
         onToggleBrowserPanel={toggleBrowserPanel}
         statusBarProps={{
           engine: settings?.engine,
