@@ -29,6 +29,10 @@ export interface AppLayoutProps {
 
 /** Fixed width of the embedded browser sidebar. */
 const BROWSER_WIDTH = 720;
+/** Minimum width the browser column collapses to before the chat area yields. */
+const BROWSER_MIN_WIDTH = 200;
+/** Minimum width of the chat area (browser shrinks first, then chat to this floor). */
+const CHAT_MIN_WIDTH = 200;
 
 /**
  * WeChat × Apple animation presets:
@@ -85,7 +89,7 @@ export function AppLayout({
         {/* Main row: header+content (sidebar | chat | detail) on the left,
             full-height browser column on the right. */}
         <div className="flex flex-1 min-h-0">
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col">
       {/* Header bar — one header per column, mirroring the content row below:
           sidebar (app title) | chat (actions) | detail */}
       <header
@@ -175,8 +179,12 @@ export function AppLayout({
           )}
         </AnimatePresence>
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--color-bg-primary)]">
+        {/* Main content — min-width floor so the browser column shrinks before
+            the chat area is squeezed below its readable minimum. */}
+        <div
+          className="flex-1 flex flex-col overflow-hidden bg-[var(--color-bg-primary)]"
+          style={{ minWidth: CHAT_MIN_WIDTH }}
+        >
           {children}
         </div>
 
@@ -204,7 +212,7 @@ export function AppLayout({
             <BrowserResizableColumn
               width={browserWidth}
               onResize={setBrowserWidth}
-              minWidth={360}
+              minWidth={BROWSER_MIN_WIDTH}
               maxWidth={1600}
             >
               {browserPanel}
@@ -297,7 +305,10 @@ function BrowserResizableColumn({
 }): React.ReactElement {
   const onMouseDown = useColumnResize({ width, onResize, minWidth, maxWidth });
   return (
-    <div className="h-full flex flex-shrink-0">
+    // No `flex-shrink-0`: when the window shrinks this column yields width to
+    // the chat area (whose 200px floor is enforced in the main-content div),
+    // collapsing down to `minWidth` before the chat gets squeezed.
+    <div className="h-full flex">
       {/* Drag handle */}
       <div
         onMouseDown={onMouseDown}
@@ -305,7 +316,7 @@ function BrowserResizableColumn({
         className="hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors"
       />
       <div
-        style={{ width, minWidth, maxWidth, flexShrink: 0 }}
+        style={{ width, minWidth, maxWidth, flexShrink: 1 }}
         className="h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]"
       >
         {children}
