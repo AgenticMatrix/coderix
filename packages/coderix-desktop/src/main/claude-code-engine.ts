@@ -30,6 +30,17 @@ import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
  */
 const claudeSessionByCoderixSession = new Map<string, string>();
 
+/**
+ * Idle timeout for a Claude Code turn. The spawned `claude` CLI streams events
+ * continuously while it runs (thinking deltas, tool progress, text), so a
+ * genuinely silent stream means the subprocess is wedged (a hung model call,
+ * a dead gateway, a stalled lock). Without this the `for await` loop above the
+ * engine would block forever and the UI would spin indefinitely. Mirrors
+ * agentstation-app's `TURN_IDLE_TIMEOUT_MS`; the timer resets on every event so
+ * slow-but-progressing turns (long tool runs, extended thinking) are unaffected.
+ */
+const TURN_IDLE_TIMEOUT_MS = 180_000;
+
 export interface ClaudeCodeQueryOptions {
   prompt: string;
   /** Coderix session id — used as the resume key across turns. */
@@ -308,6 +319,34 @@ function createSpawnFn(
       detached: true,
     });
 
+    // Abort only closes the child's stdin; a CLI wedged on a tool call (or a
+    // stuck model/gateway request) never reads stdin, so stdin-close alone
+    // would leave the subprocess — and any tool subprocesses it spawned —
+    // leaking and holding the project session lock, which then blocks the next
+    // turn in the same cwd. Force-kill the whole process group (spawned with
+    // `detached: true`, so the child is its own group leader) so nothing leaks.
+    // Mirrors agentstation-app's `SdkRuntime.kill()`.
+    if (options.signal) {
+      const killGroup = (): void => {
+        if (child.pid && !child.killed) {
+          try {
+            process.kill(-child.pid, 'SIGTERM');
+          } catch {
+            try {
+              child.kill('SIGTERM');
+            } catch {
+              /* already gone */
+            }
+          }
+        }
+      };
+      if (options.signal.aborted) {
+        killGroup();
+      } else {
+        options.signal.addEventListener('abort', killGroup, { once: true });
+      }
+    }
+
     if (child.stderr) {
       child.stderr.on('data', (chunk: Buffer) => {
         const text = chunk.toString('utf-8').trim();
@@ -347,7 +386,7 @@ export async function* runClaudeCodeQuery(
   // endpoint — mirror agentstation-app by dropping the `user` setting source
   // and injecting the bound model through a custom spawn hook.
   const resolvedBaseUrl = baseUrl
-    ? resolveClaudeCodeBaseUrl(model ?? '', baseUrl, protocol ?? 'anthropic')
+    ? resolveClaudeCodeBaseUrl(baseUrl, protocol ?? 'anthropic')
     : undefined;
   const options: Options = {
     cwd,
@@ -409,8 +448,21 @@ export async function* runClaudeCodeQuery(
 
   const stream = claudeQuery({ prompt, options });
 
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetIdleTimer = (): void => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      console.error(
+        `[claude-code] turn idle for ${TURN_IDLE_TIMEOUT_MS}ms — aborting (possible hang)`,
+      );
+      abortController.abort();
+    }, TURN_IDLE_TIMEOUT_MS);
+  };
+  resetIdleTimer();
+
   try {
     for await (const msg of stream) {
+      resetIdleTimer();
       // Remember the Claude Code session id for the next turn.
       if (msg.type === 'system' && msg.subtype === 'init') {
         claudeSessionByCoderixSession.set(sessionId, msg.session_id);
@@ -461,8 +513,11 @@ export async function* runClaudeCodeQuery(
       }
     }
   } catch (err) {
-    // An interrupt surfaces as the abort signal firing — not an error.
+    // An interrupt (user stop, or the idle timeout above) surfaces as the abort
+    // signal firing — not an error.
     if (abortController.signal.aborted) return;
     throw err;
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
   }
 }

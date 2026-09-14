@@ -27,7 +27,7 @@ import { SessionManager } from '../../../../packages/coderix-core/src/core/sessi
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
 import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
-import { loadConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
+import { loadConfig } from '../../../../packages/coderix-core/src/config.js';
 
 // Tool schema + executor imports (avoid index.ts → renderers → React/ink)
 import { schema as bashSchema } from '../../../../packages/coderix-core/src/tools/bash/schema.js';
@@ -105,14 +105,11 @@ async function bootstrap(): Promise<void> {
 
     // Start the loopback protocol-conversion gateway so the claude-code engine
     // can drive OpenAI-compatible models (anthropic → openai on the wire). The
-    // resolver maps a model name (the gateway path segment) back to its
-    // endpoint/auth from ~/.coderix/settings.json.
-    protocolGateway = startProtocolGateway((name) => {
-      const m = resolveModelByName(name);
-      return m
-        ? { baseUrl: m.baseUrl, apiKey: m.apiKey, protocol: m.protocol, maxTokens: m.maxTokens }
-        : undefined;
-    });
+    // resolved base_url travels in the gateway path, so the gateway forwards to
+    // the exact endpoint the engine already chose rather than re-resolving a
+    // model name against ~/.coderix/settings.json (names collide across
+    // providers).
+    protocolGateway = startProtocolGateway();
 
     // Step 1: Create window manager
     windowManager = createWindowManager();

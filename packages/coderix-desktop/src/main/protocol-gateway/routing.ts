@@ -15,12 +15,15 @@ import { gatewayUrl } from './config.js';
 import type { Protocol } from './types.js';
 
 export function resolveClaudeCodeBaseUrl(
-  modelName: string,
   baseUrl: string,
   protocol: Protocol,
 ): string {
   if (protocol === 'openai') {
-    return `${gatewayUrl()}/gw/${encodeURIComponent(modelName)}`;
+    // Carry the resolved base_url directly in the gateway path so the gateway
+    // forwards to the exact endpoint the engine already resolved. Never encode
+    // the model name: model ids collide across providers, and re-resolving them
+    // by name is what routed local_deepseek to the wrong base_url.
+    return `${gatewayUrl()}/gw/${encodeURIComponent(baseUrl)}`;
   }
   return baseUrl;
 }

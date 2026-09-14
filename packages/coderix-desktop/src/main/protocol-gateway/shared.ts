@@ -21,7 +21,13 @@ export function stripAnthropicAlias(base: string): string {
 export function buildUpstreamUrl(baseUrl: string, protocol: Protocol): string {
   const base = stripTrailingSlash(baseUrl);
   if (protocol === 'anthropic') return `${base}/v1/messages`;
-  return `${stripTrailingSlash(stripAnthropicAlias(base))}/chat/completions`;
+  const stripped = stripTrailingSlash(stripAnthropicAlias(base));
+  // OpenAI Chat Completions lives under `/v1/chat/completions`. A base_url may
+  // be a bare `host:port` (e.g. a "New API" relay like `http://…:3888`) that
+  // omits the `/v1` prefix; append it when absent so the request lands on the
+  // API rather than a dashboard page.
+  if (/\/v\d+$/.test(stripped)) return `${stripped}/chat/completions`;
+  return `${stripped}/v1/chat/completions`;
 }
 
 /** Auth headers for a protocol (Anthropic `x-api-key` vs OpenAI `Bearer`). */

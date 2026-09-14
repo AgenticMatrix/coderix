@@ -169,23 +169,22 @@ export function inferProvider(model: string): string {
  * Infer the wire protocol of a provider endpoint from its base URL.
  * Mirrors agentstation-app's `detectProtocol`: `/anthropic` paths are always
  * Anthropic Messages; OpenAI-compatible endpoints are recognized by a `/v\d+`
- * segment or a well-known OpenAI host. Defaults to Anthropic (the engine's
- * native protocol).
+ * segment or a well-known OpenAI host (openai.com, x.ai, localhost, or the
+ * vLLM `:8000` port). Everything else — including a bare `host:port` relay like
+ * a "New API" gateway (`http://…:3888`) — defaults to Anthropic, the engine's
+ * native protocol. (The old `:\d{4,5}` port rule wrongly classified such
+ * multi-protocol relays as OpenAI-only, forcing an unnecessary conversion.)
  */
 export function detectProtocol(baseUrl: string): 'anthropic' | 'openai' {
   const u = baseUrl.trim().toLowerCase().replace(/\/+$/, '');
   if (u.includes('/anthropic')) return 'anthropic';
-  if (/\/v\d+/.test(u)) return 'openai';
-  if (
+  const openai =
+    /\/v\d+/.test(u) ||
     u.includes('openai.com') ||
     u.includes('x.ai') ||
-    u.includes('openrouter.ai') ||
     u.includes('localhost') ||
-    /:\d{4,5}\/?$/.test(u)
-  ) {
-    return 'openai';
-  }
-  return 'anthropic';
+    u.includes(':8000');
+  return openai ? 'openai' : 'anthropic';
 }
 
 /**
