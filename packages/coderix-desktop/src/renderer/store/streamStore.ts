@@ -94,6 +94,14 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
     // ── Stream Block ──────────────────────────────────────
     const unsubBlock = onStreamBlock((block: StreamBlock) => {
+      // Drop stream events that belong to a different session — late events
+      // from a previously active query must not leak into the session that is
+      // currently being viewed (cross-session stream contamination).
+      const currentSessionId = useChatStore.getState().sessionId;
+      if (block.sessionId && currentSessionId && block.sessionId !== currentSessionId) {
+        return;
+      }
+
       const state = get();
       let msg = state.currentMessage;
 
@@ -224,7 +232,13 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubBlock);
 
     // ── Stream Done ────────────────────────────────────────
-    const unsubDone = onStreamDone((stopReason?: string) => {
+    const unsubDone = onStreamDone((stopReason?: string, sessionId?: string) => {
+      // Ignore completion events for a different session (see onStreamBlock).
+      const currentSessionId = useChatStore.getState().sessionId;
+      if (sessionId && currentSessionId && sessionId !== currentSessionId) {
+        return;
+      }
+
       // A stop reason of 'tool_use' means this turn ended to run tools — the
       // engine will emit another assistant turn right after the tool results.
       // Keep `isStreaming` true in that case so the guard above doesn't drop
@@ -254,7 +268,13 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubDone);
 
     // ── Stream Error ───────────────────────────────────────
-    const unsubError = onStreamError((error: string, code?: string) => {
+    const unsubError = onStreamError((error: string, code?: string, sessionId?: string) => {
+      // Ignore error events for a different session (see onStreamBlock).
+      const currentSessionId = useChatStore.getState().sessionId;
+      if (sessionId && currentSessionId && sessionId !== currentSessionId) {
+        return;
+      }
+
       // An interrupt (user pressed ⌘. or switched sessions) is not a real
       // error — it just means the in-flight query was aborted. Clear any
       // partial message but don't surface an error banner, so the abort from

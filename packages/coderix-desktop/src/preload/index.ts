@@ -113,17 +113,20 @@ interface StreamBlockStart {
   type: 'blockStart';
   index: number;
   content_block: unknown;
+  sessionId?: string;
 }
 
 interface StreamBlockDelta {
   type: 'blockDelta';
   index: number;
   delta: unknown;
+  sessionId?: string;
 }
 
 interface StreamBlockStop {
   type: 'blockStop';
   index: number;
+  sessionId?: string;
 }
 
 interface StreamToolState {
@@ -138,6 +141,7 @@ interface StreamToolResult {
   toolUseId: string;
   result: unknown;
   metadata?: Record<string, unknown>;
+  sessionId?: string;
 }
 
 interface StreamDone {
@@ -145,12 +149,14 @@ interface StreamDone {
   stopReason: string;
   usage?: unknown;
   model?: string;
+  sessionId?: string;
 }
 
 interface StreamError {
   type: 'error';
   message: string;
   code: string;
+  sessionId?: string;
 }
 
 type StreamEventData =
@@ -202,6 +208,7 @@ function createEventListener(
             type: 'blockStart',
             index: (data?.index as number) ?? 0,
             content_block: data?.content_block,
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
         case CH.STREAM_BLOCK_DELTA:
@@ -209,12 +216,14 @@ function createEventListener(
             type: 'blockDelta',
             index: (data?.index as number) ?? 0,
             delta: data?.delta,
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
         case CH.STREAM_BLOCK_STOP:
           callback({
             type: 'blockStop',
             index: (data?.index as number) ?? 0,
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
         case CH.STREAM_TOOL_STATE:
@@ -230,6 +239,7 @@ function createEventListener(
             type: 'toolResult',
             toolUseId: (data?.toolUseId as string) ?? '',
             result: data?.result,
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
         case CH.STREAM_DONE:
@@ -238,6 +248,7 @@ function createEventListener(
             stopReason: (data?.stopReason as string) ?? 'end_turn',
             usage: data?.usage,
             model: (data?.model as string | undefined),
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
         case CH.STREAM_ERROR:
@@ -245,6 +256,7 @@ function createEventListener(
             type: 'error',
             message: (data?.message as string) ?? 'Unknown error',
             code: (data?.code as string) ?? 'UNKNOWN',
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
       }

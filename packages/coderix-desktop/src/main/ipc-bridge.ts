@@ -140,6 +140,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   let currentModel = config.model || 'deepseek-v4-pro';
   let activeEngine: AgentEngine = 'coderix';
   let activeAbortController: AbortController | null = null;
+  // Session id of the currently streaming query, used to tag every stream push
+  // event so the renderer can drop late events from a previous session after a
+  // mid-stream session switch (cross-session stream contamination).
+  let activeStreamSessionId: string | null = null;
   let pendingPermission: DeferredPermission | null = null;
   let pendingToolName: string | null = null;
   let pendingPermissionIsClaudeCode = false;
@@ -231,6 +235,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
     activeAbortController = new AbortController();
     const controller = activeAbortController;
+    // Tag every stream push event with the session id so the renderer can drop
+    // late events from a previous session after a mid-stream switch.
+    activeStreamSessionId = sessionManager.getActive()?.id ?? sessionId ?? '';
 
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
@@ -451,6 +458,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     stopReason,
                     usage: msg.message.usage,
                     model: msg.message.model,
+                    sessionId: activeStreamSessionId,
                   });
                 }
               } else if (msg.type === 'user' && msg.message) {
@@ -483,6 +491,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                         toolName: '',
                         result: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
                         metadata: tr.metadata,
+                        sessionId: activeStreamSessionId,
                       });
                     }
                   }
@@ -519,6 +528,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
                 message: sanitizeErrorMessage(err?.message ?? 'Unknown error'),
                 code: err?.code ?? 'UNKNOWN',
+                sessionId: activeStreamSessionId,
               });
               break;
             }
@@ -571,13 +581,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       } catch (err) {
         const rawMessage = err instanceof Error ? err.message : String(err);
         const message = sanitizeErrorMessage(rawMessage);
-        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME' });
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: activeStreamSessionId });
       } finally {
         if (controller.signal.aborted) {
           const mw = getMainWindow(windowManager);
           safeSend(mw, IPC_CHANNELS.STREAM_ERROR, {
             message: 'Query interrupted by user',
             code: 'INTERRUPTED',
+            sessionId: activeStreamSessionId,
           });
         }
         // Release the controller once this query's stream has wound down so a
@@ -585,6 +596,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         // already replaced `activeAbortController`.
         if (activeAbortController === controller) {
           activeAbortController = null;
+          activeStreamSessionId = null;
         }
       }
     })();
@@ -1462,17 +1474,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_START, {
           index: event.index,
           content_block: event.content_block,
+          sessionId: activeStreamSessionId,
         });
         break;
       case 'content_block_delta':
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_DELTA, {
           index: event.index,
           delta: event.delta,
+          sessionId: activeStreamSessionId,
         });
         break;
       case 'content_block_stop':
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_STOP, {
           index: event.index,
+          sessionId: activeStreamSessionId,
         });
         break;
       case 'message_start':
@@ -1500,6 +1515,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
           stopReason:
             message?.stopReason ?? message?.stop_reason ?? lastStopReason ?? 'end_turn',
+          sessionId: activeStreamSessionId,
         });
         lastStopReason = null;
         break;

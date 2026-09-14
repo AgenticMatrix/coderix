@@ -123,6 +123,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         const block: StreamBlock = {
           type: rendererType,
           state: 'pending',
+          sessionId: event.sessionId,
         };
 
         if (cb.type === 'tool_use') {
@@ -223,6 +224,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
               : JSON.stringify(event.result),
           state: 'done',
           toolMetadata: (event as any).metadata as Record<string, unknown> | undefined,
+          sessionId: event.sessionId,
         };
         callback(resultBlock);
         break;
@@ -268,14 +270,14 @@ function mapBlockType(
  * so callers can distinguish a terminal turn from an intermediate tool turn.
  * Returns an unsubscribe function.
  */
-export function onStreamDone(callback: (stopReason?: string) => void): () => void {
+export function onStreamDone(callback: (stopReason?: string, sessionId?: string) => void): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'done') {
-      callback(event.stopReason as string | undefined);
+      callback(event.stopReason as string | undefined, event.sessionId as string | undefined);
     }
   });
 }
@@ -285,14 +287,14 @@ export function onStreamDone(callback: (stopReason?: string) => void): () => voi
  * Filters `onStreamEvent` for `{ type: 'error' }` events.
  * Returns an unsubscribe function.
  */
-export function onStreamError(callback: (error: string, code?: string) => void): () => void {
+export function onStreamError(callback: (error: string, code?: string, sessionId?: string) => void): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'error') {
-      callback(event.message, event.code);
+      callback(event.message, event.code, event.sessionId as string | undefined);
     }
   });
 }

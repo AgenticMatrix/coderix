@@ -26,6 +26,8 @@ export interface StreamBlock {
   toolResult?: string;
   /** Tool result metadata (e.g. addedLines, removedLines for write tool) */
   toolMetadata?: Record<string, unknown>;
+  /** Session this block belongs to — used to drop late cross-session stream events */
+  sessionId?: string;
 }
 
 // ── Token / Cost Types ────────────────────────────────────
