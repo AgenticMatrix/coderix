@@ -360,10 +360,21 @@ function resolveModel(settings: CoderSettings): {
   // 1. default_model from settings ("provider/model-name" format)
   const defaultName = settings.default_model;
   if (defaultName && settings.model_list) {
-    const { providerName, modelName } = parseDefault(defaultName);
+    const { providerName, modelName: preferredName } = parseDefault(defaultName);
+    // 1a. Exact provider match ("provider/model-name")
     const entry = settings.model_list.find(m => m.provider === providerName);
     if (entry && entry.model.length > 0) {
-      return resolveFromEntry(entry, modelName);
+      return resolveFromEntry(entry, preferredName);
+    }
+    // 1b. Bare model name (no "provider/") or an unknown provider — locate the
+    //     model by name across all providers. Without this, a session that
+    //     stored the bare name (e.g. "Atria-Dawn-Preview") silently falls back
+    //     to the first model_list entry instead of its real provider.
+    const bareName = preferredName ?? providerName;
+    for (const e of settings.model_list) {
+      if (e.model.length > 0 && e.model.some(m => modelName(m) === bareName)) {
+        return resolveFromEntry(e, bareName);
+      }
     }
   }
 

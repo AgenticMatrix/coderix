@@ -37,6 +37,10 @@ export interface ClaudeCodeQueryOptions {
   /** Coderix permission mode for this turn (plan/ask/auto/low). Defaults to 'ask'. */
   permissionMode?: PermissionMode;
   model?: string;
+  /** Resolved provider endpoint (base_url) for the active model, from model_list. */
+  baseUrl?: string;
+  /** Resolved API key / auth token for the active model. */
+  apiKey?: string;
   abortController: AbortController;
   /**
    * When provided, the model's `AskUserQuestion` tool calls are forwarded here
@@ -250,7 +254,7 @@ function mapPermissionMode(mode: PermissionMode): SdkPermissionMode {
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, permissionMode, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
+  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -277,6 +281,17 @@ export async function* runClaudeCodeQuery(
     pathToClaudeCodeExecutable,
   };
   if (model) options.model = model;
+  // Per-model endpoint/auth: point the spawned `claude` CLI at the active
+  // model's baseUrl/apiKey from model_list instead of the global
+  // ~/.claude/settings.json the claude-code engine otherwise falls back to.
+  // The SDK replaces (not merges) process.env when `env` is set, so spread it.
+  if (baseUrl || apiKey) {
+    options.env = {
+      ...process.env,
+      ...(baseUrl ? { ANTHROPIC_BASE_URL: baseUrl } : {}),
+      ...(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {}),
+    };
+  }
   if (resume) options.resume = resume;
   const preToolUseHooks: HookCallbackMatcher[] = [];
   if (onAskUserQuestion) {

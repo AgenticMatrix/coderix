@@ -259,6 +259,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     // Start streaming in background (don't await — send via push channels)
+    const activeConfig = loadConfig();
     const engineStream: AsyncGenerator<QueryEngineEvent> =
       activeEngine === 'claude-code'
         ? runClaudeCodeQuery({
@@ -267,6 +268,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             cwd: currentWorkDir,
             permissionMode: resolvePermissionMode(loadSettings(), currentWorkDir) as PermissionMode,
             model: currentModel,
+            baseUrl: activeConfig.baseUrl,
+            apiKey: activeConfig.apiKey,
             abortController: controller,
             // Forward AskUserQuestion to the renderer through the same
             // question-request channel the in-process engine uses, so the
