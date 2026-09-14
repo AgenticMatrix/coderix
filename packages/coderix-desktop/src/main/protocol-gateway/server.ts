@@ -195,6 +195,19 @@ export function startProtocolGateway(resolveModel: ModelResolver): Server {
     res.end();
   });
 
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(
+        `[gateway] FAILED to bind http://${GATEWAY_HOST}:${gatewayPort()} — port already in use. ` +
+          `Another app (e.g. agentstation-app) is likely holding it. ` +
+          `claude-code requests will land on the wrong gateway until this is resolved. ` +
+          `Set CONVERSION_PORT to a free port or stop the conflicting process.`,
+      );
+    } else {
+      console.error(`[gateway] server error:`, err.message);
+    }
+  });
+
   server.listen(gatewayPort(), GATEWAY_HOST, () => {
     console.log(`[gateway] protocol conversion listening on http://${GATEWAY_HOST}:${gatewayPort()}`);
   });

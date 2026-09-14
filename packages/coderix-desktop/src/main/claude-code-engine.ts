@@ -13,14 +13,14 @@
  */
 
 import { query as claudeQuery } from '@anthropic-ai/claude-agent-sdk';
-import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent } from '@coderix/core';
 import { PermissionMode } from '@coderix/core';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { extractOpenUrl } from './open-url.js';
 import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
 
@@ -259,6 +259,66 @@ function mapPermissionMode(mode: PermissionMode): SdkPermissionMode {
   }
 }
 
+/**
+ * Custom spawn hook for the SDK's underlying `claude` process. Filters `CLAUDE*`
+ * env vars (which trigger "nested session" errors when a parent Claude Code
+ * session left them set) while preserving `CLAUDE_CODE_*` config and
+ * `CLAUDE_CONFIG_DIR`, then injects the bound model's endpoint/auth so the
+ * spawned CLI is fully self-contained. Mirrors agentstation-app's `createSpawnFn`.
+ */
+function createSpawnFn(
+  modelName: string,
+  baseUrl: string | undefined,
+  apiKey: string,
+): (options: SpawnOptions) => SpawnedProcess {
+  return (options: SpawnOptions): SpawnedProcess => {
+    const baseEnv =
+      options.env && Object.keys(options.env).length > 0
+        ? { ...process.env, ...options.env }
+        : { ...process.env };
+
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(baseEnv)) {
+      if (value === undefined) continue;
+      if (
+        key.startsWith('CLAUDE') &&
+        !key.startsWith('CLAUDE_CODE_') &&
+        !key.startsWith('CLAUDE_CONFIG_DIR')
+      ) {
+        continue;
+      }
+      env[key] = value;
+    }
+
+    if (baseUrl) env.ANTHROPIC_BASE_URL = baseUrl;
+    if (apiKey) {
+      // The CLI resolves ANTHROPIC_AUTH_TOKEN (Bearer) before ANTHROPIC_API_KEY
+      // (x-api-key); set both to the bound key so a stale token in the parent
+      // env can't leak to this model's endpoint.
+      env.ANTHROPIC_API_KEY = apiKey;
+      env.ANTHROPIC_AUTH_TOKEN = apiKey;
+    }
+    if (modelName) env.ANTHROPIC_MODEL = modelName;
+
+    const child = spawn(options.command, options.args, {
+      cwd: options.cwd,
+      env,
+      signal: options.signal,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true,
+    });
+
+    if (child.stderr) {
+      child.stderr.on('data', (chunk: Buffer) => {
+        const text = chunk.toString('utf-8').trim();
+        if (text) console.error(`[claude-code] ${text}`);
+      });
+    }
+
+    return child as unknown as SpawnedProcess;
+  };
+}
+
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
@@ -279,27 +339,29 @@ export async function* runClaudeCodeQuery(
   }
 
   const sdkMode = mapPermissionMode(permissionMode ?? PermissionMode.ASK);
+  // When the model carries its own endpoint/auth, repoint the spawned `claude`
+  // CLI at it (routing openai models through the in-process gateway) instead of
+  // whatever `~/.claude/settings.json` sets. The CLI re-reads that file and
+  // re-applies its `env` block on top of the process env, so a stale gateway
+  // there (ANTHROPIC_BASE_URL/AUTH_TOKEN) would shadow the bound model's own
+  // endpoint — mirror agentstation-app by dropping the `user` setting source
+  // and injecting the bound model through a custom spawn hook.
+  const resolvedBaseUrl = baseUrl
+    ? resolveClaudeCodeBaseUrl(model ?? '', baseUrl, protocol ?? 'anthropic')
+    : undefined;
   const options: Options = {
     cwd,
     permissionMode: sdkMode,
     allowDangerouslySkipPermissions: sdkMode === 'bypassPermissions',
     includePartialMessages: true,
     abortController,
-    settingSources: ['user', 'project'],
+    // Drop `user` (~/.claude/settings.json) when a model endpoint is bound so
+    // its `env` block can't override the bound baseUrl/apiKey.
+    settingSources: resolvedBaseUrl ? ['project'] : ['user', 'project'],
     pathToClaudeCodeExecutable,
+    spawnClaudeCodeProcess: createSpawnFn(model ?? '', resolvedBaseUrl, apiKey ?? ''),
   };
   if (model) options.model = model;
-  // Per-model endpoint/auth: point the spawned `claude` CLI at the active
-  // model's baseUrl/apiKey from model_list instead of the global
-  // ~/.claude/settings.json the claude-code engine otherwise falls back to.
-  // The SDK replaces (not merges) process.env when `env` is set, so spread it.
-  if (baseUrl || apiKey) {
-    options.env = {
-      ...process.env,
-      ...(baseUrl ? { ANTHROPIC_BASE_URL: resolveClaudeCodeBaseUrl(model ?? '', baseUrl, protocol ?? 'anthropic') } : {}),
-      ...(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {}),
-    };
-  }
   if (resume) options.resume = resume;
   const preToolUseHooks: HookCallbackMatcher[] = [];
   if (onAskUserQuestion) {
