@@ -9,7 +9,7 @@ import {
   type ModelConfig,
 } from '../../store/settingsStore.js';
 import { PROVIDER_DOCS, providerLabel, ProviderLogo } from './providerMeta.js';
-import { testConnection } from '../../ipc-client.js';
+import { testConnection, openExternal } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
 
 interface ProviderEditorProps {
@@ -236,6 +236,13 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 href={docsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  // Open in the system browser: the embedded browser panel is
+                  // hidden while settings is open, so a panel-open here would
+                  // be invisible to the user.
+                  e.preventDefault();
+                  void openExternal(docsUrl);
+                }}
                 className="inline-flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline"
               >
                 {t('provider.docs')}

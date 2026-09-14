@@ -9,7 +9,7 @@
  *                                ipcRenderer                        ipcMain.handle/on
  */
 
-import { ipcMain, BrowserWindow, app, dialog } from 'electron';
+import { ipcMain, BrowserWindow, app, dialog, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
@@ -96,6 +96,7 @@ export const IPC_CHANNELS = {
   APP_VERSION: 'app:version',
   APP_CHECK_UPDATE: 'app:checkUpdate',
   APP_QUIT: 'app:quit',
+  APP_OPEN_EXTERNAL: 'app:openExternal',
 
   // Push (main → renderer)
   STREAM_BLOCK: 'stream:block',       // combined block event (for preload compatibility)
@@ -1466,6 +1467,17 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     app.quit();
   });
 
+  // Open an http(s) URL in the system default browser — used by the settings
+  // screens' "参考文档" links, which must not open in the embedded browser
+  // (that panel is hidden while settings is open, so the page would be unseen).
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL, async (_event, url: string) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      return { status: 'error', error: 'invalid-url' };
+    }
+    await shell.openExternal(url);
+    return { status: 'ok' };
+  });
+
   // -----------------------------------------------------------------------
   // Push channel registration helpers
   // -----------------------------------------------------------------------
@@ -1738,6 +1750,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_TEST_CONNECTION);
       ipcMain.removeHandler(IPC_CHANNELS.APP_VERSION);
       ipcMain.removeHandler(IPC_CHANNELS.APP_CHECK_UPDATE);
+      ipcMain.removeHandler(IPC_CHANNELS.APP_OPEN_EXTERNAL);
       ipcMain.removeHandler('project:get');
       ipcMain.removeHandler('project:list');
       ipcMain.removeHandler('project:set');

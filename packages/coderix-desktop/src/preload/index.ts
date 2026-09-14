@@ -44,6 +44,7 @@ const CH = {
   APP_VERSION: 'app:version',
   APP_CHECK_UPDATE: 'app:checkUpdate',
   APP_QUIT: 'app:quit',
+  APP_OPEN_EXTERNAL: 'app:openExternal',
 
   // Push channels (main → renderer via ipcRenderer.on)
   STREAM_BLOCK_START: 'stream:blockStart',
@@ -692,6 +693,11 @@ const coderixAPI = {
     /** Quit the application. */
     quit(): void {
       ipcRenderer.send(CH.APP_QUIT);
+    },
+
+    /** Open an http(s) URL in the system default browser. */
+    openExternal(url: string): Promise<{ status: string; error?: string }> {
+      return ipcRenderer.invoke(CH.APP_OPEN_EXTERNAL, url);
     },
   },
 

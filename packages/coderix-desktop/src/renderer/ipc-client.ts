@@ -503,6 +503,11 @@ export function quitApp(): void {
   window.coderixAPI.app.quit();
 }
 
+/** Open an http(s) URL in the system default browser (not the embedded panel). */
+export function openExternal(url: string): Promise<{ status: string; error?: string }> {
+  return getAPI().app.openExternal(url);
+}
+
 // ===========================================================================
 //  Token Usage
 // ===========================================================================
