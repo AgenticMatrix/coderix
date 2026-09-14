@@ -32,7 +32,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode } from '@coderix/core';
+import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, setTaskListId } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 import { safeSend } from './safe-send.js';
 
@@ -238,6 +238,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // Tag every stream push event with the session id so the renderer can drop
     // late events from a previous session after a mid-stream switch.
     activeStreamSessionId = sessionManager.getActive()?.id ?? sessionId ?? '';
+
+    // Scope the persistent task store to the active session. The task store is
+    // keyed by a single process-global id (setTaskListId); without this, every
+    // session reads/writes the shared "default" task list, so a task created in
+    // one conversation leaks into every other one (the model then claims "你这边
+    // 挂着一个待办任务 #N"). The CLI/VSCode/SDK hosts do the same per session.
+    setTaskListId(activeStreamSessionId);
 
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
