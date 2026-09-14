@@ -28,6 +28,7 @@ export const BROWSER_CHANNELS = {
   EXECUTE_JS: 'browser:executeJavaScript',
   GET_PAGE_INFO: 'browser:getPageInfo',
   SET_BOUNDS: 'browser:setBounds',
+  SET_ZOOM_FACTOR: 'browser:setZoomFactor',
   SHOW: 'browser:show',
   HIDE: 'browser:hide',
   // Push channels (main → renderer)
@@ -172,6 +173,11 @@ export function createBrowserViewManager(windowManager: WindowManager): BrowserV
   ipcMain.handle(BROWSER_CHANNELS.SET_BOUNDS, (_e, { tabId, bounds }: { tabId: string; bounds: BrowserBounds }) => {
     const view = views.get(tabId);
     if (view) view.setBounds(bounds);
+  });
+
+  ipcMain.handle(BROWSER_CHANNELS.SET_ZOOM_FACTOR, (_e, { tabId, factor }: { tabId: string; factor: number }) => {
+    const view = views.get(tabId);
+    if (view) view.webContents.setZoomFactor(factor);
   });
 
   ipcMain.handle(

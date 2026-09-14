@@ -15,6 +15,16 @@ function browserAPI(): Window['coderixAPI']['browser'] | undefined {
   return window.coderixAPI?.browser;
 }
 
+// Fit-to-width: zoom the page so a desktop-width layout fits the panel width
+// exactly, keeping the whole page visible and centered (no horizontal scroll).
+const BASE_WIDTH = 1280;
+
+function applyFitScale(tabId: string, width: number) {
+  if (width <= 0) return;
+  const scale = width / BASE_WIDTH;
+  browserAPI()?.setZoomFactor(tabId, scale).catch(() => {});
+}
+
 // ── Tab Bar ────────────────────────────────────────────────────────────────
 
 const TabBar: React.FC = () => {
@@ -166,6 +176,7 @@ const BrowserViewWrapper: React.FC<{ tabId: string; url: string; active: boolean
             width: Math.round(r.width),
             height: Math.round(r.height),
           });
+          applyFitScale(tabId, r.width);
         }
       } else {
         await a.hide(tabId);
@@ -192,6 +203,7 @@ const BrowserViewWrapper: React.FC<{ tabId: string; url: string; active: boolean
         width: Math.round(r.width),
         height: Math.round(r.height),
       });
+      applyFitScale(tabId, r.width);
     };
     updateBounds();
 
@@ -210,6 +222,20 @@ const BrowserViewWrapper: React.FC<{ tabId: string; url: string; active: boolean
       browserAPI()?.hide(tabId).catch(() => {});
     };
   }, [tabId]);
+
+  // Re-apply fit scale after navigation (zoom may reset per-origin).
+  useEffect(() => {
+    if (!active) return;
+    const a = browserAPI();
+    if (!a) return;
+    const cleanup = a.onEvent((ev) => {
+      if (ev.tabId !== tabId) return;
+      if (ev.type !== 'did-navigate') return;
+      const container = containerRef.current;
+      if (container) applyFitScale(tabId, container.getBoundingClientRect().width);
+    });
+    return cleanup;
+  }, [tabId, active]);
 
   return (
     <div

@@ -99,6 +99,7 @@ const CH = {
   BROWSER_EXECUTE_JS: 'browser:executeJavaScript',
   BROWSER_GET_PAGE_INFO: 'browser:getPageInfo',
   BROWSER_SET_BOUNDS: 'browser:setBounds',
+  BROWSER_SET_ZOOM_FACTOR: 'browser:setZoomFactor',
   BROWSER_SHOW: 'browser:show',
   BROWSER_HIDE: 'browser:hide',
   BROWSER_EVENT: 'browser:event',
@@ -646,6 +647,9 @@ const coderixAPI = {
     },
     setBounds(tabId: string, bounds: { x: number; y: number; width: number; height: number }): Promise<void> {
       return ipcRenderer.invoke(CH.BROWSER_SET_BOUNDS, { tabId, bounds });
+    },
+    setZoomFactor(tabId: string, factor: number): Promise<void> {
+      return ipcRenderer.invoke(CH.BROWSER_SET_ZOOM_FACTOR, { tabId, factor });
     },
     show(tabId: string, bounds?: { x: number; y: number; width: number; height: number }): Promise<void> {
       return ipcRenderer.invoke(CH.BROWSER_SHOW, { tabId, bounds });
