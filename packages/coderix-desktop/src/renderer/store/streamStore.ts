@@ -12,6 +12,25 @@ import {
   onTokenUsage,
 } from '../ipc-client.js';
 
+// Stream blocks arrive at high frequency (one IPC message per text delta), and
+// each one currently forces a React render via `set()`. Batching accumulates
+// deltas into a single pending message and flushes once per animation frame, so
+// a burst of N deltas produces at most one render instead of N. This mirrors
+// agentstation's approach of coalescing rapid stream events before committing
+// them to the UI. The refs are module-scoped (not store state) so they never
+// trigger a render themselves.
+let pendingMsg: { id: string; blocks: StreamBlock[]; content: string } | null = null;
+let pendingRaf: number | null = null;
+
+/** Drop any buffered blocks (used on error/interrupt/teardown). */
+function discardPendingBlocks(): void {
+  if (pendingRaf !== null) {
+    cancelAnimationFrame(pendingRaf);
+    pendingRaf = null;
+  }
+  pendingMsg = null;
+}
+
 export interface StreamState {
   /**
    * The currently building assistant message (accumulated blocks).
@@ -77,6 +96,25 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
     const cleanups: Array<() => void> = [];
 
+    // Flush accumulated blocks into the store as a single `set()` (called once
+    // per animation frame by `scheduleBlockFlush`, or synchronously on stream
+    // done so the final partial message is never lost).
+    const flushPendingBlocks = () => {
+      if (pendingRaf !== null) {
+        cancelAnimationFrame(pendingRaf);
+        pendingRaf = null;
+      }
+      const msg = pendingMsg;
+      pendingMsg = null;
+      if (msg) set({ currentMessage: msg });
+    };
+
+    // Coalesce a block into the pending message and schedule a single flush.
+    const scheduleBlockFlush = () => {
+      if (pendingRaf !== null) return;
+      pendingRaf = requestAnimationFrame(flushPendingBlocks);
+    };
+
     // Refresh the sidebar entry for the active session once a turn finishes.
     // A completed turn is bumped optimistically so "turns"/time update
     // immediately; a delayed disk read then reconciles the exact count and
@@ -102,8 +140,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         return;
       }
 
-      const state = get();
-      let msg = state.currentMessage;
+      // Accumulate against the pending message when a flush is already
+      // scheduled (mid-frame), otherwise against the last committed message.
+      let msg = pendingMsg ?? get().currentMessage;
 
       // Tool_result arriving outside active streaming — attach directly
       // to the matching tool_use in already-committed messages.
@@ -136,7 +175,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
           blocks: [{ ...block }],
           content: '',
         };
-        set({ currentMessage: msg });
+        pendingMsg = msg;
+        scheduleBlockFlush();
         return;
       }
 
@@ -227,7 +267,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         msg = { ...msg, content: block.content };
       }
 
-      set({ currentMessage: msg });
+      pendingMsg = msg;
+      scheduleBlockFlush();
     });
     cleanups.push(unsubBlock);
 
@@ -238,6 +279,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       if (sessionId && currentSessionId && sessionId !== currentSessionId) {
         return;
       }
+
+      // Commit any blocks still buffered (the last deltas of the turn may not
+      // have flushed yet) before reading `currentMessage` below.
+      flushPendingBlocks();
 
       // A stop reason of 'tool_use' means this turn ended to run tools — the
       // engine will emit another assistant turn right after the tool results.
@@ -275,6 +320,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         return;
       }
 
+      // Drop any buffered partial message for the current stream.
+      discardPendingBlocks();
+
       // An interrupt (user pressed ⌘. or switched sessions) is not a real
       // error — it just means the in-flight query was aborted. Clear any
       // partial message but don't surface an error banner, so the abort from
@@ -309,6 +357,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
   },
 
   stopListening: () => {
+    // Cancel any scheduled flush and drop buffered blocks so a pending frame
+    // callback doesn't fire after teardown.
+    discardPendingBlocks();
     const { _cleanups } = get();
     for (const cleanup of _cleanups) {
       cleanup();
