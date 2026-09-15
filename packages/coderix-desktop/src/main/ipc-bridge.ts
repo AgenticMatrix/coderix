@@ -286,7 +286,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             prompt: userInput,
             sessionId: sessionManager.getActive()?.id ?? '',
             cwd: currentWorkDir,
-            permissionMode: resolvePermissionMode(loadSettings(), currentWorkDir) as PermissionMode,
+            permissionMode: resolvePermissionMode(loadSettings()) as PermissionMode,
             model: sessionResolved?.model ?? currentModel,
             baseUrl: sessionResolved?.baseUrl ?? activeConfig.baseUrl,
             apiKey: sessionResolved?.apiKey ?? activeConfig.apiKey,
@@ -826,13 +826,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
       // ~/.coderix/settings.json is the single source of truth for permission
       // settings, shared by the desktop, the protocol gateway, and the CLI.
-      // Persist BOTH the global default (what the CLI and the gateway read via
-      // `default_permission_mode`) and the current project's override (what the
-      // desktop's resolvePermissionMode reads). Writing only the project override
-      // left the CLI/gateway on their stale 'ask' default after every restart.
+      // Permission is a single app-wide setting (`default_permission_mode`)
+      // shared by every conversation — no per-project override.
       const settings = loadSettings();
       settings.default_permission_mode = mode;
-      settings.project_permissions = { ...(settings.project_permissions ?? {}), [currentWorkDir]: mode };
       saveSettings(settings);
     }
     return { mode };

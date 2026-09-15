@@ -167,11 +167,8 @@ export function App(): React.ReactElement {
   // (onPermissionRequest) would always prompt even when the user saved 'auto'.
   useEffect(() => {
     if (!settings) return;
-    const effective = projectPath
-      ? (settings.projectPermissions?.[projectPath] ?? settings.defaultPermissionMode)
-      : settings.defaultPermissionMode;
-    setPermissionMode(effective);
-  }, [settings, projectPath, setPermissionMode]);
+    setPermissionMode(settings.defaultPermissionMode);
+  }, [settings, setPermissionMode]);
 
   useEffect(() => {
     getProjectDirectory()
@@ -884,7 +881,7 @@ export function App(): React.ReactElement {
           >
             {/* Settings fills the modal; its internal content pane scrolls */}
             <div style={{ flex: 1, minHeight: 0 }}>
-              <SettingsView onClose={() => setSettingsOpen(false)} projectPath={projectPath} />
+              <SettingsView onClose={() => setSettingsOpen(false)} />
             </div>
           </div>
         </div>,

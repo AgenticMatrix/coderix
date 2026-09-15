@@ -304,7 +304,7 @@ async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: 
 
   await ipcBridge.initEngine(config);
   const settings = loadSettings();
-  const permMode: PermissionMode = resolvePermissionMode(settings, activeWorkDir) as PermissionMode;
+  const permMode: PermissionMode = resolvePermissionMode(settings) as PermissionMode;
   if (ipcBridge.queryEngine) {
     ipcBridge.queryEngine.setPermissionMode(permMode);
     console.log(`[Coderix] Permission mode set to: ${permMode}`);

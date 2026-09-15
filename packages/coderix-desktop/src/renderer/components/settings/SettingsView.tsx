@@ -33,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
 
 // ── Component ──────────────────────────────────────────────
 
-export default function SettingsView({ onClose, projectPath }: { onClose?: () => void; projectPath?: string }): React.ReactElement {
+export default function SettingsView({ onClose }: { onClose?: () => void }): React.ReactElement {
   const [activeTab, setActiveTab] = useState<SettingsTab>('model');
   const [draft, setDraft] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
@@ -177,11 +177,8 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
   })();
   const defaultProviderModels = draft ? (draft.providers.find((p) => p.name === defaultSel.provider)?.models ?? []) : [];
 
-  // Effective permission mode for the current project: a per-project override
-  // wins, falling back to the global default.
-  const currentPerm: PermissionMode = projectPath
-    ? (draft?.projectPermissions?.[projectPath] ?? draft?.defaultPermissionMode ?? 'ask')
-    : (draft?.defaultPermissionMode ?? 'ask');
+  // Permission mode is a single app-wide setting shared by every conversation.
+  const currentPerm: PermissionMode = draft?.defaultPermissionMode ?? 'ask';
 
   return (
     <div className="flex h-full flex-col bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]">
@@ -388,15 +385,9 @@ export default function SettingsView({ onClose, projectPath }: { onClose?: () =>
                       setPermissionMode(mode);
                       window.coderixAPI?.permission?.setMode?.(mode).catch(() => {});
                       // Keep the local draft in sync with what the main process
-                      // just persisted to ~/.coderix/settings.json: the global
-                      // default always updates, plus the current project's
-                      // override when a project is open.
-                      updateDraft({
-                        defaultPermissionMode: mode,
-                        projectPermissions: projectPath
-                          ? { ...draft.projectPermissions, [projectPath]: mode }
-                          : draft.projectPermissions,
-                      });
+                      // just persisted to ~/.coderix/settings.json (the single
+                      // app-wide default).
+                      updateDraft({ defaultPermissionMode: mode });
                     }} style={S.permBtn(currentPerm === mode)}>
                       <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{label}</div>
                       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>

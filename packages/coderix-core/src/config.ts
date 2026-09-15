@@ -148,8 +148,6 @@ export interface CoderSettings {
   };
   /** Default permission mode. One of 'auto', 'ask', 'plan', 'low'. Defaults to 'ask'. */
   default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
-  /** Per-project permission mode overrides, keyed by absolute project path. */
-  project_permissions?: Record<string, 'auto' | 'ask' | 'plan' | 'low'>;
   /** Agent engine backing turns. Defaults to 'coderix'. */
   engine?: AgentEngine;
 }
@@ -188,16 +186,14 @@ export function detectProtocol(baseUrl: string): 'anthropic' | 'openai' {
 }
 
 /**
- * Resolve the effective permission mode for a project. A per-project override in
- * `project_permissions` (keyed by absolute path) wins, falling back to the global
- * `default_permission_mode`, then `'ask'`.
+ * Resolve the effective permission mode. Permission is a single app-wide setting
+ * (`default_permission_mode`) shared by every conversation — there is no
+ * per-project override. Falls back to `'ask'` when unset.
  */
 export function resolvePermissionMode(
   settings: CoderSettings,
-  projectPath: string,
 ): 'auto' | 'ask' | 'plan' | 'low' {
-  const override = projectPath ? settings.project_permissions?.[projectPath] : undefined;
-  return override ?? settings.default_permission_mode ?? 'ask';
+  return settings.default_permission_mode ?? 'ask';
 }
 
 export function saveSettings(settings: CoderSettings): void {
