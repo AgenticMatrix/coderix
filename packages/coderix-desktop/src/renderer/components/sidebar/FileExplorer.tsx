@@ -183,7 +183,13 @@ export function FileExplorer({ fileTree, projectPath }: FileExplorerProps): Reac
   const [loading, setLoading] = useState(!fileTree);
   const t = useT();
 
-  const loadDir = useCallback(async (dirPath: string, parentNode?: FileNode) => {
+  // The directory the current conversation is rooted at. Listing this (rather
+  // than the filesystem root) scopes the explorer to that conversation. Empty
+  // until the main process reports it — the backend then resolves the empty
+  // path to the active work dir.
+  const rootPath = projectPath || '';
+
+  const loadDir = useCallback(async (dirPath: string, parentNode?: FileNode, relPrefix = '') => {
     const api = window.coderixAPI?.fs;
     if (!api) return;
     try {
@@ -197,7 +203,10 @@ export function FileExplorer({ fileTree, projectPath }: FileExplorerProps): Reac
         })
         .map((e: any) => ({
           name: e.name,
-          path: dirPath ? `${dirPath}/${e.name}` : e.name,
+          // Node paths stay relative to the conversation root so the backend
+          // resolves them against the active work dir, and git status (reported
+          // relative to the repo root) still decorates the tree.
+          path: relPrefix ? `${relPrefix}/${e.name}` : e.name,
           type: e.isDirectory ? 'directory' as const : 'file' as const,
           children: e.isDirectory ? [] : undefined,
         }));
@@ -211,35 +220,35 @@ export function FileExplorer({ fileTree, projectPath }: FileExplorerProps): Reac
     } catch { /* fs access error */ }
   }, []);
 
-  // Load root on first mount if no fileTree provided
+  // Load the current conversation's directory on mount and whenever it changes.
   useEffect(() => {
     if (!fileTree) {
       setLoading(true);
-      loadDir('').finally(() => setLoading(false));
+      loadDir(rootPath, undefined, '').finally(() => setLoading(false));
     } else {
       setTree(fileTree);
       setLoading(false);
     }
-  }, [fileTree, loadDir, projectPath]);
+  }, [fileTree, loadDir, rootPath]);
 
   const handleToggle = useCallback((node: FileNode) => {
     if (node.children && node.children.length === 0) {
-      loadDir(node.path, node);
+      loadDir(rootPath ? `${rootPath}/${node.path}` : node.path, node, node.path);
     }
-  }, [loadDir]);
+  }, [loadDir, rootPath]);
 
   const handleFileClick = useCallback(async (node: FileNode) => {
     const api = window.coderixAPI?.fs;
     if (!api) return;
     try {
-      const result = await api.readFile(node.path);
+      const result = await api.readFile(rootPath ? `${rootPath}/${node.path}` : node.path);
       if (result?.content) {
         window.dispatchEvent(new CustomEvent('coderix:open-file', {
           detail: { path: node.path, name: node.name, content: result.content },
         }));
       }
     } catch { /* file read error */ }
-  }, []);
+  }, [rootPath]);
 
   // Merge git status from git:status IPC
   useEffect(() => {
