@@ -267,7 +267,7 @@ const EmptyState: React.FC = () => {
 
 // ── BrowserPanel ────────────────────────────────────────────────────────────
 
-export function BrowserPanel(): React.ReactElement {
+export function BrowserPanel({ onClose }: { onClose?: () => void }): React.ReactElement {
   const { tabs, activeTabId, openTab, updateTab } = useBrowserStore();
   const didInit = useRef(false);
   const t = useT();
@@ -325,9 +325,19 @@ export function BrowserPanel(): React.ReactElement {
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg-secondary)]">
-      {/* Tab bar row */}
+      {/* Tab bar row — the browser's Globe close button lives here so the column
+          is self-identified: it stays anchored in the browser column (not the chat
+          header) after the panel is opened, mirroring agentstation-app. */}
       <div className="flex items-center gap-2 px-2 shrink-0 border-b border-[var(--color-separator)] h-10 bg-[var(--color-bg-secondary)]">
         <TabBar />
+        <button
+          onClick={onClose}
+          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-brand)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+          title={t('nav.browser')}
+          aria-label={t('nav.browser')}
+        >
+          <Globe size={15} strokeWidth={1.75} />
+        </button>
       </div>
 
       {activeTab && (

@@ -701,7 +701,7 @@ export function App(): React.ReactElement {
         onIconSettings={() => setSettingsOpen(true)}
         detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
-        browserPanel={<BrowserPanel />}
+        browserPanel={<BrowserPanel onClose={toggleBrowserPanel} />}
         browserPanelVisible={browserPanelOpen && !settingsOpen}
         onToggleBrowserPanel={toggleBrowserPanel}
         statusBarProps={{

@@ -116,20 +116,6 @@ export function AppLayout({
         {/* Chat column header — browser + sidebar toggles at this column's far right */}
         <div className="flex-1 flex items-center justify-end px-4 min-w-0 titlebar-drag">
           <div className="titlebar-no-drag flex items-center gap-1">
-            {/* Browser sidebar toggle */}
-            <button
-              className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
-                         text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
-                         hover:bg-[var(--color-bg-tertiary)] transition-colors"
-              onClick={onToggleBrowserPanel}
-              title={t('nav.browser')}
-              aria-label={t('nav.browser')}
-              aria-pressed={browserPanelVisible}
-              style={browserPanelVisible ? { color: 'var(--color-brand)' } : undefined}
-            >
-              <Globe size={16} />
-            </button>
-
             {/* Sidebar toggle */}
             <button
               className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
@@ -144,6 +130,22 @@ export function AppLayout({
                 <path d="M5.5 2.5v10" />
               </svg>
             </button>
+
+            {/* Browser sidebar toggle — hidden while the browser is open, because
+                the Globe close button then lives in the browser column's own
+                header (keeps it anchored to the column, mirroring agentstation-app). */}
+            {!browserPanelVisible && (
+              <button
+                className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
+                           text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                           hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                onClick={onToggleBrowserPanel}
+                title={t('nav.browser')}
+                aria-label={t('nav.browser')}
+              >
+                <Globe size={16} />
+              </button>
+            )}
           </div>
         </div>
 
