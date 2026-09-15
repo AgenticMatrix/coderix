@@ -44,17 +44,24 @@ const sidebarTransition = {
   ease: [0, 0, 0.2, 1], // Apple ease-out
 };
 
+// Animate only opacity/transform — never `width`. Animating `width` to the
+// string 'auto' forces framer-motion to measure the column's natural width;
+// during a re-render where the sidebar content is swapped (e.g. selecting a
+// session whose cwd differs re-renders the `sidebar` prop) that measurement can
+// resolve to 0 and the column collapses to zero width, taking the header title
+// with it and leaving only the chat area. The inner fixed-width div already
+// sets the real width, so dropping the width keyframe can't collapse anything.
 const sidebarAnimation = {
-  initial: { width: 0, opacity: 0 },
-  animate: { width: 'auto', opacity: 1 },
-  exit: { width: 0, opacity: 0 },
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
   transition: sidebarTransition,
 };
 
 const detailAnimation = {
-  initial: { width: 0, opacity: 0, x: 12 },
-  animate: { width: 'auto', opacity: 1, x: 0 },
-  exit: { width: 0, opacity: 0, x: 12 },
+  initial: { opacity: 0, x: 12 },
+  animate: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: 12 },
   transition: sidebarTransition,
 };
 
@@ -89,7 +96,7 @@ export function AppLayout({
         {/* Main row: header+content (sidebar | chat | detail) on the left,
             full-height browser column on the right. */}
         <div className="flex flex-1 min-h-0">
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-w-0">
       {/* Header bar — one header per column, mirroring the content row below:
           sidebar (app title) | chat (actions) | detail */}
       <header
