@@ -142,6 +142,10 @@ export function App(): React.ReactElement {
   const [projectPath, setProjectPath] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
+  // The active session's own model ("provider/model" or bare name). Tracked
+  // here (not read from the global default) so switching models in one session
+  // never changes the model shown for any other session.
+  const [sessionModel, setSessionModelState] = useState<string | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
   // Holds the last committed composer value before clearing
@@ -367,9 +371,15 @@ export function App(): React.ReactElement {
         if (window.coderixAPI?.session?.load) {
           const session = await window.coderixAPI.session.load(id) as any;
 
-          // The main process may have promoted this session's own model to
-          // default_model (per-session model restore); re-read settings so the
-          // StatusBar/Composer labels update to match the restored model.
+          // The session now owns its model; surface it in the composer picker.
+          // Re-read settings only to keep other labels (StatusBar etc.) in sync.
+          const loadedModel =
+            typeof session?.model === 'string' &&
+            session.model &&
+            session.model !== 'unknown'
+              ? session.model
+              : null;
+          setSessionModelState(loadedModel);
           useSettingsStore.getState().load().catch(() => {});
 
           // Keep the workspace label in sync with the session's own workspace
@@ -492,6 +502,8 @@ export function App(): React.ReactElement {
     // Clear current messages
     useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', error: null });
     useStreamStore.setState({ currentMessage: null });
+    // A fresh session inherits the global default model.
+    setSessionModelState(null);
     await createSession();
     const newSid = useSessionStore.getState().currentSessionId;
     if (newSid) setSessionId(newSid);
@@ -524,6 +536,7 @@ export function App(): React.ReactElement {
     useSessionStore.getState().setCurrentSessionId(null);
     useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null, error: null });
     useStreamStore.setState({ currentMessage: null });
+    setSessionModelState(null);
     await loadSessions();
   }, [loadSessions, setSessionId]);
 
@@ -805,7 +818,10 @@ export function App(): React.ReactElement {
               </div>
             )}
 
-            <ModelCascadePicker model={settings?.defaultModel || t('modelpicker.unconfigured')} />
+            <ModelCascadePicker
+              model={(sessionModel ?? settings?.defaultModel) || t('modelpicker.unconfigured')}
+              onModelChange={setSessionModelState}
+            />
           </div>
 
           {/* Composer — fixed at bottom of chat */}

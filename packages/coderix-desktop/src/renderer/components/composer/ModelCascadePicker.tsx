@@ -18,6 +18,9 @@ const EMPTY_PROVIDERS: ProviderConfig[] = [];
 export interface ModelCascadePickerProps {
   /** Current model, "provider/model" or a bare model name. */
   model?: string;
+  /** Notifies the parent when a model is selected, so the per-session model
+   *  label can update without re-reading the global default. */
+  onModelChange?: (model: string) => void;
 }
 
 /**
@@ -29,7 +32,7 @@ export interface ModelCascadePickerProps {
  * adapted to read providers/models from the settings store instead of a model
  * registry.
  */
-export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): React.ReactElement {
+export function ModelCascadePicker({ model = '', onModelChange }: ModelCascadePickerProps): React.ReactElement {
   const t = useT();
   const providers = useSettingsStore((s) => s.settings?.providers ?? EMPTY_PROVIDERS);
   const [open, setOpen] = useState(false);
@@ -68,8 +71,9 @@ export function ModelCascadePicker({ model = '' }: ModelCascadePickerProps): Rea
 
   const handleSelect = (providerName: string, modelName: string) => {
     setOpen(false);
-    setSessionModel(`${providerName}/${modelName}`)
-      .then(() => useSettingsStore.getState().load())
+    const full = `${providerName}/${modelName}`;
+    setSessionModel(full)
+      .then(() => onModelChange?.(full))
       .catch(() => {});
   };
 

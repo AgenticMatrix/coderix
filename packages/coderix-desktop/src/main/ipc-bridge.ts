@@ -32,7 +32,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, setTaskListId } from '@coderix/core';
+import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, setTaskListId, resolveModelByName } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 import { safeSend } from './safe-send.js';
 
@@ -51,7 +51,7 @@ export interface IpcBridgeConfig {
   sessionManager: SessionManager;
   workDir: string;
   model: string;
-  reloadQueryEngine?: (workDir?: string) => Promise<void>;
+  reloadQueryEngine?: (workDir?: string, model?: string) => Promise<void>;
 }
 
 export interface IpcBridge {
@@ -268,6 +268,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     // Start streaming in background (don't await — send via push channels)
     const activeConfig = loadConfig();
+
+    // Resolve the active session's own model + endpoint so a per-session model
+    // switch (which no longer mutates the global default) still drives the
+    // engine. Falls back to the global config when the session has no bound
+    // model yet.
+    const activeSession = sessionManager.getActive();
+    const activeSessionModel = activeSession?.model;
+    const sessionResolved =
+      activeSessionModel && activeSessionModel !== 'unknown'
+        ? resolveModelByName(activeSessionModel)
+        : undefined;
+
     const engineStream: AsyncGenerator<QueryEngineEvent> =
       activeEngine === 'claude-code'
         ? runClaudeCodeQuery({
@@ -275,10 +287,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             sessionId: sessionManager.getActive()?.id ?? '',
             cwd: currentWorkDir,
             permissionMode: resolvePermissionMode(loadSettings(), currentWorkDir) as PermissionMode,
-            model: currentModel,
-            baseUrl: activeConfig.baseUrl,
-            apiKey: activeConfig.apiKey,
-            protocol: activeConfig.protocol,
+            model: sessionResolved?.model ?? currentModel,
+            baseUrl: sessionResolved?.baseUrl ?? activeConfig.baseUrl,
+            apiKey: sessionResolved?.apiKey ?? activeConfig.apiKey,
+            protocol: sessionResolved?.protocol ?? activeConfig.protocol,
             abortController: controller,
             // Forward AskUserQuestion to the renderer through the same
             // question-request channel the in-process engine uses, so the
@@ -677,26 +689,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
     }
 
-    // Restore the session's own model (per-session model switching). When the
-    // session is bound to a model that differs from the current global default,
-    // promote it so the engine reload picks it up for subsequent turns in this
-    // session.
-    let modelChanged = false;
+    // Restore the session's own model (per-session model switching). Reload the
+    // engine bound to this session's model WITHOUT mutating the global
+    // default_model, so loading a session never leaks its model to others.
     const sessionModel = session.model;
-    if (sessionModel && sessionModel !== 'unknown') {
-      const current = loadSettings();
-      if (current.default_model !== sessionModel) {
-        const settingsDir = join(homedir(), '.coderix');
-        const settingsPath = join(settingsDir, 'settings.json');
-        const merged = { ...current, default_model: sessionModel };
-        if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
-        writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
-        modelChanged = true;
-      }
-    }
+    const hasModel = sessionModel && sessionModel !== 'unknown';
+    const reloadModel = hasModel ? sessionModel : undefined;
+    const needsModelReload = hasModel && sessionModel !== currentModel;
 
-    if ((reloadWorkDir !== undefined || modelChanged) && config.reloadQueryEngine) {
-      await config.reloadQueryEngine(reloadWorkDir);
+    if ((reloadWorkDir !== undefined || needsModelReload) && config.reloadQueryEngine) {
+      await config.reloadQueryEngine(reloadWorkDir, reloadModel);
     }
 
     return { id: session.id, title: session.title, messages: session.messages, turnCount: session.turnCount, cwd: session.cwd, model: session.model };
@@ -722,25 +724,33 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     // Bind the active session to the chosen model (persists to meta.json). When
     // there's no active session yet (e.g. before the first message), skip the
-    // per-session bind — the global default below still applies and the next
-    // created session picks it up.
+    // per-session bind — the next created session inherits the global default.
+    let hasActiveSession = false;
     try {
       sessionManager.setActiveModel(model);
+      hasActiveSession = true;
     } catch {
       // No active session — proceed with the global switch only.
     }
 
-    // Persist default_model so the engine (and future sessions) use the new model.
-    const settingsDir = join(homedir(), '.coderix');
-    const settingsPath = join(settingsDir, 'settings.json');
-    const current = loadSettings();
-    const merged = { ...current, default_model: model };
-    if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
-    writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
-
-    // Reload the engine with the new model.
-    if (config.reloadQueryEngine) {
-      await config.reloadQueryEngine();
+    if (hasActiveSession) {
+      // Reload the engine bound to this session's model WITHOUT changing the
+      // global default_model, so a per-session switch never leaks to other
+      // sessions.
+      if (config.reloadQueryEngine) {
+        await config.reloadQueryEngine(undefined, model);
+      }
+    } else {
+      // No active session — persist default_model so future sessions use it.
+      const settingsDir = join(homedir(), '.coderix');
+      const settingsPath = join(settingsDir, 'settings.json');
+      const current = loadSettings();
+      const merged = { ...current, default_model: model };
+      if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
+      if (config.reloadQueryEngine) {
+        await config.reloadQueryEngine();
+      }
     }
 
     return { status: 'ok', model };

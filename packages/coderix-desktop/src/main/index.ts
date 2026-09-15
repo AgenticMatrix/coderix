@@ -27,7 +27,7 @@ import { SessionManager } from '../../../../packages/coderix-core/src/core/sessi
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
 import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
-import { loadConfig } from '../../../../packages/coderix-core/src/config.js';
+import { loadConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
 
 // Tool schema + executor imports (avoid index.ts → renderers → React/ink)
 import { schema as bashSchema } from '../../../../packages/coderix-core/src/tools/bash/schema.js';
@@ -145,7 +145,7 @@ async function bootstrap(): Promise<void> {
       sessionManager,
       workDir: activeWorkDir,
       model: activeModel,
-      reloadQueryEngine: (workDir) => initQueryEngine(workDir),
+      reloadQueryEngine: (workDir, model) => initQueryEngine(workDir, model),
     });
 
     // Step 3: Create the window — this must happen before heavy init
@@ -193,7 +193,7 @@ async function bootstrap(): Promise<void> {
 // QueryEngine initialization
 // ---------------------------------------------------------------------------
 
-async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
+async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: string): Promise<void> {
   if (!ipcBridge) {
     throw new Error('IPC bridge not initialized');
   }
@@ -203,16 +203,22 @@ async function initQueryEngine(workDir: string = activeWorkDir): Promise<void> {
 
   // Load config from ~/.coderix/settings.json
   const appConfig = loadConfig();
-  const model = appConfig.model;
-  const apiKey = appConfig.apiKey;
-  const baseURL = appConfig.baseUrl;
+  // A model override (per-session model switch) binds the engine to that model
+  // and its own endpoint/auth, without mutating the global default_model.
+  const override = modelOverride ? resolveModelByName(modelOverride) : undefined;
+  const model = override?.model ?? appConfig.model;
+  const apiKey = override?.apiKey ?? appConfig.apiKey;
+  const baseURL = override?.baseUrl ?? appConfig.baseUrl;
 
   activeModel = model;
   console.log(`[Coderix] Config ${isReload ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${baseURL}, apiKey=${apiKey.slice(0, 10)}...`);
 
   let callModel: QueryEngineConfig['callModel'];
   try {
-    callModel = createCallModel(appConfig, model);
+    callModel = createCallModel(
+      { ...appConfig, baseUrl: baseURL, apiKey, protocol: override?.protocol ?? appConfig.protocol },
+      model,
+    );
     console.log(`[Coderix] callModel initialized: model=${model}, baseURL=${baseURL}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
