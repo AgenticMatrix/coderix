@@ -39,11 +39,17 @@ export function ModelCascadePicker({ model = '', onModelChange }: ModelCascadePi
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
-  // Current provider slug, if the model is already in "provider/model" form.
+  // Current provider slug. For "provider/model" take the prefix directly; for a
+  // bare model name, locate the provider that lists it (older sessions persist
+  // bare names, e.g. "Atria-Dawn-Preview" without the "astria/" prefix). Falls
+  // back to null when neither matches.
   const currentProvider = useMemo(() => {
     const idx = model.indexOf('/');
-    return idx > 0 ? model.slice(0, idx).toLowerCase() : null;
-  }, [model]);
+    if (idx > 0) return model.slice(0, idx).toLowerCase();
+    const bare = model.toLowerCase();
+    const owner = providers.find((p) => p.models.some((m) => m.name.toLowerCase() === bare));
+    return owner ? owner.name.toLowerCase() : null;
+  }, [model, providers]);
 
   const providerModels = useMemo(() => {
     if (!selectedProvider) return [];

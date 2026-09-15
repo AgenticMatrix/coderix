@@ -732,8 +732,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // providers). Strip them before rebinding so the new provider never sees
       // stale blocks — the renderer already warned the user about this drop.
       const oldModel = sessionManager.getActive().model;
-      const oldProvider = oldModel.includes('/') ? oldModel.slice(0, oldModel.indexOf('/')).toLowerCase() : null;
-      const newProvider = model.includes('/') ? model.slice(0, model.indexOf('/')).toLowerCase() : null;
+      const oldProvider = modelProviderOf(oldModel);
+      const newProvider = modelProviderOf(model);
       if (oldProvider && newProvider && oldProvider !== newProvider) {
         sessionManager.stripThinking();
       }
@@ -1821,6 +1821,21 @@ function sanitizeErrorMessage(raw: string): string {
   // Truncate long raw messages
   if (stripped.length > 300) return stripped.slice(0, 300) + '...';
   return stripped || '未知错误，请检查 API 配置。';
+}
+
+// ---------------------------------------------------------------------------
+// Model provider resolution — map "provider/model" or a bare model name to its
+// provider slug. Older sessions persist bare names (e.g. "Atria-Dawn-Preview"
+// without the "astria/" prefix); resolve those via model_list so a
+// cross-provider switch is still detected and its thinking blocks stripped.
+// ---------------------------------------------------------------------------
+
+function modelProviderOf(model: string): string | undefined {
+  if (!model || model === 'unknown') return undefined;
+  const idx = model.indexOf('/');
+  if (idx > 0) return model.slice(0, idx).toLowerCase();
+  const resolved = resolveModelByName(model);
+  return resolved?.provider?.toLowerCase();
 }
 
 // ---------------------------------------------------------------------------
