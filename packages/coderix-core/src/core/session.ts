@@ -277,6 +277,34 @@ export class SessionManager {
   }
 
   /**
+   * Strip every `thinking` block from the active session's history.
+   *
+   * Thinking blocks are signed by the provider that produced them and cannot
+   * round-trip across providers — a cross-provider model switch that replays
+   * stale blocks gets rejected (e.g. DeepSeek's Anthropic-compatible endpoint
+   * returns 400 "The content[].thinking … must be passed back"). Called on a
+   * cross-provider switch (after the renderer warns the user) so the new
+   * provider never sees the old provider's thinking blocks.
+   *
+   * Returns the number of thinking blocks removed.
+   */
+  stripThinking(): number {
+    const session = this.getActive();
+    let removed = 0;
+    for (const msg of session.messages) {
+      if (!Array.isArray(msg.content)) continue;
+      const before = msg.content.length;
+      msg.content = msg.content.filter((block) => block.type !== 'thinking');
+      removed += before - msg.content.length;
+    }
+    if (removed > 0) {
+      session.updatedAt = new Date();
+      this.rebuildJsonlFromSession(session);
+    }
+    return removed;
+  }
+
+  /**
    * Archive the current session.jsonl to history_transcript/transcript-{ts}.jsonl.
    * Returns the archive path or undefined if the source file doesn't exist.
    */

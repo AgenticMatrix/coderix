@@ -160,6 +160,7 @@ export const en: Record<TranslationKey, string> = {
   'modelpicker.switch': 'Switch model',
   'modelpicker.unconfigured': 'No model configured',
   'modelpicker.noModels': 'No models for this provider',
+  'modelpicker.confirmSwitchProvider': 'Switching provider may drop this conversation\'s thinking blocks. Continue?',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': 'Click a file to start editing',

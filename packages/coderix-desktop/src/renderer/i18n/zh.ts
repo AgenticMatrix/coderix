@@ -156,6 +156,7 @@ export const zh = {
   'modelpicker.switch': '切换模型',
   'modelpicker.unconfigured': '未配置模型',
   'modelpicker.noModels': '该 provider 暂无模型',
+  'modelpicker.confirmSwitchProvider': '切换 provider 可能会丢失当前会话的思维链(thinking)内容，确定继续吗？',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',

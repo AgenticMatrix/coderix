@@ -727,6 +727,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // per-session bind — the next created session inherits the global default.
     let hasActiveSession = false;
     try {
+      // Cross-provider switch invalidates the conversation's thinking blocks
+      // (they're signed by the producing provider and can't round-trip across
+      // providers). Strip them before rebinding so the new provider never sees
+      // stale blocks — the renderer already warned the user about this drop.
+      const oldModel = sessionManager.getActive().model;
+      const oldProvider = oldModel.includes('/') ? oldModel.slice(0, oldModel.indexOf('/')).toLowerCase() : null;
+      const newProvider = model.includes('/') ? model.slice(0, model.indexOf('/')).toLowerCase() : null;
+      if (oldProvider && newProvider && oldProvider !== newProvider) {
+        sessionManager.stripThinking();
+      }
       sessionManager.setActiveModel(model);
       hasActiveSession = true;
     } catch {

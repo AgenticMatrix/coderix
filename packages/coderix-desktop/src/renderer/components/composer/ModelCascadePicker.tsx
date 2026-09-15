@@ -70,8 +70,17 @@ export function ModelCascadePicker({ model = '', onModelChange }: ModelCascadePi
   };
 
   const handleSelect = (providerName: string, modelName: string) => {
-    setOpen(false);
     const full = `${providerName}/${modelName}`;
+    // Switching provider invalidates the conversation's thinking blocks (they
+    // are signed by the provider that produced them and can't round-trip across
+    // providers). Warn before a cross-provider switch so the user knows their
+    // thinking content will be dropped.
+    const targetProvider = providerName.toLowerCase();
+    const isCrossProvider = !!currentProvider && currentProvider !== targetProvider;
+    if (isCrossProvider && !confirm(t('modelpicker.confirmSwitchProvider'))) {
+      return;
+    }
+    setOpen(false);
     setSessionModel(full)
       .then(() => onModelChange?.(full))
       .catch(() => {});
