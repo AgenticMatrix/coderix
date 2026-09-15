@@ -22,6 +22,10 @@ export interface ProviderConfig {
   name: string;
   apiKey: string;
   baseUrl: string;
+  /** Wire protocol of this provider's endpoint, determined by "test connection"
+   *  (real probe) and persisted so a send routes direct (anthropic) or through
+   *  the protocol gateway (openai). Undefined → fall back to URL detection. */
+  protocol?: 'anthropic' | 'openai';
   models: ModelConfig[];
   connected: boolean;
 }
@@ -65,6 +69,7 @@ interface CoreModelEntry {
   base_url?: string;
   auth_token_env?: string;
   max_tokens?: number;
+  protocol?: 'anthropic' | 'openai';
 }
 
 interface CoderSettings {
@@ -111,6 +116,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
         name: entry.provider ?? 'unknown',
         apiKey: entry.auth_token_env ?? '',
         baseUrl: entry.base_url ?? '',
+        protocol: entry.protocol,
         models:
           entry.model?.map((m) => {
             const item = typeof m === 'string' ? { name: m } : m;
@@ -149,6 +155,7 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
       provider: p.name.toLowerCase(),
       base_url: p.baseUrl,
       auth_token_env: p.apiKey,
+      protocol: p.protocol,
       model: p.models.map((m) => ({
         name: m.name,
         temperature: m.temperature,

@@ -63,6 +63,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
   const [name, setName] = useState(provider.name);
   const [baseUrl, setBaseUrl] = useState(provider.baseUrl);
   const [apiKey, setApiKey] = useState(provider.apiKey);
+  const [protocol, setProtocol] = useState<'anthropic' | 'openai' | undefined>(provider.protocol);
   const [models, setModels] = useState<ModelConfig[]>(provider.models);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(provider.models.length > 0 ? 0 : null);
   const [fields, setFields] = useState<ModelConfig>(provider.models[0] ?? { ...EMPTY_FIELDS });
@@ -80,7 +81,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
   const adding = selectedIndex === null;
 
   const emit = (next: Partial<ProviderConfig>) => {
-    onChange({ ...provider, name: slug, baseUrl, apiKey, models, ...next });
+    onChange({ ...provider, name: slug, baseUrl, apiKey, protocol, models, ...next });
   };
 
   const patchFields = (patch: Partial<ModelConfig>) => {
@@ -126,6 +127,13 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
       setTestOk(result.ok);
       setTestMessage(result.message);
       setTestModels(result.models ?? []);
+      // The probe determines the endpoint's real wire protocol; persist it so
+      // sends route direct (anthropic) or via the gateway (openai) instead of
+      // re-guessing from the URL each time.
+      if (result.protocol) {
+        setProtocol(result.protocol);
+        emit({ protocol: result.protocol });
+      }
     } catch (err) {
       setTestOk(false);
       setTestMessage(err instanceof Error ? err.message : String(err));
@@ -295,7 +303,9 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
               value={baseUrl}
               onChange={(e) => {
                 setBaseUrl(e.target.value);
-                emit({ baseUrl: e.target.value });
+                // Endpoint changed → the previously probed protocol is stale.
+                setProtocol(undefined);
+                emit({ baseUrl: e.target.value, protocol: undefined });
                 resetTest();
               }}
               placeholder="https://…"
