@@ -145,20 +145,24 @@ export function AppLayout({
               </svg>
             </button>
 
-            {/* File panel (right detail column) toggle — mirrors the sidebar icon */}
-            <button
-              className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
-                         text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
-                         hover:bg-[var(--color-bg-tertiary)] transition-colors"
-              onClick={onToggleDetailPanel}
-              title={t('nav.toggleFilePanel')}
-              aria-label={t('nav.toggleFilePanel')}
-            >
-              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
-                <path d="M9.5 2.5v10" />
-              </svg>
-            </button>
+            {/* File panel toggle — shown here only while the panel is collapsed,
+                so it acts as a "reopen" affordance. Once expanded it moves above
+                the file panel itself (see the detail column header). */}
+            {!detailVisible && (
+              <button
+                className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
+                           text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                           hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                onClick={onToggleDetailPanel}
+                title={t('nav.toggleFilePanel')}
+                aria-label={t('nav.toggleFilePanel')}
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
+                  <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
+                  <path d="M9.5 2.5v10" />
+                </svg>
+              </button>
+            )}
 
             {/* Browser sidebar toggle — hidden while the browser is open, because
                 the Globe close button then lives in the browser column's own
@@ -178,13 +182,28 @@ export function AppLayout({
           </div>
         </div>
 
-        {/* Detail column header — hosts the file tabs, mirroring the browser's
-            tab bar sitting at the very top of its column. */}
+        {/* Detail column header — hosts the file tabs (mirroring the browser's
+            tab bar at the very top) plus a collapse button at its right edge. */}
         <AnimatePresence initial={false}>
           {detailVisible && detailPanel && (
             <motion.div {...sidebarAnimation} className="overflow-hidden flex-shrink-0">
-              <div style={{ width: detailWidthState, minWidth: 280, maxWidth: 600 }} className="h-full overflow-hidden">
-                <EditorTabs />
+              <div style={{ width: detailWidthState, minWidth: 280, maxWidth: 600 }} className="h-full flex items-stretch">
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <EditorTabs />
+                </div>
+                <button
+                  onClick={onToggleDetailPanel}
+                  title={t('nav.toggleFilePanel')}
+                  aria-label={t('nav.toggleFilePanel')}
+                  className="w-7 flex-shrink-0 flex items-center justify-center
+                             text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                             hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                >
+                  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
+                    <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
+                    <path d="M9.5 2.5v10" />
+                  </svg>
+                </button>
               </div>
             </motion.div>
           )}
