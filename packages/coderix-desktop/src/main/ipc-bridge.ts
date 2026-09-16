@@ -91,6 +91,7 @@ export const IPC_CHANNELS = {
   FS_WRITE_FILE: 'fs:writeFile',
   FS_LIST_DIR: 'fs:listDir',
   FS_WATCH: 'fs:watch',
+  FS_SEARCH: 'fs:search',
   TERMINAL_CREATE: 'terminal:create',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
@@ -963,6 +964,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }),
     );
     return { path: dirPath, entries: result };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FS_SEARCH, async (_event, query: string) => {
+    return searchProjectFiles(query, currentWorkDir);
   });
 
   ipcMain.handle(IPC_CHANNELS.FS_WATCH, async (_event, watchPath: string) => {
@@ -1855,6 +1860,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.FS_WRITE_FILE);
       ipcMain.removeHandler(IPC_CHANNELS.FS_LIST_DIR);
       ipcMain.removeHandler(IPC_CHANNELS.FS_WATCH);
+      ipcMain.removeHandler(IPC_CHANNELS.FS_SEARCH);
       ipcMain.removeHandler(IPC_CHANNELS.TERMINAL_CREATE);
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_GET);
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_SET);
@@ -1939,6 +1945,106 @@ function resolveProjectPath(userPath: string, projectRoot: string): string {
     throw new Error(`Path traversal not allowed: ${userPath}`);
   }
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// Project file search (name + content)
+// ---------------------------------------------------------------------------
+
+const SEARCH_SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', 'out', '.next', '.nuxt',
+  '.cache', 'coverage', 'target', '.coderix', '.idea', '.vscode',
+]);
+
+const SEARCH_SKIP_EXT = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp', 'tiff', 'avif',
+  'pdf', 'zip', 'gz', 'tgz', 'tar', '7z', 'rar', 'xz', 'bz2',
+  'exe', 'dll', 'so', 'dylib', 'bin', 'o', 'a', 'wasm',
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+  'mp3', 'mp4', 'avi', 'mov', 'mkv', 'webm', 'wav', 'flac', 'ogg', 'm4a',
+  'db', 'sqlite', 'sqlite3', 'lock', 'jar',
+]);
+
+const SEARCH_MAX_RESULTS = 200;
+const SEARCH_MAX_FILE_BYTES = 256 * 1024; // skip content search beyond this size
+const SEARCH_MAX_CONTENT_SCANS = 1000;    // bound total files read for content
+
+interface FileSearchMatch {
+  path: string;
+  name: string;
+  type: 'file' | 'directory';
+  matched: 'name' | 'content';
+  line?: string;
+}
+
+/**
+ * Recursively search the active project for `query`, matching file/directory
+ * names (case-insensitive substring) and, for likely-text files, their content.
+ * Bounded by result count, per-file size, and total content scans so a huge
+ * repo can't freeze the main process.
+ */
+async function searchProjectFiles(query: string, root: string): Promise<{ matches: FileSearchMatch[] }> {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return { matches: [] };
+
+  const matches: FileSearchMatch[] = [];
+  let contentScans = 0;
+  const rootAbs = resolve(root);
+
+  async function walk(dirAbs: string, relPrefix: string): Promise<void> {
+    if (matches.length >= SEARCH_MAX_RESULTS) return;
+    let entries;
+    try {
+      entries = await readdir(dirAbs, { withFileTypes: true });
+    } catch {
+      return; // unreadable directory — skip
+    }
+    for (const entry of entries) {
+      if (matches.length >= SEARCH_MAX_RESULTS) return;
+      const name = entry.name;
+      const rel = relPrefix ? `${relPrefix}/${name}` : name;
+      const abs = join(dirAbs, name);
+
+      if (entry.isDirectory()) {
+        if (SEARCH_SKIP_DIRS.has(name) || name.startsWith('.')) continue;
+        if (name.toLowerCase().includes(q)) {
+          matches.push({ path: rel, name, type: 'directory', matched: 'name' });
+        }
+        await walk(abs, rel);
+      } else if (entry.isFile()) {
+        if (name.toLowerCase().includes(q)) {
+          matches.push({ path: rel, name, type: 'file', matched: 'name' });
+          continue;
+        }
+        if (contentScans >= SEARCH_MAX_CONTENT_SCANS) continue;
+        const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+        if (SEARCH_SKIP_EXT.has(ext)) continue;
+        try {
+          const st = await stat(abs);
+          if (st.size > SEARCH_MAX_FILE_BYTES) continue;
+          contentScans++;
+          const content = await readFile(abs, 'utf-8');
+          const idx = content.toLowerCase().indexOf(q);
+          if (idx >= 0) {
+            matches.push({ path: rel, name, type: 'file', matched: 'content', line: previewMatchLine(content, idx) });
+          }
+        } catch {
+          // binary / unreadable — ignore
+        }
+      }
+    }
+  }
+
+  await walk(rootAbs, '');
+  return { matches };
+}
+
+/** Extract the (trimmed, truncated) line containing the match at `idx`. */
+function previewMatchLine(content: string, idx: number): string {
+  const start = content.lastIndexOf('\n', idx) + 1;
+  const end = content.indexOf('\n', idx);
+  const line = content.slice(start, end === -1 ? undefined : end).trim();
+  return line.length > 120 ? `${line.slice(0, 120)}…` : line;
 }
 
 // ---------------------------------------------------------------------------

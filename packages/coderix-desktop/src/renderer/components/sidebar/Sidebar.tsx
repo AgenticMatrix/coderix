@@ -39,7 +39,8 @@ export function Sidebar({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header — search + new session */}
+      {/* Header — session search + new session (only for the sessions tab) */}
+      {activeTab === 'sessions' && (
       <div className="px-3 pt-3 pb-2 space-y-2">
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
@@ -68,6 +69,7 @@ export function Sidebar({
           />
         </div>
       </div>
+      )}
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">

@@ -38,6 +38,7 @@ const CH = {
   FS_WRITE_FILE: 'fs:writeFile',
   FS_LIST_DIR: 'fs:listDir',
   FS_WATCH: 'fs:watch',
+  FS_SEARCH: 'fs:search',
   TERMINAL_CREATE: 'terminal:create',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
@@ -430,6 +431,11 @@ const coderixAPI = {
     /** Start watching a path for changes. Returns watcher ID. */
     watch(watchPath: string): Promise<{ watcherId: string; path: string }> {
       return ipcRenderer.invoke(CH.FS_WATCH, watchPath);
+    },
+
+    /** Recursively search the project for matching file/dir names or content. */
+    search(query: string): Promise<{ matches: Array<{ path: string; name: string; type: 'file' | 'directory'; matched: 'name' | 'content'; line?: string }> }> {
+      return ipcRenderer.invoke(CH.FS_SEARCH, query);
     },
   },
 

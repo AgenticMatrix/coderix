@@ -204,6 +204,12 @@ export const zh = {
   // ── 项目管理 ──────────────────────────────────────────
   'project.tabFiles': '文件',
   'project.tabGit': 'Git',
+  'project.searchFiles': '搜索文件或内容…',
+  'project.searching': '搜索中…',
+  'project.noResults': '无匹配结果',
+  'project.inContent': '内容匹配',
+  'project.searchCommits': '搜索提交…',
+  'project.noCommits': '无匹配提交',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

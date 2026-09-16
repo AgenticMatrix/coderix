@@ -208,6 +208,12 @@ export const en: Record<TranslationKey, string> = {
   // ── Project management ────────────────────────────────
   'project.tabFiles': 'Files',
   'project.tabGit': 'Git',
+  'project.searchFiles': 'Search files or content…',
+  'project.searching': 'Searching…',
+  'project.noResults': 'No matches',
+  'project.inContent': 'in content',
+  'project.searchCommits': 'Search commits…',
+  'project.noCommits': 'No matching commits',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',
