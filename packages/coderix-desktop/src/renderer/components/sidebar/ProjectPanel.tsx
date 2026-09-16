@@ -21,7 +21,7 @@ interface CommitInfo {
 }
 
 /**
- * ProjectPanel — the merged "项目管理" view. Combines the file explorer and the
+ * ProjectPanel — the merged "项目开发" view. Combines the file explorer and the
  * source-control (git) manager behind a two-tab segmented control, with a
  * project-wide search box above it. The search is contextual to the active tab:
  * "文件" searches file names + content, "Git" searches commits.

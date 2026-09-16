@@ -193,7 +193,8 @@ export const en: Record<TranslationKey, string> = {
 
   // ── 图标侧栏 ──────────────────────────────────────────
   'nav.sessions': 'Sessions',
-  'nav.project': 'Project',
+  'nav.project': 'Project Development',
+  'nav.library': 'Library',
   'nav.detailMode': 'Detailed mode',
   'nav.standardMode': 'Standard mode',
   'nav.switchToDetail': 'Switch to detailed mode',
@@ -215,6 +216,16 @@ export const en: Record<TranslationKey, string> = {
   'project.inContent': 'in content',
   'project.searchCommits': 'Search commits…',
   'project.noCommits': 'No matching commits',
+  'project.createConversation': 'Create conversation',
+  'project.createConversationDesc': 'Start a new conversation in this project',
+
+  // ── Library (Skills / Knowledge / Projects) ──────────
+  'library.tabSkills': 'Skills',
+  'library.tabKnowledge': 'Knowledge',
+  'library.tabProjects': 'Projects',
+  'library.knowledgeEmpty': 'Knowledge base coming soon',
+  'library.addProject': 'Add project',
+  'library.currentProject': 'Current project',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',

@@ -17,9 +17,10 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, ChevronDown, Plus } from 'lucide-react';
+import { FolderOpen, ChevronDown, Plus, MessageSquarePlus } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
+import { LibraryView } from './components/library/LibraryView';
 import { ChatView } from './components/chat/ChatView';
 import type { ChatViewMessage } from './components/chat/ChatView';
 import { Composer } from './components/composer/Composer';
@@ -145,6 +146,9 @@ export function App(): React.ReactElement {
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<QuestionRequest | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('sessions');
+  // True while viewing a project's file/git management interface without an
+  // active conversation (entered by double-clicking a project in the library).
+  const [projectManageOpen, setProjectManageOpen] = useState(false);
   const [diffData, setDiffData] = useState<{ file: string; diff: string } | null>(null);
   const [projectPath, setProjectPath] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -199,6 +203,16 @@ export function App(): React.ReactElement {
       .catch((err) => console.error('[App] Failed to load project directory:', err));
   }, []);
 
+  // Load recent projects when the library view opens, so its projects tab
+  // always renders an up-to-date card grid.
+  useEffect(() => {
+    if (sidebarTab === 'library') {
+      listProjectDirectories()
+        .then((result) => setRecentProjects(result.paths ?? []))
+        .catch((err) => console.error('[App] Failed to list project directories:', err));
+    }
+  }, [sidebarTab]);
+
   // Load discoverable Claude Code skills for the current workspace. Re-run on
   // workspace change so project-level (.claude/skills) skills appear/disappear.
   useEffect(() => {
@@ -242,6 +256,15 @@ export function App(): React.ReactElement {
       })
       .catch((err) => console.error('[App] Failed to remove skill dir:', err));
   };
+
+  // Shared skill-selection mutation (composer picker + library Skills tab).
+  const handleSkillsChange = useCallback(
+    (next: string[]) => {
+      setSelectedSkills(next);
+      setSessionSkills(next).catch(() => {});
+    },
+    [setSessionSkills],
+  );
 
   // ── Permission request listener ─────────────────────────────────────────
   useEffect(() => {
@@ -640,6 +663,38 @@ export function App(): React.ReactElement {
     }
   }, [projectPath, switchToProject]);
 
+  // Switch the active icon-sidebar tab, always leaving the "project manage"
+  // (no-conversation) mode behind — only a library double-click re-enters it.
+  const handleTabChange = useCallback((tab: SidebarTab) => {
+    setSidebarTab(tab);
+    setProjectManageOpen(false);
+  }, []);
+
+  // Double-click a project in the library: open its file/git management view
+  // without a conversation, offering a "create conversation" action instead.
+  const handleOpenProject = useCallback(async (path: string) => {
+    if (!path) return;
+    try {
+      const result = await setProjectDirectory(path);
+      await switchToProject(result.path);
+      // Reveal the sidebar (file/git management) and swap the chat area for
+      // the "create conversation" prompt.
+      useUIStore.getState().setSidebarOpen(true);
+      setProjectManageOpen(true);
+      setSidebarTab('project');
+    } catch (err) {
+      console.error('[App] Failed to open project:', err);
+    }
+  }, [switchToProject]);
+
+  // Create a new conversation in the currently-open project workspace. Keep the
+  // left sidebar on the project view (files/git), but swap the main area from
+  // the "create conversation" prompt to the new conversation's chat + composer.
+  const handleCreateConversation = useCallback(async () => {
+    await handleNewSession();
+    setProjectManageOpen(false);
+  }, [handleNewSession]);
+
   const toggleWorkspaceMenu = useCallback(() => {
     setWorkspaceOpen((prev) => {
       const next = !prev;
@@ -818,13 +873,13 @@ export function App(): React.ReactElement {
           onOpenSettings={() => setSettingsOpen(true)}
           onSelectProject={handleProjectSelect}
           activeTab={sidebarTab}
-          onTabChange={setSidebarTab}
+          onTabChange={handleTabChange}
           projectPath={projectPath}
         />
       }
-        sidebarVisible={sidebarOpen}
+        sidebarVisible={sidebarOpen && sidebarTab !== 'library'}
         iconActiveTab={sidebarTab}
-        onIconTabChange={setSidebarTab}
+        onIconTabChange={handleTabChange}
         onIconSettings={() => setSettingsOpen(true)}
         detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
         detailVisible={detailPanelOpen}
@@ -847,7 +902,36 @@ export function App(): React.ReactElement {
           onToggleTerminal: toggleTerminal,
         }}
       >
-        {/* Main content: ChatView (scrollable) + Composer (fixed bottom) + Terminal */}
+        {/* Main content: library view when active, else project-manage prompt,
+            else chat + composer + terminal */}
+        {sidebarTab === 'library' ? (
+          <LibraryView
+            skills={availableSkills}
+            selectedSkills={selectedSkills}
+            onSkillsChange={handleSkillsChange}
+            projects={recentProjects}
+            currentProject={projectPath}
+            onOpenProject={handleOpenProject}
+            onAddProject={handleProjectSelect}
+          />
+        ) : projectManageOpen ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center">
+            <div className="flex items-center justify-center w-12 h-12 rounded-[var(--radius-lg)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
+              <MessageSquarePlus size={24} />
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-semibold text-[var(--color-text-primary)]">{t('project.createConversation')}</div>
+              <div className="text-xs text-[var(--color-text-tertiary)]">{t('project.createConversationDesc')}</div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCreateConversation}
+              className="mt-2 px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-brand)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              {t('project.createConversation')}
+            </button>
+          </div>
+        ) : (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Error banner */}
           {error && (
@@ -943,10 +1027,7 @@ export function App(): React.ReactElement {
             <SkillPicker
               skills={availableSkills}
               selected={selectedSkills}
-              onChange={(next) => {
-                setSelectedSkills(next);
-                setSessionSkills(next).catch(() => {});
-              }}
+              onChange={handleSkillsChange}
               customDirs={customSkillDirs}
               onAddDir={handleAddSkillDir}
               onRemoveDir={handleRemoveSkillDir}
@@ -969,6 +1050,7 @@ export function App(): React.ReactElement {
           {/* Terminal — collapsible, toggled from the icon sidebar */}
           <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
         </div>
+        )}
       </AppLayout>
 
 

@@ -184,7 +184,7 @@ export class QueryEngine {
     // If teams exist on disk, inject static team declarations into system prompt.
     // Dynamic worker list is injected per-turn in submitMessage() to stay cache-friendly.
     let appendPrompt = this.config.appendSystemPrompt;
-    const activeSessionId = this.config.sessionManager.getActive()?.id;
+    const activeSessionId = this.config.sessionManager.tryGetActive()?.id;
     if (activeSessionId) {
       const sd = getSessionDir(activeSessionId);
       const { listTeams, loadTeamConfig } = await import('../teams/team-store.js');
@@ -217,7 +217,7 @@ export class QueryEngine {
 
     // Setup hook (non-blockable, fires on first init)
     if (this.config.hookManager) {
-      const session = this.config.sessionManager.getActive();
+      const session = this.config.sessionManager.tryGetActive();
       if (session && session.messages.length === 0) {
         this.config.hookManager.onSetup(
           session.id,

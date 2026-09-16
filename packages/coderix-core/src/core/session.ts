@@ -140,6 +140,14 @@ export class SessionManager {
   }
 
   /**
+   * Get the active session without throwing — null when none is active.
+   * Used by paths (e.g. QueryEngine.init) that must tolerate a missing session.
+   */
+  tryGetActive(): Session | null {
+    return this.activeSession;
+  }
+
+  /**
    * Get a session by ID.
    */
   get(id: string): Session | undefined {

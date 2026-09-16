@@ -189,7 +189,8 @@ export const zh = {
 
   // ── 图标侧栏 ──────────────────────────────────────────
   'nav.sessions': '会话',
-  'nav.project': '项目管理',
+  'nav.project': '项目开发',
+  'nav.library': '库',
   'nav.detailMode': '详细模式',
   'nav.standardMode': '标准模式',
   'nav.switchToDetail': '切换到详细模式',
@@ -202,7 +203,7 @@ export const zh = {
   'nav.toggleSidebar': '切换侧栏',
   'nav.toggleFilePanel': '切换文件面板',
 
-  // ── 项目管理 ──────────────────────────────────────────
+  // ── 项目开发 ──────────────────────────────────────────
   'project.tabFiles': '文件',
   'project.tabGit': 'Git',
   'project.searchFiles': '搜索文件或内容…',
@@ -211,6 +212,16 @@ export const zh = {
   'project.inContent': '内容匹配',
   'project.searchCommits': '搜索提交…',
   'project.noCommits': '无匹配提交',
+  'project.createConversation': '创建对话',
+  'project.createConversationDesc': '在此项目下开始一个新对话',
+
+  // ── 库（Skills / 知识库 / 项目） ─────────────────────
+  'library.tabSkills': 'Skills',
+  'library.tabKnowledge': '知识库',
+  'library.tabProjects': '项目',
+  'library.knowledgeEmpty': '知识库功能开发中',
+  'library.addProject': '添加项目',
+  'library.currentProject': '当前项目',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

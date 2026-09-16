@@ -58,6 +58,7 @@ export interface UIState {
 
   // Actions
   toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
   toggleDetailPanel: () => void;
   toggleTerminal: () => void;
   toggleBrowserPanel: () => void;
@@ -101,6 +102,10 @@ export const useUIStore = create<UIState>()((set) => ({
 
   toggleSidebar: () => {
     set((state) => ({ sidebarOpen: !state.sidebarOpen }));
+  },
+
+  setSidebarOpen: (sidebarOpen) => {
+    set({ sidebarOpen });
   },
 
   toggleDetailPanel: () => {
