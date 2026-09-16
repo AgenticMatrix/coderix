@@ -88,6 +88,10 @@ export function AppLayout({
   // Browser column width — lives here (not inside the panel) so it survives
   // the panel being closed and reopened.
   const [browserWidth, setBrowserWidth] = useState(BROWSER_WIDTH);
+  // Detail width is lifted here (like browserWidth) so the header's spacer and
+  // the resizable panel always agree. Otherwise the header's browser/sidebar
+  // toggle buttons stay pinned to the default width while the panel drags.
+  const [detailWidthState, setDetailWidthState] = useState(detailWidth || 380);
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
       <IconSidebar activeTab={iconActiveTab} onTabChange={onIconTabChange} onSettings={onIconSettings} />
@@ -160,7 +164,7 @@ export function AppLayout({
         <AnimatePresence initial={false}>
           {detailVisible && detailPanel && (
             <motion.div {...sidebarAnimation} className="overflow-hidden flex-shrink-0">
-              <div style={{ width: detailWidth || 380, minWidth: 280, maxWidth: 600 }} />
+              <div style={{ width: detailWidthState, minWidth: 280, maxWidth: 600 }} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -204,7 +208,7 @@ export function AppLayout({
               {...detailAnimation}
               className="overflow-hidden flex-shrink-0"
             >
-              <DetailResizablePanel width={detailWidth} onResize={onDetailResize}>
+              <DetailResizablePanel width={detailWidthState} onResize={setDetailWidthState}>
                 {detailPanel}
               </DetailResizablePanel>
             </motion.div>
@@ -339,10 +343,10 @@ function BrowserResizableColumn({
 function DetailResizablePanel({ children, width, onResize }: {
   children: ReactNode; width?: number; onResize?: (w: number) => void;
 }) {
-  const [w, setW] = useState(width || 380);
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
+  const w = width || 380;
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -358,7 +362,6 @@ function DetailResizablePanel({ children, width, onResize }: {
       if (!dragging.current) return;
       const delta = startX.current - e.clientX;
       const newW = Math.max(280, Math.min(600, startW.current + delta));
-      setW(newW);
       onResize?.(newW);
     };
     const onUp = () => {
