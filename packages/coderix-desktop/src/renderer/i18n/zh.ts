@@ -158,6 +158,12 @@ export const zh = {
   'modelpicker.noModels': '该 provider 暂无模型',
   'modelpicker.confirmSwitchProvider': '切换 provider 可能会丢失当前会话的思维链(thinking)内容，确定继续吗？',
 
+  // ── Skills 选择器 ─────────────────────────────────────
+  'skills.title': '选择 Skills',
+  'skills.button': 'Skills',
+  'skills.selectedCount': 'Skills · {count}',
+  'skills.empty': '未发现可用的 skill（在 ~/.claude/skills/ 或项目 .claude/skills/ 放置 SKILL.md）',
+
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',
   'explorer.loading': '加载文件中...',
@@ -200,6 +206,7 @@ export const zh = {
   'status.waiting': '等待输入…',
   'status.error': '错误',
   'status.engine': '当前智能体引擎',
+  'status.context': '上下文长度',
   'status.commands': 'K 命令',
   'status.terminal': '终端',
   'status.hideTerminal': '隐藏终端 (⌘`)',

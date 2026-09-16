@@ -75,9 +75,9 @@ async function invokeWithTimeout<T>(
 // ===========================================================================
 
 /** Submit a user query to the AI engine. */
-export async function submitQuery(query: string, sessionId?: string): Promise<unknown> {
+export async function submitQuery(query: string, sessionId?: string, skills?: string[]): Promise<unknown> {
   return invokeWithTimeout('query:submit', () =>
-    getAPI().query.submit(query, sessionId),
+    getAPI().query.submit(query, sessionId, skills),
   );
 }
 
@@ -333,6 +333,31 @@ export async function deleteSession(id: string): Promise<unknown> {
 export async function setSessionModel(model: string): Promise<unknown> {
   return invokeWithTimeout('session:setModel', () =>
     getAPI().session.setModel(model),
+  );
+}
+
+/** Bind the active session to a set of skills (per-session skill selection). */
+export async function setSessionSkills(skills: string[]): Promise<unknown> {
+  return invokeWithTimeout('session:setSkills', () =>
+    getAPI().session.setSkills(skills),
+  );
+}
+
+// ===========================================================================
+//  Skills
+// ===========================================================================
+
+/** A discoverable Claude Code skill (name + description + source). */
+export interface SkillInfo {
+  name: string;
+  description: string;
+  source: 'user' | 'project' | 'plugin';
+}
+
+/** List all discoverable Claude Code skills for the active workspace. */
+export async function listSkills(): Promise<SkillInfo[]> {
+  return invokeWithTimeout<SkillInfo[]>('skills:list', () =>
+    getAPI().skills.list(),
   );
 }
 

@@ -24,6 +24,8 @@ const CH = {
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
   SESSION_SET_MODEL: 'session:setModel',
+  SESSION_SET_SKILLS: 'session:setSkills',
+  SKILLS_LIST: 'skills:list',
   PERMISSION_APPROVE: 'permission:approve',
   PERMISSION_APPROVE_SESSION: 'permission:approveSession',
   PERMISSION_APPROVE_ALWAYS: 'permission:approveAlways',
@@ -289,8 +291,8 @@ const coderixAPI = {
      * @param query - The user's input message
      * @param sessionId - Optional session ID to route the query to
      */
-    submit(query: string, sessionId?: string): Promise<{ status: string }> {
-      return ipcRenderer.invoke(CH.QUERY_SUBMIT, { query, sessionId });
+    submit(query: string, sessionId?: string, skills?: string[]): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.QUERY_SUBMIT, { query, sessionId, skills });
     },
 
     /**
@@ -337,6 +339,20 @@ const coderixAPI = {
     /** Bind the active session to a model (per-session model switch). */
     setModel(model: string): Promise<{ status: string; model: string }> {
       return ipcRenderer.invoke(CH.SESSION_SET_MODEL, model);
+    },
+
+    /** Bind the active session to a set of skills (per-session skill selection). */
+    setSkills(skills: string[]): Promise<{ status: string; skills: string[] }> {
+      return ipcRenderer.invoke(CH.SESSION_SET_SKILLS, skills);
+    },
+  },
+
+  // ── Skills ────────────────────────────────────────────────────────────
+
+  skills: {
+    /** List discoverable Claude Code skills (name + description + source). */
+    list(): Promise<unknown[]> {
+      return ipcRenderer.invoke(CH.SKILLS_LIST);
     },
   },
 

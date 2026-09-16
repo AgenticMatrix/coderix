@@ -31,8 +31,9 @@ declare global {
 
   interface Window {
     coderixAPI: {
-      query: { submit(query: string, sessionId?: string): Promise<{ status: string }>; interrupt(): Promise<{ status: string }> };
-      session: { create(opts?: { title?: string; cwd?: string; model?: string }): Promise<{ id: string; title: string; turnCount: number }>; list(): Promise<unknown[]>; get(sessionId: string): Promise<unknown>; load(sessionId: string): Promise<unknown>; fork(sessionId: string): Promise<unknown>; delete(sessionId: string): Promise<{ status: string }>; setModel(model: string): Promise<{ status: string; model: string }> };
+      query: { submit(query: string, sessionId?: string, skills?: string[]): Promise<{ status: string }>; interrupt(): Promise<{ status: string }> };
+      session: { create(opts?: { title?: string; cwd?: string; model?: string }): Promise<{ id: string; title: string; turnCount: number }>; list(): Promise<unknown[]>; get(sessionId: string): Promise<unknown>; load(sessionId: string): Promise<unknown>; fork(sessionId: string): Promise<unknown>; delete(sessionId: string): Promise<{ status: string }>; setModel(model: string): Promise<{ status: string; model: string }>; setSkills(skills: string[]): Promise<{ status: string; skills: string[] }> };
+      skills: { list(): Promise<Array<{ name: string; description: string; source: string }>> };
       permission: { approve(toolUseId: string): Promise<{ status: string }>; approveSession(toolUseId: string): Promise<{ status: string }>; approveAlways(toolUseId: string): Promise<{ status: string }>; deny(toolUseId: string): Promise<{ status: string }>; setMode(mode: string): Promise<{ mode: string }> };
       question: { answer(toolUseId: string, answers: Record<string, string | string[]>): Promise<{ status: string }> };
       fs: { readFile(filePath: string): Promise<{ content: string; path: string }>; writeFile(path: string, content: string): Promise<{ status: string; path: string }>; listDir(dirPath: string): Promise<{ path: string; entries: unknown[] }>; watch(watchPath: string): Promise<{ watcherId: string; path: string }> };
@@ -73,6 +74,7 @@ declare global {
         goForward(tabId: string): Promise<void>;
         reload(tabId: string): Promise<void>;
         stop(tabId: string): Promise<void>;
+        setZoomFactor(tabId: string, factor: number): Promise<void>;
         executeJavaScript(tabId: string, code: string): Promise<unknown>;
         getPageInfo(tabId: string): Promise<{ url: string; title: string; canGoBack: boolean; canGoForward: boolean; isLoading: boolean }>;
         setBounds(tabId: string, bounds: { x: number; y: number; width: number; height: number }): Promise<void>;

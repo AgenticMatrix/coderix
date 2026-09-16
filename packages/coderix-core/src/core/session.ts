@@ -162,6 +162,19 @@ export class SessionManager {
   }
 
   /**
+   * Bind the active session to a set of skills and persist them to meta.json
+   * so the session remembers which skills to enable when resumed later.
+   * An empty array explicitly means "no skills enabled".
+   */
+  setActiveSkills(skills: string[]): void {
+    const session = this.getActive();
+    session.skills = skills;
+    session.updatedAt = new Date();
+    const dir = getSessionDir(session.id);
+    writeSessionMeta(dir, { skills }).catch(() => {});
+  }
+
+  /**
    * Resume a session from disk.
    */
   resume(sessionId: string): Session {
@@ -889,6 +902,7 @@ export class SessionManager {
         cwd: meta?.workDir ?? process.cwd(),
         model: meta?.model ?? 'unknown',
         provider: 'anthropic',
+        skills: meta?.skills ?? [],
         tokenUsage: {
           inputTokens: persistedContextLength,
           outputTokens: 0,

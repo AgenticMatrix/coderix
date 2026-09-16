@@ -494,6 +494,8 @@ export interface Session {
   parentSessionId?: string;
   model: string;
   provider: string;
+  /** Skills selected for this session (Claude Code skill names, e.g. `["pdf"]`). Empty array = no skills enabled. */
+  skills?: string[];
   tokenUsage: TokenUsageSummary;
   metadata: SessionMetadata;
 }

@@ -34,6 +34,7 @@ import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@code
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
 import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, setTaskListId, resolveModelByName } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
+import { listAvailableSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
 
 import type { WindowManager } from './window-manager.js';
@@ -76,6 +77,8 @@ export const IPC_CHANNELS = {
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
   SESSION_SET_MODEL: 'session:setModel',
+  SESSION_SET_SKILLS: 'session:setSkills',
+  SKILLS_LIST: 'skills:list',
   PERMISSION_APPROVE: 'permission:approve',
   PERMISSION_APPROVE_SESSION: 'permission:approveSession',
   PERMISSION_APPROVE_ALWAYS: 'permission:approveAlways',
@@ -197,7 +200,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Query ──────────────────────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: { query: string; sessionId?: string }) => {
+  ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: { query: string; sessionId?: string; skills?: string[] }) => {
     if (!sessionManager) {
       throw new Error('SessionManager not initialized');
     }
@@ -205,7 +208,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       throw new Error('QueryEngine not initialized');
     }
 
-    const { query: userInput, sessionId } = payload;
+    const { query: userInput, sessionId, skills } = payload;
 
     // Ensure we have an active session (create one if needed)
     try {
@@ -292,6 +295,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             apiKey: sessionResolved?.apiKey ?? activeConfig.apiKey,
             protocol: sessionResolved?.protocol ?? activeConfig.protocol,
             abortController: controller,
+            skills: skills ?? [],
             // Forward AskUserQuestion to the renderer through the same
             // question-request channel the in-process engine uses, so the
             // Claude Code SDK hook can resolve the tool call with the user's
@@ -597,6 +601,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     sessionManager.addCost(data.totalCost);
                   } catch { /* ignore */ }
                 }
+                // Report the turn's token usage to the renderer so the status
+                // bar's context meter stays populated for the claude-code engine
+                // (the coderix engine reports per-API-call via
+                // __internal_token_usage). The SDK's `usage` is the whole-query
+                // aggregate, so broadcasting it once at `done` matches the
+                // renderer's accumulating `onTokenUsage`.
+                if (data.usage) {
+                  safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
+                    inputTokens: data.usage.input_tokens ?? 0,
+                    outputTokens: data.usage.output_tokens ?? 0,
+                    cacheReadInputTokens: data.usage.cache_read_input_tokens ?? 0,
+                    cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
+                    totalCost: data.totalCost ?? 0,
+                  });
+                }
               }
               break;
             }
@@ -701,7 +720,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       await config.reloadQueryEngine(reloadWorkDir, reloadModel);
     }
 
-    return { id: session.id, title: session.title, messages: session.messages, turnCount: session.turnCount, cwd: session.cwd, model: session.model };
+    return { id: session.id, title: session.title, messages: session.messages, turnCount: session.turnCount, cwd: session.cwd, model: session.model, skills: session.skills ?? [] };
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_FORK, async (_event, sessionId: string) => {
@@ -764,6 +783,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     return { status: 'ok', model };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_SKILLS, async (_event, skills: string[]) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const next = Array.isArray(skills) ? skills.filter((s) => typeof s === 'string') : [];
+    try {
+      sessionManager.setActiveSkills(next);
+    } catch {
+      // No active session yet — the next created session starts with no skills.
+    }
+    return { status: 'ok', skills: next };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SKILLS_LIST, async () => {
+    return listAvailableSkills(currentWorkDir);
   });
 
   // ── Permission ─────────────────────────────────────────────────────────

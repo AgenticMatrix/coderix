@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal, Gauge } from 'lucide-react';
 import { Badge, type BadgeProps } from './Badge';
 import { useT, type TranslationKey } from '../../i18n/index.js';
 import './StatusBar.css';
@@ -10,6 +10,10 @@ export interface StatusBarProps {
   /** Tokens used */
   inputTokens?: number;
   outputTokens?: number;
+  /** Cache-read tokens (accumulated, part of the context footprint) */
+  cacheReadTokens?: number;
+  /** Maximum context window size in tokens */
+  contextMax?: number;
   /** Cost in USD */
   cost?: number;
   /** Git branch */
@@ -56,6 +60,8 @@ export function StatusBar({
   engine,
   inputTokens,
   outputTokens,
+  cacheReadTokens,
+  contextMax,
   cost,
   gitBranch,
   gitAhead = 0,
@@ -67,6 +73,16 @@ export function StatusBar({
 }: StatusBarProps): React.ReactElement {
   const t = useT();
   const status = statusConfig[agentStatus];
+
+  // Context footprint mirrors the CLI: output + input + cache-read tokens.
+  const contextTokens = (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheReadTokens ?? 0);
+  const contextRatio = contextMax && contextMax > 0 ? contextTokens / contextMax : 0;
+  const contextPercent = Math.min(100, Math.round(contextRatio * 100));
+  const contextColor = contextRatio > 0.9
+    ? 'var(--color-danger)'
+    : contextRatio > 0.7
+      ? 'var(--color-warning)'
+      : 'var(--color-success)';
 
   return (
     <div
@@ -116,6 +132,26 @@ export function StatusBar({
             <DollarSign size={10} className="text-[var(--color-text-tertiary)]" />
             <span>{formatCost(cost)}</span>
           </span>
+          <div className="w-px h-3 bg-[var(--color-separator)]" />
+        </>
+      )}
+
+      {/* Context usage */}
+      {contextMax !== undefined && contextMax > 0 && (
+        <>
+          <div className="flex items-center gap-1.5" title={t('status.context')}>
+            <Gauge size={11} className="text-[var(--color-text-tertiary)]" />
+            <div className="w-14 h-1.5 rounded-full bg-[var(--color-bg-tertiary)] overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${contextPercent}%`, backgroundColor: contextColor }}
+              />
+            </div>
+            <span className="font-mono">{contextPercent}%</span>
+            <span className="text-[var(--color-text-tertiary)]">
+              {formatTokens(contextTokens)}/{formatTokens(contextMax)}
+            </span>
+          </div>
           <div className="w-px h-3 bg-[var(--color-separator)]" />
         </>
       )}

@@ -360,6 +360,8 @@ export interface SessionMeta {
   workDir?: string;
   /** Model the session is bound to ("provider/model-name"), restored on resume. */
   model?: string;
+  /** Skills selected for this session (Claude Code skill names). Empty array = no skills enabled. */
+  skills?: string[];
 }
 
 /**

@@ -60,6 +60,8 @@ export interface ClaudeCodeQueryOptions {
    * gateway, which converts anthropic → openai on the wire.
    */
   protocol?: 'anthropic' | 'openai';
+  /** Skill names to enable for this turn. Empty array = no skills. */
+  skills?: string[];
   abortController: AbortController;
   /**
    * When provided, the model's `AskUserQuestion` tool calls are forwarded here
@@ -361,7 +363,7 @@ function createSpawnFn(
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
+  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -402,6 +404,9 @@ export async function* runClaudeCodeQuery(
   };
   if (model) options.model = model;
   if (resume) options.resume = resume;
+  // Always set the skill filter so an empty selection is honored as "no skills"
+  // (rather than falling through to the CLI's load-everything default).
+  options.skills = skills ?? [];
   const preToolUseHooks: HookCallbackMatcher[] = [];
   if (onAskUserQuestion) {
     preToolUseHooks.push({

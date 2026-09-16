@@ -24,6 +24,7 @@ import { ChatView } from './components/chat/ChatView';
 import type { ChatViewMessage } from './components/chat/ChatView';
 import { Composer } from './components/composer/Composer';
 import { ModelCascadePicker } from './components/composer/ModelCascadePicker';
+import { SkillPicker } from './components/composer/SkillPicker';
 import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { QuestionPrompt } from './components/composer/QuestionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
@@ -49,7 +50,10 @@ import {
   selectProjectDirectory,
   listProjectDirectories,
   setProjectDirectory,
+  listSkills,
+  setSessionSkills,
 } from './ipc-client';
+import type { SkillInfo } from './ipc-client';
 import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
 
 // ---------------------------------------------------------------------------
@@ -146,6 +150,10 @@ export function App(): React.ReactElement {
   // here (not read from the global default) so switching models in one session
   // never changes the model shown for any other session.
   const [sessionModel, setSessionModelState] = useState<string | null>(null);
+  // Skills selected for the active session (mirrors sessionModel's per-session
+  // ownership: switching sessions restores that session's own selection).
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
   // Holds the last committed composer value before clearing
@@ -175,6 +183,14 @@ export function App(): React.ReactElement {
       .then((result) => setProjectPath(result.path))
       .catch((err) => console.error('[App] Failed to load project directory:', err));
   }, []);
+
+  // Load discoverable Claude Code skills for the current workspace. Re-run on
+  // workspace change so project-level (.claude/skills) skills appear/disappear.
+  useEffect(() => {
+    listSkills()
+      .then((skills) => setAvailableSkills(skills))
+      .catch((err) => console.error('[App] Failed to list skills:', err));
+  }, [projectPath]);
 
   // ── Permission request listener ─────────────────────────────────────────
   useEffect(() => {
@@ -379,6 +395,13 @@ export function App(): React.ReactElement {
           setSessionModelState(loadedModel);
           useSettingsStore.getState().load().catch(() => {});
 
+          // Restore the session's own skill selection (per-session skills).
+          setSelectedSkills(
+            Array.isArray(session?.skills)
+              ? (session.skills as string[])
+              : [],
+          );
+
           // Keep the workspace label in sync with the session's own workspace
           // (the main process already switched `currentWorkDir` on load).
           if (typeof session?.cwd === 'string' && session.cwd) {
@@ -501,6 +524,7 @@ export function App(): React.ReactElement {
     useStreamStore.setState({ currentMessage: null });
     // A fresh session inherits the global default model.
     setSessionModelState(null);
+    setSelectedSkills([]);
     await createSession();
     const newSid = useSessionStore.getState().currentSessionId;
     if (newSid) setSessionId(newSid);
@@ -534,6 +558,7 @@ export function App(): React.ReactElement {
     useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null, error: null });
     useStreamStore.setState({ currentMessage: null });
     setSessionModelState(null);
+    setSelectedSkills([]);
     await loadSessions();
   }, [loadSessions, setSessionId]);
 
@@ -591,7 +616,7 @@ export function App(): React.ReactElement {
       if (currentSid) {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
-          await submitQuery(value, currentSid);
+          await submitQuery(value, currentSid, selectedSkills);
         } catch (err) {
           console.error('[App] Failed to submit query:', err);
           useChatStore.getState().setError(
@@ -603,7 +628,7 @@ export function App(): React.ReactElement {
         useChatStore.getState().setError('No active session');
       }
     },
-    [sendMessage, createSession, setSessionId],
+    [sendMessage, createSession, setSessionId, selectedSkills],
   );
 
   // ── Build chat messages for ChatView ────────────────────────────────────
@@ -698,6 +723,28 @@ export function App(): React.ReactElement {
     return 'thinking';
   }, [isStreaming, streamCurrentMessage]);
 
+  // ── Context window size for the status bar ───────────────────────────────
+  // Resolve the active model's max_context from settings. Models without an
+  // explicit max_context carry the 1_000_000 sentinel (see settingsStore), so
+  // treat that — and any non-positive value — as "unknown" and fall back to the
+  // CLI's 131072 default.
+  const contextMax = useMemo(() => {
+    if (!settings) return 131072;
+    const name = sessionModel ?? settings.defaultModel ?? '';
+    if (!name) return 131072;
+    const slash = name.indexOf('/');
+    const providerPart = slash >= 0 ? name.slice(0, slash) : null;
+    const modelPart = slash >= 0 ? name.slice(slash + 1) : name;
+    for (const p of settings.providers) {
+      if (providerPart && p.name.toLowerCase() !== providerPart.toLowerCase()) continue;
+      for (const m of p.models) {
+        if (m.name !== modelPart) continue;
+        return m.maxContext > 0 && m.maxContext < 1_000_000 ? m.maxContext : 131072;
+      }
+    }
+    return 131072;
+  }, [settings, sessionModel]);
+
   // Workspace display name — the last path segment (folder name). Defaults to
   // the folder name so the menu header reads like the project's name.
   const workspaceName = projectPath ? getFolderName(projectPath) : t('workspace.chooseDir');
@@ -732,6 +779,8 @@ export function App(): React.ReactElement {
           agentStatus,
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
+          cacheReadTokens: tokenUsage.cacheReadTokens || undefined,
+          contextMax,
           cost: tokenUsage.totalCost || undefined,
           gitBranch: gitBranch || undefined,
           gitAhead: gitAhead || undefined,
@@ -831,6 +880,15 @@ export function App(): React.ReactElement {
             <ModelCascadePicker
               model={(sessionModel ?? settings?.defaultModel) || t('modelpicker.unconfigured')}
               onModelChange={setSessionModelState}
+            />
+
+            <SkillPicker
+              skills={availableSkills}
+              selected={selectedSkills}
+              onChange={(next) => {
+                setSelectedSkills(next);
+                setSessionSkills(next).catch(() => {});
+              }}
             />
           </div>
 
