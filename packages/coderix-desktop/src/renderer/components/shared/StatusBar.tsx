@@ -1,6 +1,6 @@
 import React from 'react';
 import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal } from 'lucide-react';
-import { Badge } from './Badge';
+import { Badge, type BadgeProps } from './Badge';
 import { useT, type TranslationKey } from '../../i18n/index.js';
 import './StatusBar.css';
 
@@ -18,7 +18,7 @@ export interface StatusBarProps {
   gitAhead?: number;
   gitBehind?: number;
   /** Agent status */
-  agentStatus?: 'idle' | 'thinking' | 'executing' | 'waiting' | 'error';
+  agentStatus?: 'idle' | 'thinking' | 'executing' | 'output' | 'waiting' | 'error';
   /** Whether the terminal panel is open */
   terminalOpen?: boolean;
   /** Toggle the terminal panel */
@@ -38,12 +38,13 @@ function formatCost(cost: number): string {
   return '<$0.01';
 }
 
-const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKey: TranslationKey; color: string }> = {
-  idle: { labelKey: 'status.idle', color: 'bg-[var(--color-text-tertiary)]' },
-  thinking: { labelKey: 'status.thinking', color: 'bg-[var(--color-info)] animate-pulse' },
-  executing: { labelKey: 'status.executing', color: 'bg-[var(--color-warning)] animate-pulse' },
-  waiting: { labelKey: 'status.waiting', color: 'bg-[var(--color-warning)]' },
-  error: { labelKey: 'status.error', color: 'bg-[var(--color-danger)]' },
+const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKey: TranslationKey; variant: NonNullable<BadgeProps['variant']> }> = {
+  idle: { labelKey: 'status.idle', variant: 'success' },
+  thinking: { labelKey: 'status.thinking', variant: 'purple' },
+  executing: { labelKey: 'status.executing', variant: 'warning' },
+  output: { labelKey: 'status.output', variant: 'blue' },
+  waiting: { labelKey: 'status.waiting', variant: 'warning' },
+  error: { labelKey: 'status.error', variant: 'danger' },
 };
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -120,7 +121,7 @@ export function StatusBar({
       )}
 
       {/* Agent status */}
-      <Badge variant={agentStatus === 'error' ? 'danger' : agentStatus === 'executing' ? 'warning' : 'default'} dot size="sm">
+      <Badge variant={status.variant} dot size="sm">
         {t(status.labelKey)}
       </Badge>
 

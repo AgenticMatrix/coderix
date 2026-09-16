@@ -199,7 +199,8 @@ export const en: Record<TranslationKey, string> = {
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',
   'status.thinking': 'Thinking…',
-  'status.executing': 'Executing…',
+  'status.executing': 'Running tools…',
+  'status.output': 'Responding…',
   'status.waiting': 'Waiting for input…',
   'status.error': 'Error',
   'status.engine': 'Current agent engine',

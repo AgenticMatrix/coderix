@@ -681,9 +681,22 @@ export function App(): React.ReactElement {
   const isEmpty = chatViewMessages.length === 0;
 
   // ── Agent status derivation ─────────────────────────────────────────────
-  const agentStatus = isStreaming
-    ? ('thinking' as const)
-    : ('idle' as const);
+  // While streaming, derive a finer-grained status from the blocks being
+  // built: an in-flight tool_use → "executing"; otherwise the most recent
+  // block type drives the label (thinking → "thinking", text → "output").
+  const agentStatus = useMemo<'idle' | 'thinking' | 'executing' | 'output'>(() => {
+    if (!isStreaming) return 'idle';
+    const blocks = streamCurrentMessage?.blocks ?? [];
+    const toolRunning = blocks.some(
+      (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
+    );
+    if (toolRunning) return 'executing';
+    const last = blocks[blocks.length - 1];
+    if (!last) return 'thinking';
+    if (last.type === 'thinking' || last.type === 'tool_result') return 'thinking';
+    if (last.type === 'text') return 'output';
+    return 'thinking';
+  }, [isStreaming, streamCurrentMessage]);
 
   // Workspace display name — the last path segment (folder name). Defaults to
   // the folder name so the menu header reads like the project's name.

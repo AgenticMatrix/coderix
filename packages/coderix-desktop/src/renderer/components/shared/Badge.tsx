@@ -4,7 +4,7 @@ export interface BadgeProps {
   /** Badge label */
   children: React.ReactNode;
   /** Color variant */
-  variant?: 'default' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
+  variant?: 'default' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'purple' | 'blue';
   /** Size preset */
   size?: 'sm' | 'md';
   /** Has dot indicator */
@@ -20,6 +20,8 @@ const variantStyles: Record<NonNullable<BadgeProps['variant']>, string> = {
   warning: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
   danger: 'bg-[var(--color-danger)]/10 text-[var(--color-danger)]',
   info: 'bg-[var(--color-info)]/10 text-[var(--color-info)]',
+  purple: 'bg-[var(--color-purple)]/10 text-[var(--color-purple)]',
+  blue: 'bg-[var(--color-blue)]/10 text-[var(--color-blue)]',
 };
 
 const dotColors: Record<NonNullable<BadgeProps['variant']>, string> = {
@@ -29,6 +31,8 @@ const dotColors: Record<NonNullable<BadgeProps['variant']>, string> = {
   warning: 'bg-[var(--color-warning)]',
   danger: 'bg-[var(--color-danger)]',
   info: 'bg-[var(--color-info)]',
+  purple: 'bg-[var(--color-purple)]',
+  blue: 'bg-[var(--color-blue)]',
 };
 
 const sizeStyles: Record<NonNullable<BadgeProps['size']>, string> = {
