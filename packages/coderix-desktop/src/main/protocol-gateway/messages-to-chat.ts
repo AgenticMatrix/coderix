@@ -156,6 +156,11 @@ export function chatResponseToMessages(body: Json): Json {
   const message = (choice?.message ?? {}) as Json;
 
   const content: Json[] = [];
+  // Reasoning content (DeepSeek reasoner / vLLM reasoning models) → thinking
+  // block. OpenAI Chat Completions carries no thinking signature, so omit it.
+  if (typeof message.reasoning_content === 'string' && message.reasoning_content) {
+    content.push({ type: 'thinking', thinking: message.reasoning_content });
+  }
   if (typeof message.content === 'string' && message.content) {
     content.push({ type: 'text', text: message.content });
   } else if (Array.isArray(message.content)) {
@@ -203,6 +208,8 @@ export class ChatToMessagesSseConverter {
   private blockIndex = 0;
   private textOpen = false;
   private textBlockIndex = -1;
+  private thinkingOpen = false;
+  private thinkingBlockIndex = -1;
   private tools = new Map<number, ToolBlock>();
   private finishReason = 'stop';
   private usage: Json = {};
@@ -238,7 +245,29 @@ export class ChatToMessagesSseConverter {
       });
     }
 
+    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+      if (!this.thinkingOpen) {
+        this.thinkingOpen = true;
+        this.thinkingBlockIndex = this.blockIndex++;
+        frames.push({
+          event: 'content_block_start',
+          data: JSON.stringify({ type: 'content_block_start', index: this.thinkingBlockIndex, content_block: { type: 'thinking', thinking: '' } }),
+        });
+      }
+      frames.push({
+        event: 'content_block_delta',
+        data: JSON.stringify({ type: 'content_block_delta', index: this.thinkingBlockIndex, delta: { type: 'thinking_delta', thinking: delta.reasoning_content } }),
+      });
+    }
+
     if (typeof delta.content === 'string' && delta.content) {
+      if (this.thinkingOpen) {
+        frames.push({
+          event: 'content_block_stop',
+          data: JSON.stringify({ type: 'content_block_stop', index: this.thinkingBlockIndex }),
+        });
+        this.thinkingOpen = false;
+      }
       if (!this.textOpen) {
         this.textOpen = true;
         this.textBlockIndex = this.blockIndex++;
@@ -286,6 +315,10 @@ export class ChatToMessagesSseConverter {
   finishSse(): SseFrame[] {
     if (!this.started) return [];
     const frames: SseFrame[] = [];
+    if (this.thinkingOpen) {
+      frames.push({ event: 'content_block_stop', data: JSON.stringify({ type: 'content_block_stop', index: this.thinkingBlockIndex }) });
+      this.thinkingOpen = false;
+    }
     if (this.textOpen) {
       frames.push({ event: 'content_block_stop', data: JSON.stringify({ type: 'content_block_stop', index: this.textBlockIndex }) });
     }
