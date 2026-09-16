@@ -35,6 +35,8 @@ const BROWSER_WIDTH = 720;
 const BROWSER_MIN_WIDTH = 200;
 /** Minimum width of the chat area (browser shrinks first, then chat to this floor). */
 const CHAT_MIN_WIDTH = 200;
+/** Maximum width the file/detail column can be dragged out to. */
+const DETAIL_MAX_WIDTH = 1600;
 
 /**
  * WeChat × Apple animation presets:
@@ -192,7 +194,7 @@ export function AppLayout({
             <motion.div
               {...sidebarAnimation}
               className="overflow-hidden flex-shrink min-w-0"
-              style={{ width: detailWidthState, maxWidth: 600, minWidth: 0 }}
+              style={{ width: detailWidthState, maxWidth: DETAIL_MAX_WIDTH, minWidth: 0 }}
             >
               <div className="h-full flex items-stretch w-full">
                 <div className="flex-1 min-w-0 overflow-hidden">
@@ -254,7 +256,7 @@ export function AppLayout({
             <motion.div
               {...detailAnimation}
               className="overflow-hidden flex-shrink min-w-0"
-              style={{ width: detailWidthState, maxWidth: 600, minWidth: 0 }}
+              style={{ width: detailWidthState, maxWidth: DETAIL_MAX_WIDTH, minWidth: 0 }}
             >
               <DetailResizablePanel width={detailWidthState} onResize={setDetailWidthState}>
                 {detailPanel}
@@ -409,7 +411,7 @@ function DetailResizablePanel({ children, width, onResize }: {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return;
       const delta = startX.current - e.clientX;
-      const newW = Math.max(280, Math.min(600, startW.current + delta));
+      const newW = Math.max(280, Math.min(DETAIL_MAX_WIDTH, startW.current + delta));
       onResize?.(newW);
     };
     const onUp = () => {
