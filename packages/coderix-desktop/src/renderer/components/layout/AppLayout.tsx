@@ -128,7 +128,10 @@ export function AppLayout({
         </AnimatePresence>
 
         {/* Chat column header — browser + sidebar toggles at this column's far right */}
-        <div className="flex-1 flex items-center justify-end px-4 min-w-0 titlebar-drag">
+        <div
+          className="flex-1 flex items-center justify-end px-4 titlebar-drag"
+          style={{ minWidth: CHAT_MIN_WIDTH }}
+        >
           <div className="titlebar-no-drag flex items-center gap-1">
             {/* Sidebar toggle */}
             <button
@@ -186,8 +189,12 @@ export function AppLayout({
             tab bar at the very top) plus a collapse button at its right edge. */}
         <AnimatePresence initial={false}>
           {detailVisible && detailPanel && (
-            <motion.div {...sidebarAnimation} className="overflow-hidden flex-shrink-0">
-              <div style={{ width: detailWidthState, minWidth: 280, maxWidth: 600 }} className="h-full flex items-stretch">
+            <motion.div
+              {...sidebarAnimation}
+              className="overflow-hidden flex-shrink min-w-0"
+              style={{ width: detailWidthState, maxWidth: 600, minWidth: 0 }}
+            >
+              <div className="h-full flex items-stretch w-full">
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <EditorTabs />
                 </div>
@@ -246,7 +253,8 @@ export function AppLayout({
           {detailVisible && detailPanel && (
             <motion.div
               {...detailAnimation}
-              className="overflow-hidden flex-shrink-0"
+              className="overflow-hidden flex-shrink min-w-0"
+              style={{ width: detailWidthState, maxWidth: 600, minWidth: 0 }}
             >
               <DetailResizablePanel width={detailWidthState} onResize={setDetailWidthState}>
                 {detailPanel}
@@ -418,7 +426,7 @@ function DetailResizablePanel({ children, width, onResize }: {
   }, [onResize]);
 
   return (
-    <div style={{ position: 'relative', width: w, minWidth: 280, maxWidth: 600, flexShrink: 0 }} className="h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]">
+    <div style={{ position: 'relative', width: '100%', minWidth: 0 }} className="h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]">
       {/* Drag handle — left edge */}
       <div
         onMouseDown={onMouseDown}
