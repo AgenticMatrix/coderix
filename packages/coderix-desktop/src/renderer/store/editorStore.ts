@@ -8,12 +8,26 @@ export interface OpenFile {
   modified: boolean;
 }
 
+/** A git diff opened in the detail column (one tab per changed file). */
+export interface DiffTab {
+  path: string;
+  name: string;
+  diff: string;
+  content?: string;
+}
+
+/** A single tab in the detail column: either an editable file or a git diff. */
+export type EditorTab =
+  | { kind: 'file'; id: string; file: OpenFile }
+  | { kind: 'diff'; id: string; diff: DiffTab };
+
 interface EditorState {
-  files: OpenFile[];
-  activeFile: string | null;
+  tabs: EditorTab[];
+  activeTabId: string | null;
   openFile: (file: OpenFile) => void;
-  closeFile: (path: string) => void;
-  setActiveFile: (path: string) => void;
+  openDiff: (diff: DiffTab) => void;
+  closeTab: (id: string) => void;
+  setActiveTab: (id: string) => void;
   updateContent: (path: string, content: string) => void;
 }
 
@@ -36,36 +50,54 @@ function detectLanguage(filename: string): string {
 }
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
-  files: [],
-  activeFile: null,
+  tabs: [],
+  activeTabId: null,
 
-  openFile: (file: OpenFile) => {
-    const { files } = get();
-    const exists = files.find(f => f.path === file.path);
-    if (exists) {
-      set({ activeFile: file.path });
+  openFile: (file) => {
+    const id = `file:${file.path}`;
+    const { tabs } = get();
+    if (tabs.some((t) => t.id === id)) {
+      set({ activeTabId: id });
     } else {
-      set({
-        files: [...files, { ...file, language: file.language || detectLanguage(file.name) }],
-        activeFile: file.path,
-      });
+      const fileTab: EditorTab = {
+        kind: 'file',
+        id,
+        file: { ...file, language: file.language || detectLanguage(file.name) },
+      };
+      set({ tabs: [...tabs, fileTab], activeTabId: id });
     }
   },
 
-  closeFile: (path: string) => {
-    const { files, activeFile } = get();
-    const updated = files.filter(f => f.path !== path);
-    const newActive = activeFile === path
-      ? (updated.length > 0 ? updated[updated.length - 1].path : null)
-      : activeFile;
-    set({ files: updated, activeFile: newActive });
+  openDiff: (diff) => {
+    const id = `diff:${diff.path}`;
+    const { tabs } = get();
+    const diffTab: EditorTab = { kind: 'diff', id, diff };
+    if (tabs.some((t) => t.id === id)) {
+      // Refresh the diff in place — the working tree may have changed.
+      set({ tabs: tabs.map((t) => (t.id === id ? diffTab : t)), activeTabId: id });
+    } else {
+      set({ tabs: [...tabs, diffTab], activeTabId: id });
+    }
   },
 
-  setActiveFile: (path: string) => set({ activeFile: path }),
+  closeTab: (id) => {
+    const { tabs, activeTabId } = get();
+    const updated = tabs.filter((t) => t.id !== id);
+    const newActive = activeTabId === id
+      ? (updated.length > 0 ? updated[updated.length - 1].id : null)
+      : activeTabId;
+    set({ tabs: updated, activeTabId: newActive });
+  },
 
-  updateContent: (path: string, content: string) => {
-    set(state => ({
-      files: state.files.map(f => f.path === path ? { ...f, content, modified: true } : f),
+  setActiveTab: (id) => set({ activeTabId: id }),
+
+  updateContent: (path, content) => {
+    set((state) => ({
+      tabs: state.tabs.map((t): EditorTab =>
+        t.kind === 'file' && t.file.path === path
+          ? { ...t, file: { ...t.file, content, modified: true } }
+          : t,
+      ),
     }));
   },
 }));

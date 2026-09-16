@@ -149,7 +149,6 @@ export function App(): React.ReactElement {
   // True while viewing a project's file/git management interface without an
   // active conversation (entered by double-clicking a project in the library).
   const [projectManageOpen, setProjectManageOpen] = useState(false);
-  const [diffData, setDiffData] = useState<{ file: string; diff: string } | null>(null);
   const [projectPath, setProjectPath] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
@@ -314,13 +313,13 @@ export function App(): React.ReactElement {
     init().catch((err) => console.error('[App] Session init failed:', err));
   }, [loadSessions, createSession, setSessionId]);
 
-  // ── Auto-close right panel when all editor tabs are closed ──────────
-  const editorFiles = useEditorStore((s) => s.files);
+  // ── Auto-close right panel when all editor/diff tabs are closed ─────
+  const editorTabs = useEditorStore((s) => s.tabs);
   useEffect(() => {
-    if (editorFiles.length === 0 && detailPanelOpen && !diffData) {
+    if (editorTabs.length === 0 && detailPanelOpen) {
       toggleDetailPanel();
     }
-  }, [editorFiles.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editorTabs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── File open event (from FileExplorer) ─────────────────────────────
   useEffect(() => {
@@ -337,8 +336,13 @@ export function App(): React.ReactElement {
   // ── Git diff event listener ──────────────────────────────────────────
   useEffect(() => {
     const handler = (e: Event) => {
-      const d = (e as CustomEvent).detail as { file: string; diff: string };
-      setDiffData(d);
+      const d = (e as CustomEvent).detail as { file: string; diff: string; content?: string };
+      useEditorStore.getState().openDiff({
+        path: d.file,
+        name: d.file.split('/').pop() ?? d.file,
+        diff: d.diff,
+        content: d.content,
+      });
       if (!useUIStore.getState().detailPanelOpen) useUIStore.getState().toggleDetailPanel();
     };
     window.addEventListener('coderix:open-diff', handler);
@@ -881,7 +885,7 @@ export function App(): React.ReactElement {
         iconActiveTab={sidebarTab}
         onIconTabChange={handleTabChange}
         onIconSettings={() => setSettingsOpen(true)}
-        detailPanel={<DetailPanel data={diffData} onClose={() => { setDiffData(null); if (detailPanelOpen) toggleDetailPanel(); }} />}
+        detailPanel={<DetailPanel />}
         detailVisible={detailPanelOpen}
         browserPanel={<BrowserPanel onClose={toggleBrowserPanel} />}
         browserPanelVisible={browserPanelOpen && !settingsOpen}

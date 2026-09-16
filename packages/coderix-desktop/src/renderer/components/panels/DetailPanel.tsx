@@ -1,15 +1,9 @@
 import React, { useState } from 'react';
-import { X, FileText, Plus, RotateCcw, Bot } from 'lucide-react';
+import { FileText, Plus, RotateCcw, Bot } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
-import { useEditorStore } from '../../store/editorStore.js';
+import { useEditorStore, type DiffTab } from '../../store/editorStore.js';
 import { EditorPanel } from '../editor/EditorPanel.js';
 import { useT } from '../../i18n/index.js';
-
-export interface DiffData {
-  file: string;
-  diff: string;
-  content?: string; // full file content (from git show <hash>:<file>)
-}
 
 interface Hunk {
   header: string;   // @@ line
@@ -163,35 +157,25 @@ function lineColor(line: string): { bg: string; fg: string } {
   return { bg: 'transparent', fg: 'var(--color-text-primary)' };
 }
 
-export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose?: () => void }): React.ReactElement | null {
+/**
+ * The single diff view for one changed file (one tab). Owns its own staging /
+ * reviewing state so switching diff tabs starts fresh.
+ */
+function DiffView({ data }: { data: DiffTab }): React.ReactElement {
   const t = useT();
   const [stagingHunks, setStagingHunks] = useState<Set<number>>(new Set());
   const [reviewing, setReviewing] = useState(false);
-  const editorFiles = useEditorStore((s) => s.files);
   const addNotification = useUIStore((s) => s.addNotification);
   const api = (window as any).coderixAPI?.git;
   const fullApi = (window as any).coderixAPI;
 
-  // Show editor when files are open (from main)
-  if (editorFiles.length > 0) {
-    return <EditorPanel />;
-  }
-
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
-        {t('detail.clickToDiff')}
-      </div>
-    );
-  }
-
   const { meta, hunks } = parseHunks(data.diff);
   const contentLines = data.content ? data.content.split('\n') : null;
-  const fileName = data.file.split('/').pop() ?? data.file;
+  const fileName = data.name || data.path.split('/').pop() || data.path;
 
   const handleStageHunk = async (index: number) => {
     const patch = buildHunkPatch(meta, hunks[index]);
-    const r = await api?.stageHunk(data.file, patch);
+    const r = await api?.stageHunk(data.path, patch);
     if (r?.status === 'ok') {
       addNotification({ type: 'success', message: t('detail.hunkStaged') });
       setStagingHunks(prev => new Set(prev).add(index));
@@ -215,7 +199,7 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
 
   const handleRevertHunk = async (index: number) => {
     const patch = buildHunkPatch(meta, hunks[index]);
-    const r = await api?.revertHunk(data.file, patch);
+    const r = await api?.revertHunk(data.path, patch);
     if (r?.status === 'ok') {
       addNotification({ type: 'success', message: t('detail.hunkReverted') });
       setStagingHunks(prev => new Set(prev).add(index));
@@ -237,11 +221,6 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
             title={t('detail.aiReview')}
           ><Bot size={11} /> {t('detail.review')}</button>
         </div>
-        {onClose && (
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--color-bg-tertiary)]">
-            <X size={12} className="text-[var(--color-text-tertiary)]" />
-          </button>
-        )}
       </div>
 
       {/* File content + diff (merged view when content is available) */}
@@ -287,6 +266,34 @@ export function DetailPanel({ data, onClose }: { data?: DiffData | null; onClose
       </div>
     </div>
   );
+}
+
+DiffView.displayName = 'DiffView';
+
+/**
+ * DetailPanel — the right-hand column's body. Renders the active tab: the Monaco
+ * editor for a file tab, the merge/diff view for a diff tab, or an empty prompt
+ * when nothing is open. Files and diffs coexist as tabs in the same strip.
+ */
+export function DetailPanel(): React.ReactElement | null {
+  const t = useT();
+  const { tabs, activeTabId } = useEditorStore();
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+
+  if (!activeTab) {
+    return (
+      <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
+        {t('detail.clickToDiff')}
+      </div>
+    );
+  }
+
+  if (activeTab.kind === 'file') {
+    return <EditorPanel />;
+  }
+
+  return <DiffView key={activeTab.diff.path} data={activeTab.diff} />;
 }
 
 DetailPanel.displayName = 'DetailPanel';
