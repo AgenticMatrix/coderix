@@ -120,3 +120,86 @@
   color: var(--color-text-tertiary);
   text-align: center;
 }
+
+/* Custom skill directories footer */
+.skill-picker-footer {
+  border-top: 1px solid var(--color-separator);
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.skill-picker-footer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.skill-picker-footer-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.skill-picker-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-brand);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.skill-picker-add:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.skill-picker-dir {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+}
+
+.skill-picker-dir:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.skill-picker-dir-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-picker-dir-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.skill-picker-dir-remove:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-danger);
+}

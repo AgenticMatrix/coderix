@@ -101,7 +101,7 @@ export {
 export type { AgentMetadata, TeamAgentMetadata, DiskAgentInfo } from './agents/agent-persistence.js';
 
 // ── Skills ─────────────────────────────────────────────────────────
-export { getSkillRegistry } from './skills/index.js';
+export { getSkillRegistry, setSkillRegistry, resetSkillRegistry, SkillRegistry } from './skills/index.js';
 
 // ── Provider ───────────────────────────────────────────────────────
 export { ProviderRouter } from './provider/router.js';

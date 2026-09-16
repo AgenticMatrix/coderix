@@ -163,6 +163,10 @@ export const zh = {
   'skills.button': 'Skills',
   'skills.selectedCount': 'Skills · {count}',
   'skills.empty': '未发现可用的 skill（在 ~/.claude/skills/ 或项目 .claude/skills/ 放置 SKILL.md）',
+  'skills.customDirs': '自定义目录',
+  'skills.addDir': '添加目录',
+  'skills.removeDir': '移除',
+  'skills.noCustomDirs': '暂无自定义目录',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',

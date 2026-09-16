@@ -47,6 +47,8 @@ export interface AssemblyContext {
   briefMode?: boolean;
   /** Agent registry for dynamic agent listing (optional — falls back to hardcoded list). */
   agentRegistry?: AgentRegistry;
+  /** Selected skill names (optional — when set, only these skills are injected). */
+  skillFilter?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +76,7 @@ export class SystemPromptAssembler {
       () => this.buildCodeAgentMd(codeAgentContext, role),
       () => this.buildMemoryContext(role, ctx),
       () => this.buildPermissionMode(ctx.permissionMode),
-      () => this.buildSkills(role),
+      () => this.buildSkills(role, ctx.skillFilter),
       () => this.buildAgentRegistry(role, ctx.agentRegistry),
       () => this.buildCustom(ctx.customPrompt),
       () => this.buildAppend(ctx.appendPrompt),
@@ -532,7 +534,7 @@ export class SystemPromptAssembler {
    * Progressive Disclosure: only name + description + triggers are shown.
    * The full skill body is loaded when the agent invokes the Skill tool.
    */
-  private buildSkills(role: string): PromptPart | null {
+  private buildSkills(role: string, skillFilter?: string[]): PromptPart | null {
     if (role === 'worker') return null;
 
     const registry = getSkillRegistry();
@@ -540,7 +542,15 @@ export class SystemPromptAssembler {
       registry.loadFromDisk();
     }
 
-    const summaries = registry.getSummaries();
+    let summaries = registry.getSummaries();
+
+    // When the caller narrowed the skill set (per-session selection), only
+    // inject those skills. An explicit empty array means "no skills enabled".
+    if (skillFilter) {
+      const allowed = new Set(skillFilter);
+      summaries = summaries.filter((s) => allowed.has(s.name));
+    }
+
     if (summaries.length === 0) return null;
 
     const lines: string[] = [

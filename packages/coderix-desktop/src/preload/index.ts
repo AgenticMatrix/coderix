@@ -26,6 +26,9 @@ const CH = {
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
   SKILLS_LIST: 'skills:list',
+  SKILLS_LIST_DIRS: 'skills:listDirs',
+  SKILLS_ADD_DIR: 'skills:addDir',
+  SKILLS_REMOVE_DIR: 'skills:removeDir',
   PERMISSION_APPROVE: 'permission:approve',
   PERMISSION_APPROVE_SESSION: 'permission:approveSession',
   PERMISSION_APPROVE_ALWAYS: 'permission:approveAlways',
@@ -353,6 +356,18 @@ const coderixAPI = {
     /** List discoverable Claude Code skills (name + description + source). */
     list(): Promise<unknown[]> {
       return ipcRenderer.invoke(CH.SKILLS_LIST);
+    },
+    /** List custom skill directories (app-level, from settings.json). */
+    listDirs(): Promise<string[]> {
+      return ipcRenderer.invoke(CH.SKILLS_LIST_DIRS);
+    },
+    /** Open a directory picker and add the chosen dir as a custom skill dir. */
+    addDir(): Promise<{ canceled: boolean; dirs: string[]; skills: unknown[] }> {
+      return ipcRenderer.invoke(CH.SKILLS_ADD_DIR);
+    },
+    /** Remove a custom skill dir by path. */
+    removeDir(path: string): Promise<{ dirs: string[]; skills: unknown[] }> {
+      return ipcRenderer.invoke(CH.SKILLS_REMOVE_DIR, { path });
     },
   },
 

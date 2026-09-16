@@ -351,7 +351,7 @@ export async function setSessionSkills(skills: string[]): Promise<unknown> {
 export interface SkillInfo {
   name: string;
   description: string;
-  source: 'user' | 'project' | 'plugin';
+  source: 'user' | 'project' | 'plugin' | 'custom';
 }
 
 /** List all discoverable Claude Code skills for the active workspace. */
@@ -359,6 +359,23 @@ export async function listSkills(): Promise<SkillInfo[]> {
   return invokeWithTimeout<SkillInfo[]>('skills:list', () =>
     getAPI().skills.list(),
   );
+}
+
+/** List custom skill directories (app-level, persisted in settings.json). */
+export async function listSkillDirs(): Promise<string[]> {
+  return invokeWithTimeout<string[]>('skills:listDirs', () =>
+    getAPI().skills.listDirs(),
+  );
+}
+
+/** Open a directory picker and add the chosen dir as a custom skill dir. */
+export async function addSkillDir(): Promise<{ canceled: boolean; dirs: string[]; skills: SkillInfo[] }> {
+  return invokeWithTimeout('skills:addDir', () => getAPI().skills.addDir());
+}
+
+/** Remove a custom skill dir by its exact path. */
+export async function removeSkillDir(path: string): Promise<{ dirs: string[]; skills: SkillInfo[] }> {
+  return invokeWithTimeout('skills:removeDir', () => getAPI().skills.removeDir(path));
 }
 
 // ===========================================================================

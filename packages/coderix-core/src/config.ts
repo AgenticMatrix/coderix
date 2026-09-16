@@ -150,6 +150,8 @@ export interface CoderSettings {
   default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
   /** Agent engine backing turns. Defaults to 'coderix'. */
   engine?: AgentEngine;
+  /** Custom Claude Code skill directories (each a folder of `<name>/SKILL.md`). */
+  custom_skill_dirs?: string[];
 }
 
 // ---------------------------------------------------------------------------

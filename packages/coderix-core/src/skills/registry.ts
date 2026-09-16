@@ -44,8 +44,8 @@ export class SkillRegistry {
 
   private loader: SkillLoader;
 
-  constructor(skillsDir?: string) {
-    this.loader = new SkillLoader(skillsDir);
+  constructor(skillsDirs?: string | string[]) {
+    this.loader = new SkillLoader(skillsDirs);
   }
 
   // -------------------------------------------------------------------

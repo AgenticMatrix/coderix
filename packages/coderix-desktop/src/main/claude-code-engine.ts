@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { extractOpenUrl } from './open-url.js';
 import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
+import { CUSTOM_SKILL_SHIM_DIR, refreshCustomSkillShim } from './skills.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -62,6 +63,8 @@ export interface ClaudeCodeQueryOptions {
   protocol?: 'anthropic' | 'openai';
   /** Skill names to enable for this turn. Empty array = no skills. */
   skills?: string[];
+  /** Custom skill directories to expose to the CLI via a managed plugin shim. */
+  customSkillDirs?: string[];
   abortController: AbortController;
   /**
    * When provided, the model's `AskUserQuestion` tool calls are forwarded here
@@ -363,7 +366,7 @@ function createSpawnFn(
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
+  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
   const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
@@ -407,6 +410,13 @@ export async function* runClaudeCodeQuery(
   // Always set the skill filter so an empty selection is honored as "no skills"
   // (rather than falling through to the CLI's load-everything default).
   options.skills = skills ?? [];
+  // Expose custom skill directories to the CLI as a managed local plugin. The
+  // CLI won't discover skills outside its fixed roots, so we materialize a shim
+  // (`~/.coderix/custom-skills/skills/*` symlinks) and load it via `plugins`.
+  if (customSkillDirs && customSkillDirs.length > 0) {
+    refreshCustomSkillShim();
+    options.plugins = [{ type: 'local', path: CUSTOM_SKILL_SHIM_DIR }];
+  }
   const preToolUseHooks: HookCallbackMatcher[] = [];
   if (onAskUserQuestion) {
     preToolUseHooks.push({

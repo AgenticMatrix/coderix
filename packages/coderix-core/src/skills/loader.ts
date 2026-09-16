@@ -20,7 +20,15 @@ import type {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_SKILLS_DIR = join(homedir(), '.coderix', 'skills');
+const CODERIX_SKILLS_DIR = join(homedir(), '.coderix', 'skills');
+const CLAUDE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
+
+/** Default directory (back-compat for single-dir callers such as SkillCreator). */
+const DEFAULT_SKILLS_DIR = CODERIX_SKILLS_DIR;
+/** Directories the engine scans for skills: bundled coderix skills first, then
+ *  the Claude Code user skills (~/.claude/skills/) so skills like
+ *  `dingtalk-aisearch` are loadable by the in-process engine too. */
+export const DEFAULT_SKILL_DIRS: string[] = [CODERIX_SKILLS_DIR, CLAUDE_SKILLS_DIR];
 const SKILL_FILE = 'SKILL.md';
 
 // ---------------------------------------------------------------------------
@@ -28,11 +36,14 @@ const SKILL_FILE = 'SKILL.md';
 // ---------------------------------------------------------------------------
 
 export class SkillLoader {
-  private skillsDir: string;
+  private skillsDirs: string[];
 
-  constructor(skillsDir?: string) {
-    this.skillsDir = skillsDir ?? DEFAULT_SKILLS_DIR;
-    this.ensureDir();
+  constructor(skillsDirs?: string | string[]) {
+    const dirs = skillsDirs === undefined
+      ? DEFAULT_SKILL_DIRS
+      : (Array.isArray(skillsDirs) ? skillsDirs : [skillsDirs]);
+    this.skillsDirs = dirs.filter((d) => typeof d === 'string' && d.length > 0);
+    this.ensureDirs();
   }
 
   // -------------------------------------------------------------------
@@ -40,36 +51,40 @@ export class SkillLoader {
   // -------------------------------------------------------------------
 
   /**
-   * Scan the skills directory and return a list of skill names.
+   * Scan the skills directories and return a list of skill names.
    * Only directories containing a SKILL.md file are considered valid skills.
+   * On a name collision the first-listed directory wins.
    */
   scan(): string[] {
-    if (!existsSync(this.skillsDir)) return [];
+    const names = new Set<string>();
 
-    const names: string[] = [];
+    for (const skillsDir of this.skillsDirs) {
+      if (!existsSync(skillsDir)) continue;
 
-    try {
-      const entries = readdirSync(this.skillsDir);
-      for (const entry of entries) {
-        const entryPath = join(this.skillsDir, entry);
+      try {
+        const entries = readdirSync(skillsDir);
+        for (const entry of entries) {
+          if (names.has(entry)) continue;
 
-        try {
-          if (!statSync(entryPath).isDirectory()) continue;
-        } catch {
-          continue;
+          const entryPath = join(skillsDir, entry);
+
+          try {
+            if (!statSync(entryPath).isDirectory()) continue;
+          } catch {
+            continue;
+          }
+
+          const skillFile = join(entryPath, SKILL_FILE);
+          if (existsSync(skillFile)) {
+            names.add(entry);
+          }
         }
-
-        const skillFile = join(entryPath, SKILL_FILE);
-        if (existsSync(skillFile)) {
-          names.push(entry);
-        }
+      } catch {
+        // Directory unreadable — skip to the next root
       }
-    } catch {
-      // Directory unreadable — return empty
     }
 
-    names.sort();
-    return names;
+    return Array.from(names).sort();
   }
 
   // -------------------------------------------------------------------
@@ -81,29 +96,33 @@ export class SkillLoader {
    * Returns null if the skill does not exist or is unparseable.
    */
   load(skillName: string): Skill | null {
-    const filePath = join(this.skillsDir, skillName, SKILL_FILE);
+    for (const skillsDir of this.skillsDirs) {
+      const filePath = join(skillsDir, skillName, SKILL_FILE);
 
-    if (!existsSync(filePath)) return null;
+      if (!existsSync(filePath)) continue;
 
-    let raw: string;
-    try {
-      raw = readFileSync(filePath, 'utf-8');
-    } catch {
-      return null;
+      let raw: string;
+      try {
+        raw = readFileSync(filePath, 'utf-8');
+      } catch {
+        continue;
+      }
+
+      const metadata = this.parseFrontmatter(raw, filePath);
+      if (!metadata) continue;
+
+      const body = this.extractBody(raw);
+      if (body === null) continue;
+
+      return {
+        metadata,
+        body,
+        path: filePath,
+        usageCount: 0,
+      };
     }
 
-    const metadata = this.parseFrontmatter(raw, filePath);
-    if (!metadata) return null;
-
-    const body = this.extractBody(raw);
-    if (body === null) return null;
-
-    return {
-      metadata,
-      body,
-      path: filePath,
-      usageCount: 0,
-    };
+    return null;
   }
 
   /**
@@ -139,22 +158,13 @@ export class SkillLoader {
     const summaries: SkillSummary[] = [];
 
     for (const name of names) {
-      const filePath = join(this.skillsDir, name, SKILL_FILE);
-
-      let raw: string;
-      try {
-        raw = readFileSync(filePath, 'utf-8');
-      } catch {
-        continue;
-      }
-
-      const metadata = this.parseFrontmatter(raw, filePath);
-      if (!metadata) continue;
+      const skill = this.load(name);
+      if (!skill) continue;
 
       summaries.push({
-        name: metadata.name,
-        description: metadata.description,
-        triggers: metadata.triggers ?? [],
+        name: skill.metadata.name,
+        description: skill.metadata.description,
+        triggers: skill.metadata.triggers ?? [],
       });
     }
 
@@ -181,10 +191,10 @@ export class SkillLoader {
   }
 
   /**
-   * Get the skills directory path.
+   * Get the primary skills directory path (first-listed, back-compat).
    */
   getSkillsDir(): string {
-    return this.skillsDir;
+    return this.skillsDirs[0] ?? DEFAULT_SKILLS_DIR;
   }
 
   // -------------------------------------------------------------------
@@ -396,11 +406,13 @@ export class SkillLoader {
   // -------------------------------------------------------------------
 
   /**
-   * Ensure the skills directory exists.
+   * Ensure the skills directories exist.
    */
-  private ensureDir(): void {
-    if (!existsSync(this.skillsDir)) {
-      mkdirSync(this.skillsDir, { recursive: true });
+  private ensureDirs(): void {
+    for (const dir of this.skillsDirs) {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
     }
   }
 }

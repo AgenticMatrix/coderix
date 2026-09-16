@@ -52,6 +52,9 @@ import {
   setProjectDirectory,
   listSkills,
   setSessionSkills,
+  listSkillDirs,
+  addSkillDir,
+  removeSkillDir,
 } from './ipc-client';
 import type { SkillInfo } from './ipc-client';
 import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
@@ -154,6 +157,7 @@ export function App(): React.ReactElement {
   // ownership: switching sessions restores that session's own selection).
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
+  const [customSkillDirs, setCustomSkillDirs] = useState<string[]>([]);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
   // Holds the last committed composer value before clearing
@@ -190,7 +194,30 @@ export function App(): React.ReactElement {
     listSkills()
       .then((skills) => setAvailableSkills(skills))
       .catch((err) => console.error('[App] Failed to list skills:', err));
+    listSkillDirs()
+      .then((dirs) => setCustomSkillDirs(dirs))
+      .catch((err) => console.error('[App] Failed to list skill dirs:', err));
   }, [projectPath]);
+
+  // ── Custom skill directory management ───────────────────────────────────
+  const handleAddSkillDir = () => {
+    addSkillDir()
+      .then((res) => {
+        if (res.canceled) return;
+        setCustomSkillDirs(res.dirs);
+        setAvailableSkills(res.skills);
+      })
+      .catch((err) => console.error('[App] Failed to add skill dir:', err));
+  };
+
+  const handleRemoveSkillDir = (path: string) => {
+    removeSkillDir(path)
+      .then((res) => {
+        setCustomSkillDirs(res.dirs);
+        setAvailableSkills(res.skills);
+      })
+      .catch((err) => console.error('[App] Failed to remove skill dir:', err));
+  };
 
   // ── Permission request listener ─────────────────────────────────────────
   useEffect(() => {
@@ -889,6 +916,9 @@ export function App(): React.ReactElement {
                 setSelectedSkills(next);
                 setSessionSkills(next).catch(() => {});
               }}
+              customDirs={customSkillDirs}
+              onAddDir={handleAddSkillDir}
+              onRemoveDir={handleRemoveSkillDir}
             />
           </div>
 

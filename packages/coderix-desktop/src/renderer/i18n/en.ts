@@ -167,6 +167,10 @@ export const en: Record<TranslationKey, string> = {
   'skills.button': 'Skills',
   'skills.selectedCount': 'Skills · {count}',
   'skills.empty': 'No skills found (add a SKILL.md under ~/.claude/skills/ or the project .claude/skills/)',
+  'skills.customDirs': 'Custom directories',
+  'skills.addDir': 'Add directory',
+  'skills.removeDir': 'Remove',
+  'skills.noCustomDirs': 'No custom directories',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': 'Click a file to start editing',

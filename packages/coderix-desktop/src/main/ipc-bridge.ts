@@ -30,11 +30,11 @@ import type {
   Message,
 } from '@coderix/core';
 import type { CoderSettings, ModelItem } from '@coderix/core';
-import { QueryEngine, SessionManager, ToolRegistry, PermissionMode } from '@coderix/core';
+import { QueryEngine, SessionManager, ToolRegistry, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
 import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, setTaskListId, resolveModelByName } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
-import { listAvailableSkills } from './skills.js';
+import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
 
 import type { WindowManager } from './window-manager.js';
@@ -79,6 +79,9 @@ export const IPC_CHANNELS = {
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
   SKILLS_LIST: 'skills:list',
+  SKILLS_LIST_DIRS: 'skills:listDirs',
+  SKILLS_ADD_DIR: 'skills:addDir',
+  SKILLS_REMOVE_DIR: 'skills:removeDir',
   PERMISSION_APPROVE: 'permission:approve',
   PERMISSION_APPROVE_SESSION: 'permission:approveSession',
   PERMISSION_APPROVE_ALWAYS: 'permission:approveAlways',
@@ -283,6 +286,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         ? resolveModelByName(activeSessionModel)
         : undefined;
 
+    // Apply the per-session skill selection to the in-process engine (the
+    // claude-code engine receives the same list via `runClaudeCodeQuery`).
+    if (activeEngine === 'coderix') {
+      queryEngine!.setSkills(skills ?? []);
+    }
+
     const engineStream: AsyncGenerator<QueryEngineEvent> =
       activeEngine === 'claude-code'
         ? runClaudeCodeQuery({
@@ -296,6 +305,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             protocol: sessionResolved?.protocol ?? activeConfig.protocol,
             abortController: controller,
             skills: skills ?? [],
+            customSkillDirs: loadSettings().custom_skill_dirs ?? [],
             // Forward AskUserQuestion to the renderer through the same
             // question-request channel the in-process engine uses, so the
             // Claude Code SDK hook can resolve the tool call with the user's
@@ -796,8 +806,48 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return { status: 'ok', skills: next };
   });
 
-  ipcMain.handle(IPC_CHANNELS.SKILLS_LIST, async () => {
-    return listAvailableSkills(currentWorkDir);
+  // The skill list must match the active engine's actual loader: the coderix
+  // engine scans coderix+claude+custom roots, the claude-code engine scans the
+  // claude roots + custom. Otherwise the picker shows skills the engine can't use.
+  const listSkills = () =>
+    activeEngine === 'coderix' ? listCoderixSkills() : listAvailableSkills(currentWorkDir);
+
+  // Custom skill dirs change the coderix registry's roots, so rebuild it and
+  // drop the cached system prompt so the next turn reflects the change.
+  const rebuildCoderixRegistry = () => {
+    if (activeEngine !== 'coderix') return;
+    setSkillRegistry(new SkillRegistry(coderixSkillDirs()));
+    queryEngine?.invalidateSystemPrompt();
+  };
+
+  ipcMain.handle(IPC_CHANNELS.SKILLS_LIST, async () => listSkills());
+
+  ipcMain.handle(IPC_CHANNELS.SKILLS_LIST_DIRS, async () => {
+    return listCustomSkillDirs();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SKILLS_ADD_DIR, async () => {
+    const mainWindow = getMainWindow(windowManager);
+    if (!mainWindow) throw new Error('No main window');
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择 Skills 目录',
+      properties: ['openDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, dirs: listCustomSkillDirs(), skills: listSkills() };
+    }
+
+    const dirs = addCustomSkillDir(result.filePaths[0]!);
+    rebuildCoderixRegistry();
+    return { canceled: false, dirs, skills: listSkills() };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SKILLS_REMOVE_DIR, async (_event, payload: { path: string }) => {
+    const dirs = removeCustomSkillDir(payload?.path ?? '');
+    rebuildCoderixRegistry();
+    return { dirs, skills: listSkills() };
   });
 
   // ── Permission ─────────────────────────────────────────────────────────
@@ -1771,6 +1821,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         sessionManager,
         toolRegistry,
       });
+
+      // Point the in-process engine's skill registry at the same roots the
+      // picker lists (bundled coderix skills + Claude Code user skills +
+      // custom dirs) so a selected skill actually resolves for this engine.
+      setSkillRegistry(new SkillRegistry(coderixSkillDirs()));
 
       await queryEngine.init();
       const engineId = Date.now();

@@ -103,6 +103,8 @@ export interface QueryEngineConfig {
   briefMode?: boolean;
   /** Enable automatic context compaction. When false, only manual /compact works. */
   autoCompactEnabled?: boolean;
+  /** Selected skill names for the current session (empty = no skills enabled). */
+  skills?: string[];
 }
 
 export interface QueryEngineEvent {
@@ -207,6 +209,7 @@ export class QueryEngine {
       memorySettings: this.config.settings?.memory,
       briefMode: this.config.briefMode ?? false,
       agentRegistry: this.config.agentRegistry,
+      skillFilter: this.config.skills,
     });
 
     // Persist system prompt to session directory for debugging / auditing
@@ -235,6 +238,31 @@ export class QueryEngine {
     if (this.config.briefMode === enabled) return;
     this.config.briefMode = enabled;
     this.systemPrompt = null; // force reassembly on next submitMessage
+  }
+
+  /**
+   * Set the selected skills for the current session. Forces system prompt
+   * rebuild only when the selection actually changes, so the "Available Skills"
+   * section reflects the per-session selection on the next turn.
+   */
+  setSkills(skills: string[] | undefined): void {
+    const next = Array.isArray(skills) ? [...skills] : [];
+    const prev = this.config.skills;
+    const same =
+      Array.isArray(prev) &&
+      prev.length === next.length &&
+      prev.every((s, i) => s === next[i]);
+    if (same) return;
+    this.config.skills = next;
+    this.systemPrompt = null; // force reassembly on next submitMessage
+  }
+
+  /**
+   * Drop the cached system prompt so the next turn re-assembles it (e.g. after
+   * the skill registry's roots changed under us).
+   */
+  invalidateSystemPrompt(): void {
+    this.systemPrompt = null;
   }
 
   /**
