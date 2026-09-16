@@ -831,6 +831,7 @@ export function App(): React.ReactElement {
         browserPanel={<BrowserPanel onClose={toggleBrowserPanel} />}
         browserPanelVisible={browserPanelOpen && !settingsOpen}
         onToggleBrowserPanel={toggleBrowserPanel}
+        onToggleDetailPanel={toggleDetailPanel}
         statusBarProps={{
           engine: settings?.engine,
           agentStatus,

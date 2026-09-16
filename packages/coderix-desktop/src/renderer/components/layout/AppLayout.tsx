@@ -5,6 +5,7 @@ import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
 import { IconSidebar } from '../sidebar/IconSidebar';
 import type { SidebarTab } from '../sidebar/IconSidebar';
+import { EditorTabs } from '../editor/EditorTabs';
 import { useT } from '../../i18n/index.js';
 
 export interface AppLayoutProps {
@@ -25,6 +26,7 @@ export interface AppLayoutProps {
   browserPanel?: ReactNode;
   browserPanelVisible?: boolean;
   onToggleBrowserPanel?: () => void;
+  onToggleDetailPanel?: () => void;
 }
 
 /** Fixed width of the embedded browser sidebar. */
@@ -83,6 +85,7 @@ export function AppLayout({
   browserPanel,
   browserPanelVisible = false,
   onToggleBrowserPanel,
+  onToggleDetailPanel,
 }: AppLayoutProps): React.ReactElement {
   const t = useT();
   // Browser column width — lives here (not inside the panel) so it survives
@@ -142,6 +145,21 @@ export function AppLayout({
               </svg>
             </button>
 
+            {/* File panel (right detail column) toggle — mirrors the sidebar icon */}
+            <button
+              className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
+                         text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                         hover:bg-[var(--color-bg-tertiary)] transition-colors"
+              onClick={onToggleDetailPanel}
+              title={t('nav.toggleFilePanel')}
+              aria-label={t('nav.toggleFilePanel')}
+            >
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
+                <path d="M9.5 2.5v10" />
+              </svg>
+            </button>
+
             {/* Browser sidebar toggle — hidden while the browser is open, because
                 the Globe close button then lives in the browser column's own
                 header (keeps it anchored to the column, mirroring agentstation-app). */}
@@ -160,11 +178,14 @@ export function AppLayout({
           </div>
         </div>
 
-        {/* Detail column header spacer */}
+        {/* Detail column header — hosts the file tabs, mirroring the browser's
+            tab bar sitting at the very top of its column. */}
         <AnimatePresence initial={false}>
           {detailVisible && detailPanel && (
             <motion.div {...sidebarAnimation} className="overflow-hidden flex-shrink-0">
-              <div style={{ width: detailWidthState, minWidth: 280, maxWidth: 600 }} />
+              <div style={{ width: detailWidthState, minWidth: 280, maxWidth: 600 }} className="h-full overflow-hidden">
+                <EditorTabs />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

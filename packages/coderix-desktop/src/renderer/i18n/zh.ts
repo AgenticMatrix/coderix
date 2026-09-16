@@ -200,6 +200,7 @@ export const zh = {
   'nav.switchToLight': '切换到浅色',
   'nav.settings': '设置',
   'nav.toggleSidebar': '切换侧栏',
+  'nav.toggleFilePanel': '切换文件面板',
 
   // ── 项目管理 ──────────────────────────────────────────
   'project.tabFiles': '文件',
