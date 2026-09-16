@@ -42,19 +42,21 @@ import { loadSettings, saveSettings } from '@coderix/core';
 export interface SkillInfo {
   name: string;
   description: string;
-  source: 'user' | 'project' | 'plugin' | 'custom';
+  source: 'user' | 'project' | 'plugin' | 'custom' | 'builtin';
 }
 
 const SKILL_FILE = 'SKILL.md';
 
 /** Discovery priority — higher wins when the same skill name is found in
  *  multiple roots (matches the CLI's project > user > plugin shadowing, plus a
- *  top "custom" tier so a user-added skill overrides built-ins). */
+ *  top "custom" tier so a user-added skill overrides built-ins, and a "builtin"
+ *  tier for the coderix engine's bundled ~/.coderix/skills/). */
 const SOURCE_PRIORITY: Record<SkillInfo['source'], number> = {
   plugin: 1,
   user: 2,
   project: 3,
   custom: 4,
+  builtin: 5,
 };
 
 /** Managed plugin dir whose `skills/*` symlinks expose custom skill dirs to the CLI. */
@@ -127,15 +129,25 @@ export function coderixSkillDirs(): string[] {
  * List the skills the Coderix (in-process) engine can actually load — the same
  * roots as `coderixSkillDirs()`. Used by the skill picker when the built-in
  * engine is active so the picker matches what the engine will inject.
+ * Bundled `~/.coderix/skills/` skills are tagged `builtin` so the renderer can
+ * pre-select them by default.
  */
 export function listCoderixSkills(): SkillInfo[] {
   const byName = new Map<string, SkillInfo>();
-  for (const dir of coderixSkillDirs()) {
+
+  for (const skill of scanSkillDir(CODERIX_SKILLS_DIR, 'builtin')) {
+    registerSkill(byName, skill);
+  }
+  for (const skill of scanSkillDir(CLAUDE_SKILLS_DIR, 'user')) {
+    registerSkill(byName, skill);
+  }
+  for (const dir of readCustomSkillDirs()) {
     if (!existsSync(dir)) continue;
-    for (const skill of scanSkillDir(dir, 'user')) {
+    for (const skill of scanSkillDir(dir, 'custom')) {
       registerSkill(byName, skill);
     }
   }
+
   return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 

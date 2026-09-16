@@ -160,6 +160,17 @@ export function App(): React.ReactElement {
   const [customSkillDirs, setCustomSkillDirs] = useState<string[]>([]);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
+  // Bundled skills (~/.coderix/skills/) are enabled by default for the built-in
+  // engine; the user can uncheck them in the picker to opt out. Only the coderix
+  // engine reports a `builtin` source, so this is empty for the claude-code engine.
+  const builtinSkillNames = useMemo(
+    () => availableSkills.filter((s) => s.source === 'builtin').map((s) => s.name),
+    [availableSkills],
+  );
+  // Tracks which session already had its built-in default applied, so we don't
+  // re-override an explicitly emptied selection when a session is revisited.
+  const defaultedSkillsFor = useRef<string | null>(null);
+
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
 
@@ -198,6 +209,19 @@ export function App(): React.ReactElement {
       .then((dirs) => setCustomSkillDirs(dirs))
       .catch((err) => console.error('[App] Failed to list skill dirs:', err));
   }, [projectPath]);
+
+  // Default a freshly-created session to the built-in skills (checked) so they
+  // stay enabled unless the user unchecks them in the picker. Applied once per
+  // session id; sessions selected via the sidebar set their own authoritative
+  // selection (which the `defaultedSkillsFor` ref guards against overriding).
+  useEffect(() => {
+    if (!sessionId) return;
+    if (defaultedSkillsFor.current === sessionId) return;
+    if (builtinSkillNames.length === 0) return;
+    defaultedSkillsFor.current = sessionId;
+    setSelectedSkills(builtinSkillNames);
+    setSessionSkills(builtinSkillNames).catch(() => {});
+  }, [sessionId, builtinSkillNames, setSessionSkills]);
 
   // ── Custom skill directory management ───────────────────────────────────
   const handleAddSkillDir = () => {
@@ -257,6 +281,9 @@ export function App(): React.ReactElement {
       } else {
         // Use the most recent session
         const latest = sessions[0];
+        // Existing session: its own persisted skills are authoritative, so mark
+        // it as handled and keep the built-in default from overriding them.
+        defaultedSkillsFor.current = latest.id;
         setSessionId(latest.id);
         useSessionStore.getState().setCurrentSessionId(latest.id);
       }
@@ -406,6 +433,9 @@ export function App(): React.ReactElement {
 
       setSessionId(id);
       useSessionStore.getState().setCurrentSessionId(id);
+      // The session's own persisted skills are authoritative — don't let the
+      // built-in default effect override them when this session is re-opened.
+      defaultedSkillsFor.current = id;
       // Load session messages from backend
       try {
         if (window.coderixAPI?.session?.load) {

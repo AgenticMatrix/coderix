@@ -351,7 +351,7 @@ export async function setSessionSkills(skills: string[]): Promise<unknown> {
 export interface SkillInfo {
   name: string;
   description: string;
-  source: 'user' | 'project' | 'plugin' | 'custom';
+  source: 'user' | 'project' | 'plugin' | 'custom' | 'builtin';
 }
 
 /** List all discoverable Claude Code skills for the active workspace. */
