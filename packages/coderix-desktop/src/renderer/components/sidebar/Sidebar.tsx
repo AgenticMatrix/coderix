@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Search, Plus, FolderOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
-import { FileExplorer } from './FileExplorer';
-import { GitPanel } from './GitPanel';
+import { ProjectPanel } from './ProjectPanel';
 import type { SidebarTab } from './IconSidebar';
 import { IconButton } from '../shared/IconButton';
 import { useT } from '../../i18n/index.js';
@@ -85,18 +84,14 @@ export function Sidebar({
             />
           </motion.div>
         )}
-        {activeTab === 'files' && (
+        {activeTab === 'project' && (
           <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.15 }}
+            className="h-full"
           >
-            <FileExplorer projectPath={projectPath} />
-          </motion.div>
-        )}
-        {activeTab === 'git' && (
-          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}>
-            <GitPanel projectPath={projectPath} />
+            <ProjectPanel projectPath={projectPath} />
           </motion.div>
         )}
       </div>

@@ -1,11 +1,11 @@
 import React from 'react';
-import { MessageSquare, FolderGit2, GitBranch, Settings, Sun, Moon, Brain } from 'lucide-react';
+import { MessageSquare, FolderGit2, Settings, Sun, Moon, Brain } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useT } from '../../i18n/index.js';
 import './IconSidebar.css';
 import styles from './IconSidebar.module.css';
 
-export type SidebarTab = 'sessions' | 'files' | 'git';
+export type SidebarTab = 'sessions' | 'project';
 
 interface Props {
   activeTab: SidebarTab;
@@ -34,15 +34,10 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
           <MessageSquare size={22} strokeWidth={activeTab === 'sessions' ? 2.5 : 2} />
           <span className={styles.tooltip}>{t('nav.sessions')}</span>
         </button>
-        <button className={`${styles.iconButton} ${activeTab === 'files' ? styles.active : ''}`}
-          onClick={() => onTabChange('files')} title={t('nav.explorer')}>
-          <FolderGit2 size={22} strokeWidth={activeTab === 'files' ? 2.5 : 2} />
-          <span className={styles.tooltip}>{t('nav.explorer')}</span>
-        </button>
-        <button className={`${styles.iconButton} ${activeTab === 'git' ? styles.active : ''}`}
-          onClick={() => onTabChange('git')} title={t('nav.sourceControl')}>
-          <GitBranch size={22} strokeWidth={activeTab === 'git' ? 2.5 : 2} />
-          <span className={styles.tooltip}>{t('nav.sourceControl')}</span>
+        <button className={`${styles.iconButton} ${activeTab === 'project' ? styles.active : ''}`}
+          onClick={() => onTabChange('project')} title={t('nav.project')}>
+          <FolderGit2 size={22} strokeWidth={activeTab === 'project' ? 2.5 : 2} />
+          <span className={styles.tooltip}>{t('nav.project')}</span>
         </button>
       </nav>
 

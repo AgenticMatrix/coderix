@@ -193,8 +193,7 @@ export const en: Record<TranslationKey, string> = {
 
   // ── 图标侧栏 ──────────────────────────────────────────
   'nav.sessions': 'Sessions',
-  'nav.explorer': 'Explorer',
-  'nav.sourceControl': 'Source Control',
+  'nav.project': 'Project',
   'nav.detailMode': 'Detailed mode',
   'nav.standardMode': 'Standard mode',
   'nav.switchToDetail': 'Switch to detailed mode',
@@ -205,6 +204,10 @@ export const en: Record<TranslationKey, string> = {
   'nav.switchToLight': 'Switch to Light',
   'nav.settings': 'Settings',
   'nav.toggleSidebar': 'Toggle Sidebar',
+
+  // ── Project management ────────────────────────────────
+  'project.tabFiles': 'Files',
+  'project.tabGit': 'Git',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',

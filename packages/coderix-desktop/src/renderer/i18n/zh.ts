@@ -189,8 +189,7 @@ export const zh = {
 
   // ── 图标侧栏 ──────────────────────────────────────────
   'nav.sessions': '会话',
-  'nav.explorer': '资源管理器',
-  'nav.sourceControl': '源代码管理',
+  'nav.project': '项目管理',
   'nav.detailMode': '详细模式',
   'nav.standardMode': '标准模式',
   'nav.switchToDetail': '切换到详细模式',
@@ -201,6 +200,10 @@ export const zh = {
   'nav.switchToLight': '切换到浅色',
   'nav.settings': '设置',
   'nav.toggleSidebar': '切换侧栏',
+
+  // ── 项目管理 ──────────────────────────────────────────
+  'project.tabFiles': '文件',
+  'project.tabGit': 'Git',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',
