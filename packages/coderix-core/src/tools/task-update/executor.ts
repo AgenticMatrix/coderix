@@ -2,14 +2,14 @@ import { updateTask, listTasks, getTask } from '../../tasks/store.js';
 import type { TaskStatus } from '../../tasks/schema.js';
 import type { ToolExecutor } from '../types.js';
 
-export const execute: ToolExecutor = async (input, _opts) => {
+export const execute: ToolExecutor = async (input, options) => {
   const taskId = input.taskId as string;
   if (!taskId) return { content: 'Error: taskId is required', isError: true };
 
   const statusInput = input.status as TaskStatus | undefined;
 
   // Capture old state before update for inline rendering
-  const oldTask = await getTask(taskId);
+  const oldTask = await getTask(taskId, options.sessionId);
   const oldStatus = oldTask?.status;
   const taskSubject = oldTask?.subject ?? input.subject ?? '';
 
@@ -22,7 +22,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
     addBlocks: input.addBlocks as string[] | undefined,
     addBlockedBy: input.addBlockedBy as string[] | undefined,
     metadata: input.metadata as Record<string, unknown> | undefined,
-  });
+  }, options.sessionId);
 
   if ('error' in result) {
     return { content: `Error: ${result.error}`, isError: true };
@@ -45,7 +45,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
 
     // Verification nudge: when the main-thread agent closes out the last task
     // in a list of 3+ tasks and none was a verification step, append a reminder.
-    const allTasks = await listTasks();
+    const allTasks = await listTasks(options.sessionId);
     const allDone = allTasks.every(t => t.status === 'completed');
     if (
       allDone &&

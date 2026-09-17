@@ -1,8 +1,11 @@
 /**
  * client.ts — CoderixSDKClient, mirroring claude-code-sdk's ClaudeSDKClient.
  *
- * A long-lived client that holds an engine across multiple query() calls and
- * supports runtime control (setPermissionMode / interrupt).
+ * A long-lived client that holds a *shared* engine template (config, model,
+ * tool/MCP/agent registries) across many concurrent query() calls. Each query
+ * builds its own session + QueryEngine from the template, so one client can run
+ * multiple tasks in parallel and control them (setPermissionMode / interrupt)
+ * independently.
  */
 
 import { toCorePermissionMode } from '@coderix/core';
@@ -12,7 +15,12 @@ import type {
   SDKInputMessage,
   Query,
 } from '@coderix/core';
-import { buildEngine, type BuiltEngine } from './engine-builder.js';
+import {
+  buildEngineTemplate,
+  buildEngineFromTemplate,
+  type BuiltEngine,
+  type EngineTemplate,
+} from './engine-builder.js';
 import { runQuery } from './run.js';
 
 export interface ClientQueryArgs {
@@ -21,50 +29,83 @@ export interface ClientQueryArgs {
 }
 
 export class CoderixSDKClient {
-  private built: BuiltEngine | undefined;
+  private template: EngineTemplate | undefined;
+  private active = new Set<BuiltEngine>();
   private options: Options;
+  private permissionMode: SdkPermissionMode;
 
   constructor(options: Options = {}) {
     this.options = options;
+    this.permissionMode = options.permissionMode ?? 'default';
   }
 
-  /** Build and initialize the underlying engine. */
+  /** Build the shared engine template (tools/MCP/agents). */
   async connect(): Promise<void> {
-    if (this.built) return;
-    this.built = await buildEngine(this.options);
+    if (this.template) return;
+    this.template = await buildEngineTemplate(this.options);
   }
 
-  /** Start a query against the connected engine. */
+  /**
+   * Start a query. Each call builds an independent engine from the shared
+   * template, so concurrent queries never serialize on a single engine.
+   */
   query({ prompt, options }: ClientQueryArgs): Query {
-    if (!this.built) {
+    if (!this.template) {
       throw new Error('CoderixSDKClient.connect() must be called before query()');
     }
-    const merged: Options = { ...this.options, ...options };
-    return runQuery(this.built.engine, prompt, merged, {
-      sessionId: this.built.sessionManager.getActive()?.id ?? '',
-      model: this.built.model,
-      tools: this.built.toolRegistry.names,
-      mcpServers: this.built.mcpServerNames,
-      permissionMode: (merged.permissionMode ?? 'default') as SdkPermissionMode,
-      cwd: this.built.cwd,
-    });
+    const template = this.template;
+    const active = this.active;
+    const merged: Options = {
+      ...this.options,
+      ...options,
+      permissionMode: options?.permissionMode ?? this.permissionMode,
+    };
+
+    return (async function* () {
+      const built = await buildEngineFromTemplate(template, merged);
+      active.add(built);
+      try {
+        yield* runQuery(built.engine, prompt, merged, {
+          sessionId: built.sessionManager.getActive()?.id ?? '',
+          model: built.model,
+          tools: built.toolRegistry.names,
+          mcpServers: built.mcpServerNames,
+          permissionMode: (merged.permissionMode ?? 'default') as SdkPermissionMode,
+          cwd: built.cwd,
+        });
+      } finally {
+        active.delete(built);
+        await built.dispose();
+      }
+    })();
   }
 
-  /** Change permission mode mid-session. */
+  /** Change permission mode on every active engine (and as the default for new queries). */
   setPermissionMode(mode: SdkPermissionMode): void {
-    this.built?.engine.setPermissionMode(toCorePermissionMode(mode));
+    this.permissionMode = mode;
+    for (const built of this.active) {
+      built.engine.setPermissionMode(toCorePermissionMode(mode));
+    }
   }
 
-  /** Interrupt the currently running turn. */
+  /** Interrupt every currently running turn. */
   interrupt(): void {
-    this.built?.engine.interrupt();
+    for (const built of this.active) {
+      built.engine.interrupt();
+    }
   }
 
-  /** Tear down the engine and close MCP connections. */
+  /** Tear down all engines and close MCP connections. */
   async disconnect(): Promise<void> {
-    if (this.built) {
-      await this.built.dispose();
-      this.built = undefined;
+    for (const built of this.active) {
+      built.engine.interrupt();
+    }
+    await Promise.allSettled([...this.active].map((built) => built.dispose()));
+    this.active.clear();
+
+    if (this.template) {
+      await this.template.dispose();
+      this.template = undefined;
     }
   }
 }

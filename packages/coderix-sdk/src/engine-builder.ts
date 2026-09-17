@@ -23,7 +23,6 @@ import {
   discoverTools,
   plugins,
   RiskLevel,
-  setTaskListId,
   toCorePermissionMode,
 } from '@coderix/core';
 import type {
@@ -34,6 +33,7 @@ import type {
   ScopedServerConfig,
   SdkOptions as Options,
   SystemPromptConfig,
+  AgentRegistry,
 } from '@coderix/core';
 
 export interface BuiltEngine {
@@ -45,7 +45,27 @@ export interface BuiltEngine {
   settings: CoderSettings;
   cwd: string;
   mcpServerNames: string[];
-  /** Close programmatic MCP connections + shut the engine down. */
+  /** Shut the engine down (session + in-flight turns). */
+  dispose: () => Promise<void>;
+}
+
+/**
+ * Shared, connection-heavy engine resources reused across many per-query
+ * engines. `toolRegistry` (incl. programmatic MCP connections), the agent
+ * registry, and the (stateless) system-prompt assembler are safe to share
+ * read-only; each query gets its own session, sub-agent registry, callModel
+ * and QueryEngine (see buildEngineFromTemplate).
+ */
+export interface EngineTemplate {
+  config: AppConfig;
+  model: string;
+  settings: CoderSettings;
+  cwd: string;
+  toolRegistry: ToolRegistry;
+  mcpServerNames: string[];
+  systemPromptAssembler: SystemPromptAssembler;
+  agentRegistry: AgentRegistry;
+  /** Close programmatic MCP connections. */
   dispose: () => Promise<void>;
 }
 
@@ -179,52 +199,81 @@ function resolveSystemPrompt(sp: string | SystemPromptConfig | undefined): strin
 
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
-export async function buildEngine(options: Options = {}): Promise<BuiltEngine> {
+/**
+ * Build the shareable half of an engine: config/settings/model/cwd plus the
+ * connection-heavy registries (tools incl. programmatic MCP, agents, and the
+ * stateless system-prompt assembler). Reuse one template across many
+ * `buildEngineFromTemplate` calls so concurrent queries don't each re-spawn MCP
+ * connections.
+ */
+export async function buildEngineTemplate(options: Options = {}): Promise<EngineTemplate> {
   const cwd = options.cwd ?? process.cwd();
   const config = loadConfig();
   const model = options.model ?? config.model;
   const settings = loadSettings();
 
+  const { registry, mcpServerNames, cleanup } = await buildToolRegistry(options, cwd);
+  const systemPromptAssembler = new SystemPromptAssembler();
+  const { registry: agentRegistry } = await buildAgentRegistry(cwd);
+
+  return {
+    config,
+    model,
+    settings,
+    cwd,
+    toolRegistry: registry,
+    mcpServerNames,
+    systemPromptAssembler,
+    agentRegistry,
+    dispose: async () => {
+      await Promise.allSettled(cleanup.map((fn) => fn()));
+    },
+  };
+}
+
+/**
+ * Assemble a full, independently-scheduled QueryEngine from a shared template.
+ * The session, sub-agent registry, callModel and QueryEngine are all fresh per
+ * call — the mutable per-query state — while the registries come from the
+ * template. No global `setTaskListId` side effect here: the per-session
+ * sessionId flows through the tool context instead.
+ */
+export async function buildEngineFromTemplate(tpl: EngineTemplate, options: Options = {}): Promise<BuiltEngine> {
   // Per-agent model binding: options.baseUrl/apiKey (injected by agentstation)
   // override the global ~/.coderix/settings.json endpoint/auth.
-  const baseUrl = options.baseUrl ?? config.baseUrl;
-  const apiKey = options.apiKey ?? config.apiKey;
+  const baseUrl = options.baseUrl ?? tpl.config.baseUrl;
+  const apiKey = options.apiKey ?? tpl.config.apiKey;
 
-  const callModel = createCallModel({ baseUrl, apiKey, proxy: config.proxy, maxTokens: config.maxTokens }, model);
+  const callModel = createCallModel({ baseUrl, apiKey, proxy: tpl.config.proxy, maxTokens: tpl.config.maxTokens }, tpl.model);
 
   const sessionManager = new SessionManager();
   if (options.resume) {
     try {
       sessionManager.resume(options.resume);
     } catch {
-      sessionManager.create({ cwd, model });
+      sessionManager.create({ cwd: tpl.cwd, model: tpl.model });
     }
   } else {
-    sessionManager.create({ cwd, model });
+    sessionManager.create({ cwd: tpl.cwd, model: tpl.model });
   }
-  setTaskListId(sessionManager.getActive()?.id ?? '');
-
-  const { registry, mcpServerNames, cleanup } = await buildToolRegistry(options, cwd);
 
   const subAgentRegistry = new SubAgentRegistry();
-  const systemPromptAssembler = new SystemPromptAssembler();
-  const { registry: agentRegistry } = await buildAgentRegistry(cwd);
 
   const engine = new QueryEngine({
-    cwd,
-    toolRegistry: registry,
+    cwd: tpl.cwd,
+    toolRegistry: tpl.toolRegistry,
     sessionManager,
     callModel,
-    model,
-    maxToolConcurrency: getMaxToolConcurrency(settings),
+    model: tpl.model,
+    maxToolConcurrency: getMaxToolConcurrency(tpl.settings),
     subAgentRegistry,
-    systemPromptAssembler,
-    agentRegistry,
-    settings,
-    maxContext: config.maxContext || undefined,
-    briefMode: config.briefMode,
-    autoCompactEnabled: config.autoCompactEnabled,
-    compactThreshold: config.compactThreshold,
+    systemPromptAssembler: tpl.systemPromptAssembler,
+    agentRegistry: tpl.agentRegistry,
+    settings: tpl.settings,
+    maxContext: tpl.config.maxContext || undefined,
+    briefMode: tpl.config.briefMode,
+    autoCompactEnabled: tpl.config.autoCompactEnabled,
+    compactThreshold: tpl.config.compactThreshold,
     maxTurns: options.maxTurns,
     customSystemPrompt: resolveSystemPrompt(options.systemPrompt),
     appendSystemPrompt: options.appendSystemPrompt,
@@ -236,15 +285,31 @@ export async function buildEngine(options: Options = {}): Promise<BuiltEngine> {
   return {
     engine,
     sessionManager,
-    toolRegistry: registry,
-    config,
-    model,
-    settings,
-    cwd,
-    mcpServerNames,
+    toolRegistry: tpl.toolRegistry,
+    config: tpl.config,
+    model: tpl.model,
+    settings: tpl.settings,
+    cwd: tpl.cwd,
+    mcpServerNames: tpl.mcpServerNames,
     dispose: async () => {
-      await Promise.allSettled(cleanup.map((fn) => fn()));
       await engine.shutdown();
+    },
+  };
+}
+
+/**
+ * One-shot convenience: build a fresh template + engine together, disposing
+ * both on `dispose()`. Use `buildEngineTemplate` + `buildEngineFromTemplate`
+ * directly when you need many engines to share a single template.
+ */
+export async function buildEngine(options: Options = {}): Promise<BuiltEngine> {
+  const template = await buildEngineTemplate(options);
+  const built = await buildEngineFromTemplate(template, options);
+  return {
+    ...built,
+    dispose: async () => {
+      await built.dispose();
+      await template.dispose();
     },
   };
 }

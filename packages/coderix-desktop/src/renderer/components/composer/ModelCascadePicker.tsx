@@ -21,6 +21,9 @@ export interface ModelCascadePickerProps {
   /** Notifies the parent when a model is selected, so the per-session model
    *  label can update without re-reading the global default. */
   onModelChange?: (model: string) => void;
+  /** Owning session id, so the switch binds the right session (not the global
+   *  active pointer) when multiple sessions are open. */
+  sessionId?: string;
 }
 
 /**
@@ -32,7 +35,7 @@ export interface ModelCascadePickerProps {
  * adapted to read providers/models from the settings store instead of a model
  * registry.
  */
-export function ModelCascadePicker({ model = '', onModelChange }: ModelCascadePickerProps): React.ReactElement {
+export function ModelCascadePicker({ model = '', onModelChange, sessionId }: ModelCascadePickerProps): React.ReactElement {
   const t = useT();
   const providers = useSettingsStore((s) => s.settings?.providers ?? EMPTY_PROVIDERS);
   const [open, setOpen] = useState(false);
@@ -87,7 +90,7 @@ export function ModelCascadePicker({ model = '', onModelChange }: ModelCascadePi
       return;
     }
     setOpen(false);
-    setSessionModel(full)
+    setSessionModel(full, sessionId)
       .then(() => onModelChange?.(full))
       .catch(() => {});
   };

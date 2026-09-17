@@ -1,7 +1,7 @@
 import { createTask } from '../../tasks/store.js';
 import type { ToolExecutor } from '../types.js';
 
-export const execute: ToolExecutor = async (input, _opts) => {
+export const execute: ToolExecutor = async (input, options) => {
   const subject = input.subject as string;
   const description = input.description as string;
 
@@ -14,7 +14,7 @@ export const execute: ToolExecutor = async (input, _opts) => {
     description,
     activeForm: input.activeForm as string | undefined,
     metadata: (input.metadata as Record<string, unknown>) ?? {},
-  });
+  }, options.sessionId);
 
   return {
     content: `Task #${task.id} created: ${task.subject}`,

@@ -9,6 +9,12 @@ export { query } from './query.js';
 export type { QueryArgs } from './query.js';
 export { CoderixSDKClient } from './client.js';
 export type { ClientQueryArgs } from './client.js';
+export {
+  buildEngine,
+  buildEngineTemplate,
+  buildEngineFromTemplate,
+} from './engine-builder.js';
+export type { BuiltEngine, EngineTemplate } from './engine-builder.js';
 
 // Re-export the shared SDK schema (single source of truth lives in @coderix/core).
 // Names that collide with @coderix/core's own exports are aliased there and

@@ -23,6 +23,7 @@ import { startProtocolGateway } from './protocol-gateway/server.js';
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
 import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/core/query-engine.js';
+import type { Session } from '../../../../packages/coderix-core/src/core/types.js';
 import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
@@ -146,6 +147,7 @@ async function bootstrap(): Promise<void> {
       workDir: activeWorkDir,
       model: activeModel,
       reloadQueryEngine: (workDir, model) => initQueryEngine(workDir, model),
+      createEngineForSession,
     });
 
     // Step 3: Create the window — this must happen before heavy init
@@ -193,53 +195,16 @@ async function bootstrap(): Promise<void> {
 // QueryEngine initialization
 // ---------------------------------------------------------------------------
 
-async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: string): Promise<void> {
-  if (!ipcBridge) {
-    throw new Error('IPC bridge not initialized');
-  }
+// Shared, read-only tool registry reused across every per-session engine. The
+// in-process coderix engine needs one engine instance per concurrently-running
+// session, but the tool set (bash/read/write/…) is identical, so it is built
+// once and shared. The executor wrapper reads `ctx.cwd` (each engine passes its
+// session's workspace) so tools run in the right directory per session.
+let sharedToolRegistry: ToolRegistry | null = null;
 
-  activeWorkDir = workDir;
-  const isReload = ipcBridge.queryEngine !== null;
+function buildSharedToolRegistry(): ToolRegistry {
+  if (sharedToolRegistry) return sharedToolRegistry;
 
-  // Load config from ~/.coderix/settings.json
-  const appConfig = loadConfig();
-  // A model override (per-session model switch) binds the engine to that model
-  // and its own endpoint/auth, without mutating the global default_model.
-  const override = modelOverride ? resolveModelByName(modelOverride) : undefined;
-  const model = override?.model ?? appConfig.model;
-  const apiKey = override?.apiKey ?? appConfig.apiKey;
-  const baseURL = override?.baseUrl ?? appConfig.baseUrl;
-
-  activeModel = model;
-  console.log(`[Coderix] Config ${isReload ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${baseURL}, apiKey=${apiKey.slice(0, 10)}...`);
-
-  let callModel: QueryEngineConfig['callModel'];
-  try {
-    callModel = createCallModel(
-      { ...appConfig, baseUrl: baseURL, apiKey, protocol: override?.protocol ?? appConfig.protocol },
-      model,
-    );
-    console.log(`[Coderix] callModel initialized: model=${model}, baseURL=${baseURL}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[Coderix] Failed to initialize Anthropic client:', message);
-    callModel = (async function* (_params: unknown) {
-      yield {
-        type: 'message' as const,
-        data: {
-          type: 'assistant' as const,
-          message: {
-            content: `⚠️ **API 未配置**\n\n无法初始化模型客户端:\n\`\`\`\n${message}\n\`\`\`\n\n请在设置中配置 API Key。`,
-            stop_reason: 'end_turn' as const,
-            usage: { input_tokens: 0, output_tokens: 0 },
-            model: 'system',
-          },
-        },
-      } as unknown;
-    }) as unknown as QueryEngineConfig['callModel'];
-  }
-
-  // Register built-in tools via direct schema+executor imports
   const toolRegistry = new ToolRegistry();
   const toolList: Array<{ schema: any; executor: any }> = [
     { schema: bashSchema, executor: bashExec },
@@ -281,35 +246,115 @@ async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: 
             return { content: `Opened in the embedded browser: ${url}`, isError: false };
           }
         }
-        const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir, allowMutation: true });
+        const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir, allowMutation: true, sessionId: ctx.sessionId });
         return { content: String(result.content ?? ''), isError: result.isError ?? false };
       },
     );
   }
   console.log(`[Coderix] Registered ${toolRegistry.names.length} tools: ${toolRegistry.names.join(', ')}`);
+  sharedToolRegistry = toolRegistry;
+  return toolRegistry;
+}
 
-  const config: QueryEngineConfig = {
-    cwd: activeWorkDir,
+// Build a callModel bound to a specific model + endpoint, falling back to an
+// "API 未配置" assistant message when the client can't be constructed.
+function makeCallModelSafe(
+  appConfig: ReturnType<typeof loadConfig>,
+  override: ReturnType<typeof resolveModelByName>,
+  model: string,
+): QueryEngineConfig['callModel'] {
+  const baseURL = override?.baseUrl ?? appConfig.baseUrl;
+  const apiKey = override?.apiKey ?? appConfig.apiKey;
+  try {
+    const callModel = createCallModel(
+      { ...appConfig, baseUrl: baseURL, apiKey, protocol: override?.protocol ?? appConfig.protocol },
+      model,
+    );
+    console.log(`[Coderix] callModel initialized: model=${model}, baseURL=${baseURL}`);
+    return callModel;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[Coderix] Failed to initialize Anthropic client:', message);
+    return (async function* (_params: unknown) {
+      yield {
+        type: 'message' as const,
+        data: {
+          type: 'assistant' as const,
+          message: {
+            content: `⚠️ **API 未配置**\n\n无法初始化模型客户端:\n\`\`\`\n${message}\n\`\`\`\n\n请在设置中配置 API Key。`,
+            stop_reason: 'end_turn' as const,
+            usage: { input_tokens: 0, output_tokens: 0 },
+            model: 'system',
+          },
+        },
+      } as unknown;
+    }) as unknown as QueryEngineConfig['callModel'];
+  }
+}
+
+// Build a QueryEngine bound to a single session. Each engine owns a private
+// SessionManager that `adopt()`s the registry's session object (single in-memory
+// source of truth) plus a fresh callModel bound to the session's model. This is
+// what lets the in-process coderix engine run multiple sessions in parallel:
+// isActive/messageQueue/abortController are all per-instance.
+async function createEngineForSession(session: Session): Promise<QueryEngine> {
+  const appConfig = loadConfig();
+  const sessionModel =
+    session.model && session.model !== 'unknown' ? session.model : activeModel;
+  const override = resolveModelByName(sessionModel);
+  const model = override?.model ?? sessionModel;
+  const callModel = makeCallModelSafe(appConfig, override, model);
+
+  const perSessionManager = new SessionManager(false);
+  perSessionManager.adopt(session);
+
+  const engine = new QueryEngine({
+    cwd: session.cwd ?? activeWorkDir,
     model,
-    customSystemPrompt: undefined,
-    sessionManager: sessionManagerRef!,
-    toolRegistry: isReload ? undefined! : toolRegistry,
+    sessionManager: perSessionManager,
+    toolRegistry: buildSharedToolRegistry(),
     callModel,
-  };
+    skills: session.skills ?? [],
+  });
+  await engine.init();
+  engine.setPermissionMode(resolvePermissionMode(loadSettings()) as PermissionMode);
+  return engine;
+}
 
-  // Set the engine BEFORE re-initializing the QueryEngine so that an engine
-  // switch (e.g. coderix → claude-code) takes effect even if the in-process
-  // QueryEngine re-init below throws for any reason.
+async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: string): Promise<void> {
+  if (!ipcBridge) {
+    throw new Error('IPC bridge not initialized');
+  }
+
+  activeWorkDir = workDir;
+
+  // Load config from ~/.coderix/settings.json
+  const appConfig = loadConfig();
+  // A model override (per-session model switch) binds the engine to that model
+  // and its own endpoint/auth, without mutating the global default_model.
+  const override = modelOverride ? resolveModelByName(modelOverride) : undefined;
+  const model = override?.model ?? appConfig.model;
+
+  activeModel = model;
+  console.log(`[Coderix] Config ${sharedToolRegistry ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${override?.baseUrl ?? appConfig.baseUrl}`);
+
+  // Set the engine BEFORE (re)initializing the bootstrap so an engine switch
+  // (e.g. coderix → claude-code) takes effect even if the per-session engine
+  // factory throws later. `initEngine` clears any cached per-session engines so
+  // the next submit for a session rebuilds with the current model / registry /
+  // cwd (a live stream is unaffected — its generator already holds its engine).
   ipcBridge.setEngine(appConfig.engine ?? 'coderix');
 
-  await ipcBridge.initEngine(config);
-  const settings = loadSettings();
-  const permMode: PermissionMode = resolvePermissionMode(settings) as PermissionMode;
-  if (ipcBridge.queryEngine) {
-    ipcBridge.queryEngine.setPermissionMode(permMode);
-    console.log(`[Coderix] Permission mode set to: ${permMode}`);
-  }
-  console.log('[Coderix] QueryEngine initialized');
+  // Prime the shared tool registry (built once) so tool registration and its
+  // log line happen at startup rather than on the first message.
+  buildSharedToolRegistry();
+
+  await ipcBridge.initEngine({
+    cwd: activeWorkDir,
+    model,
+    sessionManager: sessionManagerRef!,
+  });
+  console.log('[Coderix] QueryEngine bootstrap ready');
 }
 
 // ---------------------------------------------------------------------------

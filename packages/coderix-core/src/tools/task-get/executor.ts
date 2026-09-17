@@ -75,7 +75,7 @@ export const execute: ToolExecutor = async (input, options) => {
     };
   }
 
-  const task = await getTask(taskId);
+  const task = await getTask(taskId, options.sessionId);
   if (!task) return { content: `Error: Task #${taskId} not found`, isError: true };
 
   const details = [

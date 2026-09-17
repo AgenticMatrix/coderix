@@ -185,6 +185,7 @@ interface PermissionRequest {
   toolName: string;
   command: string;
   description: string;
+  sessionId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,10 +301,12 @@ const coderixAPI = {
     },
 
     /**
-     * Interrupt the currently running query.
+     * Interrupt a running query. Pass `sessionId` to stop only that session's
+     * stream (e.g. when the user presses ⌘. while viewing it); omit to stop
+     * every in-flight stream.
      */
-    interrupt(): Promise<{ status: string }> {
-      return ipcRenderer.invoke(CH.QUERY_INTERRUPT);
+    interrupt(sessionId?: string): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.QUERY_INTERRUPT, sessionId);
     },
   },
 
@@ -340,14 +343,14 @@ const coderixAPI = {
       return ipcRenderer.invoke(CH.SESSION_DELETE, sessionId);
     },
 
-    /** Bind the active session to a model (per-session model switch). */
-    setModel(model: string): Promise<{ status: string; model: string }> {
-      return ipcRenderer.invoke(CH.SESSION_SET_MODEL, model);
+    /** Bind a session to a model (per-session model switch). */
+    setModel(sessionId: string, model: string): Promise<{ status: string; model: string }> {
+      return ipcRenderer.invoke(CH.SESSION_SET_MODEL, { sessionId, model });
     },
 
-    /** Bind the active session to a set of skills (per-session skill selection). */
-    setSkills(skills: string[]): Promise<{ status: string; skills: string[] }> {
-      return ipcRenderer.invoke(CH.SESSION_SET_SKILLS, skills);
+    /** Bind a session to a set of skills (per-session skill selection). */
+    setSkills(sessionId: string, skills: string[]): Promise<{ status: string; skills: string[] }> {
+      return ipcRenderer.invoke(CH.SESSION_SET_SKILLS, { sessionId, skills });
     },
   },
 
@@ -828,11 +831,11 @@ const coderixAPI = {
    * Returns an unsubscribe function.
    */
   onQuestionRequest(
-    callback: (req: { toolUseId: string; toolName: string; questions: Array<{ header: string; question: string; options?: Array<{ label: string; description: string }>; multiSelect?: boolean }> }) => void,
+    callback: (req: { toolUseId: string; toolName: string; sessionId?: string; questions: Array<{ header: string; question: string; options?: Array<{ label: string; description: string }>; multiSelect?: boolean }> }) => void,
   ): () => void {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      data: { toolUseId: string; toolName: string; questions: Array<{ header: string; question: string; options?: Array<{ label: string; description: string }>; multiSelect?: boolean }> },
+      data: { toolUseId: string; toolName: string; sessionId?: string; questions: Array<{ header: string; question: string; options?: Array<{ label: string; description: string }>; multiSelect?: boolean }> },
     ) => {
       callback(data);
     };

@@ -158,28 +158,62 @@ export class SessionManager {
   }
 
   /**
-   * Bind the active session to a model and persist it to meta.json so the
-   * session remembers which model to use when resumed later.
+   * Resolve a session by id for a write operation, caching it from disk when
+   * necessary. Throws if the session does not exist.
    */
-  setActiveModel(model: string): void {
-    const session = this.getActive();
+  private requireSession(sessionId: string): Session {
+    let session = this.sessions.get(sessionId);
+    if (!session) {
+      session = this.loadSession(sessionId);
+      if (session) this.sessions.set(sessionId, session);
+    }
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+    return session;
+  }
+
+  /**
+   * Adopt an existing session object into this manager as its active session
+   * without writing to disk. Used by per-session managers so they share the
+   * same in-memory Session object as the registry (single source of truth).
+   */
+  adopt(session: Session): void {
+    this.sessions.set(session.id, session);
+    this.activeSession = session;
+  }
+
+  /**
+   * Bind a session to a model and persist it to meta.json so the session
+   * remembers which model to use when resumed later.
+   */
+  setModel(sessionId: string, model: string): void {
+    const session = this.requireSession(sessionId);
     session.model = model;
     session.updatedAt = new Date();
     const dir = getSessionDir(session.id);
     writeSessionMeta(dir, { model }).catch(() => {});
   }
 
+  /** Bind the active session to a model (delegator — see setModel). */
+  setActiveModel(model: string): void {
+    this.setModel(this.getActive().id, model);
+  }
+
   /**
-   * Bind the active session to a set of skills and persist them to meta.json
-   * so the session remembers which skills to enable when resumed later.
+   * Bind a session to a set of skills and persist them to meta.json so the
+   * session remembers which skills to enable when resumed later.
    * An empty array explicitly means "no skills enabled".
    */
-  setActiveSkills(skills: string[]): void {
-    const session = this.getActive();
+  setSkills(sessionId: string, skills: string[]): void {
+    const session = this.requireSession(sessionId);
     session.skills = skills;
     session.updatedAt = new Date();
     const dir = getSessionDir(session.id);
     writeSessionMeta(dir, { skills }).catch(() => {});
+  }
+
+  /** Bind the active session to a set of skills (delegator — see setSkills). */
+  setActiveSkills(skills: string[]): void {
+    this.setSkills(this.getActive().id, skills);
   }
 
   /**
@@ -259,12 +293,22 @@ export class SessionManager {
   /**
    * Trim session messages to stay within a token budget.
    */
-  trimMessages(maxTokens: number, minKeep = 10): number {
-    const session = this.getActive();
+  trimMessages(maxTokens: number, minKeep?: number): number;
+  trimMessages(sessionId: string, maxTokens: number, minKeep?: number): number;
+  trimMessages(sessionIdOrMaxTokens: string | number, maxTokensOrMinKeep?: number, minKeep = 10): number {
+    const session = typeof sessionIdOrMaxTokens === 'string'
+      ? this.requireSession(sessionIdOrMaxTokens)
+      : this.getActive();
+    const maxTokens = typeof sessionIdOrMaxTokens === 'string'
+      ? (maxTokensOrMinKeep as number)
+      : sessionIdOrMaxTokens;
+    const minKeepFinal = typeof sessionIdOrMaxTokens === 'string'
+      ? (minKeep ?? 10)
+      : (maxTokensOrMinKeep ?? 10);
     const totalTokens = tokenCountWithEstimation(session.messages);
     if (totalTokens <= maxTokens) return 0;
 
-    const maxDrop = session.messages.length - minKeep;
+    const maxDrop = session.messages.length - minKeepFinal;
     let keepStart = 0;
     for (let i = 0; i < maxDrop; i++) {
       keepStart = i + 1;
@@ -282,12 +326,19 @@ export class SessionManager {
   }
 
   /**
-   * Replace the active session's messages with a compacted set.
+   * Replace a session's messages with a compacted set.
    * Archives the old transcript to history_transcript/ before rewriting.
    * Returns the archive path for inclusion in the compact summary.
    */
-  replaceMessages(messages: Message[]): string | undefined {
-    const session = this.getActive();
+  replaceMessages(messages: Message[]): string | undefined;
+  replaceMessages(sessionId: string, messages: Message[]): string | undefined;
+  replaceMessages(sessionIdOrMessages: string | Message[], maybeMessages?: Message[]): string | undefined {
+    const session = typeof sessionIdOrMessages === 'string'
+      ? this.requireSession(sessionIdOrMessages)
+      : this.getActive();
+    const messages = typeof sessionIdOrMessages === 'string'
+      ? (maybeMessages as Message[])
+      : sessionIdOrMessages;
     session.messages = [...messages];
     session.updatedAt = new Date();
     // Archive old JSONL before rebuilding
@@ -309,8 +360,10 @@ export class SessionManager {
    *
    * Returns the number of thinking blocks removed.
    */
-  stripThinking(): number {
-    const session = this.getActive();
+  stripThinking(): number;
+  stripThinking(sessionId: string): number;
+  stripThinking(sessionId?: string): number {
+    const session = sessionId !== undefined ? this.requireSession(sessionId) : this.getActive();
     let removed = 0;
     for (const msg of session.messages) {
       if (!Array.isArray(msg.content)) continue;
@@ -349,11 +402,18 @@ export class SessionManager {
   private static readonly MAX_MESSAGES = 300;
 
   /**
-   * Add a message to the active session.
+   * Add a message to a session (active when called with one arg).
    * Appends to JSONL file AND updates in-memory messages array.
    */
-  addMessage(message: Message): void {
-    const session = this.getActive();
+  addMessage(message: Message): void;
+  addMessage(sessionId: string, message: Message): void;
+  addMessage(sessionIdOrMessage: string | Message, maybeMessage?: Message): void {
+    const session = typeof sessionIdOrMessage === 'string'
+      ? this.requireSession(sessionIdOrMessage)
+      : this.getActive();
+    const message = typeof sessionIdOrMessage === 'string'
+      ? (maybeMessage as Message)
+      : sessionIdOrMessage;
 
     // Track the last transcript entry's uuid for parentUuid chaining
     const prevUuid = (session as any)._lastEntryUuid as string | null ?? null;
@@ -445,8 +505,15 @@ export class SessionManager {
   /**
    * Update token usage for the active session.
    */
-  updateUsage(usage: Partial<TokenUsageSummary>): void {
-    const session = this.getActive();
+  updateUsage(usage: Partial<TokenUsageSummary>): void;
+  updateUsage(sessionId: string, usage: Partial<TokenUsageSummary>): void;
+  updateUsage(sessionIdOrUsage: string | Partial<TokenUsageSummary>, maybeUsage?: Partial<TokenUsageSummary>): void {
+    const session = typeof sessionIdOrUsage === 'string'
+      ? this.requireSession(sessionIdOrUsage)
+      : this.getActive();
+    const usage = typeof sessionIdOrUsage === 'string'
+      ? (maybeUsage as Partial<TokenUsageSummary>)
+      : sessionIdOrUsage;
     if (usage.inputTokens) session.tokenUsage.inputTokens += usage.inputTokens;
     if (usage.outputTokens) session.tokenUsage.outputTokens += usage.outputTokens;
     if (usage.cacheCreationInputTokens)
@@ -462,16 +529,28 @@ export class SessionManager {
   /**
    * Add cost to the active session.
    */
-  addCost(cost: number): void {
-    const session = this.getActive();
+  addCost(cost: number): void;
+  addCost(sessionId: string, cost: number): void;
+  addCost(sessionIdOrCost: string | number, maybeCost?: number): void {
+    const session = typeof sessionIdOrCost === 'string'
+      ? this.requireSession(sessionIdOrCost)
+      : this.getActive();
+    const cost = typeof sessionIdOrCost === 'string'
+      ? (maybeCost as number)
+      : sessionIdOrCost;
     session.totalCost += cost;
   }
 
   /**
    * Add a file to the modified-files list.
    */
-  trackModifiedFile(filePath: string): void {
-    const session = this.getActive();
+  trackModifiedFile(filePath: string): void;
+  trackModifiedFile(sessionId: string, filePath: string): void;
+  trackModifiedFile(sessionIdOrFilePath: string, maybeFilePath?: string): void {
+    const session = maybeFilePath !== undefined
+      ? this.requireSession(sessionIdOrFilePath)
+      : this.getActive();
+    const filePath = maybeFilePath ?? sessionIdOrFilePath;
     if (!session.metadata.filesModified!.includes(filePath)) {
       session.metadata.filesModified!.push(filePath);
     }
@@ -480,8 +559,13 @@ export class SessionManager {
   /**
    * Track a tool that was used.
    */
-  trackTool(toolName: string): void {
-    const session = this.getActive();
+  trackTool(toolName: string): void;
+  trackTool(sessionId: string, toolName: string): void;
+  trackTool(sessionIdOrToolName: string, maybeToolName?: string): void {
+    const session = maybeToolName !== undefined
+      ? this.requireSession(sessionIdOrToolName)
+      : this.getActive();
+    const toolName = maybeToolName ?? sessionIdOrToolName;
     if (!session.metadata.toolsUsed!.includes(toolName)) {
       session.metadata.toolsUsed!.push(toolName);
     }
@@ -601,12 +685,21 @@ export class SessionManager {
   }
 
   /**
-   * Flush all pending writes and exit the process.
+   * Flush all pending writes WITHOUT exiting. Used to drain per-session
+   * managers' pending JSONL writes before the registry's single exit handler
+   * calls process.exit, so parallel sessions never truncate their transcripts.
    */
-  async flushAndExit(code = 0): Promise<void> {
+  async flush(): Promise<void> {
     if (this.pendingWrites.size > 0) {
       await Promise.all(Array.from(this.pendingWrites));
     }
+  }
+
+  /**
+   * Flush all pending writes and exit the process.
+   */
+  async flushAndExit(code = 0): Promise<void> {
+    await this.flush();
     process.exit(code);
   }
 

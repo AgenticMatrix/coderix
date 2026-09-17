@@ -54,12 +54,15 @@ export interface PermissionRequest {
   toolInput: Record<string, unknown>;
   /** Human-readable description of what the tool will do */
   message?: string;
+  /** Owning session id (for routing a backgrounded prompt back to its session) */
+  sessionId?: string;
 }
 
 /** Question request emitted by AskUserQuestion. */
 export interface QuestionRequest {
   toolUseId: string;
   toolName: string;
+  sessionId?: string;
   questions: Array<{
     header: string;
     question: string;

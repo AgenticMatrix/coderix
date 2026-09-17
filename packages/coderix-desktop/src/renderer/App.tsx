@@ -177,6 +177,15 @@ export function App(): React.ReactElement {
   // Holds the last committed composer value before clearing
   const composerValueRef = useRef('');
 
+  // Prompts (permission + AskUserQuestion) raised by sessions that are NOT the
+  // currently-viewed one. Keyed by session id so a concurrent prompt from a
+  // backgrounded session is stashed here and surfaced when that session is
+  // selected, instead of being dropped or clobbering the viewed session's
+  // prompt. The *viewed* session's prompt lives in `pendingPermission` /
+  // `pendingQuestion` state above.
+  const backgroundedPermissions = useRef(new Map<string, PermissionRequest>());
+  const backgroundedQuestions = useRef(new Map<string, QuestionRequest>());
+
   // ── Activate IPC stream listeners ───────────────────────────────────────
   // Registers onStreamBlock, onStreamDone, onStreamError, onTokenUsage
   // via the preload contextBridge. Cleaned up on unmount.
@@ -233,7 +242,7 @@ export function App(): React.ReactElement {
     if (builtinSkillNames.length === 0) return;
     defaultedSkillsFor.current = sessionId;
     setSelectedSkills(builtinSkillNames);
-    setSessionSkills(builtinSkillNames).catch(() => {});
+    setSessionSkills(builtinSkillNames, sessionId ?? undefined).catch(() => {});
   }, [sessionId, builtinSkillNames, setSessionSkills]);
 
   // ── Custom skill directory management ───────────────────────────────────
@@ -260,9 +269,9 @@ export function App(): React.ReactElement {
   const handleSkillsChange = useCallback(
     (next: string[]) => {
       setSelectedSkills(next);
-      setSessionSkills(next).catch(() => {});
+      setSessionSkills(next, sessionId ?? undefined).catch(() => {});
     },
-    [setSessionSkills],
+    [setSessionSkills, sessionId],
   );
 
   // ── Permission request listener ─────────────────────────────────────────
@@ -276,6 +285,13 @@ export function App(): React.ReactElement {
         return;
       }
 
+      // A backgrounded session's prompt is stashed and shown when that session
+      // is selected; only the viewed session's prompt shows immediately.
+      if (req.sessionId && req.sessionId !== useChatStore.getState().sessionId) {
+        backgroundedPermissions.current.set(req.sessionId, req);
+        return;
+      }
+
       // Show inline prompt (replaces any existing pending permission)
       setPendingPermission(req);
     });
@@ -283,11 +299,15 @@ export function App(): React.ReactElement {
     return unsubscribe;
   }, []);
 
-  // ── Question request listener (auto-answer for now) ────────────────────
+  // ── Question request listener ───────────────────────────────────────────
   useEffect(() => {
     if (!window.coderixAPI?.onQuestionRequest) return;
     const unsub = window.coderixAPI.onQuestionRequest((req: QuestionRequest) => {
       console.log('[App] Question received:', req.toolName, req.questions?.length, 'questions');
+      if (req.sessionId && req.sessionId !== useChatStore.getState().sessionId) {
+        backgroundedQuestions.current.set(req.sessionId, req);
+        return;
+      }
       setPendingQuestion(req);
     });
     return unsub;
@@ -386,13 +406,15 @@ export function App(): React.ReactElement {
         e.preventDefault();
         toggleTerminal();
       }
-      // ⌘. — interrupt generation
+      // ⌘. — interrupt the viewed session's generation (other sessions keep
+      // running).
       if (meta && e.key === '.') {
         e.preventDefault();
-        void interruptQuery().catch((err) => {
+        const sid = useChatStore.getState().sessionId ?? undefined;
+        void interruptQuery(sid).catch((err) => {
           console.error('[App] Failed to interrupt query:', err);
         });
-        useChatStore.getState().interruptStream();
+        useChatStore.getState().interruptStream(sid);
       }
       // ⌘⇧T — toggle theme
       if (meta && e.shiftKey && e.key === 't') {
@@ -449,17 +471,30 @@ export function App(): React.ReactElement {
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
     async (id: string) => {
-      // If a query is still streaming from the previous session, abort it and
-      // drop its in-progress message so its output does not leak into the
-      // newly selected session's transcript.
-      if (useChatStore.getState().isStreaming) {
-        void interruptQuery().catch(() => {});
+      // Clicking the already-active session is a no-op — re-selecting it must
+      // not interrupt a running task or reload the transcript.
+      if (id === useSessionStore.getState().currentSessionId) {
+        return;
       }
-      useStreamStore.setState({ currentMessage: null });
-      useChatStore.setState({ isStreaming: false, error: null });
 
-      setSessionId(id);
+      // Route the swap through the per-session stores: stash the currently
+      // viewed session's live state into its cache slot and load the target's
+      // cached transcript. Switching never aborts a running task — any
+      // background stream keeps accumulating into its own cache.
+      useStreamStore.getState().setViewedSession(id);
+      const hadCached = setSessionId(id);
       useSessionStore.getState().setCurrentSessionId(id);
+
+      // Surface any permission / question prompt this session raised while it
+      // was backgrounded, and drop the previously-viewed session's prompt from
+      // the visible slot (its own prompt was already stashed or resolved).
+      const storedPermission = backgroundedPermissions.current.get(id);
+      backgroundedPermissions.current.delete(id);
+      setPendingPermission(storedPermission ?? null);
+      const storedQuestion = backgroundedQuestions.current.get(id);
+      backgroundedQuestions.current.delete(id);
+      setPendingQuestion(storedQuestion ?? null);
+
       // The session's own persisted skills are authoritative — don't let the
       // built-in default effect override them when this session is re-opened.
       defaultedSkillsFor.current = id;
@@ -588,7 +623,12 @@ export function App(): React.ReactElement {
               }
             }
 
-            useChatStore.setState({ messages: chatMsgs, isStreaming: false });
+            // A session that was streaming in the background already has an
+            // up-to-date transcript in memory; only hydrate a cold session from
+            // disk, so a just-streamed turn isn't clobbered by a stale read.
+            if (!hadCached) {
+              useChatStore.setState({ messages: chatMsgs, isStreaming: false });
+            }
           }
         }
       } catch (err) {
@@ -599,19 +639,17 @@ export function App(): React.ReactElement {
   );
 
   const handleNewSession = useCallback(async () => {
-    // Abort any in-flight query so its output doesn't leak into the new session.
-    if (useChatStore.getState().isStreaming) {
-      void interruptQuery().catch(() => {});
-    }
-    // Clear current messages
-    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', error: null });
-    useStreamStore.setState({ currentMessage: null });
     // A fresh session inherits the global default model.
     setSessionModelState(null);
     setSelectedSkills([]);
     await createSession();
     const newSid = useSessionStore.getState().currentSessionId;
-    if (newSid) setSessionId(newSid);
+    if (newSid) {
+      // Route the swap through the per-session stores (never abort the previous
+      // session's running task) and point the view at the new empty session.
+      useStreamStore.getState().setViewedSession(newSid);
+      setSessionId(newSid);
+    }
   }, [createSession, setSessionId]);
 
   const handleOpenSettings = useCallback(() => {
@@ -632,15 +670,12 @@ export function App(): React.ReactElement {
   // Shared post-switch cleanup: reset the active session/chat and reload the
   // session list for the new workspace directory.
   const switchToProject = useCallback(async (path: string) => {
-    // Abort any in-flight query so its output doesn't leak into the new workspace.
-    if (useChatStore.getState().isStreaming) {
-      void interruptQuery().catch(() => {});
-    }
     setProjectPath(path);
+    // Leave the conversation without killing any running task: stash the viewed
+    // session's live state so it resumes intact when re-selected.
+    useStreamStore.getState().setViewedSession(null);
     setSessionId(null);
     useSessionStore.getState().setCurrentSessionId(null);
-    useChatStore.setState({ messages: [], isStreaming: false, streamingContent: '', sessionId: null, error: null });
-    useStreamStore.setState({ currentMessage: null });
     setSessionModelState(null);
     setSelectedSkills([]);
     await loadSessions();
@@ -1026,6 +1061,7 @@ export function App(): React.ReactElement {
             <ModelCascadePicker
               model={(sessionModel ?? settings?.defaultModel) || t('modelpicker.unconfigured')}
               onModelChange={setSessionModelState}
+              sessionId={sessionId ?? undefined}
             />
 
             <SkillPicker
@@ -1044,10 +1080,11 @@ export function App(): React.ReactElement {
             disabled={isStreaming || pendingQuestion !== null}
             isStreaming={isStreaming}
             onInterrupt={() => {
-              void interruptQuery().catch((err) => {
+              const sid = sessionId ?? undefined;
+              void interruptQuery(sid).catch((err) => {
                 console.error('[App] Failed to interrupt query:', err);
               });
-              useChatStore.getState().interruptStream();
+              useChatStore.getState().interruptStream(sid);
             }}
           />
 

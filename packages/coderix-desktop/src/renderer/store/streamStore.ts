@@ -17,33 +17,72 @@ import {
 // deltas into a single pending message and flushes once per animation frame, so
 // a burst of N deltas produces at most one render instead of N. This mirrors
 // agentstation's approach of coalescing rapid stream events before committing
-// them to the UI. The refs are module-scoped (not store state) so they never
-// trigger a render themselves.
-let pendingMsg: { id: string; blocks: StreamBlock[]; content: string } | null = null;
-let pendingRaf: number | null = null;
+// them to the UI. The pending buffers are module-scoped and keyed by session id
+// so concurrent streams never coalesce into each other, and they never trigger
+// a render themselves.
+interface PendingMsg { id: string; blocks: StreamBlock[]; content: string; }
+const pendingBySession = new Map<string, { msg: PendingMsg | null; raf: number | null }>();
 
-/** Drop any buffered blocks (used on error/interrupt/teardown). */
-function discardPendingBlocks(): void {
-  if (pendingRaf !== null) {
-    cancelAnimationFrame(pendingRaf);
-    pendingRaf = null;
+function getPending(sessionId: string): { msg: PendingMsg | null; raf: number | null } {
+  let p = pendingBySession.get(sessionId);
+  if (!p) {
+    p = { msg: null, raf: null };
+    pendingBySession.set(sessionId, p);
   }
-  pendingMsg = null;
+  return p;
+}
+
+/** Drop any buffered blocks for one session (used on error/interrupt/teardown). */
+function discardPending(sessionId: string): void {
+  const p = pendingBySession.get(sessionId);
+  if (!p) return;
+  if (p.raf !== null) {
+    cancelAnimationFrame(p.raf);
+    p.raf = null;
+  }
+  p.msg = null;
+}
+
+function emptyTokenUsage(): AggregatedTokenUsage {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalCost: 0,
+    currency: 'USD',
+  };
+}
+
+function accumulateTokenUsage(
+  acc: AggregatedTokenUsage,
+  stats: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number; currency?: string },
+): AggregatedTokenUsage {
+  return {
+    inputTokens: (acc.inputTokens ?? 0) + (stats.inputTokens ?? 0),
+    outputTokens: (acc.outputTokens ?? 0) + (stats.outputTokens ?? 0),
+    cacheReadTokens: (acc.cacheReadTokens ?? 0) + (stats.cacheReadTokens ?? 0),
+    cacheWriteTokens: (acc.cacheWriteTokens ?? 0) + (stats.cacheWriteTokens ?? 0),
+    totalCost: (acc.totalCost ?? 0) + (stats.cost ?? 0),
+    currency: stats.currency || acc.currency,
+  };
 }
 
 export interface StreamState {
   /**
-   * The currently building assistant message (accumulated blocks).
-   * Reset to null when streaming ends.
+   * The currently building assistant message for the *viewed* session
+   * (accumulated blocks). Reset to null when that session's stream ends.
    */
-  currentMessage: {
-    id: string;
-    blocks: StreamBlock[];
-    content: string;
-  } | null;
+  currentMessage: PendingMsg | null;
 
-  /** Aggregated token usage across all turns of the current session */
+  /** Building assistant messages for backgrounded sessions, keyed by session. */
+  currentMessageBySession: Record<string, PendingMsg>;
+
+  /** Aggregated token usage for the viewed session. */
   tokenUsage: AggregatedTokenUsage;
+
+  /** Aggregated token usage for backgrounded sessions. */
+  tokenUsageBySession: Record<string, AggregatedTokenUsage>;
 
   /** Cleanup functions for IPC event listeners */
   _cleanups: Array<() => void>;
@@ -53,6 +92,9 @@ export interface StreamState {
   startListening: () => void;
   /** Unregister all stream event listeners. Called at app teardown. */
   stopListening: () => void;
+  /** Swap the viewed session: stash the current session's stream state and load
+   *  the target's cached state (coordinated with chatStore.setSessionId). */
+  setViewedSession: (id: string | null) => void;
 }
 
 /**
@@ -65,29 +107,44 @@ export interface StreamState {
  *
  * It also listens to `state:tokenUsage` for real-time token stats.
  *
- * Blocks are accumulated into `currentMessage` during streaming. When the
- * stream completes, the message is committed to the chat store's message list.
- *
- * The preload API emits blocks through a single unified `onStreamBlock` channel.
- * The block's `type` field differentiates between text, tool_use, tool_result,
- * thinking, and system blocks. This store handles the full lifecycle:
- *
- *   blockStart (type set, content empty) → blockDelta (type set, content has data) → blockStop (state: 'done')
- *
- * For simplicity, each block update replaces or appends to the correct entry
- * in the blocks array, keyed by toolId (for tool blocks) or type (for text/thinking/system).
+ * Blocks are accumulated into the owning session's `currentMessage` (flat for the
+ * viewed session, `currentMessageBySession` for backgrounded ones) during
+ * streaming. When a stream completes, the message is committed to that session's
+ * transcript. Events are **routed** to their owning session — never dropped — so
+ * switching sessions leaves every background stream running and accumulating.
  */
 export const useStreamStore = create<StreamState>()((set, get) => ({
   currentMessage: null,
-  tokenUsage: {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0,
-    totalCost: 0,
-    currency: 'USD',
-  },
+  currentMessageBySession: {},
+  tokenUsage: emptyTokenUsage(),
+  tokenUsageBySession: {},
   _cleanups: [],
+
+  setViewedSession: (id: string | null) => {
+    const oldId = useChatStore.getState().sessionId;
+    const state = get();
+
+    const currentMessageBySession = { ...state.currentMessageBySession };
+    const tokenUsageBySession = { ...state.tokenUsageBySession };
+    if (oldId) {
+      if (state.currentMessage) currentMessageBySession[oldId] = state.currentMessage;
+      tokenUsageBySession[oldId] = state.tokenUsage;
+    }
+
+    const nextCurrent = id ? (currentMessageBySession[id] ?? null) : null;
+    const nextUsage = id ? (tokenUsageBySession[id] ?? emptyTokenUsage()) : emptyTokenUsage();
+    if (id) {
+      delete currentMessageBySession[id];
+      delete tokenUsageBySession[id];
+    }
+
+    set({
+      currentMessage: nextCurrent,
+      tokenUsage: nextUsage,
+      currentMessageBySession,
+      tokenUsageBySession,
+    });
+  },
 
   startListening: () => {
     // Prevent double-registration
@@ -96,95 +153,144 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
     const cleanups: Array<() => void> = [];
 
-    // Flush accumulated blocks into the store as a single `set()` (called once
-    // per animation frame by `scheduleBlockFlush`, or synchronously on stream
-    // done so the final partial message is never lost).
-    const flushPendingBlocks = () => {
-      if (pendingRaf !== null) {
-        cancelAnimationFrame(pendingRaf);
-        pendingRaf = null;
+    // Resolve the session a stream event belongs to, falling back to the viewed
+    // session when an event is untagged.
+    const sessionOf = (sessionId?: string): string =>
+      sessionId || useChatStore.getState().sessionId || '';
+
+    const viewedSession = (): string | null => useChatStore.getState().sessionId;
+
+    // Read a session's in-progress assistant message (flat if viewed, map slot
+    // if backgrounded).
+    const getCurrent = (sessionId: string): PendingMsg | null => {
+      if (sessionId === viewedSession()) return get().currentMessage;
+      return get().currentMessageBySession[sessionId] ?? null;
+    };
+
+    // Write a session's in-progress assistant message to the right slot.
+    const writeCurrent = (sessionId: string, msg: PendingMsg | null): void => {
+      if (sessionId === viewedSession()) {
+        set({ currentMessage: msg });
+        return;
       }
-      const msg = pendingMsg;
-      pendingMsg = null;
-      if (msg) set({ currentMessage: msg });
+      set((s) => {
+        const next = { ...s.currentMessageBySession };
+        if (msg === null) delete next[sessionId];
+        else next[sessionId] = msg;
+        return { currentMessageBySession: next };
+      });
     };
 
-    // Coalesce a block into the pending message and schedule a single flush.
-    const scheduleBlockFlush = () => {
-      if (pendingRaf !== null) return;
-      pendingRaf = requestAnimationFrame(flushPendingBlocks);
+    // Flush accumulated blocks for a session into the store as a single `set()`
+    // (called once per animation frame, or synchronously on stream done so the
+    // final partial message is never lost).
+    const flushPendingBlocks = (sessionId: string) => {
+      const p = pendingBySession.get(sessionId);
+      if (!p) return;
+      if (p.raf !== null) {
+        cancelAnimationFrame(p.raf);
+        p.raf = null;
+      }
+      const msg = p.msg;
+      p.msg = null;
+      if (msg) writeCurrent(sessionId, msg);
     };
 
-    // Refresh the sidebar entry for the active session once a turn finishes.
-    // A completed turn is bumped optimistically so "turns"/time update
-    // immediately; a delayed disk read then reconciles the exact count and
-    // title once the engine's async JSONL/meta writes have landed.
-    const refreshSidebarSession = (bump: boolean) => {
-      const sessionId =
+    // Coalesce a block into a session's pending message and schedule one flush.
+    const scheduleBlockFlush = (sessionId: string) => {
+      const p = getPending(sessionId);
+      if (p.raf !== null) return;
+      p.raf = requestAnimationFrame(() => flushPendingBlocks(sessionId));
+    };
+
+    // Refresh the sidebar entry for a session once a turn finishes. A completed
+    // turn is bumped optimistically so "turns"/time update immediately; a
+    // delayed disk read then reconciles the exact count and title once the
+    // engine's async JSONL/meta writes have landed.
+    const refreshSidebarSession = (bump: boolean, sessionId?: string) => {
+      const sid =
+        sessionId ??
         useChatStore.getState().sessionId ??
         useSessionStore.getState().currentSessionId;
-      if (!sessionId) return;
-      if (bump) useSessionStore.getState().bumpSession(sessionId);
+      if (!sid) return;
+      if (bump) useSessionStore.getState().bumpSession(sid);
       setTimeout(() => {
-        void useSessionStore.getState().refreshSession(sessionId);
+        void useSessionStore.getState().refreshSession(sid);
       }, 400);
+    };
+
+    // Read a session's committed transcript (flat if viewed, map slot if not).
+    const getMessages = (sessionId: string): ChatMessage[] => {
+      if (sessionId === viewedSession()) return useChatStore.getState().messages;
+      return useChatStore.getState().messagesBySession[sessionId] ?? [];
+    };
+
+    // Attach a tool_result to the matching tool_use across a session's committed
+    // messages. Returns true when the result found a home.
+    const attachToolResult = (sessionId: string, block: StreamBlock): boolean => {
+      const chatMessages = getMessages(sessionId);
+      for (let i = chatMessages.length - 1; i >= 0; i--) {
+        const chatMsg = chatMessages[i];
+        if (chatMsg.role !== 'assistant') continue;
+        const toolUseIdx = chatMsg.blocks.findIndex(
+          (b) => b.type === 'tool_use' && b.toolId === block.toolId,
+        );
+        if (toolUseIdx >= 0) {
+          useChatStore.getState().patchSessionMessages(
+            sessionId,
+            (msgs) =>
+              msgs.map((m) =>
+                m.id === chatMsg.id
+                  ? {
+                      ...m,
+                      blocks: m.blocks.map((b, bi) =>
+                        bi === toolUseIdx
+                          ? { ...b, toolResult: block.content, toolMetadata: block.toolMetadata }
+                          : b,
+                      ),
+                    }
+                  : m,
+              ),
+          );
+          return true;
+        }
+      }
+      return false;
     };
 
     // ── Stream Block ──────────────────────────────────────
     const unsubBlock = onStreamBlock((block: StreamBlock) => {
-      // Drop stream events that belong to a different session — late events
-      // from a previously active query must not leak into the session that is
-      // currently being viewed (cross-session stream contamination).
-      const currentSessionId = useChatStore.getState().sessionId;
-      if (block.sessionId && currentSessionId && block.sessionId !== currentSessionId) {
-        return;
-      }
+      // Route the block to its owning session (never drop it): a backgrounded
+      // session keeps accumulating into its own cache.
+      const sid = sessionOf(block.sessionId);
 
       // Accumulate against the pending message when a flush is already
       // scheduled (mid-frame), otherwise against the last committed message.
-      let msg = pendingMsg ?? get().currentMessage;
+      let msg = getPending(sid).msg ?? getCurrent(sid);
 
       // Tool_result arriving outside active streaming — attach directly
       // to the matching tool_use in already-committed messages.
       if (block.type === 'tool_result' && block.toolId && !msg) {
-        const chatMessages = useChatStore.getState().messages;
-        for (let i = chatMessages.length - 1; i >= 0; i--) {
-          const chatMsg = chatMessages[i];
-          if (chatMsg.role !== 'assistant') continue;
-          const toolUseIdx = chatMsg.blocks.findIndex(
-            (b) => b.type === 'tool_use' && b.toolId === block.toolId,
-          );
-          if (toolUseIdx >= 0) {
-            const updatedBlocks = [...chatMsg.blocks];
-            updatedBlocks[toolUseIdx] = {
-              ...updatedBlocks[toolUseIdx],
-              toolResult: block.content,
-              toolMetadata: block.toolMetadata,
-            };
-            useChatStore.setState((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === chatMsg.id ? { ...m, blocks: updatedBlocks } : m,
-              ),
-            }));
-            return;
-          }
-        }
+        if (attachToolResult(sid, block)) return;
         // Couldn't attach — create a minimal standalone message
         msg = {
           id: createId(),
           blocks: [{ ...block }],
           content: '',
         };
-        pendingMsg = msg;
-        scheduleBlockFlush();
+        getPending(sid).msg = msg;
+        scheduleBlockFlush(sid);
         return;
       }
 
-      // Stray blocks arriving after a stream was cancelled (e.g. a session
-      // switch interrupted the previous query) must not start a new in-progress
-      // message in the newly selected session. During a live stream
-      // `isStreaming` is true, so this only filters out orphaned blocks.
-      if (!msg && !useChatStore.getState().isStreaming) {
+      // Stray blocks arriving after a stream was cancelled must not start a new
+      // in-progress message. During a live stream `isStreaming` is true, so this
+      // only filters out orphaned blocks.
+      const isStreaming =
+        sid === viewedSession()
+          ? useChatStore.getState().isStreaming
+          : (useChatStore.getState().streamingBySession[sid] ?? false);
+      if (!msg && !isStreaming) {
         return;
       }
 
@@ -232,30 +338,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       } else if (block.type === 'tool_result' && block.toolId) {
         // Tool_result arrived during active streaming — search committed
         // messages for the matching tool_use (may be from a prior turn).
-        const chatMessages = useChatStore.getState().messages;
-        let attached = false;
-        for (let i = chatMessages.length - 1; i >= 0; i--) {
-          const chatMsg = chatMessages[i];
-          if (chatMsg.role !== 'assistant') continue;
-          const toolUseIdx = chatMsg.blocks.findIndex(
-            (b) => b.type === 'tool_use' && b.toolId === block.toolId,
-          );
-          if (toolUseIdx >= 0) {
-            const updatedBlocks = [...chatMsg.blocks];
-            updatedBlocks[toolUseIdx] = {
-              ...updatedBlocks[toolUseIdx],
-              toolResult: block.content,
-              toolMetadata: block.toolMetadata,
-            };
-            useChatStore.setState((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === chatMsg.id ? { ...m, blocks: updatedBlocks } : m,
-              ),
-            }));
-            attached = true;
-            break;
-          }
-        }
+        const attached = attachToolResult(sid, block);
         if (!attached) {
           msg = { ...msg, blocks: [...msg.blocks, { ...block }] };
         }
@@ -267,89 +350,85 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         msg = { ...msg, content: block.content };
       }
 
-      pendingMsg = msg;
-      scheduleBlockFlush();
+      getPending(sid).msg = msg;
+      scheduleBlockFlush(sid);
     });
     cleanups.push(unsubBlock);
 
     // ── Stream Done ────────────────────────────────────────
     const unsubDone = onStreamDone((stopReason?: string, sessionId?: string) => {
-      // Ignore completion events for a different session (see onStreamBlock).
-      const currentSessionId = useChatStore.getState().sessionId;
-      if (sessionId && currentSessionId && sessionId !== currentSessionId) {
-        return;
-      }
+      const sid = sessionOf(sessionId);
 
       // Commit any blocks still buffered (the last deltas of the turn may not
       // have flushed yet) before reading `currentMessage` below.
-      flushPendingBlocks();
+      flushPendingBlocks(sid);
 
       // A stop reason of 'tool_use' means this turn ended to run tools — the
       // engine will emit another assistant turn right after the tool results.
-      // Keep `isStreaming` true in that case so the guard above doesn't drop
-      // the next turn's blocks; only reset it on a terminal turn (end_turn /
-      // max_tokens / stop_sequence / refusal, or an undefined reason).
+      // Keep streaming true in that case; only reset it on a terminal turn
+      // (end_turn / max_tokens / stop_sequence / refusal, or undefined).
       const isToolTurn = stopReason === 'tool_use';
-      const { currentMessage } = get();
-      if (currentMessage) {
+      const current = getCurrent(sid);
+      if (current) {
         const chatMsg: ChatMessage = {
-          id: currentMessage.id,
+          id: current.id,
           role: 'assistant',
-          content: currentMessage.content,
-          blocks: currentMessage.blocks,
+          content: current.content,
+          blocks: current.blocks,
           timestamp: Date.now(),
         };
-        useChatStore.setState((state) => ({
-          messages: [...state.messages, chatMsg],
-          isStreaming: isToolTurn ? state.isStreaming : false,
-          streamingContent: '',
-        }));
-        set({ currentMessage: null });
+        useChatStore.getState().commitAssistantMessage(sid || undefined, chatMsg, isToolTurn);
+        writeCurrent(sid, null);
       } else if (!isToolTurn) {
-        useChatStore.setState({ isStreaming: false });
+        useChatStore.getState().setSessionStreaming(sid || undefined, false);
       }
-      refreshSidebarSession(true);
+      refreshSidebarSession(true, sid);
     });
     cleanups.push(unsubDone);
 
     // ── Stream Error ───────────────────────────────────────
     const unsubError = onStreamError((error: string, code?: string, sessionId?: string) => {
-      // Ignore error events for a different session (see onStreamBlock).
-      const currentSessionId = useChatStore.getState().sessionId;
-      if (sessionId && currentSessionId && sessionId !== currentSessionId) {
-        return;
-      }
+      const sid = sessionOf(sessionId);
 
-      // Drop any buffered partial message for the current stream.
-      discardPendingBlocks();
+      // Drop any buffered partial message for this session's stream.
+      discardPending(sid);
 
-      // An interrupt (user pressed ⌘. or switched sessions) is not a real
-      // error — it just means the in-flight query was aborted. Clear any
-      // partial message but don't surface an error banner, so the abort from
-      // a previous session doesn't pollute the newly selected one.
+      // An interrupt (user pressed ⌘.) is not a real error — it just means the
+      // in-flight query was aborted. Clear any partial message but don't surface
+      // an error banner.
       if (code === 'INTERRUPTED') {
-        set({ currentMessage: null });
-        useChatStore.setState({ isStreaming: false });
+        writeCurrent(sid, null);
+        useChatStore.getState().setSessionStreaming(sid || undefined, false);
         return;
       }
-      useChatStore.setState({ error: error, isStreaming: false });
-      set({ currentMessage: null });
-      refreshSidebarSession(false);
+
+      // Surface the error banner only for the viewed session; a backgrounded
+      // session just stops streaming (its error is re-read from disk on switch).
+      if (sid === viewedSession()) {
+        useChatStore.getState().setError(error);
+      } else {
+        useChatStore.getState().setSessionStreaming(sid, false);
+      }
+      writeCurrent(sid, null);
+      refreshSidebarSession(false, sid);
     });
     cleanups.push(unsubError);
 
     // ── Token Usage ────────────────────────────────────────
-    const unsubToken = onTokenUsage((stats) => {
-      set((state) => ({
-        tokenUsage: {
-          inputTokens: (state.tokenUsage.inputTokens ?? 0) + (stats.inputTokens ?? 0),
-          outputTokens: (state.tokenUsage.outputTokens ?? 0) + (stats.outputTokens ?? 0),
-          cacheReadTokens: (state.tokenUsage.cacheReadTokens ?? 0) + (stats.cacheReadTokens ?? 0),
-          cacheWriteTokens: (state.tokenUsage.cacheWriteTokens ?? 0) + (stats.cacheWriteTokens ?? 0),
-          totalCost: (state.tokenUsage.totalCost ?? 0) + (stats.cost ?? 0),
-          currency: stats.currency || state.tokenUsage.currency,
-        },
-      }));
+    const unsubToken = onTokenUsage((stats, sessionId?: string) => {
+      const sid = sessionOf(sessionId);
+      if (sid === viewedSession()) {
+        set((state) => ({
+          tokenUsage: accumulateTokenUsage(state.tokenUsage, stats),
+        }));
+      } else {
+        set((state) => ({
+          tokenUsageBySession: {
+            ...state.tokenUsageBySession,
+            [sid]: accumulateTokenUsage(state.tokenUsageBySession[sid] ?? emptyTokenUsage(), stats),
+          },
+        }));
+      }
     });
     cleanups.push(unsubToken);
 
@@ -359,7 +438,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
   stopListening: () => {
     // Cancel any scheduled flush and drop buffered blocks so a pending frame
     // callback doesn't fire after teardown.
-    discardPendingBlocks();
+    for (const sid of pendingBySession.keys()) {
+      discardPending(sid);
+    }
+    pendingBySession.clear();
     const { _cleanups } = get();
     for (const cleanup of _cleanups) {
       cleanup();

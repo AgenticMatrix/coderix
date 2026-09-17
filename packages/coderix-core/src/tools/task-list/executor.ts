@@ -1,8 +1,8 @@
 import { listTasks } from '../../tasks/store.js';
 import type { ToolExecutor } from '../types.js';
 
-export const execute: ToolExecutor = async (_input, _opts) => {
-  const tasks = await listTasks();
+export const execute: ToolExecutor = async (_input, options) => {
+  const tasks = await listTasks(options.sessionId);
 
   if (tasks.length === 0) {
     return {

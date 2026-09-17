@@ -30,9 +30,9 @@ import type {
   Message,
 } from '@coderix/core';
 import type { CoderSettings, ModelItem } from '@coderix/core';
-import { QueryEngine, SessionManager, ToolRegistry, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
-import type { QueryEngineConfig, QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, setTaskListId, resolveModelByName } from '@coderix/core';
+import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
+import type { QueryEngineEvent, AgentEngine } from '@coderix/core';
+import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
@@ -53,11 +53,19 @@ export interface IpcBridgeConfig {
   workDir: string;
   model: string;
   reloadQueryEngine?: (workDir?: string, model?: string) => Promise<void>;
+  /** Build a QueryEngine bound to one session (invoked lazily on first submit). */
+  createEngineForSession?: (session: Session) => Promise<QueryEngine>;
+}
+
+/** Shared state a fresh engine bootstrap needs (no per-session callModel here). */
+export interface EngineBootstrapConfig {
+  cwd: string;
+  model: string;
+  sessionManager: SessionManager;
 }
 
 export interface IpcBridge {
-  queryEngine: QueryEngine | null;
-  initEngine(config: QueryEngineConfig): Promise<void>;
+  initEngine(config: EngineBootstrapConfig): Promise<void>;
   setEngine(engine: AgentEngine): void;
   readonly engine: AgentEngine;
   destroy(): void;
@@ -141,21 +149,48 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   const { windowManager, fileWatcher, terminalManager, sessionManager: initialSessionManager } = config;
 
   // Internal state
-  let queryEngine: QueryEngine | null = null;
   let sessionManager: SessionManager | null = initialSessionManager;
-  let toolRegistry: ToolRegistry | null = null;
   let currentWorkDir = resolve(config.workDir || process.cwd());
   let currentModel = config.model || 'deepseek-v4-pro';
   let activeEngine: AgentEngine = 'coderix';
-  let activeAbortController: AbortController | null = null;
-  // Session id of the currently streaming query, used to tag every stream push
-  // event so the renderer can drop late events from a previous session after a
-  // mid-stream session switch (cross-session stream contamination).
-  let activeStreamSessionId: string | null = null;
-  let pendingPermission: DeferredPermission | null = null;
-  let pendingToolName: string | null = null;
-  let pendingPermissionIsClaudeCode = false;
-  let pendingQuestion: DeferredQuestion | null = null;
+  // Per-session abort controllers: one in-flight stream per session id, so
+  // starting a query in one session never aborts another session's stream.
+  const abortControllers = new Map<string, AbortController>();
+  // One QueryEngine per concurrently-running session. The in-process coderix
+  // engine is serial per instance (`isActive`/`messageQueue`/`abortController`
+  // are instance fields), so true parallel requires an instance per session.
+  // Engines are built lazily on first submit via the config factory and evicted
+  // on session delete / engine reload.
+  const engineBySession = new Map<string, QueryEngine>();
+  const createEngineForSession = config.createEngineForSession ?? null;
+
+  const getEngineForSession = async (session: Session): Promise<QueryEngine> => {
+    const existing = engineBySession.get(session.id);
+    if (existing) return existing;
+    if (!createEngineForSession) {
+      throw new Error('QueryEngine factory not initialized');
+    }
+    const engine = await createEngineForSession(session);
+    engineBySession.set(session.id, engine);
+    return engine;
+  };
+
+  // Permission / AskUserQuestion prompts keyed by tool-use id. A tool-use id is
+  // globally unique across the process, so this is what lets two sessions prompt
+  // concurrently without one overwriting the other's deferred (the old single
+  // `pendingPermission`/`pendingQuestion` globals could only hold one at a time).
+  interface PendingPermission {
+    deferred: DeferredPermission;
+    toolName: string;
+    isClaudeCode: boolean;
+    sessionId: string;
+  }
+  interface PendingQuestionEntry {
+    deferred: DeferredQuestion;
+    sessionId: string;
+  }
+  const pendingPermissions = new Map<string, PendingPermission>();
+  const pendingQuestions = new Map<string, PendingQuestionEntry>();
   let updateListenersBound = false;
   let permissionsState: {
     resolve: ((value: boolean) => void) | null;
@@ -208,8 +243,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (!sessionManager) {
       throw new Error('SessionManager not initialized');
     }
-    if (activeEngine === 'coderix' && !queryEngine) {
-      throw new Error('QueryEngine not initialized');
+    if (activeEngine === 'coderix' && !createEngineForSession) {
+      throw new Error('QueryEngine factory not initialized');
     }
 
     const { query: userInput, sessionId, skills } = payload;
@@ -236,23 +271,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
     }
 
-    // Abort any existing query
-    if (activeAbortController) {
-      activeAbortController.abort();
-      await new Promise(r => setTimeout(r, 0));
-    }
-    activeAbortController = new AbortController();
-    const controller = activeAbortController;
-    // Tag every stream push event with the session id so the renderer can drop
-    // late events from a previous session after a mid-stream switch.
-    activeStreamSessionId = sessionManager.getActive()?.id ?? sessionId ?? '';
+    // The session id this stream belongs to — captured as a local so every push
+    // event from this query is tagged correctly even as other sessions stream
+    // concurrently (no shared global to race on).
+    const streamSessionId = sessionManager.getActive()?.id ?? sessionId ?? '';
 
-    // Scope the persistent task store to the active session. The task store is
-    // keyed by a single process-global id (setTaskListId); without this, every
-    // session reads/writes the shared "default" task list, so a task created in
-    // one conversation leaks into every other one (the model then claims "你这边
-    // 挂着一个待办任务 #N"). The CLI/VSCode/SDK hosts do the same per session.
-    setTaskListId(activeStreamSessionId);
+    // Abort any existing query for THIS session only (one turn per session),
+    // never another session's in-flight stream.
+    const prevController = abortControllers.get(streamSessionId);
+    if (prevController) {
+      prevController.abort();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const controller = new AbortController();
+    abortControllers.set(streamSessionId, controller);
 
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
@@ -287,10 +319,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         ? resolveModelByName(activeSessionModel)
         : undefined;
 
-    // Apply the per-session skill selection to the in-process engine (the
-    // claude-code engine receives the same list via `runClaudeCodeQuery`).
+    // Resolve (or lazily build) the in-process engine bound to this session and
+    // apply its per-session skill selection. The claude-code engine receives the
+    // same list via `runClaudeCodeQuery`.
+    let coderixEngine: QueryEngine | null = null;
     if (activeEngine === 'coderix') {
-      queryEngine!.setSkills(skills ?? []);
+      coderixEngine = await getEngineForSession(activeSession);
+      coderixEngine.setSkills(skills ?? []);
     }
 
     const engineStream: AsyncGenerator<QueryEngineEvent> =
@@ -322,18 +357,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 resolve: resolveFn,
                 promise,
               };
-              pendingQuestion = deferred;
+              pendingQuestions.set(req.toolUseId, { deferred, sessionId: streamSessionId });
               console.log('[AskUserQuestion] STATE_QUESTION_REQ attempting send. mainWindow:', !!mainWindow, 'destroyed:', mainWindow?.isDestroyed?.(), 'rendererDestroyed:', mainWindow?.webContents?.isDestroyed?.());
               safeSend(mainWindow, IPC_CHANNELS.STATE_QUESTION_REQ, {
                 toolUseId: req.toolUseId,
                 toolName: 'AskUserQuestion',
                 questions: req.questions,
+                sessionId: streamSessionId,
               });
               // Resolve empty if the turn is aborted while the question is open,
               // so the hook never leaves the Claude Code subprocess hanging.
               controller.signal.addEventListener('abort', () => {
-                if (pendingQuestion === deferred) {
-                  pendingQuestion = null;
+                if (pendingQuestions.delete(req.toolUseId)) {
                   resolveFn({});
                 }
               }, { once: true });
@@ -359,20 +394,21 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   resolve: done,
                   promise: new Promise<boolean>(() => {}),
                 };
-                pendingPermission = deferred;
-                pendingToolName = deferred.toolName;
-                pendingPermissionIsClaudeCode = true;
+                pendingPermissions.set(req.toolUseId, {
+                  deferred,
+                  toolName: deferred.toolName,
+                  isClaudeCode: true,
+                  sessionId: streamSessionId,
+                });
                 safeSend(mainWindow, IPC_CHANNELS.STATE_PERMISSION_REQ, {
                   toolUseId: req.toolUseId,
                   toolName: req.toolName,
                   command: deferred.command,
                   description: deferred.description,
+                  sessionId: streamSessionId,
                 });
                 controller.signal.addEventListener('abort', () => {
-                  if (pendingPermission === deferred) {
-                    pendingPermission = null;
-                    pendingToolName = null;
-                    pendingPermissionIsClaudeCode = false;
+                  if (pendingPermissions.delete(req.toolUseId)) {
                     done(false);
                   }
                 }, { once: true });
@@ -384,7 +420,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               safeSend(mainWindow, IPC_CHANNELS.BROWSER_OPEN_URL, { url });
             },
           })
-        : queryEngine!.submitMessage(userInput);
+        : coderixEngine!.submitMessage(userInput);
 
     // The in-process Coderix engine persists the user turn itself inside
     // submitMessage(); the Claude Code SDK engine does not, so record it here
@@ -456,6 +492,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         }
       };
 
+      // Clear any stale coalescing state from a previous (possibly aborted) turn.
+      discardStreamBuffer(streamSessionId);
+
       try {
         for await (const event of engineStream) {
           if (controller.signal.aborted) break;
@@ -476,7 +515,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     claudeRawInputByStreamIndex,
                   );
                 }
-                forwardStreamEvent(mainWindow, msg.event);
+                forwardStreamEvent(mainWindow, msg.event, streamSessionId);
               } else if (msg.type === 'assistant' && msg.message) {
                 // The `message_stop` stream event (forwarded above) is the
                 // authoritative end-of-turn signal. The Claude Code SDK also
@@ -497,7 +536,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     stopReason,
                     usage: msg.message.usage,
                     model: msg.message.model,
-                    sessionId: activeStreamSessionId,
+                    sessionId: streamSessionId,
                   });
                 }
               } else if (msg.type === 'user' && msg.message) {
@@ -530,7 +569,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                         toolName: '',
                         result: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
                         metadata: tr.metadata,
-                        sessionId: activeStreamSessionId,
+                        sessionId: streamSessionId,
                       });
                     }
                   }
@@ -540,24 +579,30 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             }
             case 'permission_required': {
               const deferred = event.deferred as DeferredPermission;
-              pendingPermission = deferred;
-              pendingToolName = deferred.toolName;
+              pendingPermissions.set(deferred.toolUseId, {
+                deferred,
+                toolName: deferred.toolName,
+                isClaudeCode: false,
+                sessionId: streamSessionId,
+              });
               safeSend(mainWindow, IPC_CHANNELS.STATE_PERMISSION_REQ, {
                 toolUseId: deferred.toolUseId,
                 toolName: deferred.toolName,
                 command: deferred.command,
                 description: deferred.description,
+                sessionId: streamSessionId,
               });
               // Wait for user response (via permission:approve or permission:deny IPC)
               break;
             }
             case 'question_required': {
               const deferred = event.deferred as DeferredQuestion;
-              pendingQuestion = deferred;
+              pendingQuestions.set(deferred.toolUseId, { deferred, sessionId: streamSessionId });
               safeSend(mainWindow, IPC_CHANNELS.STATE_QUESTION_REQ, {
                 toolUseId: deferred.toolUseId,
                 toolName: deferred.toolName,
                 questions: deferred.questions,
+                sessionId: streamSessionId,
               });
               // Wait for user response (via a question:answer channel or similar)
               break;
@@ -567,7 +612,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
                 message: sanitizeErrorMessage(err?.message ?? 'Unknown error'),
                 code: err?.code ?? 'UNKNOWN',
-                sessionId: activeStreamSessionId,
+                sessionId: streamSessionId,
               });
               break;
             }
@@ -601,15 +646,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 try {
                   if (claudeTurnMessages.length > 0) {
                     for (const m of claudeTurnMessages) {
-                      sessionManager.addMessage(m);
+                      sessionManager.addMessage(streamSessionId, m);
                     }
                   } else if (data.result) {
-                    sessionManager.addMessage({ role: 'assistant', content: data.result });
+                    sessionManager.addMessage(streamSessionId, { role: 'assistant', content: data.result });
                   }
                 } catch { /* ignore — best-effort persistence */ }
                 if (data.totalCost) {
                   try {
-                    sessionManager.addCost(data.totalCost);
+                    sessionManager.addCost(streamSessionId, data.totalCost);
                   } catch { /* ignore */ }
                 }
                 // Report the turn's token usage to the renderer so the status
@@ -625,6 +670,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     cacheReadInputTokens: data.usage.cache_read_input_tokens ?? 0,
                     cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
                     totalCost: data.totalCost ?? 0,
+                    sessionId: streamSessionId,
                   });
                 }
               }
@@ -633,24 +679,29 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           }
         }
       } catch (err) {
+        discardStreamBuffer(streamSessionId);
         const rawMessage = err instanceof Error ? err.message : String(err);
         const message = sanitizeErrorMessage(rawMessage);
-        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: activeStreamSessionId });
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: streamSessionId });
       } finally {
+        // Cancel any dangling flush timer and drop buffered deltas — a normal
+        // completion has already flushed via message_stop, and an aborted turn's
+        // buffered text belongs to the message the renderer is about to drop.
+        discardStreamBuffer(streamSessionId);
         if (controller.signal.aborted) {
           const mw = getMainWindow(windowManager);
           safeSend(mw, IPC_CHANNELS.STREAM_ERROR, {
             message: 'Query interrupted by user',
             code: 'INTERRUPTED',
-            sessionId: activeStreamSessionId,
+            sessionId: streamSessionId,
           });
         }
-        // Release the controller once this query's stream has wound down so a
-        // later query can take over. Only clear it if a newer query hasn't
-        // already replaced `activeAbortController`.
-        if (activeAbortController === controller) {
-          activeAbortController = null;
-          activeStreamSessionId = null;
+        // Release this session's controller once its stream has wound down so a
+        // later query in the same session can take over. Guard with `===` so a
+        // newer query's controller (already stored for this session) is never
+        // removed.
+        if (abortControllers.get(streamSessionId) === controller) {
+          abortControllers.delete(streamSessionId);
         }
       }
     })();
@@ -658,9 +709,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return { status: 'submitted' };
   });
 
-  ipcMain.handle(IPC_CHANNELS.QUERY_INTERRUPT, async () => {
-    if (activeAbortController) {
-      activeAbortController.abort();
+  ipcMain.handle(IPC_CHANNELS.QUERY_INTERRUPT, async (_event, sessionId?: string) => {
+    // Interrupt only the named session's stream (the one the user is viewing);
+    // other sessions' streams keep running. Omit `sessionId` to abort every
+    // in-flight stream (teardown / "stop all").
+    if (sessionId) {
+      abortControllers.get(sessionId)?.abort();
+    } else {
+      for (const controller of abortControllers.values()) {
+        controller.abort();
+      }
     }
     return { status: 'interrupted' };
   });
@@ -704,11 +762,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD, async (_event, sessionId: string) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
-    const session = sessionManager.resume(sessionId);
+    // Read-only load: `get()` reads/caches from disk without flipping the global
+    // active-session pointer, so loading a session to view it can't hijack the
+    // session resolution of a concurrent stream (QUERY_SUBMIT calls resume()
+    // when the user actually sends a message).
+    const session = sessionManager.get(sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
 
     // Restore the session's workspace so a reloaded conversation opens in the
-    // directory it was created in. `resume` sets it as the active session, so
-    // keep `currentWorkDir` in sync (and reload the engine) when it differs.
+    // directory it was created in (the next submit uses this as its cwd).
     let reloadWorkDir: string | undefined;
     if (session.cwd) {
       const sessionCwd = resolve(session.cwd);
@@ -727,7 +789,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const reloadModel = hasModel ? sessionModel : undefined;
     const needsModelReload = hasModel && sessionModel !== currentModel;
 
-    if ((reloadWorkDir !== undefined || needsModelReload) && config.reloadQueryEngine) {
+    // Only re-bind the engine when nothing is streaming — a live stream owns
+    // its engine, and swapping it mid-flight would tear down the running turn.
+    if ((reloadWorkDir !== undefined || needsModelReload) && config.reloadQueryEngine && abortControllers.size === 0) {
       await config.reloadQueryEngine(reloadWorkDir, reloadModel);
     }
 
@@ -742,53 +806,58 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, async (_event, sessionId: string) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
+    // Tear down any live stream and evict the session's engine before removing
+    // its files, so a mid-stream delete never leaves a zombie engine writing
+    // to a deleted session directory.
+    abortControllers.get(sessionId)?.abort();
+    engineBySession.delete(sessionId);
     sessionManager.delete(sessionId);
     return { status: 'deleted' };
   });
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, model: string) => {
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, payload: { sessionId?: string; model: string }) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
+    const model = payload?.model;
+    const sessionId = payload?.sessionId;
     if (!model || typeof model !== 'string') {
       throw new Error('Invalid model name');
     }
 
-    // Bind the active session to the chosen model (persists to meta.json). When
-    // there's no active session yet (e.g. before the first message), skip the
+    // Bind the named session to the chosen model (persists to meta.json). When
+    // no session id is supplied yet (e.g. before the first message), skip the
     // per-session bind — the next created session inherits the global default.
-    let hasActiveSession = false;
-    try {
+    const hasSession = !!sessionId;
+    if (hasSession) {
       // Cross-provider switch invalidates the conversation's thinking blocks
       // (they're signed by the producing provider and can't round-trip across
       // providers). Strip them before rebinding so the new provider never sees
       // stale blocks — the renderer already warned the user about this drop.
-      const oldModel = sessionManager.getActive().model;
-      const oldProvider = modelProviderOf(oldModel);
+      const oldModel = sessionManager.get(sessionId!)?.model;
+      const oldProvider = modelProviderOf(oldModel ?? '');
       const newProvider = modelProviderOf(model);
       if (oldProvider && newProvider && oldProvider !== newProvider) {
-        sessionManager.stripThinking();
+        sessionManager.stripThinking(sessionId!);
       }
-      sessionManager.setActiveModel(model);
-      hasActiveSession = true;
-    } catch {
-      // No active session — proceed with the global switch only.
+      sessionManager.setModel(sessionId!, model);
     }
 
-    if (hasActiveSession) {
+    if (hasSession) {
       // Reload the engine bound to this session's model WITHOUT changing the
       // global default_model, so a per-session switch never leaks to other
-      // sessions.
-      if (config.reloadQueryEngine) {
+      // sessions. Skip the swap while any stream is live — a running turn owns
+      // its engine.
+      if (config.reloadQueryEngine && abortControllers.size === 0) {
         await config.reloadQueryEngine(undefined, model);
       }
     } else {
-      // No active session — persist default_model so future sessions use it.
+      // No session — persist default_model so future sessions use it.
       const settingsDir = join(homedir(), '.coderix');
       const settingsPath = join(settingsDir, 'settings.json');
       const current = loadSettings();
       const merged = { ...current, default_model: model };
       if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
       writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
-      if (config.reloadQueryEngine) {
+      if (config.reloadQueryEngine && abortControllers.size === 0) {
         await config.reloadQueryEngine();
       }
     }
@@ -796,13 +865,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return { status: 'ok', model };
   });
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_SKILLS, async (_event, skills: string[]) => {
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_SKILLS, async (_event, payload: { sessionId?: string; skills: string[] }) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
-    const next = Array.isArray(skills) ? skills.filter((s) => typeof s === 'string') : [];
-    try {
-      sessionManager.setActiveSkills(next);
-    } catch {
-      // No active session yet — the next created session starts with no skills.
+    const next = Array.isArray(payload?.skills) ? payload.skills.filter((s) => typeof s === 'string') : [];
+    const sessionId = payload?.sessionId;
+    if (sessionId) {
+      sessionManager.setSkills(sessionId, next);
+    } else {
+      try {
+        sessionManager.setActiveSkills(next);
+      } catch {
+        // No active session yet — the next created session starts with no skills.
+      }
     }
     return { status: 'ok', skills: next };
   });
@@ -818,7 +892,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   const rebuildCoderixRegistry = () => {
     if (activeEngine !== 'coderix') return;
     setSkillRegistry(new SkillRegistry(coderixSkillDirs()));
-    queryEngine?.invalidateSystemPrompt();
+    for (const engine of engineBySession.values()) {
+      engine.invalidateSystemPrompt();
+    }
   };
 
   ipcMain.handle(IPC_CHANNELS.SKILLS_LIST, async () => listSkills());
@@ -854,51 +930,45 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // ── Permission ─────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE, async (_event, toolUseId: string) => {
-    if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
-      pendingPermission.resolve(true);
-      pendingPermission = null;
-      pendingToolName = null;
-      pendingPermissionIsClaudeCode = false;
+    const pending = pendingPermissions.get(toolUseId);
+    if (pending) {
+      pendingPermissions.delete(toolUseId);
+      pending.deferred.resolve(true);
     }
     return { status: 'approved' };
   });
 
   ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE_SESSION, async (_event, toolUseId: string) => {
-    if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
-      const toolName = pendingToolName;
-      const isClaudeCode = pendingPermissionIsClaudeCode;
-      pendingPermission.resolve(true);
-      pendingPermission = null;
-      pendingToolName = null;
-      pendingPermissionIsClaudeCode = false;
-      if (toolName && queryEngine && !isClaudeCode) {
-        queryEngine.addPermissionRule(toolName, undefined, 'allow');
+    const pending = pendingPermissions.get(toolUseId);
+    if (pending) {
+      pendingPermissions.delete(toolUseId);
+      pending.deferred.resolve(true);
+      // "Allow for this session" only persists a rule for the in-process engine
+      // (Claude Code manages its own permission persistence per-subprocess).
+      if (pending.toolName && !pending.isClaudeCode) {
+        engineBySession.get(pending.sessionId)?.addPermissionRule(pending.toolName, undefined, 'allow');
       }
     }
     return { status: 'approved_session' };
   });
 
   ipcMain.handle(IPC_CHANNELS.PERMISSION_APPROVE_ALWAYS, async (_event, toolUseId: string) => {
-    if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
-      const toolName = pendingToolName;
-      const isClaudeCode = pendingPermissionIsClaudeCode;
-      pendingPermission.resolve(true);
-      pendingPermission = null;
-      pendingToolName = null;
-      pendingPermissionIsClaudeCode = false;
-      if (toolName && queryEngine && !isClaudeCode) {
-        queryEngine.persistPermissionRule(toolName, undefined, 'allow');
+    const pending = pendingPermissions.get(toolUseId);
+    if (pending) {
+      pendingPermissions.delete(toolUseId);
+      pending.deferred.resolve(true);
+      if (pending.toolName && !pending.isClaudeCode) {
+        engineBySession.get(pending.sessionId)?.persistPermissionRule(pending.toolName, undefined, 'allow');
       }
     }
     return { status: 'approved_always' };
   });
 
   ipcMain.handle(IPC_CHANNELS.PERMISSION_DENY, async (_event, toolUseId: string) => {
-    if (pendingPermission && pendingPermission.toolUseId === toolUseId) {
-      pendingPermission.resolve(false);
-      pendingPermission = null;
-      pendingToolName = null;
-      pendingPermissionIsClaudeCode = false;
+    const pending = pendingPermissions.get(toolUseId);
+    if (pending) {
+      pendingPermissions.delete(toolUseId);
+      pending.deferred.resolve(false);
     }
     return { status: 'denied' };
   });
@@ -906,9 +976,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // ── Question (AskUserQuestion) ──────────────────────────────────────
 
   ipcMain.handle('question:answer', async (_event, payload: { toolUseId: string; answers: Record<string, string | string[]> }) => {
-    if (pendingQuestion && pendingQuestion.toolUseId === payload.toolUseId) {
-      pendingQuestion.resolve(payload.answers);
-      pendingQuestion = null;
+    const pending = pendingQuestions.get(payload.toolUseId);
+    if (pending) {
+      pendingQuestions.delete(payload.toolUseId);
+      pending.deferred.resolve(payload.answers);
     }
     return { status: 'answered' };
   });
@@ -916,8 +987,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.PERMISSION_SET_MODE, async (_event, mode: string) => {
     // Mode can be 'plan' | 'ask' | 'auto'
     if (mode === 'plan' || mode === 'ask' || mode === 'auto') {
-      if (queryEngine) {
-        queryEngine.setPermissionMode(mode as PermissionMode);
+      for (const engine of engineBySession.values()) {
+        engine.setPermissionMode(mode as PermissionMode);
       }
       // ~/.coderix/settings.json is the single source of truth for permission
       // settings, shared by the desktop, the protocol gateway, and the CLI.
@@ -1594,34 +1665,121 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // Push channel registration helpers
   // -----------------------------------------------------------------------
 
-  // The stop reason for the current model turn. The Anthropic API carries it
-  // in `message_delta` (the following `message_stop` has no payload), so we
-  // remember it here to forward the *real* reason — not a hardcoded
-  // 'end_turn' — when `message_stop` arrives. This is what lets the renderer
+  // ── Per-session stream text/thinking delta coalescing ──────────────────
+  // Claude/Anthropic emit `content_block_delta` per token (≈1 CJK character),
+  // so a Chinese reply streams as hundreds of one-character deltas. Forwarding
+  // each one over IPC makes the renderer redraw character-by-character. We
+  // buffer text/thinking deltas per block index and flush on a short time
+  // window, so a burst of deltas becomes a single larger delta message — the
+  // renderer then sees text in chunks instead of characters, and we avoid N
+  // `webContents.send` calls per second. Boundary events (content_block_stop /
+  // message_delta / message_stop) and turn end flush immediately so the final
+  // chunk is never lost.
+  //
+  // Coalescing state (buffer, flush timer, stop reason) is keyed by sessionId
+  // so two sessions streaming concurrently never interleave their buffered
+  // deltas or stop reasons. The Anthropic API carries the turn's stop reason
+  // in `message_delta` (the following `message_stop` has no payload); we
+  // remember it per-session to forward the *real* reason — not a hardcoded
+  // 'end_turn' — when `message_stop` arrives, which is what lets the renderer
   // keep listening across a multi-turn tool loop (stop reason 'tool_use').
-  let lastStopReason: string | null = null;
+  const STREAM_FLUSH_INTERVAL_MS = 80;
+
+  interface StreamContext {
+    lastStopReason: string | null;
+    buffer: Map<number, { text: string; thinking: string }>;
+    flushTimer: ReturnType<typeof setTimeout> | null;
+  }
+
+  const streamContexts = new Map<string, StreamContext>();
+
+  function getStreamContext(sessionId: string): StreamContext {
+    let ctx = streamContexts.get(sessionId);
+    if (!ctx) {
+      ctx = { lastStopReason: null, buffer: new Map(), flushTimer: null };
+      streamContexts.set(sessionId, ctx);
+    }
+    return ctx;
+  }
+
+  function flushStreamBuffer(sessionId: string): void {
+    const ctx = getStreamContext(sessionId);
+    if (ctx.flushTimer !== null) {
+      clearTimeout(ctx.flushTimer);
+      ctx.flushTimer = null;
+    }
+    if (ctx.buffer.size === 0) return;
+    const mw = getMainWindow(windowManager);
+    for (const [index, acc] of ctx.buffer) {
+      const delta: { text?: string; thinking?: string } = {};
+      if (acc.text) delta.text = acc.text;
+      if (acc.thinking) delta.thinking = acc.thinking;
+      safeSend(mw, IPC_CHANNELS.STREAM_BLOCK_DELTA, {
+        index,
+        delta,
+        sessionId,
+      });
+    }
+    ctx.buffer.clear();
+  }
+
+  function scheduleStreamFlush(sessionId: string): void {
+    const ctx = getStreamContext(sessionId);
+    if (ctx.flushTimer !== null) return;
+    ctx.flushTimer = setTimeout(() => flushStreamBuffer(sessionId), STREAM_FLUSH_INTERVAL_MS);
+  }
+
+  function discardStreamBuffer(sessionId: string): void {
+    const ctx = getStreamContext(sessionId);
+    if (ctx.flushTimer !== null) {
+      clearTimeout(ctx.flushTimer);
+      ctx.flushTimer = null;
+    }
+    ctx.buffer.clear();
+  }
 
   // Forward StreamEvent to the correct push channel
-  function forwardStreamEvent(mainWindow: BrowserWindow, event: StreamEvent): void {
+  function forwardStreamEvent(mainWindow: BrowserWindow, event: StreamEvent, sessionId: string): void {
+    const ctx = getStreamContext(sessionId);
     switch (event.type) {
       case 'content_block_start':
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_START, {
           index: event.index,
           content_block: event.content_block,
-          sessionId: activeStreamSessionId,
+          sessionId,
         });
         break;
-      case 'content_block_delta':
+      case 'content_block_delta': {
+        const delta = event.delta as {
+          text?: string;
+          thinking?: string;
+          partial_json?: string;
+        };
+        // Text/thinking deltas are buffered and coalesced; tool input JSON
+        // deltas (partial_json) still forward immediately so tool cards update
+        // in real time.
+        if (delta.text !== undefined || delta.thinking !== undefined) {
+          const acc = ctx.buffer.get(event.index) ?? { text: '', thinking: '' };
+          if (delta.text !== undefined) acc.text += delta.text;
+          if (delta.thinking !== undefined) acc.thinking += delta.thinking;
+          ctx.buffer.set(event.index, acc);
+          scheduleStreamFlush(sessionId);
+          break;
+        }
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_DELTA, {
           index: event.index,
           delta: event.delta,
-          sessionId: activeStreamSessionId,
+          sessionId,
         });
         break;
+      }
       case 'content_block_stop':
+        // Flush this block's buffered deltas before the stop so the renderer
+        // sees the full text chunk before the block is marked done.
+        flushStreamBuffer(sessionId);
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_STOP, {
           index: event.index,
-          sessionId: activeStreamSessionId,
+          sessionId,
         });
         break;
       case 'message_start':
@@ -1630,15 +1788,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       case 'message_delta': {
         // Message delta — forward as delta event, and remember the turn's
         // stop reason so `message_stop` can be forwarded with the real value.
+        flushStreamBuffer(sessionId);
         const delta = event.delta as { stop_reason?: string | null };
-        if (delta.stop_reason) lastStopReason = delta.stop_reason;
+        if (delta.stop_reason) ctx.lastStopReason = delta.stop_reason;
         safeSend(mainWindow, IPC_CHANNELS.STREAM_BLOCK_DELTA, {
           index: -1,
           delta: event.delta,
+          sessionId,
         });
         break;
       }
       case 'message_stop': {
+        // Flush any still-buffered text/thinking deltas before signalling done,
+        // otherwise the turn's last chunk would be dropped by the renderer.
+        flushStreamBuffer(sessionId);
         // The Coderix engine attaches the AssistantMessage (with its camelCase
         // `stopReason`) to `message_stop`; the Claude Code SDK's raw
         // `message_stop` carries no payload, so fall back to the reason
@@ -1648,10 +1811,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         }).message;
         safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
           stopReason:
-            message?.stopReason ?? message?.stop_reason ?? lastStopReason ?? 'end_turn',
-          sessionId: activeStreamSessionId,
+            message?.stopReason ?? message?.stop_reason ?? ctx.lastStopReason ?? 'end_turn',
+          sessionId,
         });
-        lastStopReason = null;
+        ctx.lastStopReason = null;
         break;
       }
       default:
@@ -1773,6 +1936,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
         cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
         totalCost: usage.totalCost ?? 0,
+        // Legacy channel with no active sender; the active pointer is kept as a
+        // best-effort owner. Per-session usage is reported via the `done` event
+        // and STATE_TOKEN_USAGE instead.
+        sessionId: sessionManager?.getActive()?.id ?? '',
       });
     }
   });
@@ -1786,10 +1953,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // -----------------------------------------------------------------------
 
   return {
-    get queryEngine() {
-      return queryEngine;
-    },
-
     get engine() {
       return activeEngine;
     },
@@ -1799,9 +1962,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       console.log('[Coderix] Agent engine set to:', engine);
     },
 
-    async initEngine(config: QueryEngineConfig): Promise<void> {
-      const isReload = queryEngine !== null;
-
+    async initEngine(config: EngineBootstrapConfig): Promise<void> {
       // sessionManager is already set from IpcBridgeConfig; only update on explicit override
       if (config.sessionManager) {
         sessionManager = config.sessionManager;
@@ -1812,37 +1973,29 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       if (config.model) {
         currentModel = config.model;
       }
-      if (!isReload || !toolRegistry) {
-        toolRegistry = config.toolRegistry ?? new ToolRegistry();
-      }
 
       if (!sessionManager) {
         throw new Error('SessionManager not initialized');
       }
-
-      // Instantiate QueryEngine
-      queryEngine = new QueryEngine({
-        ...config,
-        sessionManager,
-        toolRegistry,
-      });
 
       // Point the in-process engine's skill registry at the same roots the
       // picker lists (bundled coderix skills + Claude Code user skills +
       // custom dirs) so a selected skill actually resolves for this engine.
       setSkillRegistry(new SkillRegistry(coderixSkillDirs()));
 
-      await queryEngine.init();
-      const engineId = Date.now();
-      (queryEngine as any).__engineId = engineId;
-      if (isReload) console.log('[Coderix] QueryEngine reloaded, id:', engineId);
+      // Invalidate any previously-built per-session engines so the next submit
+      // for a session rebuilds with the new shared registry / model / cwd. A
+      // live stream is unaffected — its generator already holds its engine, and
+      // the engine persists its own messages through its per-session manager.
+      engineBySession.clear();
     },
 
     destroy(): void {
-      if (activeAbortController) {
-        activeAbortController.abort();
-        activeAbortController = null;
+      for (const controller of abortControllers.values()) {
+        controller.abort();
       }
+      abortControllers.clear();
+      engineBySession.clear();
       ipcMain.removeHandler(IPC_CHANNELS.QUERY_SUBMIT);
       ipcMain.removeHandler(IPC_CHANNELS.QUERY_INTERRUPT);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LIST);

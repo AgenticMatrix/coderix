@@ -16,6 +16,7 @@ import type { StreamBlock, PermissionRequest, TokenUsage, SessionInfo } from './
 export interface QuestionRequest {
   toolUseId: string;
   toolName: string;
+  sessionId?: string;
   questions: Array<{
     header: string;
     question: string;
@@ -81,10 +82,10 @@ export async function submitQuery(query: string, sessionId?: string, skills?: st
   );
 }
 
-/** Interrupt the active query in the main process. */
-export async function interruptQuery(): Promise<unknown> {
+/** Interrupt a query. Pass `sessionId` to stop only that session's stream. */
+export async function interruptQuery(sessionId?: string): Promise<unknown> {
   return invokeWithTimeout('query:interrupt', () =>
-    getAPI().query.interrupt(),
+    getAPI().query.interrupt(sessionId),
   );
 }
 
@@ -104,8 +105,18 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
     return NOOP_UNSUB;
   }
 
-  // Internal map: stream index → partially built StreamBlock
-  const blockMap = new Map<number, StreamBlock>();
+  // Internal map: session id → (stream index → partially built StreamBlock).
+  // The Anthropic stream index resets per API call, so two concurrent sessions
+  // can reuse the same index; keying by session id keeps them from colliding.
+  const blockMap = new Map<string, Map<number, StreamBlock>>();
+  const sessionMap = (sessionId: string): Map<number, StreamBlock> => {
+    let m = blockMap.get(sessionId);
+    if (!m) {
+      m = new Map<number, StreamBlock>();
+      blockMap.set(sessionId, m);
+    }
+    return m;
+  };
 
   const unsub = window.coderixAPI.onStreamEvent((event: any) => {
     switch (event.type) {
@@ -136,7 +147,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
           block.toolId = cb.tool_use_id;
         }
 
-        blockMap.set(event.index, block);
+        sessionMap(event.sessionId ?? '').set(event.index, block);
         // Emit initial block (stores need the ID for tool_use correlation)
         callback({ ...block });
         break;
@@ -144,7 +155,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
 
       // ── Block Delta ──────────────────────────────────────────
       case 'blockDelta': {
-        const existing = blockMap.get(event.index);
+        const existing = sessionMap(event.sessionId ?? '').get(event.index);
         if (!existing) break;
 
         const delta = event.delta as {
@@ -170,7 +181,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
 
       // ── Block Stop ───────────────────────────────────────────
       case 'blockStop': {
-        const existing = blockMap.get(event.index);
+        const existing = sessionMap(event.sessionId ?? '').get(event.index);
         if (!existing) break;
 
         existing.state = 'done';
@@ -188,7 +199,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         }
 
         callback({ ...existing });
-        blockMap.delete(event.index);
+        sessionMap(event.sessionId ?? '').delete(event.index);
         break;
       }
 
@@ -201,13 +212,16 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
           error: 'error',
         };
 
-        // Find the tool_use block by toolUseId
-        for (const [, block] of blockMap) {
-          if (block.toolId === event.toolUseId) {
-            block.state = stateMap[event.state] ?? 'pending';
-            if (event.toolName) block.toolName = event.toolName;
-            callback({ ...block });
-            break;
+        // tool_use ids are globally unique, so search every session's in-flight
+        // blocks (toolState events aren't tagged with a session id).
+        for (const [, map] of blockMap) {
+          for (const [, block] of map) {
+            if (block.toolId === event.toolUseId) {
+              block.state = stateMap[event.state] ?? 'pending';
+              if (event.toolName) block.toolName = event.toolName;
+              callback({ ...block });
+              break;
+            }
           }
         }
         break;
@@ -330,16 +344,16 @@ export async function deleteSession(id: string): Promise<unknown> {
 }
 
 /** Bind the active session to a model (per-session model switch). */
-export async function setSessionModel(model: string): Promise<unknown> {
+export async function setSessionModel(model: string, sessionId?: string): Promise<unknown> {
   return invokeWithTimeout('session:setModel', () =>
-    getAPI().session.setModel(model),
+    getAPI().session.setModel(sessionId ?? '', model),
   );
 }
 
 /** Bind the active session to a set of skills (per-session skill selection). */
-export async function setSessionSkills(skills: string[]): Promise<unknown> {
+export async function setSessionSkills(skills: string[], sessionId?: string): Promise<unknown> {
   return invokeWithTimeout('session:setSkills', () =>
-    getAPI().session.setSkills(skills),
+    getAPI().session.setSkills(sessionId ?? '', skills),
   );
 }
 
@@ -459,6 +473,7 @@ export function onPermissionRequest(
       toolName: preloadReq.toolName,
       toolInput: preloadReq.toolInput as Record<string, unknown>,
       message: preloadReq.description,
+      sessionId: preloadReq.sessionId,
     });
   });
 }
@@ -563,10 +578,12 @@ export function openExternal(url: string): Promise<{ status: string; error?: str
  *
  * This adapter maps it to the renderer's `TokenUsage` shape:
  * `{ inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, cost }`.
+ * The owning session id is forwarded so callers can route concurrent sessions'
+ * usage independently.
  *
  * Returns an unsubscribe function.
  */
-export function onTokenUsage(callback: (stats: TokenUsage) => void): () => void {
+export function onTokenUsage(callback: (stats: TokenUsage, sessionId?: string) => void): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
@@ -580,6 +597,7 @@ export function onTokenUsage(callback: (stats: TokenUsage) => void): () => void 
       cacheReadInputTokens?: number;
       cacheCreationInputTokens?: number;
       totalCost?: number;
+      sessionId?: string;
     };
 
     callback({
@@ -588,6 +606,6 @@ export function onTokenUsage(callback: (stats: TokenUsage) => void): () => void 
       cacheReadTokens: raw.cacheReadInputTokens,
       cacheWriteTokens: raw.cacheCreationInputTokens,
       cost: raw.totalCost,
-    });
+    }, raw.sessionId);
   });
 }
