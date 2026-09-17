@@ -34,6 +34,47 @@ function buildHunkPatch(meta: string[], hunk: Hunk): string {
   return [...meta, hunk.header, ...hunk.lines].join('\n') + '\n';
 }
 
+type DiffLineKind = 'add' | 'del' | 'context' | 'meta';
+
+/** Classify a diff body line so it can be colored and numbered. */
+function classifyDiffLine(line: string): DiffLineKind {
+  if (line.startsWith('@@')) return 'meta';
+  if (line.startsWith('--- ') || line.startsWith('+++ ')) return 'meta';
+  if (line.startsWith('+')) return 'add';
+  if (line.startsWith('-')) return 'del';
+  if (line.startsWith(' ')) return 'context';
+  // diff --git / index / \ No newline ... — headers, not diff lines.
+  return 'meta';
+}
+
+interface AnnotatedLine {
+  line: string;
+  kind: DiffLineKind;
+  oldNum: number | null;
+  newNum: number | null;
+}
+
+/** Annotate one hunk's body lines with their old/new-file line numbers. */
+function annotateHunk(hunk: Hunk): AnnotatedLine[] {
+  const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)?/.exec(hunk.header);
+  let oldNum = m ? parseInt(m[1], 10) : 0;
+  let newNum = m ? parseInt(m[2], 10) : 0;
+  return hunk.lines.map((line) => {
+    const kind = classifyDiffLine(line);
+    let o: number | null = null;
+    let n: number | null = null;
+    if (kind === 'context') {
+      o = oldNum++;
+      n = newNum++;
+    } else if (kind === 'del') {
+      o = oldNum++;
+    } else if (kind === 'add') {
+      n = newNum++;
+    }
+    return { line, kind, oldNum: o, newNum: n };
+  });
+}
+
 // MergeView: combines file content lines with diff annotations
 function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert }: {
   contentLines: string[];
@@ -94,6 +135,7 @@ function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert 
       );
 
       let newLineOffset = 0;
+      let oldLineOffset = 0;
       for (const line of hunk.lines) {
         if (line.startsWith('+') && !line.startsWith('+++')) {
           // Added line — part of new content
@@ -107,10 +149,12 @@ function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert 
           newLineOffset++;
           contentIdx++;
         } else if (line.startsWith('-') && !line.startsWith('---')) {
-          // Removed line — not in new content, show in red without line number
+          // Removed line — not in new content, show its old-file line number.
+          const oldLineNum = range.oldStart + oldLineOffset;
+          oldLineOffset++;
           rows.push(
-            <div key={`h${hunkIdx}-d-${newLineOffset}`} className="flex px-3 whitespace-pre" style={{ background: 'rgba(244,67,54,0.08)', color: '#f44336', minHeight: '20px' }}>
-              <span className="text-[10px] select-none w-10 flex-shrink-0 text-right mr-2"></span>
+            <div key={`h${hunkIdx}-d-${oldLineOffset}`} className="flex px-3 whitespace-pre" style={{ background: 'rgba(244,67,54,0.08)', color: '#f44336', minHeight: '20px' }}>
+              <span className="text-[10px] text-[var(--color-text-tertiary)] select-none w-10 flex-shrink-0 text-right mr-2">{oldLineNum}</span>
               <span className="flex-1">{line}</span>
             </div>
           );
@@ -124,6 +168,7 @@ function MergeView({ contentLines, hunks, meta, stagingHunks, onStage, onRevert 
             </div>
           );
           newLineOffset++;
+          oldLineOffset++;
           contentIdx++;
         }
       }
@@ -239,7 +284,12 @@ function DiffView({ data }: { data: DiffTab }): React.ReactElement {
           <>
             {meta.map((line, i) => {
               const c = lineColor(line);
-              return <div key={`m-${i}`} className="px-3 whitespace-pre" style={{ background: c.bg, color: c.fg, minHeight: '20px' }}>{line || ' '}</div>;
+              return (
+                <div key={`m-${i}`} className="flex px-3 whitespace-pre" style={{ background: c.bg, color: c.fg, minHeight: '20px' }}>
+                  <span className="text-[10px] select-none w-10 flex-shrink-0 text-right mr-2"></span>
+                  <span className="flex-1">{line || ' '}</span>
+                </div>
+              );
             })}
             {hunks.map((hunk, hi) => (
               <div key={`h-${hi}`}>
@@ -252,9 +302,16 @@ function DiffView({ data }: { data: DiffTab }): React.ReactElement {
                       className="px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5" style={{ background: 'rgba(244,67,54,0.1)', color: '#f44336' }}><RotateCcw size={10} /> {t('detail.revert')}</button>
                   </div>
                 </div>
-                {hunk.lines.map((line, li) => {
-                  const c = lineColor(line);
-                  return <div key={li} className="px-3 whitespace-pre" style={{ background: c.bg, color: c.fg, minHeight: '20px' }}>{line || ' '}</div>;
+                {annotateHunk(hunk).map((al, li) => {
+                  const c = lineColor(al.line);
+                  // Deleted lines show their old-file number; everything else the new-file number.
+                  const num = al.kind === 'del' ? al.oldNum : al.newNum;
+                  return (
+                    <div key={li} className="flex px-3 whitespace-pre" style={{ background: c.bg, color: c.fg, minHeight: '20px' }}>
+                      <span className="text-[10px] text-[var(--color-text-tertiary)] select-none w-10 flex-shrink-0 text-right mr-2">{num ?? ''}</span>
+                      <span className="flex-1">{al.line || ' '}</span>
+                    </div>
+                  );
                 })}
               </div>
             ))}
