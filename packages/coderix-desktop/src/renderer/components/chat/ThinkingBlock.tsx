@@ -22,6 +22,13 @@ export function ThinkingBlock({
 
   const text = content ?? '';
 
+  // While a thinking block is streaming, always render the reasoning text
+  // expanded so the user sees it arrive in real time. A collapsed block only
+  // shows a single truncated gray line, which during streaming reads as a
+  // static "思考中" with no output — and looks like a hang. Once streaming
+  // finishes we fall back to the user's collapsed/expanded preference.
+  const expanded = isExpanded || isStreaming;
+
   // Collapsed preview shows just the first non-empty line plus a "... N more
   // lines" hint instead of clamping two lines of raw reasoning.
   const lines = text
@@ -51,7 +58,7 @@ export function ThinkingBlock({
           `}
         >
           <motion.span
-            animate={{ rotate: isExpanded ? 90 : 0 }}
+            animate={{ rotate: expanded ? 90 : 0 }}
             transition={{ duration: 0.15 }}
             className="flex-shrink-0"
           >
@@ -85,7 +92,7 @@ export function ThinkingBlock({
 
       {/* Collapsed preview — one line of reasoning plus a "... N more lines"
           hint. Rendered inline (no box, no gap) right below the header. */}
-      {!isExpanded && text.trim() !== '' && (
+      {!expanded && text.trim() !== '' && (
         <div className="pl-5">
           <div className="text-xs text-[var(--color-text-secondary)] font-mono leading-[18px] m-0 truncate">
             {firstLine}
@@ -100,7 +107,7 @@ export function ThinkingBlock({
 
       {/* Expanded content — also inline, no box, no gap */}
       <AnimatePresence>
-        {isExpanded && (
+        {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
