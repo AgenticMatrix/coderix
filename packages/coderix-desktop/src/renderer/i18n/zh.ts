@@ -202,6 +202,8 @@ export const zh = {
   'nav.settings': '设置',
   'nav.toggleSidebar': '切换侧栏',
   'nav.toggleFilePanel': '切换文件面板',
+  'nav.maximize': '全屏展示',
+  'nav.restore': '退出全屏',
 
   // ── 项目开发 ──────────────────────────────────────────
   'project.tabFiles': '文件',

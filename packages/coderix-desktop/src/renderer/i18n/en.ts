@@ -206,6 +206,8 @@ export const en: Record<TranslationKey, string> = {
   'nav.settings': 'Settings',
   'nav.toggleSidebar': 'Toggle Sidebar',
   'nav.toggleFilePanel': 'Toggle file panel',
+  'nav.maximize': 'Maximize',
+  'nav.restore': 'Restore',
 
   // ── Project management ────────────────────────────────
   'project.tabFiles': 'Files',

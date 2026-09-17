@@ -3,6 +3,10 @@ import type { Language } from '../i18n/types.js';
 
 export type PermissionMode = 'plan' | 'ask' | 'auto';
 export type Theme = 'dark' | 'light';
+/** Which column (if any) is expanded to fill the window, mirroring agentstation-app.
+ *  `main` is intentionally absent — the main column already fills the window once
+ *  the file + browser columns are collapsed, so "maximizing" it is just closing them. */
+export type MaximizedPanel = 'none' | 'detail' | 'browser';
 
 const STANDARD_MODE_KEY = 'coderix-standard-mode';
 const LANGUAGE_KEY = 'coderix-language';
@@ -45,6 +49,7 @@ export interface UIState {
   detailPanelOpen: boolean;
   terminalOpen: boolean;
   browserPanelOpen: boolean;
+  maximizedPanel: MaximizedPanel;
   permissionMode: PermissionMode;
   theme: Theme;
   standardMode: boolean;
@@ -62,6 +67,7 @@ export interface UIState {
   toggleDetailPanel: () => void;
   toggleTerminal: () => void;
   toggleBrowserPanel: () => void;
+  setMaximizedPanel: (panel: MaximizedPanel) => void;
   setTerminalOpen: (open: boolean) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setTheme: (theme: Theme) => void;
@@ -90,6 +96,7 @@ export const useUIStore = create<UIState>()((set) => ({
   detailPanelOpen: false,
   terminalOpen: false,
   browserPanelOpen: false,
+  maximizedPanel: 'none',
   permissionMode: 'ask',
   theme: 'light',
   standardMode: loadStandardMode(),
@@ -118,6 +125,10 @@ export const useUIStore = create<UIState>()((set) => ({
 
   toggleBrowserPanel: () => {
     set((state) => ({ browserPanelOpen: !state.browserPanelOpen }));
+  },
+
+  setMaximizedPanel: (maximizedPanel) => {
+    set({ maximizedPanel });
   },
 
   setTerminalOpen: (open: boolean) => {

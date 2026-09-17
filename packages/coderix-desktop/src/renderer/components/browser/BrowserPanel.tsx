@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, X, ArrowLeft, ArrowRight, RotateCw, Home, Globe } from 'lucide-react';
+import { Plus, X, ArrowLeft, ArrowRight, RotateCw, Home, Globe, Maximize2, Minimize2 } from 'lucide-react';
 import { useBrowserStore, HOME_URL } from '../../store/browserStore.js';
 import { useT } from '../../i18n/index.js';
+import { useUIStore } from '../../store/uiStore';
 
 /**
  * BrowserPanel — an embedded Chromium browser (WebContentsView) shown as a
@@ -18,14 +19,19 @@ function browserAPI(): Window['coderixAPI']['browser'] | undefined {
 // Fit-to-width: zoom the page so a desktop-width layout fits the panel width
 // exactly, keeping the whole page visible and centered (no horizontal scroll).
 const BASE_WIDTH = 1280;
+// Minimum zoom the fit-to-width is allowed to reach. Below this the text is
+// too small to read, so instead of shrinking further the page stops zooming
+// out and overflows horizontally — the user scrolls the page sideways (wheel /
+// scrollbar) rather than squinting at tiny text.
+const MIN_SCALE = 0.5;
 
 function applyFitScale(tabId: string, width: number) {
   if (width <= 0) return;
   // Never zoom *in* past 100%: a panel wider than the base width must not
   // magnify the page (which reads as "the page/enlarged font changed when I
-  // dragged the boundary"). Fit-to-width only shrinks a wide page into a
-  // narrower panel.
-  const scale = Math.min(1, width / BASE_WIDTH);
+  // dragged the boundary"). And never zoom *out* below MIN_SCALE: past that
+  // point the page keeps its readable size and scrolls horizontally instead.
+  const scale = Math.min(1, Math.max(MIN_SCALE, width / BASE_WIDTH));
   browserAPI()?.setZoomFactor(tabId, scale).catch(() => {});
 }
 
@@ -276,6 +282,12 @@ export function BrowserPanel({ onClose }: { onClose?: () => void }): React.React
   const didInit = useRef(false);
   const t = useT();
 
+  // Fullscreen (maximize) toggle — mirrors agentstation-app's browser panel.
+  const maximizedPanel = useUIStore((s) => s.maximizedPanel);
+  const setMaximizedPanel = useUIStore((s) => s.setMaximizedPanel);
+  const isMaximized = maximizedPanel === 'browser';
+  const toggleMaximize = () => setMaximizedPanel(isMaximized ? 'none' : 'browser');
+
   // Open an initial tab on first mount.
   useEffect(() => {
     if (!didInit.current && tabs.length === 0) {
@@ -335,7 +347,15 @@ export function BrowserPanel({ onClose }: { onClose?: () => void }): React.React
       <div className="flex items-center gap-2 px-2 shrink-0 border-b border-[var(--color-separator)] h-10 bg-[var(--color-bg-secondary)]">
         <TabBar />
         <button
-          onClick={onClose}
+          onClick={toggleMaximize}
+          className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${isMaximized ? 'text-[var(--color-brand)]' : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-tertiary)]'}`}
+          title={t(isMaximized ? 'nav.restore' : 'nav.maximize')}
+          aria-label={t(isMaximized ? 'nav.restore' : 'nav.maximize')}
+        >
+          {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
+        <button
+          onClick={() => { setMaximizedPanel('none'); onClose?.(); }}
           className="shrink-0 w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-brand)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
           title={t('nav.browser')}
           aria-label={t('nav.browser')}

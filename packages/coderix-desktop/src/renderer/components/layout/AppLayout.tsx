@@ -1,12 +1,13 @@
 import React, { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Globe } from 'lucide-react';
+import { Globe, Maximize2, Minimize2 } from 'lucide-react';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
 import { IconSidebar } from '../sidebar/IconSidebar';
 import type { SidebarTab } from '../sidebar/IconSidebar';
 import { EditorTabs } from '../editor/EditorTabs';
 import { useT } from '../../i18n/index.js';
+import { useUIStore } from '../../store/uiStore';
 
 export interface AppLayoutProps {
   sidebar: ReactNode;
@@ -100,6 +101,12 @@ export function AppLayout({
   // toggle buttons stay pinned to the default width while the panel drags.
   const [detailWidthState, setDetailWidthState] = useState(detailWidth || 380);
 
+  // Which panel (if any) is expanded to fill the window — mirrors
+  // agentstation-app's `maximizedPanel`. Only one column can be maximized at a
+  // time; the icon rail stays visible and the chosen column fills the rest.
+  const maximizedPanel = useUIStore((s) => s.maximizedPanel);
+  const setMaximizedPanel = useUIStore((s) => s.setMaximizedPanel);
+
   // Track the window width so a right-hand column can never be dragged wider
   // than the space that remains for the left columns. The browser column's
   // flex-basis is its own width while its sibling (the left column) has
@@ -133,16 +140,41 @@ export function AppLayout({
     setBrowserWidth((w) => (w > browserMaxWidth ? browserMaxWidth : w));
   }, [browserMaxWidth]);
 
+  // Fullscreen (maximize) state — mirrors agentstation-app: one column expands
+  // to fill the window (minus the always-visible icon rail) and the rest hide.
+  // Columns are: main (sidebar + chat), detail (file management), browser.
+  const fsDetail = maximizedPanel === 'detail';
+  const fsBrowser = maximizedPanel === 'browser';
+  const fsNone = maximizedPanel === 'none';
+
+  // The main column (sidebar + chat) has no dedicated fullscreen state: filling
+  // it means collapsing the file + browser columns (the main column already
+  // occupies everything they don't). So "maximize main" just closes those two.
+  const showSidebar = fsNone && sidebarVisible;
+  const showChat = fsNone;
+  const showDetail = fsNone ? detailVisible : fsDetail;
+  const showBrowser = fsNone ? browserPanelVisible : fsBrowser;
+
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
-      <IconSidebar activeTab={iconActiveTab} onTabChange={onIconTabChange} onSettings={onIconSettings} />
+      <IconSidebar
+        activeTab={iconActiveTab}
+        onTabChange={(tab) => {
+          // Switching views leaves fullscreen. While a panel is maximized its
+          // restore button may be hidden (e.g. the chat), so a tab click is the
+          // reliable way back to the normal layout.
+          setMaximizedPanel('none');
+          onIconTabChange(tab);
+        }}
+        onSettings={onIconSettings}
+      />
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Main row: header+content (sidebar | chat | detail) on the left,
             full-height browser column on the right. */}
         <div className="flex flex-1 min-h-0">
           <div
-            className="flex-1 flex flex-col"
+            className={fsBrowser ? 'hidden' : 'flex-1 flex flex-col'}
             style={{ minWidth: leftColumnMinWidth }}
           >
       {/* Header bar — one header per column, mirroring the content row below:
@@ -152,9 +184,11 @@ export function AppLayout({
                    bg-[var(--color-bg-primary)] border-b border-[var(--color-separator)]
                    select-none z-[var(--z-sticky)]"
       >
-        {/* Sidebar column header — app title */}
+        {/* Sidebar column header — app title. The sidebar (conversation list)
+            belongs to the main column, so it carries no maximize button of its
+            own — the main column's button lives in the chat header. */}
         <AnimatePresence initial={false}>
-          {sidebarVisible && (
+          {showSidebar && (
             <motion.div {...sidebarAnimation} className="overflow-hidden flex-shrink-0">
               <div
                 style={{ width: sidebarWidth || 260, minWidth: 200, maxWidth: 400 }}
@@ -168,9 +202,10 @@ export function AppLayout({
           )}
         </AnimatePresence>
 
-        {/* Chat column header — browser + sidebar toggles at this column's far right */}
+        {/* Chat column header — browser + sidebar toggles at this column's far right.
+            Kept mounted (hidden via CSS) so the composer draft survives maximization. */}
         <div
-          className="flex-1 flex items-center justify-end px-4 titlebar-drag"
+          className={`${showChat ? 'flex flex-1' : 'hidden'} items-center justify-end px-4 titlebar-drag`}
           style={{ minWidth: CHAT_MIN_WIDTH }}
         >
           <div className="titlebar-no-drag flex items-center gap-1">
@@ -223,22 +258,40 @@ export function AppLayout({
                 <Globe size={16} />
               </button>
             )}
+            {/* Maximize the main column — collapses the file + browser columns so
+                the main column fills the window (its "fullscreen"). Only useful
+                while at least one of them is open. */}
+            {(detailVisible || browserPanelVisible) && (
+              <MaximizeButton
+                active={false}
+                onToggle={() => {
+                  if (detailVisible) onToggleDetailPanel?.();
+                  if (browserPanelVisible) onToggleBrowserPanel?.();
+                }}
+                label={t('nav.maximize')}
+              />
+            )}
           </div>
         </div>
 
         {/* Detail column header — hosts the file tabs (mirroring the browser's
             tab bar at the very top) plus a collapse button at its right edge. */}
         <AnimatePresence initial={false}>
-          {detailVisible && detailPanel && (
+          {showDetail && detailPanel && (
             <motion.div
               {...sidebarAnimation}
-              className="overflow-hidden flex-shrink min-w-0"
-              style={{ width: detailWidthState, maxWidth: DETAIL_MAX_WIDTH, minWidth: 0 }}
+              className={fsDetail ? 'flex-1 overflow-hidden min-w-0' : 'overflow-hidden flex-shrink min-w-0'}
+              style={fsDetail ? { minWidth: 0 } : { width: detailWidthState, maxWidth: DETAIL_MAX_WIDTH, minWidth: 0 }}
             >
               <div className="h-full flex items-stretch w-full">
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <EditorTabs />
                 </div>
+                <MaximizeButton
+                  active={fsDetail}
+                  onToggle={() => setMaximizedPanel(fsDetail ? 'none' : 'detail')}
+                  label={t(fsDetail ? 'nav.restore' : 'nav.maximize')}
+                />
                 <button
                   onClick={onToggleDetailPanel}
                   title={t('nav.toggleFilePanel')}
@@ -262,7 +315,7 @@ export function AppLayout({
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar — WeChat-style frosted glass with subtle right border */}
         <AnimatePresence initial={false}>
-          {sidebarVisible && (
+          {showSidebar && (
             <motion.div
               {...sidebarAnimation}
               className="overflow-hidden flex-shrink-0"
@@ -281,9 +334,10 @@ export function AppLayout({
         </AnimatePresence>
 
         {/* Main content — min-width floor so the browser column shrinks before
-            the chat area is squeezed below its readable minimum. */}
+            the chat area is squeezed below its readable minimum. Kept mounted
+            (hidden via CSS) so composer/terminal state survives maximization. */}
         <div
-          className="flex-1 flex flex-col overflow-hidden bg-[var(--color-bg-primary)]"
+          className={`${showChat ? 'flex-1 flex flex-col' : 'hidden'} overflow-hidden bg-[var(--color-bg-primary)]`}
           style={{ minWidth: CHAT_MIN_WIDTH }}
         >
           {children}
@@ -291,11 +345,11 @@ export function AppLayout({
 
         {/* Detail panel — clean white/dark surface */}
         <AnimatePresence initial={false}>
-          {detailVisible && detailPanel && (
+          {showDetail && detailPanel && (
             <motion.div
               {...detailAnimation}
-              className="overflow-hidden flex-shrink min-w-0"
-              style={{ width: detailWidthState, maxWidth: DETAIL_MAX_WIDTH, minWidth: 0 }}
+              className={fsDetail ? 'flex-1 overflow-hidden min-w-0' : 'overflow-hidden flex-shrink min-w-0'}
+              style={fsDetail ? { minWidth: 0 } : { width: detailWidthState, maxWidth: DETAIL_MAX_WIDTH, minWidth: 0 }}
             >
               <DetailResizablePanel width={detailWidthState} onResize={setDetailWidthState}>
                 {detailPanel}
@@ -310,12 +364,13 @@ export function AppLayout({
               The drag handle is a leading sibling (not drawn inside the panel),
               because the native WebContentsView renders above the DOM and would
               otherwise cover it. */}
-          {browserPanelVisible && browserPanel && (
+          {showBrowser && browserPanel && (
             <BrowserResizableColumn
-              width={browserWidth}
+              width={fsBrowser ? Math.max(0, windowWidth - ICON_SIDEBAR_WIDTH) : browserWidth}
               onResize={setBrowserWidth}
               minWidth={BROWSER_MIN_WIDTH}
-              maxWidth={browserMaxWidth}
+              maxWidth={fsBrowser ? Math.max(0, windowWidth - ICON_SIDEBAR_WIDTH) : browserMaxWidth}
+              resizable={!fsBrowser}
             >
               {browserPanel}
             </BrowserResizableColumn>
@@ -387,6 +442,37 @@ function useColumnResize(opts: {
 }
 
 /**
+ * Maximize/restore toggle — the per-column "fullscreen" button, mirroring
+ * agentstation-app. Shows a Maximize2 icon normally and a brand-tinted
+ * Minimize2 icon when the column is expanded.
+ */
+function MaximizeButton({
+  active,
+  onToggle,
+  label,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  label: string;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={label}
+      aria-label={label}
+      className={`w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
+        active
+          ? 'text-[var(--color-brand)] hover:bg-[var(--color-bg-tertiary)]'
+          : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)]'
+      }`}
+    >
+      {active ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+    </button>
+  );
+}
+
+/**
  * Browser column — a full-height panel with a 4px drag handle on its left edge.
  * The handle is rendered as a leading sibling of the panel (not inside it) so it
  * stays grabbable: the embedded WebContentsView is a native layer that paints
@@ -398,12 +484,14 @@ function BrowserResizableColumn({
   onResize,
   minWidth,
   maxWidth,
+  resizable = true,
 }: {
   children: ReactNode;
   width: number;
   onResize: (w: number) => void;
   minWidth: number;
   maxWidth: number;
+  resizable?: boolean;
 }): React.ReactElement {
   const onMouseDown = useColumnResize({ width, onResize, minWidth, maxWidth });
   return (
@@ -411,15 +499,17 @@ function BrowserResizableColumn({
     // the chat area (whose 200px floor is enforced in the main-content div),
     // collapsing down to `minWidth` before the chat gets squeezed.
     <div className="h-full flex">
-      {/* Drag handle — 4px grab zone with a solid 1px divider line through its
-          center, so the browser/chat boundary stays visible (not just on hover). */}
-      <div
-        onMouseDown={onMouseDown}
-        style={{ width: 4, cursor: 'col-resize', flexShrink: 0 }}
-        className="relative group hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors"
-      >
-        <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-[var(--color-separator)] group-hover:bg-[var(--color-brand)] transition-colors" />
-      </div>
+      {resizable && (
+        // Drag handle — 4px grab zone with a solid 1px divider line through its
+        // center, so the browser/chat boundary stays visible (not just on hover).
+        <div
+          onMouseDown={onMouseDown}
+          style={{ width: 4, cursor: 'col-resize', flexShrink: 0 }}
+          className="relative group hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors"
+        >
+          <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-[var(--color-separator)] group-hover:bg-[var(--color-brand)] transition-colors" />
+        </div>
+      )}
       <div
         style={{ width, minWidth, maxWidth, flexShrink: 1 }}
         className="h-full bg-[var(--color-bg-secondary)]"
