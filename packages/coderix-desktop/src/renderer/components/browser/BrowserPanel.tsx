@@ -21,7 +21,11 @@ const BASE_WIDTH = 1280;
 
 function applyFitScale(tabId: string, width: number) {
   if (width <= 0) return;
-  const scale = width / BASE_WIDTH;
+  // Never zoom *in* past 100%: a panel wider than the base width must not
+  // magnify the page (which reads as "the page/enlarged font changed when I
+  // dragged the boundary"). Fit-to-width only shrinks a wide page into a
+  // narrower panel.
+  const scale = Math.min(1, width / BASE_WIDTH);
   browserAPI()?.setZoomFactor(tabId, scale).catch(() => {});
 }
 

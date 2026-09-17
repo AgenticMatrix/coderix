@@ -292,6 +292,18 @@ export function createWindowManager(): WindowManager {
         }
       });
 
+      // Force 100% zoom on the shell. Chromium persists per-host page zoom in
+      // the profile, so an accidental Cmd+-/Cmd++ zoom-out would otherwise
+      // survive restarts and make the fixed-width sidebar columns look tiny
+      // next to a huge chat area. The embedded browser views keep their own
+      // per-site zoom (set via browser:setZoomFactor), so this only resets the
+      // app shell.
+      win.webContents.on('did-finish-load', () => {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+          win.webContents.setZoomFactor(1.0);
+        }
+      });
+
       // Recover from a renderer crash (the usual cause of a blank white
       // window) by reloading instead of leaving the user staring at nothing.
       // Throttle reloads so a deterministically-crashing renderer can't spin

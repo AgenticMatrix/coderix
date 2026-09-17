@@ -107,6 +107,13 @@ export function createBrowserViewManager(windowManager: WindowManager): BrowserV
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: false,
+        // Isolate the embedded browser's session from the app shell's default
+        // session. Chromium persists per-host page zoom in the session, so
+        // without this the fit-to-width zoom applied when the browser visits a
+        // localhost page (e.g. http://127.0.0.1:8791) would leak to the app
+        // shell on the same host and shrink/squeeze its layout until the profile
+        // is cleared (the "reinstall fixes it" symptom).
+        partition: 'persist:browser',
       },
     });
     // Opaque background so the view never renders transparently (e.g. while a

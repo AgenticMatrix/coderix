@@ -37,6 +37,8 @@ const BROWSER_MIN_WIDTH = 200;
 const CHAT_MIN_WIDTH = 200;
 /** Maximum width the file/detail column can be dragged out to. */
 const DETAIL_MAX_WIDTH = 1600;
+/** Fixed width of the icon rail on the far left. */
+const ICON_SIDEBAR_WIDTH = 65;
 
 /**
  * WeChat × Apple animation presets:
@@ -97,6 +99,40 @@ export function AppLayout({
   // the resizable panel always agree. Otherwise the header's browser/sidebar
   // toggle buttons stay pinned to the default width while the panel drags.
   const [detailWidthState, setDetailWidthState] = useState(detailWidth || 380);
+
+  // Track the window width so a right-hand column can never be dragged wider
+  // than the space that remains for the left columns. The browser column's
+  // flex-basis is its own width while its sibling (the left column) has
+  // flex-basis 0 — so without this clamp, dragging the browser past the window
+  // width collapses the left column to zero and breaks the layout.
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // The left column must always keep room for the (fixed, non-shrinking) sidebar
+  // plus the chat area's readable minimum. The file/detail column is allowed to
+  // shrink away (flex-shrink + min-w-0), so it is not part of this floor. Use
+  // the sidebar's *actual* width (not a hard-coded minimum) — otherwise a
+  // 260–400px sidebar still lets the browser be dragged wide enough to squeeze
+  // the chat below 200px and clip the sidebar, which is the "sidebar shrunk /
+  // layout broken" symptom.
+  const leftColumnMinWidth =
+    (sidebarVisible ? (sidebarWidth || 260) : 0) + CHAT_MIN_WIDTH;
+  const browserMaxWidth = Math.max(
+    BROWSER_MIN_WIDTH,
+    windowWidth - ICON_SIDEBAR_WIDTH - leftColumnMinWidth,
+  );
+
+  // If the window shrinks after the browser was dragged wide, clamp the state so
+  // the next drag starts from the actually-rendered width (the CSS max-width
+  // already clamps the visual; this keeps the state consistent with it).
+  useEffect(() => {
+    setBrowserWidth((w) => (w > browserMaxWidth ? browserMaxWidth : w));
+  }, [browserMaxWidth]);
+
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
       <IconSidebar activeTab={iconActiveTab} onTabChange={onIconTabChange} onSettings={onIconSettings} />
@@ -105,7 +141,10 @@ export function AppLayout({
         {/* Main row: header+content (sidebar | chat | detail) on the left,
             full-height browser column on the right. */}
         <div className="flex flex-1 min-h-0">
-          <div className="flex-1 flex flex-col min-w-0">
+          <div
+            className="flex-1 flex flex-col"
+            style={{ minWidth: leftColumnMinWidth }}
+          >
       {/* Header bar — one header per column, mirroring the content row below:
           sidebar (app title) | chat (actions) | detail */}
       <header
@@ -276,7 +315,7 @@ export function AppLayout({
               width={browserWidth}
               onResize={setBrowserWidth}
               minWidth={BROWSER_MIN_WIDTH}
-              maxWidth={1600}
+              maxWidth={browserMaxWidth}
             >
               {browserPanel}
             </BrowserResizableColumn>
@@ -372,15 +411,18 @@ function BrowserResizableColumn({
     // the chat area (whose 200px floor is enforced in the main-content div),
     // collapsing down to `minWidth` before the chat gets squeezed.
     <div className="h-full flex">
-      {/* Drag handle */}
+      {/* Drag handle — 4px grab zone with a solid 1px divider line through its
+          center, so the browser/chat boundary stays visible (not just on hover). */}
       <div
         onMouseDown={onMouseDown}
         style={{ width: 4, cursor: 'col-resize', flexShrink: 0 }}
-        className="hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors"
-      />
+        className="relative group hover:bg-[var(--color-brand)]/40 active:bg-[var(--color-brand)]/60 transition-colors"
+      >
+        <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-1/2 bg-[var(--color-separator)] group-hover:bg-[var(--color-brand)] transition-colors" />
+      </div>
       <div
         style={{ width, minWidth, maxWidth, flexShrink: 1 }}
-        className="h-full bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]"
+        className="h-full bg-[var(--color-bg-secondary)]"
       >
         {children}
       </div>
