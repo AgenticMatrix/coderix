@@ -23,7 +23,7 @@ const BASE_WIDTH = 1280;
 // too small to read, so instead of shrinking further the page stops zooming
 // out and overflows horizontally — the user scrolls the page sideways (wheel /
 // scrollbar) rather than squinting at tiny text.
-const MIN_SCALE = 0.5;
+const MIN_SCALE = 0.75;
 
 function applyFitScale(tabId: string, width: number) {
   if (width <= 0) return;
