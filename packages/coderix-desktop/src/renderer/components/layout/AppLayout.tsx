@@ -209,6 +209,19 @@ export function AppLayout({
           style={{ minWidth: CHAT_MIN_WIDTH }}
         >
           <div className="titlebar-no-drag flex items-center gap-1">
+            {/* Maximize the main column — collapses the file + browser columns so
+                the main column fills the window (its "fullscreen"). Only useful
+                while at least one of them is open. */}
+            {(detailVisible || browserPanelVisible) && (
+              <MaximizeButton
+                active={false}
+                onToggle={() => {
+                  if (detailVisible) onToggleDetailPanel?.();
+                  if (browserPanelVisible) onToggleBrowserPanel?.();
+                }}
+                label={t('nav.maximize')}
+              />
+            )}
             {/* Sidebar toggle */}
             <button
               className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
@@ -255,21 +268,8 @@ export function AppLayout({
                 title={t('nav.browser')}
                 aria-label={t('nav.browser')}
               >
-                <Globe size={16} />
+                <Globe size={15} />
               </button>
-            )}
-            {/* Maximize the main column — collapses the file + browser columns so
-                the main column fills the window (its "fullscreen"). Only useful
-                while at least one of them is open. */}
-            {(detailVisible || browserPanelVisible) && (
-              <MaximizeButton
-                active={false}
-                onToggle={() => {
-                  if (detailVisible) onToggleDetailPanel?.();
-                  if (browserPanelVisible) onToggleBrowserPanel?.();
-                }}
-                label={t('nav.maximize')}
-              />
             )}
           </div>
         </div>
@@ -287,24 +287,26 @@ export function AppLayout({
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <EditorTabs />
                 </div>
-                <MaximizeButton
-                  active={fsDetail}
-                  onToggle={() => setMaximizedPanel(fsDetail ? 'none' : 'detail')}
-                  label={t(fsDetail ? 'nav.restore' : 'nav.maximize')}
-                />
-                <button
-                  onClick={onToggleDetailPanel}
-                  title={t('nav.toggleFilePanel')}
-                  aria-label={t('nav.toggleFilePanel')}
-                  className="w-7 flex-shrink-0 flex items-center justify-center
-                             text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
-                             hover:bg-[var(--color-bg-tertiary)] transition-colors"
-                >
-                  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
-                    <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
-                    <path d="M9.5 2.5v10" />
-                  </svg>
-                </button>
+                <div className="flex items-center shrink-0">
+                  <MaximizeButton
+                    active={fsDetail}
+                    onToggle={() => setMaximizedPanel(fsDetail ? 'none' : 'detail')}
+                    label={t(fsDetail ? 'nav.restore' : 'nav.maximize')}
+                  />
+                  <button
+                    onClick={onToggleDetailPanel}
+                    title={t('nav.toggleFilePanel')}
+                    aria-label={t('nav.toggleFilePanel')}
+                    className="w-7 h-7 flex-shrink-0 flex items-center justify-center
+                               text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                               hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
+                      <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
+                      <path d="M9.5 2.5v10" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}
