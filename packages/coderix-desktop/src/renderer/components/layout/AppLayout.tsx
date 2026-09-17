@@ -284,7 +284,7 @@ export function AppLayout({
                 <div className="flex-1 min-w-0 overflow-hidden">
                   <EditorTabs />
                 </div>
-                <div className="flex items-center shrink-0">
+                <div className="flex items-center shrink-0 gap-2 pr-2">
                   <MaximizeButton
                     active={fsDetail}
                     onToggle={() => setMaximizedPanel(fsDetail ? 'none' : 'detail')}
