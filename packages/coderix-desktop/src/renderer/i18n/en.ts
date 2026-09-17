@@ -205,7 +205,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.switchToLight': 'Switch to Light',
   'nav.settings': 'Settings',
   'nav.toggleSidebar': 'Toggle Sidebar',
-  'nav.toggleFilePanel': 'Toggle file panel',
+  'nav.toggleFilePanel': 'Project Files',
   'nav.maximize': 'Maximize',
   'nav.restore': 'Restore',
 

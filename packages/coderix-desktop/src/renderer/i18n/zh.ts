@@ -201,7 +201,7 @@ export const zh = {
   'nav.switchToLight': '切换到浅色',
   'nav.settings': '设置',
   'nav.toggleSidebar': '切换侧栏',
-  'nav.toggleFilePanel': '切换文件面板',
+  'nav.toggleFilePanel': '项目文件',
   'nav.maximize': '全屏展示',
   'nav.restore': '退出全屏',
 

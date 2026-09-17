@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Globe, Maximize2, Minimize2 } from 'lucide-react';
+import { FolderGit2, Globe, Maximize2, Minimize2 } from 'lucide-react';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
 import { IconSidebar } from '../sidebar/IconSidebar';
@@ -249,10 +249,7 @@ export function AppLayout({
                 title={t('nav.toggleFilePanel')}
                 aria-label={t('nav.toggleFilePanel')}
               >
-                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
-                  <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
-                  <path d="M9.5 2.5v10" />
-                </svg>
+                <FolderGit2 size={15} />
               </button>
             )}
 
@@ -301,10 +298,7 @@ export function AppLayout({
                                text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
                                hover:bg-[var(--color-bg-tertiary)] transition-colors"
                   >
-                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
-                      <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
-                      <path d="M9.5 2.5v10" />
-                    </svg>
+                    <FolderGit2 size={15} />
                   </button>
                 </div>
               </div>
