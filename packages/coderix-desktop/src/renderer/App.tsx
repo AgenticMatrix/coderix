@@ -313,26 +313,6 @@ export function App(): React.ReactElement {
     return unsub;
   }, []);
 
-  // ── Load sessions on mount & auto-create default session ──────────────
-  useEffect(() => {
-    async function init(): Promise<void> {
-      await loadSessions();
-      const sessions = useSessionStore.getState().sessions;
-      if (sessions.length === 0) {
-        await createSession();
-      } else {
-        // Use the most recent session
-        const latest = sessions[0];
-        // Existing session: its own persisted skills are authoritative, so mark
-        // it as handled and keep the built-in default from overriding them.
-        defaultedSkillsFor.current = latest.id;
-        setSessionId(latest.id);
-        useSessionStore.getState().setCurrentSessionId(latest.id);
-      }
-    }
-    init().catch((err) => console.error('[App] Session init failed:', err));
-  }, [loadSessions, createSession, setSessionId]);
-
   // ── Auto-close right panel when all editor/diff tabs are closed ─────
   const editorTabs = useEditorStore((s) => s.tabs);
   useEffect(() => {
@@ -637,6 +617,24 @@ export function App(): React.ReactElement {
     },
     [setSessionId],
   );
+
+  // ── Load sessions on mount & auto-create default session ──────────────
+  useEffect(() => {
+    async function init(): Promise<void> {
+      await loadSessions();
+      const sessions = useSessionStore.getState().sessions;
+      if (sessions.length === 0) {
+        await createSession();
+      } else {
+        // Auto-select the most recent session and hydrate it fully (transcript,
+        // model, skills, workspace) through the same path as a sidebar click.
+        // Selecting without hydrating left the first session "current" but with
+        // an empty chat pane, so clicking it was a no-op (it was already active).
+        await handleSessionSelect(sessions[0].id);
+      }
+    }
+    init().catch((err) => console.error('[App] Session init failed:', err));
+  }, [loadSessions, createSession, handleSessionSelect]);
 
   const handleNewSession = useCallback(async () => {
     // A fresh session inherits the global default model.
