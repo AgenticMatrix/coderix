@@ -20,6 +20,7 @@ import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
 import { installCli, bootstrapConfig } from './cli-installer.js';
+import { autoInstallClaudeCodeOnBoot } from './claude-code-runtime.js';
 
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
@@ -190,6 +191,14 @@ async function bootstrap(): Promise<void> {
     // onto the user's PATH so the terminal has a `coderix` command. Idempotent
     // and non-blocking; failures are logged, never fatal.
     autoInstallCli();
+
+    // Step 6c: First-launch claude-code runtime install — pull the ~200MB native
+    // CLI into ~/.coderix/runtimes/claude-code (not bundled with the app) when
+    // the default engine is claude-code. Fire-and-forget so it never blocks
+    // startup; the engine itself also installs on demand as a fallback.
+    if (initialConfig.engine === 'claude-code') {
+      autoInstallClaudeCodeOnBoot();
+    }
 
     // Step 7: Defer QueryEngine init to avoid blocking renderer startup
     setTimeout(() => {

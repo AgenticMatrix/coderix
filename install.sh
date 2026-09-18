@@ -197,6 +197,64 @@ if [ -f "${SCRIPT_DIR}/package.json" ] && grep -q '"coderix"' "${SCRIPT_DIR}/pac
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. Claude Code CLI runtime (native binary, npm registry failover)
+# ---------------------------------------------------------------------------
+# The claude-code engine spawns the native `claude` CLI, which the SDK ships as
+# a ~200MB platform optionalDependency. `pnpm install` normally provides it in
+# dev; this additionally installs it into ~/.coderix/runtimes/claude-code (the
+# same dir the packaged app's engine resolves) so a source install matches a
+# packaged install. Mirrors agentstation-app's registry failover: probe
+# registry.npmjs.org first, fall back to registry.npmmirror.com (mainland China).
+CLAUDE_CODE_SDK_VERSION="0.3.199"
+CLAUDE_CODE_INSTALL_DIR="${HOME}/.coderix/runtimes/claude-code"
+
+claude_code_binary_installed() {
+  local nm="${CLAUDE_CODE_INSTALL_DIR}/node_modules/@anthropic-ai"
+  [ -d "$nm" ] || return 1
+  for bin in "$nm"/claude-agent-sdk-*/claude; do
+    [ -f "$bin" ] && return 0
+  done
+  return 1
+}
+
+install_claude_code_runtime() {
+  if claude_code_binary_installed; then
+    echo -e "${GREEN}Claude Code CLI already installed at ${CLAUDE_CODE_INSTALL_DIR}${NC}"
+    return 0
+  fi
+
+  echo ""
+  echo -e "${CYAN}Installing Claude Code CLI (${CLAUDE_CODE_SDK_VERSION})…${NC}"
+
+  local REGISTRY="https://registry.npmjs.org"
+  if ! curl -fsS --max-time 5 "${REGISTRY}/-/ping" >/dev/null 2>&1; then
+    echo -e "${YELLOW}registry.npmjs.org unreachable — switching to registry.npmmirror.com${NC}"
+    REGISTRY="https://registry.npmmirror.com"
+  fi
+
+  mkdir -p "${CLAUDE_CODE_INSTALL_DIR}"
+  if npm install --prefix "${CLAUDE_CODE_INSTALL_DIR}" --no-audit --no-fund "--registry=${REGISTRY}" "@anthropic-ai/claude-agent-sdk@${CLAUDE_CODE_SDK_VERSION}"; then
+    echo -e "${GREEN}Claude Code CLI installed at ${CLAUDE_CODE_INSTALL_DIR}${NC}"
+    return 0
+  fi
+
+  # 官方源探测通过但安装仍失败（例如中途被墙）→ 清掉半成品，改走镜像重试一次。
+  if [ "${REGISTRY}" = "https://registry.npmjs.org" ]; then
+    echo -e "${YELLOW}npmjs install failed — retrying via registry.npmmirror.com${NC}"
+    rm -rf "${CLAUDE_CODE_INSTALL_DIR}"
+    mkdir -p "${CLAUDE_CODE_INSTALL_DIR}"
+    if npm install --prefix "${CLAUDE_CODE_INSTALL_DIR}" --no-audit --no-fund "--registry=https://registry.npmmirror.com" "@anthropic-ai/claude-agent-sdk@${CLAUDE_CODE_SDK_VERSION}"; then
+      echo -e "${GREEN}Claude Code CLI installed at ${CLAUDE_CODE_INSTALL_DIR}${NC}"
+      return 0
+    fi
+  fi
+
+  # Non-fatal: the engine itself retries on first use.
+  echo -e "${YELLOW}WARNING: Claude Code CLI install failed. The claude-code engine will retry on first use.${NC}"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # 3. Install coderix
 # ---------------------------------------------------------------------------
 echo ""
@@ -268,6 +326,10 @@ if $LOCAL_INSTALL || $DESKTOP_INSTALL; then
     echo -e "${CYAN}Setting up desktop app...${NC}"
     (cd "${REPO_DIR}/packages/coderix-desktop" && pnpm install 2>/dev/null || true)
     echo -e "${GREEN}Desktop app dependencies installed${NC}"
+
+    # Ensure the claude-code native CLI is available for the claude-code engine
+    # (installs into ~/.coderix/runtimes/claude-code, with npm registry failover).
+    install_claude_code_runtime
 
     # A reinstall rebuilds the Electron bundle so the fresh source lands in
     # packages/coderix-desktop/dist/main/index.cjs (what the app actually runs).

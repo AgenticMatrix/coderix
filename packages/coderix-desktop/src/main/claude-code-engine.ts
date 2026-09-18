@@ -24,6 +24,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { extractOpenUrl } from './open-url.js';
 import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
 import { CUSTOM_SKILL_SHIM_DIR, refreshCustomSkillShim } from './skills.js';
+import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -225,8 +226,14 @@ function resolveClaudeCodeExecutable(): string | undefined {
     const bin = join(storeNodeModules, scope, pkgName, exe);
     if (existsSync(bin)) return bin;
   } catch {
-    /* SDK not resolvable — fall through to PATH lookup */
+    /* SDK not resolvable — fall through to runtime dir / PATH lookup */
   }
+
+  // 2b. On-demand runtime dir (~/.coderix/runtimes/claude-code) — the
+  //     version-pinned binary installed by claude-code-runtime.ts. Checked
+  //     before PATH so an arbitrary (possibly older) user `claude` doesn't win.
+  const runtimeBin = findClaudeCodeBinary();
+  if (runtimeBin) return runtimeBin;
 
   // 3. User-installed `claude` CLI on PATH.
   try {
@@ -369,7 +376,16 @@ export async function* runClaudeCodeQuery(
   const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   const resume = claudeSessionByCoderixSession.get(sessionId);
-  const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
+  let pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
+
+  // Not bundled with the packaged app — install the native CLI on demand into
+  // ~/.coderix/runtimes/claude-code (mirrors agentstation-app's engine fallback).
+  // Blocking, but idempotent and shared with the boot-time pre-install.
+  if (!pathToClaudeCodeExecutable) {
+    console.log('[claude-code] native CLI not found — installing on demand…');
+    await ensureClaudeCodeInstalled();
+    pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
+  }
 
   if (!pathToClaudeCodeExecutable) {
     yield {
