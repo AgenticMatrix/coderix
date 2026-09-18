@@ -22,6 +22,8 @@ cd "$DESKTOP_DIR"
 BUILD_DIR="$DESKTOP_DIR/.build-dmg"
 ESBUILDER="$DESKTOP_DIR/node_modules/.bin/electron-builder"
 VITE="$DESKTOP_DIR/node_modules/.bin/electron-vite"
+# Bun 用于把 @coderix/cli 编译为原生可执行文件（随 .app 分发，首次启动自动安装到 PATH）。
+BUN="$(command -v bun 2>/dev/null || echo "$HOME/.bun/bin/bun")"
 
 # ---------- 输出辅助 ----------
 c_blue=$'\033[1;36m'
@@ -39,6 +41,7 @@ command -v node     >/dev/null 2>&1 || die "未找到 node"
 command -v pnpm     >/dev/null 2>&1 || die "未找到 pnpm"
 command -v sips     >/dev/null 2>&1 || die "未找到 sips"
 command -v iconutil >/dev/null 2>&1 || die "未找到 iconutil"
+[ -x "$BUN" ]       || die "未找到 bun（CLI 编译需要，安装：https://bun.sh）"
 [ -x "$VITE" ]      || die "未找到 electron-vite（请先 pnpm install）"
 [ -x "$ESBUILDER" ] || die "未找到 electron-builder（请先 pnpm install）"
 node -e "require('bytenode')"                     >/dev/null 2>&1 || die "未找到 bytenode（请先 pnpm install）"
@@ -88,6 +91,21 @@ sips -z 1024 1024 "$ICON_PNG" --out "$ICONSET/icon_512x512@2x.png" >/dev/null
 iconutil -c icns "$ICONSET" -o "$ICNS"
 ok "icon.icns 已生成"
 
+# ---------- 4b. 编译 coderix CLI 为原生可执行文件（Bun） ----------
+# 分别产出 arm64 与 x64 两个 Mach-O 单架构二进制，随 .app 一起分发；
+# 首次启动时由主进程按 process.arch 选择对应 slice 建立 /usr/local/bin 等处的
+# 符号链接。不在此处 lipo 合并：Bun 编译产物体量较大，lipo 在受限环境易 OOM，
+# 且双二进制让安装逻辑无需依赖 fat-binary 处理。
+log "编译 coderix CLI（Bun → 原生可执行，arm64 + x64）"
+CLI_BUILD_DIR="$BUILD_DIR/cli"
+mkdir -p "$CLI_BUILD_DIR"
+CLI_ENTRY="$ROOT/packages/coderix-cli/src/cli/main.tsx"
+[ -f "$CLI_ENTRY" ] || die "未找到 CLI 入口：$CLI_ENTRY"
+( cd "$ROOT" && "$BUN" build --compile --minify --target=bun-darwin-arm64 --outfile "$CLI_BUILD_DIR/coderix-arm64" "$CLI_ENTRY" )
+( cd "$ROOT" && "$BUN" build --compile --minify --target=bun-darwin-x64   --outfile "$CLI_BUILD_DIR/coderix-x64"   "$CLI_ENTRY" )
+chmod +x "$CLI_BUILD_DIR/coderix-arm64" "$CLI_BUILD_DIR/coderix-x64"
+ok "coderix CLI 已编译（arm64 + x64）"
+
 # ---------- 5. 组装自包含 staging（规避 pnpm 工作区符号链接） ----------
 log "组装 staging（自包含 node_modules）"
 STAGING="$BUILD_DIR/staging"
@@ -97,6 +115,12 @@ mkdir -p "$STAGING/node_modules"
 cp -R "$DESKTOP_DIR/dist"   "$STAGING/dist"
 cp -R "$DESKTOP_DIR/assets" "$STAGING/assets"
 cp "$DESKTOP_DIR/electron-builder.yml" "$STAGING/electron-builder.yml"
+# CLI 原生二进制（extraResources → Contents/Resources/cli/）
+cp -R "$CLI_BUILD_DIR" "$STAGING/cli"
+# 首次启动引导所需：bundled skills + 默认 settings.json（extraResources）
+[ -d "$ROOT/resources/skills" ] && cp -R "$ROOT/resources/skills" "$STAGING/skills"
+mkdir -p "$STAGING/config"
+[ -f "$ROOT/config/default_settings.json" ] && cp "$ROOT/config/default_settings.json" "$STAGING/default_settings.json"
 
 # 精简 package.json：只保留入口与运行时外部依赖，去除 workspace/已打包依赖，
 # 避免 electron-builder 沿 node_modules 符号链接收集到包目录之外。
@@ -142,7 +166,8 @@ cp -f "$STAGING"/release/*.zip "$DESKTOP_DIR/release/" 2>/dev/null || true
 # ---------- 汇总 ----------
 echo
 printf '%s========== 完成 ==========%s\n' "$c_green" "$c_reset"
-ls -lh "$DESKTOP_DIR/release"/*.dmg "$DESKTOP_DIR/release"/*.zip 2>/dev/null | awk '{print "  "$5"  "$9}'
+# 只打 dmg 目标时没有 *.zip，ls 会因 *.zip 不匹配返回非零，导致 set -e 误报失败；加 || true 兜底。
+ls -lh "$DESKTOP_DIR/release"/*.dmg "$DESKTOP_DIR/release"/*.zip 2>/dev/null | awk '{print "  "$5"  "$9}' || true
 echo
 echo "产物目录：$DESKTOP_DIR/release"
 echo "验证：双击 .dmg，把 Coderix.app 拖入 /Applications 后运行"

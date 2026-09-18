@@ -17,12 +17,31 @@ asarUnpack:
   - '**/*.node'
   - '**/spawn-helper'
 
+# Bun-compiled CLI binaries (arm64 + x64) shipped outside the asar, symlinked
+# onto PATH on first launch by src/main/cli-installer.ts. Also ship the bundled
+# skills + default settings so first launch can bootstrap ~/.coderix (mirrors
+# ./install.sh), since the core can't reach these files through the asar.
+extraResources:
+  - from: cli/coderix-arm64
+    to: cli/coderix-arm64
+  - from: cli/coderix-x64
+    to: cli/coderix-x64
+  - from: skills
+    to: skills
+  - from: default_settings.json
+    to: config/default_settings.json
+
 # node-pty ships N-API prebuilds (ABI-stable across Node/Electron) — no rebuild.
 npmRebuild: false
 
 mac:
   category: public.app-category.developer-tools
   icon: assets/icon.icns
+  # The Bun-compiled CLI binaries are shipped as two separate single-arch Mach-O
+  # files (cli/coderix-arm64 + cli/coderix-x64) identical in both arch builds; the
+  # installer picks one by process.arch at first launch. Tell the universal merger
+  # not to lipo these identical-across-arch binaries (it would otherwise fail).
+  x64ArchFiles: '**/cli/**'
   target:
     - target: dmg
       arch:

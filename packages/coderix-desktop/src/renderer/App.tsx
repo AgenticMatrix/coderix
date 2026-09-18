@@ -874,9 +874,8 @@ export function App(): React.ReactElement {
 
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an
-  // explicit max_context carry the 1_000_000 sentinel (see settingsStore), so
-  // treat that — and any non-positive value — as "unknown" and fall back to the
-  // CLI's 131072 default.
+  // explicit max_context carry 0 (see settingsStore), so treat a non-positive
+  // value as "unknown" and fall back to the CLI's 131072 default.
   const contextMax = useMemo(() => {
     if (!settings) return 131072;
     const name = sessionModel ?? settings.defaultModel ?? '';
@@ -888,7 +887,7 @@ export function App(): React.ReactElement {
       if (providerPart && p.name.toLowerCase() !== providerPart.toLowerCase()) continue;
       for (const m of p.models) {
         if (m.name !== modelPart) continue;
-        return m.maxContext > 0 && m.maxContext < 1_000_000 ? m.maxContext : 131072;
+        return m.maxContext > 0 ? m.maxContext : 131072;
       }
     }
     return 131072;

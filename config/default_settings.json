@@ -4,6 +4,9 @@
   "brief_mode": false,
   "auto_compact_enabled": true,
   "compact_threshold": 0.85,
+  "language": "zh",
+  "engine": "coderix",
+  "default_permission_mode": "auto",
   "web_bridge": {
     "_comment": "── Web Bridge (Browser Automation via CDP) ───────────────────",
     "_help": "Control a real Chrome/Edge browser from the AI agent.",
@@ -24,160 +27,654 @@
     "proxy": ""
   },
   "default_model": "deepseek/deepseek-v4-pro",
+  "desktop_default_model": "glm/glm-5.3",
   "model_list": [
     {
-      "model": [
-        "claude-sonnet-5",
-        "claude-opus-4-8",
-        "claude-opus-5"
-      ],
-      "base_url": "https://api.anthropic.com",
-      "auth_token_env": "YOUR_ANTHROPIC_API_KEY",
-      "provider": "anthropic"
-    },
-    {
-      "model": [
-        "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
-        "gpt-5.5"
-      ],
-      "base_url": "https://api.openai.com/v1",
-      "auth_token_env": "YOUR_OPENAI_API_KEY",
-      "provider": "openai"
-    },
-    {
-      "model": [
-        "anthropic/claude-sonnet-5",
-        "openai/gpt-5",
-        "google/gemini-3-flash"
-      ],
-      "base_url": "https://openrouter.ai/api/v1",
-      "auth_token_env": "YOUR_OPENROUTER_API_KEY",
-      "provider": "openrouter"
-    },
-    {
-      "model": [
-        "glm-5",
-        "glm-5.2",
-        "glm-5.3"
-      ],
-      "base_url": "https://open.bigmodel.cn/api/anthropic",
-      "auth_token_env": "YOUR_GLM_API_KEY",
-      "provider": "glm"
-    },
-    {
+      "provider": "deepseek",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "auth_token_env": "YOUR_DEEPSEEK_API_KEY",
+      "protocol": "anthropic",
       "model": [
         {
           "name": "deepseek-v4-pro",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
           "price": {
-            "input": 3,
-            "cache_read_input": 0.025,
-            "output": 6,
-            "currency": "CNY",
-            "unit": 1000000,
-            "concurrency": 500,
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
             "max_context": 1000000
           }
         },
         {
-          "name": "deepseek-v4-flash",
+          "name": "deepseek-flash",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
           "price": {
-            "input": 1,
-            "cache_read_input": 0.02,
-            "output": 2,
-            "currency": "CNY",
-            "unit": 1000000,
-            "concurrency": 2500,
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
             "max_context": 1000000
           }
         }
-      ],
-      "base_url": "https://api.deepseek.com/anthropic",
-      "auth_token_env": "YOUR_DEEPSEEK_API_KEY",
-      "provider": "deepseek"
+      ]
     },
     {
+      "provider": "anthropic",
+      "base_url": "https://api.anthropic.com",
+      "auth_token_env": "YOUR_ANTHROPIC_API_KEY",
       "model": [
-        "gemini-3-flash",
-        "gemini-3-flash-lite",
-        "gemini-3-pro"
-      ],
-      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-      "auth_token_env": "YOUR_GOOGLE_API_KEY",
-      "provider": "google"
+        {
+          "name": "claude-opus-4-8",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 2,
+            "output": 10,
+            "cache_read_input": 1,
+            "max_context": 1000000
+          }
+        }
+      ]
     },
     {
+      "provider": "glm",
+      "base_url": "https://open.bigmodel.cn/api/anthropic",
+      "auth_token_env": "YOUR_GLM_API_KEY",
+      "protocol": "anthropic",
       "model": [
-        "grok-4",
-        "grok-4-fast",
-        "grok-4-mini"
-      ],
-      "base_url": "https://api.x.ai/v1",
-      "auth_token_env": "YOUR_GROK_API_KEY",
-      "provider": "grok"
+        {
+          "name": "glm-4-air",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "glm-5.2",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "glm-5.3",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "glm-5.3-flash",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
     },
     {
-      "model": [
-        "qwen3.8-flash",
-        "qwen3.8-max-0902"
-      ],
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "auth_token_env": "YOUR_QWEN_API_KEY",
-      "provider": "qwen"
-    },
-    {
-      "model": [
-        "kimi-k2.6",
-        "kimi-k2.7-code",
-        "kimi-k3",
-        "kimi-k2.7-code-highspeed"
-      ],
-      "base_url": "https://api.moonshot.cn/anthropic",
-      "auth_token_env": "YOUR_MOONSHOT_API_KEY",
-      "provider": "moonshot"
-    },
-    {
-      "model": [
-        "hunyuan-2.0-instruct-20251111",
-        "hunyuan-2.0-thinking-20251109"
-      ],
-      "base_url": "https://api.hunyuan.cloud.tencent.com/anthropic",
-      "auth_token_env": "YOUR_TENCENT_API_KEY",
-      "provider": "tencent"
-    },
-    {
-      "model": [
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-lite",
-        "doubao-seed-2.0-pro",
-        "deepseek-r1-250120",
-        "doubao-1-5-pro-32k-character-250228",
-        "seed-2.5"
-      ],
-      "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-      "auth_token_env": "YOUR_BYTEDANCE_API_KEY",
-      "provider": "bytedance"
-    },
-    {
-      "model": [
-        "MiniMax-M2.7",
-        "MiniMax-M2.7-highspeed",
-        "MiniMax-M3"
-      ],
+      "provider": "minimax",
       "base_url": "https://api.minimaxi.com/anthropic",
       "auth_token_env": "YOUR_MINIMAX_API_KEY",
-      "provider": "minimax"
+      "protocol": "anthropic",
+      "model": [
+        {
+          "name": "MiniMax-Text-01",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "abab7-chat",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "abab6.5s-chat",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "MiniMax-M3",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "MiniMax-M2.7",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "MiniMax-M2.7-highspeed",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
     },
     {
+      "provider": "qwen",
+      "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic",
+      "auth_token_env": "YOUR_QWEN_API_KEY",
       "model": [
-        "local-llama3-70b",
-        "local-qwen-32b",
-        "local-mistral"
-      ],
-      "base_url": "http://localhost:8000/v1",
-      "auth_token_env": "LOCAL_NO_KEY",
-      "provider": "local"
+        {
+          "name": "qwen-max",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "qwen-plus",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "qwen-turbo",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "qwen3.7-max",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "openai",
+      "base_url": "https://api.openai.com/v1",
+      "auth_token_env": "YOUR_OPENAI_API_KEY",
+      "model": [
+        {
+          "name": "gpt-4-turbo",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "gpt-4o",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "gpt-3.5-turbo",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "base_url": "https://api.x.ai/v1",
+      "auth_token_env": "YOUR_GROK_API_KEY",
+      "model": [
+        {
+          "name": "grok-1",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "grok-beta",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "grok-vision-beta",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "google",
+      "base_url": "https://generativelanguage.googleapis.com/v1",
+      "auth_token_env": "YOUR_GOOGLE_API_KEY",
+      "model": [
+        {
+          "name": "gemini-1.5-pro",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "gemini-1.5-flash",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "gemini-1.0-pro",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "tencent",
+      "base_url": "https://api.hunyuan.cloud.tencent.com/anthropic",
+      "auth_token_env": "YOUR_TENCENT_API_KEY",
+      "model": [
+        {
+          "name": "hunyuan-2.0-instruct-20251111",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "hunyuan-2.0-thinking-20251109",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "bytedance",
+      "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+      "auth_token_env": "YOUR_BYTEDANCE_API_KEY",
+      "model": [
+        {
+          "name": "doubao-seed-2.0-code",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "doubao-seed-2.0-lite",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "doubao-seed-2.0-pro",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "deepseek-r1-250120",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "doubao-1-5-pro-32k-character-250228",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "seed-2.5",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "auth_token_env": "YOUR_OPENROUTER_API_KEY",
+      "model": [
+        {
+          "name": "anthropic/claude-sonnet-5",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "openai/gpt-5",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "google/gemini-3-flash",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "astria",
+      "base_url": "https://discovery-api.intern-ai.org.cn/v1",
+      "auth_token_env": "YOUR_ASTRIA_API_KEY",
+      "protocol": "openai",
+      "model": [
+        {
+          "name": "Agents-A1",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "deepseek-v4-flash-0731",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "Atria-Dawn-Preview",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "Intern-S2-Preview-397B",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "glm-5.3",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
+    },
+    {
+      "provider": "moonshot",
+      "base_url": "https://api.moonshot.cn/anthropic",
+      "auth_token_env": "YOUR_MOONSHOT_API_KEY",
+      "model": [
+        {
+          "name": "kimi-k2.6",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "kimi-k2.7-code",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "kimi-k3",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        },
+        {
+          "name": "kimi-k2.7-code-highspeed",
+          "temperature": 0.7,
+          "top_p": 1,
+          "max_tokens": 32768,
+          "price": {
+            "input": 0,
+            "output": 0,
+            "cache_read_input": 0,
+            "max_context": 1000000
+          }
+        }
+      ]
     }
   ]
 }

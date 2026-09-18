@@ -2,7 +2,7 @@
  * Coderix Desktop — Electron Main Process Entry Point
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Notification } from 'electron';
 import { existsSync } from 'node:fs';
 import { createWindowManager } from './window-manager.js';
 import type { WindowManager } from './window-manager.js';
@@ -19,6 +19,7 @@ import type { BrowserViewManager } from './browser-view-manager.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
+import { installCli, bootstrapConfig } from './cli-installer.js';
 
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
@@ -28,7 +29,7 @@ import { SessionManager } from '../../../../packages/coderix-core/src/core/sessi
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
 import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
-import { loadConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
+import { loadDesktopConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
 
 // Tool schema + executor imports (avoid index.ts → renderers → React/ink)
 import { schema as bashSchema } from '../../../../packages/coderix-core/src/tools/bash/schema.js';
@@ -96,7 +97,14 @@ let protocolGateway: ReturnType<typeof startProtocolGateway> | null = null;
 
 async function bootstrap(): Promise<void> {
   try {
-    const initialConfig = loadConfig();
+    // First-launch config bootstrap — ensure ~/.coderix/{settings.json,skills,…}
+    // exists before loadConfig() reads it. On a fresh install the core can't
+    // reach its bundled resources through the asar, so loadConfig() would throw
+    // "No model configured" and the app would quit before any window opens.
+    // Idempotent: existing settings.json / user-customized skills are preserved.
+    bootstrapConfig();
+
+    const initialConfig = loadDesktopConfig();
     // Restore the last-used workspace across restarts. `loadConfig().cwd` is
     // `process.cwd()` (the app's launch dir, e.g. `packages/coderix-desktop`),
     // which is never the project the user wants to reopen — fall back to it
@@ -178,6 +186,11 @@ async function bootstrap(): Promise<void> {
 
     console.log('[Coderix] Bootstrap complete');
 
+    // Step 6b: First-launch CLI install — symlink the bundled `coderix` binary
+    // onto the user's PATH so the terminal has a `coderix` command. Idempotent
+    // and non-blocking; failures are logged, never fatal.
+    autoInstallCli();
+
     // Step 7: Defer QueryEngine init to avoid blocking renderer startup
     setTimeout(() => {
       initQueryEngine(activeWorkDir).catch((err) => {
@@ -188,6 +201,38 @@ async function bootstrap(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[Coderix] Bootstrap failed:', message);
     app.quit();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// First-launch CLI install
+// ---------------------------------------------------------------------------
+
+/**
+ * Symlink the bundled `coderix` binary onto the PATH. Idempotent — a no-op when
+ * already installed. Announces a real install (or a failure) via a macOS
+ * notification so the user knows the terminal command became available.
+ */
+function autoInstallCli(): void {
+  try {
+    const result = installCli();
+    if (result.ok) {
+      if (result.message.startsWith('Already installed')) {
+        console.log(`[Coderix] CLI already installed: ${result.targetPath}`);
+      } else {
+        console.log(`[Coderix] CLI installed: ${result.message}`);
+        if (Notification.isSupported()) {
+          new Notification({ title: 'Coderix CLI', body: result.message }).show();
+        }
+      }
+    } else {
+      console.warn(`[Coderix] CLI install skipped: ${result.message}`);
+      if (Notification.isSupported()) {
+        new Notification({ title: 'Coderix CLI', body: result.message }).show();
+      }
+    }
+  } catch (err) {
+    console.error('[Coderix] CLI install error:', err);
   }
 }
 
@@ -259,7 +304,7 @@ function buildSharedToolRegistry(): ToolRegistry {
 // Build a callModel bound to a specific model + endpoint, falling back to an
 // "API 未配置" assistant message when the client can't be constructed.
 function makeCallModelSafe(
-  appConfig: ReturnType<typeof loadConfig>,
+  appConfig: ReturnType<typeof loadDesktopConfig>,
   override: ReturnType<typeof resolveModelByName>,
   model: string,
 ): QueryEngineConfig['callModel'] {
@@ -298,7 +343,7 @@ function makeCallModelSafe(
 // what lets the in-process coderix engine run multiple sessions in parallel:
 // isActive/messageQueue/abortController are all per-instance.
 async function createEngineForSession(session: Session): Promise<QueryEngine> {
-  const appConfig = loadConfig();
+  const appConfig = loadDesktopConfig();
   const sessionModel =
     session.model && session.model !== 'unknown' ? session.model : activeModel;
   const override = resolveModelByName(sessionModel);
@@ -329,9 +374,9 @@ async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: 
   activeWorkDir = workDir;
 
   // Load config from ~/.coderix/settings.json
-  const appConfig = loadConfig();
+  const appConfig = loadDesktopConfig();
   // A model override (per-session model switch) binds the engine to that model
-  // and its own endpoint/auth, without mutating the global default_model.
+  // and its own endpoint/auth, without mutating the desktop default model.
   const override = modelOverride ? resolveModelByName(modelOverride) : undefined;
   const model = override?.model ?? appConfig.model;
 

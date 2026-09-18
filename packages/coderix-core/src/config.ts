@@ -126,6 +126,8 @@ export interface CoderSettings {
   model_list?: ModelEntry[];
   /** Format: "provider/model-name" (e.g. "deepseek/deepseek-v4-pro") */
   default_model?: string;
+  /** Desktop app's own default model — independent of the CLI's `default_model`. */
+  desktop_default_model?: string;
   /** Global max output tokens (default: 32768) */
   max_tokens?: number;
   /** UI theme (dark / light) */
@@ -306,7 +308,10 @@ export function getMaxToolConcurrency(settings?: CoderSettings): number {
 //   4. Legacy env vars in settings.env
 // ---------------------------------------------------------------------------
 
-function resolveModel(settings: CoderSettings): {
+function resolveModel(
+  settings: CoderSettings,
+  defaultName: string | undefined = settings.default_model,
+): {
   model: string;
   baseUrl: string;
   apiKey: string;
@@ -354,8 +359,7 @@ function resolveModel(settings: CoderSettings): {
     };
   };
 
-  // 1. default_model from settings ("provider/model-name" format)
-  const defaultName = settings.default_model;
+  // 1. default model from settings ("provider/model-name" format)
   if (defaultName && settings.model_list) {
     const { providerName, modelName: preferredName } = parseDefault(defaultName);
     // 1a. Exact provider match ("provider/model-name")
@@ -478,10 +482,8 @@ export function resolveModelByName(name: string): ResolvedModel | undefined {
  *   "default_model": "deepseek/deepseek-v4-pro"
  * }
  */
-export function loadConfig(): AppConfig {
-  const settings = loadSettings();
-
-  const resolved = resolveModel(settings);
+function buildConfig(settings: CoderSettings, defaultName: string | undefined): AppConfig {
+  const resolved = resolveModel(settings, defaultName);
 
   const model = resolved.model;
   const apiKey = resolved.apiKey;
@@ -496,4 +498,17 @@ export function loadConfig(): AppConfig {
   }
 
   return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, engine: settings.engine ?? 'coderix' };
+}
+
+export function loadConfig(): AppConfig {
+  const settings = loadSettings();
+  return buildConfig(settings, settings.default_model);
+}
+
+/** Desktop's default model is independent of the CLI's (`default_model`), so
+ *  each app picks its own default without clobbering the other. Falls back to
+ *  `default_model` on first upgrade so existing installs keep working. */
+export function loadDesktopConfig(): AppConfig {
+  const settings = loadSettings();
+  return buildConfig(settings, settings.desktop_default_model ?? settings.default_model);
 }

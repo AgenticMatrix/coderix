@@ -3,8 +3,8 @@
 Generate the Coderix app icon (a "lightning bolt" mark) as a 1024x1024 PNG.
 
 Design:
-  - Rounded-square background with a dark-indigo -> violet vertical gradient.
-  - A bold amber/gold lightning bolt with a soft warm glow, lit from the top.
+  - Rounded-square background with a near-black -> deep-purple vertical gradient.
+  - A bold purple/violet lightning bolt with a soft glow, lit from the top.
 
 Only depends on Pillow (already available in the environment). Output is written
 to assets/icon.png; build-dmg.sh turns that into assets/icon.icns via sips/iconutil.
@@ -18,8 +18,8 @@ from PIL import Image, ImageDraw, ImageFilter
 SIZE = 1024
 
 # --- background gradient (top -> bottom) ------------------------------------
-BG_TOP = (19, 15, 54)      # #130f36  dark indigo
-BG_BOT = (124, 58, 237)    # #7c3aed  violet
+BG_TOP = (10, 9, 20)       # #0a0914  near-black
+BG_BOT = (40, 22, 80)      # #281450  deep purple
 
 
 def vertical_gradient(top_rgb, bottom_rgb, size):
@@ -33,27 +33,35 @@ def vertical_gradient(top_rgb, bottom_rgb, size):
 def main():
     img = vertical_gradient(BG_TOP, BG_BOT, SIZE)
 
-    # Rounded-square corners (macOS will apply its own squircle mask too).
+    # Rounded-square background tile, sized to ~83% (850×850) and centered, leaving a
+    # small transparent margin. The bolt is sized relative to it (see `scale` below).
+    tile = 850
+    margin = (SIZE - tile) // 2          # 87
+    radius = 187                         # ≈ 22% of tile (macOS squircle ratio)
     mask = Image.new("L", (SIZE, SIZE), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, SIZE - 1, SIZE - 1], radius=200, fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [margin, margin, margin + tile - 1, margin + tile - 1],
+        radius=radius,
+        fill=255,
+    )
     img.putalpha(mask)
 
     # Lightning bolt polygon (conceptual 100x100 box, chunky classic bolt).
     bolt100 = [(50, 0), (18, 52), (46, 52), (34, 98), (66, 46), (44, 46)]
-    scale = 8.33
-    tx, ty = 162, 104  # centers the bolt on the canvas
+    scale = 6.664  # bolt ≈ 653px ≈ 64% of canvas (≈ 77% of the 850px tile height)
+    tx, ty = 232, 186  # centers the bolt on the canvas
     pts = [(tx + x * scale, ty + y * scale) for (x, y) in bolt100]
 
-    # --- soft warm glow behind the bolt -------------------------------------
+    # --- soft purple glow behind the bolt -----------------------------------
     glow = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     ImageDraw.Draw(glow).polygon(
-        [(x * 1.06, y * 1.06) for (x, y) in pts], fill=(251, 191, 36, 150)
+        [(x * 1.06, y * 1.06) for (x, y) in pts], fill=(168, 85, 247, 150)
     )
     glow = glow.filter(ImageFilter.GaussianBlur(60))
     img = Image.alpha_composite(img, glow)
 
-    # --- bolt body: near-white top -> amber bottom --------------------------
-    bolt_tex = vertical_gradient((255, 250, 235), (245, 158, 11), SIZE)  # #fffaeb -> #f59e0b
+    # --- bolt body: near-white lavender top -> vivid purple bottom ----------
+    bolt_tex = vertical_gradient((245, 243, 255), (147, 51, 234), SIZE)  # #f5f3ff -> #9333ea
     bolt_mask = Image.new("L", (SIZE, SIZE), 0)
     ImageDraw.Draw(bolt_mask).polygon(pts, fill=255)
     bolt = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))

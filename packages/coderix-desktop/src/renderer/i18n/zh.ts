@@ -87,6 +87,7 @@ export const zh = {
   'provider.customNamePlaceholder': '例如 cohere',
   'provider.baseUrl': '接口地址 (Base URL)',
   'provider.apiKey': 'API Key',
+  'provider.proxy': '代理 (Proxy)',
   'provider.showKey': '显示',
   'provider.hideKey': '隐藏',
   'provider.testing': '测试中…',

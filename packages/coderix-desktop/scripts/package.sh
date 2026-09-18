@@ -62,6 +62,23 @@ copy_runtime_deps() {
   done
 }
 
+# ── Copy first-launch bootstrap resources (default settings + skills) ─────
+# bootstrapConfig() in src/main/cli-installer.ts resolves these relative to
+# app.getAppPath(), which is the directory holding package.json in this layout.
+copy_bootstrap_resources() {
+  local DEST="$1"
+  mkdir -p "$DEST/config"
+  if [ -f "$ROOT_DIR/config/default_settings.json" ]; then
+    cp "$ROOT_DIR/config/default_settings.json" "$DEST/config/default_settings.json"
+    echo "  ✓ default_settings.json"
+  fi
+  if [ -d "$ROOT_DIR/resources/skills" ]; then
+    mkdir -p "$DEST/skills"
+    cp -R "$ROOT_DIR/resources/skills/." "$DEST/skills/"
+    echo "  ✓ skills"
+  fi
+}
+
 # ── Package based on target platform ──────────────────────────────
 package_linux() {
   local OUT="$PWD/release/${APP_NAME}-${VERSION}-linux-x64"
@@ -81,6 +98,7 @@ package_linux() {
 
   # Copy externalized runtime deps (not bundled into main.cjs)
   copy_runtime_deps "$OUT"
+  copy_bootstrap_resources "$OUT"
 
   # Electron runtime — copy ALL files except the binary itself (renamed)
   for f in "$ELECTRON_DIR/"*; do
@@ -123,6 +141,7 @@ package_mac() {
     require('fs').writeFileSync('$OUT/${APP_NAME}.app/Contents/Resources/package.json', JSON.stringify(pkg, null, 2));
   "
   copy_runtime_deps "$OUT/${APP_NAME}.app/Contents/Resources"
+  copy_bootstrap_resources "$OUT/${APP_NAME}.app/Contents/Resources"
 
   # Electron runtime
   cp "$ELECTRON_DIR/electron" "$OUT/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
@@ -170,6 +189,7 @@ package_win() {
     require('fs').writeFileSync('$OUT/package.json', JSON.stringify(pkg, null, 2));
   "
   copy_runtime_deps "$OUT"
+  copy_bootstrap_resources "$OUT"
 
   # Electron runtime
   for f in "$ELECTRON_DIR/"*; do

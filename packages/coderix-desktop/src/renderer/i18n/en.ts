@@ -91,6 +91,7 @@ export const en: Record<TranslationKey, string> = {
   'provider.customNamePlaceholder': 'e.g. cohere',
   'provider.baseUrl': 'Base URL',
   'provider.apiKey': 'API Key',
+  'provider.proxy': 'Proxy',
   'provider.showKey': 'Show',
   'provider.hideKey': 'Hide',
   'provider.testing': 'Testing…',

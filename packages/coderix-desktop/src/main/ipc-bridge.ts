@@ -33,7 +33,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings, saveSettings, loadConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName } from '@coderix/core';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
@@ -307,7 +307,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     // Start streaming in background (don't await — send via push channels)
-    const activeConfig = loadConfig();
+    const activeConfig = loadDesktopConfig();
 
     // Resolve the active session's own model + endpoint so a per-session model
     // switch (which no longer mutates the global default) still drives the
@@ -844,18 +844,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     if (hasSession) {
       // Reload the engine bound to this session's model WITHOUT changing the
-      // global default_model, so a per-session switch never leaks to other
+      // global default, so a per-session switch never leaks to other
       // sessions. Skip the swap while any stream is live — a running turn owns
       // its engine.
       if (config.reloadQueryEngine && abortControllers.size === 0) {
         await config.reloadQueryEngine(undefined, model);
       }
     } else {
-      // No session — persist default_model so future sessions use it.
+      // No session — persist desktop_default_model so future sessions use it.
       const settingsDir = join(homedir(), '.coderix');
       const settingsPath = join(settingsDir, 'settings.json');
       const current = loadSettings();
-      const merged = { ...current, default_model: model };
+      const merged = { ...current, desktop_default_model: model };
       if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true });
       writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
       if (config.reloadQueryEngine && abortControllers.size === 0) {
@@ -2248,7 +2248,7 @@ export function getLastWorkspace(): string | undefined {
 async function summarizeClaudeSessionTitle(sessionId: string, text: string): Promise<void> {
   if (!text || text.trim().length <= 30) return;
   try {
-    const config = loadConfig();
+    const config = loadDesktopConfig();
     if (!config.apiKey || !config.baseUrl || !config.model) return;
 
     const { default: Anthropic } = require('@anthropic-ai/sdk');

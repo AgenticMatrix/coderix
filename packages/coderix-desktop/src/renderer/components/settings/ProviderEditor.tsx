@@ -24,7 +24,7 @@ const EMPTY_FIELDS: ModelConfig = {
   name: '',
   temperature: 0.7,
   maxTokens: 32768,
-  maxContext: 1000000,
+  maxContext: 0,
   topP: 1.0,
   cachePrice: 0,
   inputPrice: 0,
@@ -64,6 +64,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
   const [baseUrl, setBaseUrl] = useState(provider.baseUrl);
   const [apiKey, setApiKey] = useState(provider.apiKey);
   const [protocol, setProtocol] = useState<'anthropic' | 'openai' | undefined>(provider.protocol);
+  const [proxy, setProxy] = useState(provider.proxy ?? '');
   const [models, setModels] = useState<ModelConfig[]>(provider.models);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(provider.models.length > 0 ? 0 : null);
   const [fields, setFields] = useState<ModelConfig>(provider.models[0] ?? { ...EMPTY_FIELDS });
@@ -81,7 +82,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
   const adding = selectedIndex === null;
 
   const emit = (next: Partial<ProviderConfig>) => {
-    onChange({ ...provider, name: slug, baseUrl, apiKey, protocol, models, ...next });
+    onChange({ ...provider, name: slug, baseUrl, apiKey, proxy: proxy.trim() || undefined, protocol, models, ...next });
   };
 
   const patchFields = (patch: Partial<ModelConfig>) => {
@@ -341,6 +342,17 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
               </button>
             </div>
 
+            <label style={labelStyle}>{t('provider.proxy')}</label>
+            <input
+              style={inputStyle}
+              value={proxy}
+              onChange={(e) => {
+                setProxy(e.target.value);
+                emit({ proxy: e.target.value.trim() || undefined });
+              }}
+              placeholder="http://127.0.0.1:7890"
+            />
+
             <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <button
                 type="button"
@@ -584,7 +596,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 min={1}
                 step={1000}
                 value={fields.maxContext}
-                onChange={(e) => patchFields({ maxContext: parseInt(e.target.value) || 1000000 })}
+                onChange={(e) => patchFields({ maxContext: parseInt(e.target.value) || 0 })}
               />
             </label>
 

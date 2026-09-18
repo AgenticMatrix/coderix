@@ -16,12 +16,18 @@ export interface ModelConfig {
   cachePrice: number;
   inputPrice: number;
   outputPrice: number;
+  /** Pricing metadata carried through losslessly (not edited in UI). */
+  currency?: string;
+  unit?: number;
+  concurrency?: number;
 }
 
 export interface ProviderConfig {
   name: string;
   apiKey: string;
   baseUrl: string;
+  /** HTTP/HTTPS proxy for this provider's endpoint (shared with the CLI). */
+  proxy?: string;
   /** Wire protocol of this provider's endpoint, determined by "test connection"
    *  (real probe) and persisted so a send routes direct (anthropic) or through
    *  the protocol gateway (openai). Undefined → fall back to URL detection. */
@@ -67,6 +73,7 @@ interface CoreModelEntry {
   provider?: string;
   base_url?: string;
   auth_token_env?: string;
+  proxy?: string;
   max_tokens?: number;
   protocol?: 'anthropic' | 'openai';
 }
@@ -74,6 +81,7 @@ interface CoreModelEntry {
 interface CoderSettings {
   model_list?: CoreModelEntry[];
   default_model?: string;
+  desktop_default_model?: string;
   theme?: string;
   language?: string;
   max_tokens?: number;
@@ -99,7 +107,7 @@ function isPlaceholderKey(key: string): boolean {
 
 /** Resolve a bare default_model (e.g. "deepseek-v4-pro") to "provider/model" form. */
 function qualifyDefaultModel(config: CoderSettings): string {
-  const raw = config.default_model ?? '';
+  const raw = config.desktop_default_model ?? config.default_model ?? '';
   if (!raw || raw.includes('/')) return raw;
   const owner = config.model_list?.find((entry) =>
     entry.model?.some((m) => (typeof m === 'string' ? m : m.name) === raw),
@@ -114,6 +122,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
         name: entry.provider ?? 'unknown',
         apiKey: entry.auth_token_env ?? '',
         baseUrl: entry.base_url ?? '',
+        proxy: entry.proxy,
         protocol: entry.protocol,
         models:
           entry.model?.map((m) => {
@@ -122,11 +131,14 @@ function settingsToUI(config: CoderSettings): SettingsData {
               name: item.name,
               temperature: item.temperature ?? 0.7,
               maxTokens: item.max_tokens ?? entry.max_tokens ?? config.max_tokens ?? 32768,
-              maxContext: item.price?.max_context ?? 1000000,
+              maxContext: item.price?.max_context ?? 0,
               topP: item.top_p ?? 1.0,
               cachePrice: item.price?.cache_read_input ?? 0,
               inputPrice: item.price?.input ?? 0,
               outputPrice: item.price?.output ?? 0,
+              currency: item.price?.currency,
+              unit: item.price?.unit,
+              concurrency: item.price?.concurrency,
             };
           }) ?? [],
         connected: !!(entry.auth_token_env && entry.auth_token_env.length > 0 && !isPlaceholderKey(entry.auth_token_env)),
@@ -144,13 +156,14 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
   return {
     theme: data.theme,
     language: data.language,
-    default_model: data.defaultModel,
+    desktop_default_model: data.defaultModel,
     engine: data.engine,
     default_permission_mode: data.defaultPermissionMode,
     model_list: data.providers.map((p) => ({
       provider: p.name.toLowerCase(),
       base_url: p.baseUrl,
       auth_token_env: p.apiKey,
+      proxy: p.proxy,
       protocol: p.protocol,
       model: p.models.map((m) => ({
         name: m.name,
@@ -162,6 +175,9 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
           output: m.outputPrice,
           cache_read_input: m.cachePrice,
           max_context: m.maxContext,
+          currency: m.currency,
+          unit: m.unit,
+          concurrency: m.concurrency,
         },
       })),
     })),
@@ -257,7 +273,7 @@ export function toModelConfigs(names: string[], maxTokens = 32768): ModelConfig[
     name,
     temperature: 0.7,
     maxTokens,
-    maxContext: 1000000,
+    maxContext: 0,
     topP: 1.0,
     cachePrice: 0,
     inputPrice: 0,

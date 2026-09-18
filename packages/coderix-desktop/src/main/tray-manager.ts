@@ -5,10 +5,11 @@
  * Permission Mode toggle, Check for Updates, and Quit.
  */
 
-import { Tray, Menu, app, BrowserWindow, nativeImage } from 'electron';
+import { Tray, Menu, app, BrowserWindow, nativeImage, dialog } from 'electron';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { safeSend } from './safe-send.js';
+import { installCli, uninstallCli } from './cli-installer.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,6 +126,34 @@ export function createTrayManager(): TrayManager {
               checked: mode === 'plan',
               click: () => {
                 safeSend(BrowserWindow.getAllWindows()[0], 'permission:setMode', 'plan');
+              },
+            },
+          ],
+        },
+        { type: 'separator' },
+        {
+          label: 'CLI',
+          submenu: [
+            {
+              label: 'Install coderix CLI',
+              click: () => {
+                const r = installCli();
+                dialog.showMessageBox({
+                  type: r.ok ? 'info' : 'warning',
+                  title: 'Coderix CLI',
+                  message: r.message,
+                });
+              },
+            },
+            {
+              label: 'Uninstall coderix CLI',
+              click: () => {
+                const r = uninstallCli();
+                dialog.showMessageBox({
+                  type: r.ok ? 'info' : 'warning',
+                  title: 'Coderix CLI',
+                  message: r.message,
+                });
               },
             },
           ],

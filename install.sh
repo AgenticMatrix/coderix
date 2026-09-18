@@ -403,24 +403,32 @@ fi
 # 8. Create default settings.json
 # ---------------------------------------------------------------------------
 SETTINGS_FILE="${CODERIX_DIR}/settings.json"
+DEFAULT_SETTINGS="${SCRIPT_DIR}/config/default_settings.json"
 
 echo ""
 if [ ! -f "$SETTINGS_FILE" ]; then
-  cat > "$SETTINGS_FILE" << 'SETTINGS_EOF'
+  if [ -f "$DEFAULT_SETTINGS" ]; then
+    cp "$DEFAULT_SETTINGS" "$SETTINGS_FILE"
+    echo -e "${GREEN}Created ${SETTINGS_FILE} from bundled defaults${NC}"
+  else
+    # Remote install (curl | bash) has no repo checkout — fall back to a minimal
+    # template so the CLI still boots out of the box.
+    cat > "$SETTINGS_FILE" << 'SETTINGS_EOF'
 {
   "model_list": [
     {
       "model": ["deepseek-v4-pro"],
       "provider": "deepseek",
       "base_url": "https://api.deepseek.com/anthropic",
-      "auth_token_env": "sk-your-api-key-here",
+      "auth_token_env": "YOUR_DEEPSEEK_API_KEY",
       "max_tokens": 32768
     }
   ],
   "default_model": "deepseek/deepseek-v4-pro"
 }
 SETTINGS_EOF
-  echo -e "${GREEN}Created ${SETTINGS_FILE} with default template${NC}"
+    echo -e "${GREEN}Created ${SETTINGS_FILE} with default template${NC}"
+  fi
   echo ""
   echo -e "${YELLOW}Edit ${SETTINGS_FILE} to configure your API key and model:${NC}"
   echo -e "  - Replace auth_token_env with your API key"
