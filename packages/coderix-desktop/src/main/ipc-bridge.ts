@@ -11,6 +11,7 @@
 
 import { ipcMain, BrowserWindow, app, dialog, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { execSync, spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -1140,8 +1141,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // ── Git ────────────────────────────────────────────────────────────────
 
   ipcMain.handle('git:status', async () => {
-    const { execSync } = await import('node:child_process');
-    const { existsSync } = await import('node:fs');
     let cwd: string;
     try { cwd = findGitRoot(currentWorkDir); } catch { return { branch: '', files: [], commits: [] }; }
     const inRepo = existsSync(require('node:path').join(cwd, '.git'));
@@ -1206,7 +1205,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:diff', async (_event, payload: { file: string; staged?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = payload.staged
         ? ['diff', '--staged', '--', payload.file]
@@ -1218,7 +1216,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:log', async (_event, payload?: { maxCount?: number }) => {
     try {
-      const { execSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const n = payload?.maxCount ?? 30;
       const log = execSync(
@@ -1247,7 +1244,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:show', async (_event, payload: { hash: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       // Validate hash is a hex SHA before passing to git
       if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
@@ -1286,7 +1282,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:stage', async (_event, payload: { file?: string; all?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       if (payload.all) {
         spawnSync('git', ['add', '-A'], { cwd, encoding: 'utf-8' });
@@ -1299,7 +1294,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:unstage', async (_event, payload: { file?: string; all?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       if (payload.all) {
         spawnSync('git', ['reset', 'HEAD'], { cwd, encoding: 'utf-8' });
@@ -1312,7 +1306,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:commit', async (_event, payload: { message: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       // Use -F - to read commit message from stdin (no shell interpolation)
       const result = spawnSync('git', ['commit', '-F', '-'], {
@@ -1330,7 +1323,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:push', async (_event, payload?: { remote?: string; branch?: string; setUpstream?: boolean; force?: boolean; tags?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['push'];
       if (payload?.force) args.push('--force-with-lease');
@@ -1346,7 +1338,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:pull', async (_event, payload?: { remote?: string; branch?: string; rebase?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['pull'];
       if (payload?.rebase) args.push('--rebase');
@@ -1360,7 +1351,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:fetch', async (_event, payload?: { remote?: string; prune?: boolean; all?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['fetch'];
       if (payload?.prune) args.push('--prune');
@@ -1374,7 +1364,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:discard', async (_event, payload: { file: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       // Unstage first if staged, then checkout to discard
       spawnSync('git', ['reset', 'HEAD', '--', payload.file], { cwd });
@@ -1388,7 +1377,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:branch-list', async () => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       // List local branches with format
       const local = spawnSync('git', ['branch', '--format=%(refname:short)|%(objectname:short)|%(upstream:short)'], { cwd, encoding: 'utf-8' });
@@ -1403,7 +1391,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:checkout', async (_event, payload: { branch: string; create?: boolean; base?: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = payload.create ? ['checkout', '-b', payload.branch] : ['checkout', payload.branch];
       if (payload.create && payload.base) args.push(payload.base);
@@ -1415,7 +1402,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:branch-delete', async (_event, payload: { branch: string; force?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = payload.force ? ['branch', '-D', payload.branch] : ['branch', '-d', payload.branch];
       const result = spawnSync('git', args, { cwd, encoding: 'utf-8' });
@@ -1428,7 +1414,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:stash-list', async () => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const result = spawnSync('git', ['stash', 'list', '--format=%gd|%s|%ar'], { cwd, encoding: 'utf-8' });
       const stashes = result.stdout.split('\n').filter(Boolean).map(line => {
@@ -1441,7 +1426,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:stash-save', async (_event, payload: { message?: string; includeUntracked?: boolean }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['stash', 'push'];
       if (payload.includeUntracked) args.push('--include-untracked');
@@ -1454,7 +1438,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:stash-pop', async (_event, payload?: { ref?: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['stash', 'pop'];
       if (payload?.ref) args.push(payload.ref);
@@ -1466,7 +1449,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:stash-drop', async (_event, payload?: { ref?: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['stash', 'drop'];
       if (payload?.ref) args.push(payload.ref);
@@ -1480,7 +1462,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:commit-amend', async (_event, payload: { message?: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const args = ['commit', '--amend'];
       if (payload.message) {
@@ -1498,7 +1479,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:show-file', async (_event, payload: { hash: string; file: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) {
         return { diff: '', content: '', error: 'Invalid commit hash' };
@@ -1517,7 +1497,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:commit-body', async (_event, payload: { hash: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       if (!/^[0-9a-f]{7,40}$/i.test(payload.hash)) return { body: '' };
       const result = spawnSync('git', ['log', '-1', '--format=%B', payload.hash], { cwd, encoding: 'utf-8' });
@@ -1529,7 +1508,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:stage-hunk', async (_event, payload: { file: string; hunk: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const result = spawnSync('git', ['apply', '--cached'], {
         cwd, encoding: 'utf-8',
@@ -1542,7 +1520,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('git:revert-hunk', async (_event, payload: { file: string; hunk: string }) => {
     try {
-      const { spawnSync } = await import('node:child_process');
       const cwd = findGitRoot(currentWorkDir);
       const result = spawnSync('git', ['apply', '--reverse'], {
         cwd, encoding: 'utf-8',
@@ -1613,7 +1590,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     try {
-      const { autoUpdater } = await import('electron-updater');
+      const { autoUpdater } = require('electron-updater');
       bindUpdaterListeners(autoUpdater);
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
@@ -2274,7 +2251,7 @@ async function summarizeClaudeSessionTitle(sessionId: string, text: string): Pro
     const config = loadConfig();
     if (!config.apiKey || !config.baseUrl || !config.model) return;
 
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const { default: Anthropic } = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseUrl });
 
     const stream = client.messages.stream({

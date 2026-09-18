@@ -13,6 +13,7 @@
 
 import { relative } from 'node:path';
 import type { FSWatcher } from 'chokidar';
+import chokidar from 'chokidar';
 import { BrowserWindow } from 'electron';
 import { safeSend } from './safe-send.js';
 
@@ -71,13 +72,6 @@ const DEFAULT_IGNORED = [
 export function createFileWatcherManager(): FileWatcherManager {
   const watchers = new Map<string, FSWatcher>();
   let mainWindow: BrowserWindow | null = null;
-  let chokidarModule: typeof import('chokidar') | null = null;
-
-  async function getChokidar(): Promise<typeof import('chokidar')> {
-    if (chokidarModule) return chokidarModule;
-    chokidarModule = await import('chokidar');
-    return chokidarModule!;
-  }
 
   function sendToRenderer(event: FileChangeEvent): void {
     safeSend(mainWindow, 'fs:fileChanged', event);
@@ -89,8 +83,6 @@ export function createFileWatcherManager(): FileWatcherManager {
     },
 
     async watch(watchPath: string, config?: Partial<FileWatcherConfig>): Promise<string> {
-      const chokidar = await getChokidar();
-
       const mergedConfig: FileWatcherConfig = {
         cwd: watchPath,
         extraIgnores: [],

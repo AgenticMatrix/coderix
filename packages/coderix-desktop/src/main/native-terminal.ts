@@ -74,7 +74,7 @@ export function createTerminalManager(): TerminalManager {
 
   async function getNodePty(): Promise<typeof import('node-pty')> {
     if (nodePtyModule) return nodePtyModule;
-    nodePtyModule = await import('node-pty');
+    nodePtyModule = require('node-pty');
     return nodePtyModule!;
   }
 
