@@ -114,8 +114,10 @@ export interface CallModelParams {
   signal: AbortSignal;
   /** When true, annotate the system prompt with cache_control for Anthropic prompt caching. */
   cacheControl?: boolean;
-  /** Optional thinking config override. Falls back to enabled(16000) if omitted. */
-  thinking?: { type: 'enabled'; budget_tokens: number } | { type: 'disabled' };
+  /** Optional thinking config override. When omitted, `createCallModel` resolves a
+    * per-endpoint default: 'adaptive' for Anthropic's official API, a fixed budget
+    * ('enabled') for third-party Anthropic-compatible endpoints. */
+  thinking?: { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | { type: 'disabled' };
 }
 
 // ---------------------------------------------------------------------------

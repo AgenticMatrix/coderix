@@ -17,6 +17,11 @@ export interface AppConfig {
   protocol: 'anthropic' | 'openai';
   proxy?: string;
   maxTokens?: number;
+  /** Extended-thinking mode. Undefined = auto: 'adaptive' for Anthropic's official
+    * API, a fixed budget ('enabled') for third-party Anthropic-compatible endpoints. */
+  thinkingMode?: 'adaptive' | 'enabled' | 'disabled';
+  /** Fixed thinking budget (tokens) when `thinkingMode` is 'enabled'. Default 31999. */
+  thinkingBudgetTokens?: number;
   currency?: string;
   inputPrice: number;
   outputPrice: number;
@@ -130,6 +135,11 @@ export interface CoderSettings {
   desktop_default_model?: string;
   /** Global max output tokens (default: 65536) */
   max_tokens?: number;
+  /** Extended-thinking mode: 'auto' (default — adaptive for Anthropic, fixed budget
+    * elsewhere), 'adaptive', 'enabled', or 'disabled'. */
+  thinking?: 'auto' | 'adaptive' | 'enabled' | 'disabled';
+  /** Fixed thinking budget (tokens) when `thinking` is 'enabled'. Default 31999. */
+  thinking_budget_tokens?: number;
   /** UI theme (dark / light) */
   theme?: string;
   /** Max concurrent tool executions (default: 32, range: 1-256). */
@@ -499,7 +509,7 @@ function buildConfig(settings: CoderSettings, defaultName: string | undefined): 
     );
   }
 
-  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, engine: settings.engine ?? 'coderix' };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, thinkingMode: settings.thinking === 'auto' ? undefined : settings.thinking, thinkingBudgetTokens: settings.thinking_budget_tokens, engine: settings.engine ?? 'coderix' };
 }
 
 export function loadConfig(): AppConfig {

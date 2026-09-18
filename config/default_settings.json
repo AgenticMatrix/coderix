@@ -1,6 +1,8 @@
 {
   "theme": "light",
   "max_tokens": 65536,
+  "thinking": "auto",
+  "thinking_budget_tokens": 31999,
   "brief_mode": false,
   "auto_compact_enabled": true,
   "compact_threshold": 0.85,

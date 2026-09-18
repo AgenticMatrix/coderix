@@ -88,6 +88,11 @@ export interface CoderSettings {
   default_model?: string;
   /** Global max output tokens (default: 65536) */
   max_tokens?: number;
+  /** Extended-thinking mode: 'auto' (default — adaptive for Anthropic, fixed budget
+    * elsewhere), 'adaptive', 'enabled', or 'disabled'. */
+  thinking?: 'auto' | 'adaptive' | 'enabled' | 'disabled';
+  /** Fixed thinking budget (tokens) when `thinking` is 'enabled'. Default 31999. */
+  thinking_budget_tokens?: number;
   /** UI theme (dark / light) */
   theme?: string;
   /** Max concurrent tool executions (default: 32, range: 1-256). */
@@ -332,5 +337,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, theme: settings.theme, engine: settings.engine ?? 'coderix' };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, thinkingMode: settings.thinking === 'auto' ? undefined : settings.thinking, thinkingBudgetTokens: settings.thinking_budget_tokens, theme: settings.theme, engine: settings.engine ?? 'coderix' };
 }

@@ -35,6 +35,11 @@ export interface CallModelConfig {
   proxy?: string;
   /** Maximum output tokens. Defaults to 65536. */
   maxTokens?: number;
+  /** Extended-thinking mode for Anthropic-protocol endpoints. Undefined = auto:
+    * 'adaptive' for Anthropic's official API, 'enabled' (fixed budget) elsewhere. */
+  thinkingMode?: 'adaptive' | 'enabled' | 'disabled';
+  /** Fixed thinking budget (tokens) when `thinkingMode` is 'enabled'. Default 31999. */
+  thinkingBudgetTokens?: number;
 }
 
 // ---------------------------------------------------------------------------

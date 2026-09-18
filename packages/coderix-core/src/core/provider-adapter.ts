@@ -180,6 +180,7 @@ function toAnthropicTools(tools: unknown[]): Anthropic.Tool[] {
 export function createCallModelFromClient(
   client: Anthropic,
   model: string,
+  defaultThinking?: Anthropic.MessageCreateParams['thinking'],
 ): (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage> {
   return async function* (params: CallModelParams) {
     const { system, messages, tools, signal, cacheControl, thinking: thinkingConfig } = params;
@@ -218,7 +219,7 @@ export function createCallModelFromClient(
         messages: apiMessages,
         ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
         stream: true,
-        thinking: thinkingConfig ?? { type: 'enabled', budget_tokens: 16000 },
+        thinking: thinkingConfig ?? defaultThinking,
       });
 
       for await (const event of stream) {
@@ -415,6 +416,39 @@ export function createCallModelFromClient(
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether the endpoint is Anthropic's official API. Only official Claude models
+ * support adaptive thinking; third-party Anthropic-compatible endpoints
+ * (DeepSeek, GLM, MiniMax, Qwen, Moonshot, …) only accept a fixed `budget_tokens`.
+ */
+function isOfficialAnthropic(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === 'api.anthropic.com' || host.endsWith('.anthropic.com');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve the default `thinking` param for Anthropic-protocol requests.
+ *
+ * Adaptive thinking (Claude self-regulates reasoning depth) is the default on
+ * Anthropic's official API — this is what keeps Claude Code's thinking shorter.
+ * Third-party endpoints fall back to a fixed budget so their reasoning models
+ * keep working. The fixed-budget default (31999) matches Claude Code's
+ * `MAX_THINKING_TOKENS`. Both can be overridden via `config.thinkingMode`.
+ */
+function resolveDefaultThinking(
+  config: CallModelConfig,
+): Anthropic.MessageCreateParams['thinking'] {
+  const mode =
+    config.thinkingMode ?? (isOfficialAnthropic(config.baseUrl) ? 'adaptive' : 'enabled');
+  if (mode === 'adaptive') return { type: 'adaptive' };
+  if (mode === 'enabled') return { type: 'enabled', budget_tokens: config.thinkingBudgetTokens ?? 31999 };
+  return undefined; // 'disabled' — omit thinking entirely
+}
+
+/**
  * Create a callModel function that routes by the endpoint's wire protocol.
  *
  * - `openai`  → OpenAI Chat Completions adapter (openai/grok/qwen/google/bytedance/openrouter/local).
@@ -436,5 +470,5 @@ export function createCallModel(
     baseURL: config.baseUrl,
     apiKey: config.apiKey,
   });
-  return createCallModelFromClient(client, model);
+  return createCallModelFromClient(client, model, resolveDefaultThinking(config));
 }
