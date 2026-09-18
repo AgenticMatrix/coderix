@@ -190,6 +190,8 @@ export interface Options {
   baseUrl?: string;
   /** Override the auth token from ~/.coderix/settings.json (per-agent model binding). */
   apiKey?: string;
+  /** Override the HTTP/HTTPS proxy from ~/.coderix/settings.json (per-agent model binding). */
+  proxy?: string;
   appendSystemPrompt?: string;
   canUseTool?: CanUseTool;
   cwd?: string;

@@ -244,7 +244,7 @@ export async function buildEngineFromTemplate(tpl: EngineTemplate, options: Opti
   const baseUrl = options.baseUrl ?? tpl.config.baseUrl;
   const apiKey = options.apiKey ?? tpl.config.apiKey;
 
-  const callModel = createCallModel({ baseUrl, apiKey, proxy: tpl.config.proxy, maxTokens: tpl.config.maxTokens }, tpl.model);
+  const callModel = createCallModel({ baseUrl, apiKey, proxy: options.proxy ?? tpl.config.proxy, maxTokens: tpl.config.maxTokens }, tpl.model);
 
   const sessionManager = new SessionManager();
   if (options.resume) {
