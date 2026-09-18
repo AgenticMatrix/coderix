@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bot, Palette, ShieldCheck, RefreshCw, X, Plus, ChevronRight, Sun, Moon, Cpu } from 'lucide-react';
+import { Bot, Palette, ShieldCheck, RefreshCw, X, Plus, ChevronRight, Sun, Moon, Cpu, FolderOpen } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useUIStore, type PermissionMode, type Theme } from '../../store/uiStore.js';
 import { useSettingsStore, type SettingsData, type ProviderConfig, type AgentEngine } from '../../store/settingsStore.js';
@@ -7,6 +7,7 @@ import ProviderEditor from './ProviderEditor.js';
 import { providerLabel, ProviderLogo } from './providerMeta.js';
 import { useT, type TranslationKey } from '../../i18n/index.js';
 import type { Language } from '../../i18n/types.js';
+import { getDefaultWorkspace, setDefaultWorkspace, selectDefaultWorkspace } from '../../ipc-client.js';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -49,6 +50,9 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
   const { settings, loading, load, save } = useSettingsStore();
   const t = useT();
 
+  const [workspaceValue, setWorkspaceValue] = useState('');
+  const [workspaceFeedback, setWorkspaceFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+
   // Reload from file every time settings panel opens
   useEffect(() => { load(); }, [load]);
 
@@ -62,6 +66,13 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
   useEffect(() => {
     if (settings) setDraft(JSON.parse(JSON.stringify(settings)));
   }, [settings]);
+
+  // Load the current default workspace base dir into the input on mount.
+  useEffect(() => {
+    getDefaultWorkspace()
+      .then((r) => setWorkspaceValue(r.path))
+      .catch(() => {});
+  }, []);
 
   // ── Draft helpers ────────────────────────────────────────
 
@@ -144,6 +155,26 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
       setCheckingUpdate(false);
     }
   }, [t]);
+
+  const handleBrowseWorkspace = async () => {
+    try {
+      const r = await selectDefaultWorkspace();
+      if (!r.canceled) setWorkspaceValue(r.path);
+    } catch { /* ignore */ }
+  };
+
+  const handleSaveWorkspace = async () => {
+    const p = workspaceValue.trim();
+    if (!p) return;
+    try {
+      const r = await setDefaultWorkspace(p);
+      setWorkspaceValue(r.path);
+      setWorkspaceFeedback({ ok: true, text: t('common.saved') });
+    } catch (e) {
+      setWorkspaceFeedback({ ok: false, text: t('common.saveFailed') + ': ' + (e as Error).message });
+    }
+    setTimeout(() => setWorkspaceFeedback(null), 2000);
+  };
 
   // ── Inline styles (form controls keep the warm Coderix tokens) ──
   const S = {
@@ -366,6 +397,63 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                     </button>
                   ))}
                 </div>
+
+                <div style={{ marginTop: '24px' }}>
+                  <h3 style={sectionTitle}>{t('general.defaultWorkspace')}</h3>
+                  <p style={sectionDesc}>{t('general.defaultWorkspaceDesc')}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    value={workspaceValue}
+                    onChange={(e) => setWorkspaceValue(e.target.value)}
+                    placeholder="~/Documents/agentstation/apps"
+                    spellCheck={false}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-separator)',
+                      background: 'var(--color-input-bg)',
+                      color: 'var(--color-text-primary)',
+                      fontSize: 'var(--text-sm)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBrowseWorkspace}
+                    title={t('workspace.chooseDir')}
+                    style={{
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-separator)',
+                      background: 'var(--color-input-bg)',
+                      color: 'var(--color-text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <FolderOpen size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveWorkspace}
+                    disabled={!workspaceValue.trim()}
+                    style={{ ...S.saveBtn, opacity: workspaceValue.trim() ? 1 : 0.5 }}
+                  >
+                    {t('common.confirm')}
+                  </button>
+                </div>
+                {workspaceFeedback && (
+                  <div style={{ fontSize: 'var(--text-xs)', color: workspaceFeedback.ok ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                    {workspaceFeedback.text}
+                  </div>
+                )}
               </div>
             )}
 

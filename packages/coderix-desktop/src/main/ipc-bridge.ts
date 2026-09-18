@@ -10,13 +10,13 @@
  */
 
 import { ipcMain, BrowserWindow, app, dialog, shell } from 'electron';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { execSync, spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { join, resolve, normalize, relative, isAbsolute } from 'node:path';
-import { homedir } from 'node:os';
+import { join, resolve, normalize, relative, isAbsolute, dirname } from 'node:path';
+import { homedir, platform } from 'node:os';
 import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
 
@@ -165,6 +165,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   const engineBySession = new Map<string, QueryEngine>();
   const createEngineForSession = config.createEngineForSession ?? null;
 
+  // Resolve the working directory for a brand-new conversation. When the user
+  // hasn't picked an explicit project (currentWorkDir is the default-workspace
+  // base dir, or a hash subdir already under it), specialize the conversation
+  // into a fresh hash-named subdir so every new conversation gets its own
+  // workspace. Otherwise (explicit project) reuse the project dir as-is.
+  const resolveNewSessionCwd = (): string => {
+    if (isDefaultWorkspaceContext(currentWorkDir)) {
+      const ws = createConversationWorkspace(randomUUID());
+      currentWorkDir = ws;
+      return ws;
+    }
+    return currentWorkDir;
+  };
+
   const getEngineForSession = async (session: Session): Promise<QueryEngine> => {
     const existing = engineBySession.get(session.id);
     if (existing) return existing;
@@ -254,10 +268,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     try {
       const active = sessionManager.getActive();
       if (active.cwd !== currentWorkDir) {
-        sessionManager.create({ title: '新对话', cwd: currentWorkDir, model: currentModel });
+        sessionManager.create({ title: '新对话', cwd: resolveNewSessionCwd(), model: currentModel });
       }
     } catch {
-      sessionManager.create({ title: '新对话', cwd: currentWorkDir, model: currentModel });
+      sessionManager.create({ title: '新对话', cwd: resolveNewSessionCwd(), model: currentModel });
     }
 
     // Switch to requested session if it exists
@@ -730,7 +744,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (!sessionManager) throw new Error('SessionManager not initialized');
     const session = sessionManager.create({
       title: opts?.title ?? '新对话',
-      cwd: currentWorkDir,
+      cwd: resolveNewSessionCwd(),
       model: currentModel,
     });
     return { id: session.id, title: session.title, turnCount: session.turnCount };
@@ -1101,6 +1115,34 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     return { canceled: false, path: nextWorkDir };
+  });
+
+  // ── Default workspace (per-conversation hash subdirs) ──────────────────
+
+  ipcMain.handle('defaultWorkspace:get', async () => {
+    return { path: getDefaultWorkspaceDir() };
+  });
+
+  ipcMain.handle('defaultWorkspace:set', async (_event, path: string) => {
+    if (!path || typeof path !== 'string') {
+      throw new Error('Invalid workspace path');
+    }
+    return { path: setDefaultWorkspaceDir(path) };
+  });
+
+  ipcMain.handle('defaultWorkspace:select', async () => {
+    const mainWindow = getMainWindow(windowManager);
+    if (!mainWindow) {
+      throw new Error('No main window');
+    }
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择默认工作区',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: getDefaultWorkspaceDir() };
+    }
+    return { canceled: false, path: setDefaultWorkspaceDir(result.filePaths[0]!) };
   });
 
   // ── Terminal ───────────────────────────────────────────────────────────
@@ -2003,6 +2045,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler('project:list');
       ipcMain.removeHandler('project:set');
       ipcMain.removeHandler('project:select');
+      ipcMain.removeHandler('defaultWorkspace:get');
+      ipcMain.removeHandler('defaultWorkspace:set');
+      ipcMain.removeHandler('defaultWorkspace:select');
     },
   };
 }
@@ -2178,6 +2223,54 @@ function previewMatchLine(content: string, idx: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Default workspace — base dir + per-conversation hash subdirs
+// ---------------------------------------------------------------------------
+
+/** Platform default base directory for new conversations. */
+function platformDefaultWorkspaceDir(): string {
+  return platform() === 'win32'
+    ? join('D:\\agentstation', 'app')
+    : join(homedir(), 'Documents', 'agentstation', 'apps');
+}
+
+/** The persisted (or platform-default) base directory, created if missing. */
+export function getDefaultWorkspaceDir(): string {
+  const configured = loadSettings().default_workspace_dir?.trim();
+  const base = configured || platformDefaultWorkspaceDir();
+  if (!existsSync(base)) mkdirSync(base, { recursive: true });
+  return base;
+}
+
+/** Persist a new default workspace base dir (mkdir -p + tilde expansion). */
+export function setDefaultWorkspaceDir(path: string): string {
+  const trimmed = path.trim();
+  const dir = trimmed ? trimmed.replace(/^~/, homedir()) : platformDefaultWorkspaceDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const settings = loadSettings();
+  settings.default_workspace_dir = dir;
+  saveSettings(settings);
+  return dir;
+}
+
+/** Create a per-conversation hash-named subdir under the default base dir. */
+function createConversationWorkspace(seed: string): string {
+  const base = getDefaultWorkspaceDir();
+  const hash = createHash('sha256').update(seed).digest('hex').slice(0, 12);
+  const dir = join(base, hash);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * True when `cwd` is the default workspace base dir, or a conversation hash
+ * subdir directly under it — i.e. the user has not chosen an explicit project.
+ */
+function isDefaultWorkspaceContext(cwd: string): boolean {
+  const base = resolve(getDefaultWorkspaceDir());
+  const c = resolve(cwd);
+  return c === base || dirname(c) === base;
+}
+
 // Recent project (workspace) history — persisted to ~/.coderix/recent_projects.json
 // ---------------------------------------------------------------------------
 

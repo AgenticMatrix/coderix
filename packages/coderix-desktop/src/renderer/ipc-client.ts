@@ -540,6 +540,27 @@ export async function setProjectDirectory(path: string): Promise<{ canceled: boo
   );
 }
 
+/** Get the default workspace base dir (where new conversations spawn). */
+export async function getDefaultWorkspace(): Promise<{ path: string }> {
+  return invokeWithTimeout('defaultWorkspace:get', () =>
+    getAPI().defaultWorkspace.get(),
+  );
+}
+
+/** Set the default workspace base dir. */
+export async function setDefaultWorkspace(path: string): Promise<{ path: string }> {
+  return invokeWithTimeout('defaultWorkspace:set', () =>
+    getAPI().defaultWorkspace.set(path),
+  );
+}
+
+/** Open a directory picker and set it as the default workspace base dir. */
+export async function selectDefaultWorkspace(): Promise<{ canceled: boolean; path: string }> {
+  return invokeWithTimeout('defaultWorkspace:select', () =>
+    getAPI().defaultWorkspace.select(),
+  );
+}
+
 // ===========================================================================
 //  App Lifecycle
 // ===========================================================================

@@ -34,6 +34,8 @@ export const zh = {
   'general.dark': '深色',
   'general.language': '语言',
   'general.languageDesc': '选择界面显示语言',
+  'general.defaultWorkspace': '默认工作区',
+  'general.defaultWorkspaceDesc': '新建对话后，首次发送消息会在该目录下自动创建会话专属的工作目录',
 
   // ── 模型 tab ──────────────────────────────────────────
   'model.default': '默认模型',

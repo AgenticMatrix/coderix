@@ -38,6 +38,8 @@ export const en: Record<TranslationKey, string> = {
   'general.dark': 'Dark',
   'general.language': 'Language',
   'general.languageDesc': 'Choose the interface language',
+  'general.defaultWorkspace': 'Default workspace',
+  'general.defaultWorkspaceDesc': 'New conversations auto-create a dedicated workspace folder here on the first message',
 
   // ── 模型 tab ──────────────────────────────────────────
   'model.default': 'Default model',

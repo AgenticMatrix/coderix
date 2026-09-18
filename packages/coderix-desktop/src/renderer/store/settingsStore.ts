@@ -42,6 +42,7 @@ export interface SettingsData {
   defaultPermissionMode: PermissionMode;
   theme: Theme;
   language: Language;
+  defaultWorkspace: string;
   mcpServers: Array<{ name: string; url: string; enabled: boolean }>;
   engine: AgentEngine;
 }
@@ -89,6 +90,7 @@ interface CoderSettings {
   web_search?: unknown;
   engine?: string;
   default_permission_mode?: 'auto' | 'ask' | 'plan' | 'low';
+  default_workspace_dir?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +149,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
     defaultPermissionMode: (config.default_permission_mode as PermissionMode) ?? 'ask',
     theme: (config.theme as Theme) ?? 'light',
     language: config.language === 'en' || config.language === 'zh' ? config.language : 'zh',
+    defaultWorkspace: config.default_workspace_dir ?? '',
     mcpServers: [],
     engine: (config.engine === 'claude-code' ? 'claude-code' : 'coderix'),
   };
@@ -156,6 +159,7 @@ function uiToSettings(data: SettingsData): Partial<CoderSettings> {
   return {
     theme: data.theme,
     language: data.language,
+    default_workspace_dir: data.defaultWorkspace || undefined,
     desktop_default_model: data.defaultModel,
     engine: data.engine,
     default_permission_mode: data.defaultPermissionMode,
@@ -307,6 +311,7 @@ export const useSettingsStore = create<SettingsStore>()((set) => ({
             defaultPermissionMode: 'auto',
             theme: 'light',
             language: 'zh',
+            defaultWorkspace: '',
             mcpServers: [],
             engine: 'coderix',
           },

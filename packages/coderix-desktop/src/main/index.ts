@@ -6,7 +6,7 @@ import { app, BrowserWindow, Notification } from 'electron';
 import { existsSync } from 'node:fs';
 import { createWindowManager } from './window-manager.js';
 import type { WindowManager } from './window-manager.js';
-import { createIpcBridge, getLastWorkspace, IPC_CHANNELS } from './ipc-bridge.js';
+import { createIpcBridge, getLastWorkspace, getDefaultWorkspaceDir, IPC_CHANNELS } from './ipc-bridge.js';
 import type { IpcBridge } from './ipc-bridge.js';
 import { createFileWatcherManager } from './file-watcher.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -109,7 +109,7 @@ async function bootstrap(): Promise<void> {
     // `process.cwd()` (the app's launch dir, e.g. `packages/coderix-desktop`),
     // which is never the project the user wants to reopen — fall back to it
     // only when there's no persisted workspace yet (first launch).
-    activeWorkDir = getLastWorkspace() ?? initialConfig.cwd ?? process.cwd();
+    activeWorkDir = getLastWorkspace() ?? getDefaultWorkspaceDir();
     activeModel = initialConfig.model;
 
     // Start the loopback protocol-conversion gateway so the claude-code engine

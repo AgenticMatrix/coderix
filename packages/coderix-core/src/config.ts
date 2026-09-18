@@ -154,6 +154,8 @@ export interface CoderSettings {
   engine?: AgentEngine;
   /** Custom Claude Code skill directories (each a folder of `<name>/SKILL.md`). */
   custom_skill_dirs?: string[];
+  /** Default workspace base dir — new conversations get a hash subdir under it. */
+  default_workspace_dir?: string;
 }
 
 // ---------------------------------------------------------------------------

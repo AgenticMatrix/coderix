@@ -47,6 +47,9 @@ const CH = {
   CONFIG_SET: 'config:set',
   CONFIG_GET_MODEL_LIST: 'config:getModelList',
   CONFIG_TEST_CONNECTION: 'config:testConnection',
+  DEFAULT_WORKSPACE_GET: 'defaultWorkspace:get',
+  DEFAULT_WORKSPACE_SET: 'defaultWorkspace:set',
+  DEFAULT_WORKSPACE_SELECT: 'defaultWorkspace:select',
   APP_VERSION: 'app:version',
   APP_CHECK_UPDATE: 'app:checkUpdate',
   APP_QUIT: 'app:quit',
@@ -542,6 +545,23 @@ const coderixAPI = {
     /** Select a new project directory. */
     select(): Promise<{ canceled: boolean; path: string }> {
       return ipcRenderer.invoke('project:select');
+    },
+  },
+
+  // ── Default workspace ────────────────────────────────────────────────────
+
+  defaultWorkspace: {
+    /** Get the default workspace base dir (where new conversations spawn). */
+    get(): Promise<{ path: string }> {
+      return ipcRenderer.invoke(CH.DEFAULT_WORKSPACE_GET);
+    },
+    /** Set the default workspace base dir. */
+    set(path: string): Promise<{ path: string }> {
+      return ipcRenderer.invoke(CH.DEFAULT_WORKSPACE_SET, path);
+    },
+    /** Open a directory picker and set it as the default workspace base dir. */
+    select(): Promise<{ canceled: boolean; path: string }> {
+      return ipcRenderer.invoke(CH.DEFAULT_WORKSPACE_SELECT);
     },
   },
 
