@@ -33,7 +33,7 @@ export interface CallModelConfig {
   protocol?: 'anthropic' | 'openai';
   /** HTTP/HTTPS proxy URL (e.g. "http://127.0.0.1:7890"). */
   proxy?: string;
-  /** Maximum output tokens. Defaults to 32768. */
+  /** Maximum output tokens. Defaults to 65536. */
   maxTokens?: number;
 }
 
@@ -219,7 +219,7 @@ export function createCallModelFromOpenAI(
       messages: openaiMessages,
       stream: true,
       stream_options: { include_usage: true },
-      max_tokens: config.maxTokens ?? 32768,
+      max_tokens: config.maxTokens ?? 65536,
     };
     if (openaiTools.length > 0) {
       requestBody.tools = openaiTools;

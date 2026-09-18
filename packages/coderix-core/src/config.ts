@@ -128,7 +128,7 @@ export interface CoderSettings {
   default_model?: string;
   /** Desktop app's own default model — independent of the CLI's `default_model`. */
   desktop_default_model?: string;
-  /** Global max output tokens (default: 32768) */
+  /** Global max output tokens (default: 65536) */
   max_tokens?: number;
   /** UI theme (dark / light) */
   theme?: string;

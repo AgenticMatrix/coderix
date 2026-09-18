@@ -23,7 +23,7 @@ interface ProviderEditorProps {
 const EMPTY_FIELDS: ModelConfig = {
   name: '',
   temperature: 0.7,
-  maxTokens: 32768,
+  maxTokens: 65536,
   maxContext: 0,
   topP: 1.0,
   cachePrice: 0,
@@ -568,10 +568,10 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   style={{ ...inputStyle, marginTop: '4px' }}
                   type="number"
                   min={1}
-                  max={32768}
+                  max={65536}
                   step={1}
                   value={fields.maxTokens}
-                  onChange={(e) => patchFields({ maxTokens: parseInt(e.target.value) || 32768 })}
+                  onChange={(e) => patchFields({ maxTokens: parseInt(e.target.value) || 65536 })}
                 />
               </label>
               <label style={labelStyle}>

@@ -155,9 +155,9 @@ export function startProtocolGateway(): Server {
 
       // Ensure the model-native request carries a valid token limit. The claude
       // CLI sends its own default (or omits it), which may exceed the model's
-      // cap and 400 upstream. Clamp to the global configured max (32768), which
+      // cap and 400 upstream. Clamp to the global configured max (65536), which
       // is under every supported model's limit.
-      const cap = 32768;
+      const cap = 65536;
       const tokenLimit = convertedBody.max_tokens;
       if (typeof tokenLimit !== 'number' || tokenLimit < 1) {
         convertedBody.max_tokens = cap;

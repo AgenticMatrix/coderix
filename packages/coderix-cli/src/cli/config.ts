@@ -86,7 +86,7 @@ export interface CoderSettings {
   model_list?: ModelEntry[];
   /** Format: "provider/model-name" (e.g. "deepseek/deepseek-v4-pro") */
   default_model?: string;
-  /** Global max output tokens (default: 32768) */
+  /** Global max output tokens (default: 65536) */
   max_tokens?: number;
   /** UI theme (dark / light) */
   theme?: string;

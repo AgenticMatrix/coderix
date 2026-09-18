@@ -216,7 +216,7 @@ export class OpenAICompatProvider implements Provider {
       messages: openaiMessages,
       stream: true,
       stream_options: { include_usage: true },
-      max_tokens: modelConfig.maxTokens ?? 32768,
+      max_tokens: modelConfig.maxTokens ?? 65536,
     };
 
     if (modelConfig.temperature !== undefined) {

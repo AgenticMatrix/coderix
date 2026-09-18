@@ -538,9 +538,9 @@ export async function handleSetupFlag(): Promise<void> {
   {
     const rl = readline.createInterface({ input: stdin, output: stdout });
     const maxTokens = await new Promise<number>(resolve => {
-      rl.question('\x1b[1mMax output tokens [32768]:\x1b[22m ', answer => {
+      rl.question('\x1b[1mMax output tokens [65536]:\x1b[22m ', answer => {
         const trimmed = answer.trim();
-        resolve(trimmed ? parseInt(trimmed, 10) || 32768 : 32768);
+        resolve(trimmed ? parseInt(trimmed, 10) || 65536 : 65536);
       });
     });
     settings.max_tokens = maxTokens;

@@ -52,7 +52,7 @@ export const configCommands: SlashCommand[] = [
         const lines: string[] = [];
         const theme = settings.theme ?? 'not set';
         const defaultModel = settings.default_model ?? 'not set';
-        const maxTokens = settings.max_tokens ?? '32768 (default)';
+        const maxTokens = settings.max_tokens ?? '65536 (default)';
         const concurrency = settings.max_tool_concurrency ?? '32 (default)';
 
         lines.push('Appearance');

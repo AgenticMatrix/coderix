@@ -132,7 +132,7 @@ function settingsToUI(config: CoderSettings): SettingsData {
             return {
               name: item.name,
               temperature: item.temperature ?? 0.7,
-              maxTokens: item.max_tokens ?? entry.max_tokens ?? config.max_tokens ?? 32768,
+              maxTokens: item.max_tokens ?? entry.max_tokens ?? config.max_tokens ?? 65536,
               maxContext: item.price?.max_context ?? 0,
               topP: item.top_p ?? 1.0,
               cachePrice: item.price?.cache_read_input ?? 0,
@@ -272,7 +272,7 @@ export function getProviderBaseUrl(providerName: string): string {
 }
 
 /** Map a catalog provider's model names to full ModelConfig entries with defaults. */
-export function toModelConfigs(names: string[], maxTokens = 32768): ModelConfig[] {
+export function toModelConfigs(names: string[], maxTokens = 65536): ModelConfig[] {
   return names.map((name) => ({
     name,
     temperature: 0.7,

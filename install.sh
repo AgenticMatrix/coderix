@@ -421,7 +421,7 @@ if [ ! -f "$SETTINGS_FILE" ]; then
       "provider": "deepseek",
       "base_url": "https://api.deepseek.com/anthropic",
       "auth_token_env": "YOUR_DEEPSEEK_API_KEY",
-      "max_tokens": 32768
+      "max_tokens": 65536
     }
   ],
   "default_model": "deepseek/deepseek-v4-pro"

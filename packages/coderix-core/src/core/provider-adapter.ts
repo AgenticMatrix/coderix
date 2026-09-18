@@ -213,7 +213,7 @@ export function createCallModelFromClient(
     try {
       const stream = await client.messages.create({
         model,
-        max_tokens: 32768,
+        max_tokens: 65536,
         system: systemParam,
         messages: apiMessages,
         ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
