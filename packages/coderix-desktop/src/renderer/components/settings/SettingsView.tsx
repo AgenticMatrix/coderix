@@ -25,9 +25,9 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { id: 'appearance', labelKey: 'settings.general', icon: Palette },
   { id: 'model', labelKey: 'settings.model', icon: Bot },
   { id: 'engine', labelKey: 'settings.engine', icon: Cpu },
-  { id: 'appearance', labelKey: 'settings.general', icon: Palette },
   { id: 'permissions', labelKey: 'settings.permissions', icon: ShieldCheck },
   { id: 'update', labelKey: 'settings.update', icon: RefreshCw },
 ];
@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
 // ── Component ──────────────────────────────────────────────
 
 export default function SettingsView({ onClose }: { onClose?: () => void }): React.ReactElement {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('model');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
   const [draft, setDraft] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
