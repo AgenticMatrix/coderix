@@ -1,16 +1,24 @@
 appId: com.coderix.desktop
 productName: Coderix
 copyright: Copyright © 2026 Coderix Contributors
+electronVersion: 34.5.8
 
 directories:
   output: release
-  buildResources: assets
 
 files:
   - dist/**/*
-  - package.json
-  - node_modules/**/*
-  - '!node_modules/.cache'
+  - node_modules/bytenode/**/*
+  - node_modules/node-pty/**/*
+  - '!**/*.map'
+
+asar: true
+asarUnpack:
+  - '**/*.node'
+  - '**/spawn-helper'
+
+# node-pty ships N-API prebuilds (ABI-stable across Node/Electron) — no rebuild.
+npmRebuild: false
 
 mac:
   category: public.app-category.developer-tools
@@ -18,47 +26,5 @@ mac:
   target:
     - target: dmg
       arch:
-        - x64
-        - arm64
-    - target: zip
-      arch:
-        - x64
-        - arm64
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: assets/entitlements.mac.plist
-  entitlementsInherit: assets/entitlements.mac.plist
-  notarize:
-    teamId: ${APPLE_TEAM_ID}
-  extendInfo:
-    NSHighResolutionCapable: true
-    NSSupportsAutomaticGraphicsSwitching: true
-
-win:
-  icon: assets/icon.ico
-  target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
+        - universal
   artifactName: ${productName}-${version}-${arch}.${ext}
-
-nsis:
-  oneClick: false
-  perMachine: true
-  allowToChangeInstallationDirectory: true
-  deleteAppDataOnUninstall: false
-  installerIcon: assets/icon.ico
-  uninstallerIcon: assets/icon.ico
-
-linux:
-  icon: assets/icons
-  target:
-    - target: AppImage
-      arch:
-        - x64
-        - arm64
-  category: Development
-  artifactName: ${productName}-${version}-${arch}.${ext}
-
-asar: false
