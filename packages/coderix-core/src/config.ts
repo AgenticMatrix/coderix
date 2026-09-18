@@ -13,6 +13,11 @@ export interface AppConfig {
   apiKey: string;
   model: string;
   provider?: string;
+  /** Full `provider/model` identifier (e.g. "local_deepseek/deepseek-v4-pro").
+    * The stable identity persisted with a session. `model` is the bare API model
+    * name and is ambiguous across providers (e.g. "deepseek-v4-pro" exists on
+    * both the official and a relay provider), so it must not be stored/round-tripped. */
+  modelId: string;
   /** Wire protocol of the resolved endpoint: 'anthropic' (Messages API) or 'openai' (Chat Completions). */
   protocol: 'anthropic' | 'openai';
   proxy?: string;
@@ -382,12 +387,21 @@ function resolveModel(
     // 1b. Bare model name (no "provider/") or an unknown provider — locate the
     //     model by name across all providers. Without this, a session that
     //     stored the bare name (e.g. "Atria-Dawn-Preview") silently falls back
-    //     to the first model_list entry instead of its real provider.
+    //     to the first model_list entry instead of its real provider. When the
+    //     bare name is listed by several providers (e.g. "deepseek-v4-pro" on
+    //     both the official and a relay provider), prefer the provider named by
+    //     default_model/desktop_default_model so the collision resolves to the
+    //     endpoint the user is actually on, not the first entry in the list.
     const bareName = preferredName ?? providerName;
-    for (const e of settings.model_list) {
-      if (e.model.length > 0 && e.model.some(m => modelName(m) === bareName)) {
-        return resolveFromEntry(e, bareName);
-      }
+    const matches = settings.model_list.filter(
+      e => e.model.length > 0 && e.model.some(m => modelName(m) === bareName),
+    );
+    if (matches.length > 0) {
+      const defaultProvider = parseDefault(
+        settings.desktop_default_model ?? settings.default_model ?? '',
+      ).providerName;
+      const picked = matches.find(e => e.provider === defaultProvider) ?? matches[0]!;
+      return resolveFromEntry(picked, bareName);
     }
   }
 
@@ -462,13 +476,19 @@ export function resolveModelByName(name: string): ResolvedModel | undefined {
   }
 
   // 2. Bare model name — locate across all providers (mirrors resolveModel's
-  //    fallback for sessions that stored the bare name).
+  //    fallback for sessions that stored the bare name). When the bare name is
+  //    listed by several providers, prefer the provider named by
+  //    desktop_default_model/default_model, falling back to the first entry.
   const bare = preferredName ?? providerName;
-  for (const e of settings.model_list) {
-    if (e.model.length > 0 && e.model.some(m => modelName(m) === bare)) {
-      const r = pick(e, bare);
-      if (r) return r;
-    }
+  const matches = settings.model_list.filter(
+    e => e.model.length > 0 && e.model.some(m => modelName(m) === bare),
+  );
+  if (matches.length > 0) {
+    const defaultProvider = (settings.desktop_default_model ?? settings.default_model ?? '')
+      .split('/')[0];
+    const picked = matches.find(e => e.provider === defaultProvider) ?? matches[0]!;
+    const r = pick(picked, bare);
+    if (r) return r;
   }
 
   return undefined;
@@ -498,6 +518,7 @@ function buildConfig(settings: CoderSettings, defaultName: string | undefined): 
   const resolved = resolveModel(settings, defaultName);
 
   const model = resolved.model;
+  const modelId = `${resolved.provider}/${model}`;
   const apiKey = resolved.apiKey;
   const baseUrl = resolved.baseUrl;
   const proxy = resolved.proxy;
@@ -509,7 +530,7 @@ function buildConfig(settings: CoderSettings, defaultName: string | undefined): 
     );
   }
 
-  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, thinkingMode: settings.thinking === 'auto' ? undefined : settings.thinking, thinkingBudgetTokens: settings.thinking_budget_tokens, engine: settings.engine ?? 'coderix' };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, modelId, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, thinkingMode: settings.thinking === 'auto' ? undefined : settings.thinking, thinkingBudgetTokens: settings.thinking_budget_tokens, engine: settings.engine ?? 'coderix' };
 }
 
 export function loadConfig(): AppConfig {

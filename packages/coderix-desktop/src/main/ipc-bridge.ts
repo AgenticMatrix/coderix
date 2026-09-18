@@ -350,7 +350,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             sessionId: sessionManager.getActive()?.id ?? '',
             cwd: currentWorkDir,
             permissionMode: resolvePermissionMode(loadSettings()) as PermissionMode,
-            model: sessionResolved?.model ?? currentModel,
+            model: sessionResolved?.model ?? activeConfig.model,
             baseUrl: sessionResolved?.baseUrl ?? activeConfig.baseUrl,
             apiKey: sessionResolved?.apiKey ?? activeConfig.apiKey,
             protocol: sessionResolved?.protocol ?? activeConfig.protocol,

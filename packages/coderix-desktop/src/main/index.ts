@@ -110,7 +110,7 @@ async function bootstrap(): Promise<void> {
     // which is never the project the user wants to reopen — fall back to it
     // only when there's no persisted workspace yet (first launch).
     activeWorkDir = getLastWorkspace() ?? getDefaultWorkspaceDir();
-    activeModel = initialConfig.model;
+    activeModel = initialConfig.modelId;
 
     // Start the loopback protocol-conversion gateway so the claude-code engine
     // can drive OpenAI-compatible models (anthropic → openai on the wire). The
@@ -379,8 +379,12 @@ async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: 
   // and its own endpoint/auth, without mutating the desktop default model.
   const override = modelOverride ? resolveModelByName(modelOverride) : undefined;
   const model = override?.model ?? appConfig.model;
+  // The stable `provider/model` identity (e.g. "local_deepseek/deepseek-v4-pro")
+  // that sessions persist and re-resolve by. `model` above is the bare API name
+  // and is ambiguous across providers, so only the full id may be stored.
+  const modelId = override ? `${override.provider}/${override.model}` : appConfig.modelId;
 
-  activeModel = model;
+  activeModel = modelId;
   console.log(`[Coderix] Config ${sharedToolRegistry ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${override?.baseUrl ?? appConfig.baseUrl}`);
 
   // Set the engine BEFORE (re)initializing the bootstrap so an engine switch
@@ -396,7 +400,7 @@ async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: 
 
   await ipcBridge.initEngine({
     cwd: activeWorkDir,
-    model,
+    model: modelId,
     sessionManager: sessionManagerRef!,
   });
   console.log('[Coderix] QueryEngine bootstrap ready');

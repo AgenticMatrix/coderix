@@ -326,6 +326,7 @@ export function loadConfig(): AppConfig {
   const resolved = resolveModel(settings);
 
   const model = resolved.model;
+  const modelId = `${resolved.provider}/${model}`;
   const apiKey = resolved.apiKey;
   const baseUrl = resolved.baseUrl;
   const proxy = resolved.proxy;
@@ -337,5 +338,5 @@ export function loadConfig(): AppConfig {
     );
   }
 
-  return { cwd: process.cwd(), baseUrl, apiKey, model, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, thinkingMode: settings.thinking === 'auto' ? undefined : settings.thinking, thinkingBudgetTokens: settings.thinking_budget_tokens, theme: settings.theme, engine: settings.engine ?? 'coderix' };
+  return { cwd: process.cwd(), baseUrl, apiKey, model, modelId, provider: resolved.provider, protocol: resolved.protocol ?? detectProtocol(baseUrl), proxy, maxTokens, currency: resolved.currency, inputPrice: resolved.inputPrice ?? 0, outputPrice: resolved.outputPrice ?? 0, cacheReadPrice: resolved.cacheReadPrice ?? 0, maxContext: resolved.maxContext ?? 0, briefMode: settings.brief_mode ?? false, autoCompactEnabled: settings.auto_compact_enabled ?? true, compactThreshold: settings.compact_threshold ?? 0.85, thinkingMode: settings.thinking === 'auto' ? undefined : settings.thinking, thinkingBudgetTokens: settings.thinking_budget_tokens, theme: settings.theme, engine: settings.engine ?? 'coderix' };
 }
