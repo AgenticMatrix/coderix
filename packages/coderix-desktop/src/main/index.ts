@@ -6,7 +6,7 @@ import { app, BrowserWindow, Notification } from 'electron';
 import { existsSync } from 'node:fs';
 import { createWindowManager } from './window-manager.js';
 import type { WindowManager } from './window-manager.js';
-import { createIpcBridge, getLastWorkspace, getDefaultWorkspaceDir, IPC_CHANNELS } from './ipc-bridge.js';
+import { createIpcBridge, getLastWorkspace, getDefaultWorkspaceDir, isDefaultWorkspaceContext, IPC_CHANNELS } from './ipc-bridge.js';
 import type { IpcBridge } from './ipc-bridge.js';
 import { createFileWatcherManager } from './file-watcher.js';
 import type { FileWatcherManager } from './file-watcher.js';
@@ -135,10 +135,13 @@ async function bootstrap(): Promise<void> {
 
     // Restore the workspace from the most recently used session so a restart
     // reopens the project that session was working in (each session remembers
-    // its own workspace), instead of the app's launch directory.
+    // its own workspace), instead of the app's launch directory. Only a
+    // default-workspace dir (base or hash subdir) is trusted here — a session
+    // that recorded the launch dir (dev) or a stale legacy base must not pin
+    // the app there.
     try {
       const latest = sessionManager.list({ limit: 1 })[0];
-      if (latest?.workDir && existsSync(latest.workDir)) {
+      if (latest?.workDir && existsSync(latest.workDir) && isDefaultWorkspaceContext(latest.workDir)) {
         activeWorkDir = latest.workDir;
       }
     } catch {

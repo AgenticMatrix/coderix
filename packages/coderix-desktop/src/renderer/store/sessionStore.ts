@@ -13,7 +13,7 @@ export interface SessionState {
   loadSessions: () => Promise<void>;
   refreshSession: (id: string) => Promise<void>;
   bumpSession: (id: string) => void;
-  createSession: () => Promise<void>;
+  createSession: () => Promise<string | undefined>;
   forkSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
@@ -142,9 +142,11 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         currentSessionId: result.id,
         isLoading: false,
       }));
+      return result.cwd;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create session';
       set({ error: message, isLoading: false });
+      return undefined;
     }
   },
 

@@ -217,6 +217,19 @@ export class SessionManager {
   }
 
   /**
+   * Bind a session to a working directory and persist it to meta.json so the
+   * session reopens in that workspace when resumed later. Used to lazily mint a
+   * conversation's hash subdir on the first message rather than on creation.
+   */
+  setCwd(sessionId: string, cwd: string): void {
+    const session = this.requireSession(sessionId);
+    session.cwd = cwd;
+    session.updatedAt = new Date();
+    const dir = getSessionDir(session.id);
+    writeSessionMeta(dir, { workDir: cwd }).catch(() => {});
+  }
+
+  /**
    * Resume a session from disk.
    */
   resume(sessionId: string): Session {

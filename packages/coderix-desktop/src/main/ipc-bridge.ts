@@ -168,20 +168,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   const engineBySession = new Map<string, QueryEngine>();
   const createEngineForSession = config.createEngineForSession ?? null;
 
-  // Resolve the working directory for a brand-new conversation. When the user
-  // hasn't picked an explicit project (currentWorkDir is the default-workspace
-  // base dir, or a hash subdir already under it), specialize the conversation
-  // into a fresh hash-named subdir so every new conversation gets its own
-  // workspace. Otherwise (explicit project) reuse the project dir as-is.
-  const resolveNewSessionCwd = (): string => {
-    if (isDefaultWorkspaceContext(currentWorkDir)) {
-      const ws = createConversationWorkspace(randomUUID());
-      currentWorkDir = ws;
-      return ws;
-    }
-    return currentWorkDir;
-  };
-
   const getEngineForSession = async (session: Session): Promise<QueryEngine> => {
     const existing = engineBySession.get(session.id);
     if (existing) return existing;
@@ -267,26 +253,35 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     const { query: userInput, sessionId, skills } = payload;
 
-    // Ensure we have an active session (create one if needed)
-    try {
-      const active = sessionManager.getActive();
-      if (active.cwd !== currentWorkDir) {
-        sessionManager.create({ title: '新对话', cwd: resolveNewSessionCwd(), model: currentModel });
-      }
-    } catch {
-      sessionManager.create({ title: '新对话', cwd: resolveNewSessionCwd(), model: currentModel });
+    // Ensure an active session exists (the renderer normally creates one before
+    // submitting; this covers the bare-submit fallback).
+    if (!sessionManager.tryGetActive()) {
+      sessionManager.create({ title: '新对话', cwd: currentWorkDir, model: currentModel });
     }
 
     // Switch to requested session if it exists
     if (sessionId) {
       try {
-        if (sessionManager.getActive()?.id !== sessionId) {
+        if (sessionManager.tryGetActive()?.id !== sessionId) {
           sessionManager.resume(sessionId);
         }
       } catch {
         // Session doesn't exist — keep using the current (newly created) one
         console.warn(`[IpcBridge] Session not found: ${sessionId}, using current session`);
       }
+    }
+
+    // Finalize the active session's workspace on the first message. A
+    // brand-new conversation is parked on the default-workspace base (or a hash
+    // subdir) and only here mints its own fresh hash subdir — "new
+    // conversation" alone never touches disk. Resuming an existing session
+    // keeps its persisted workspace; a conversation bound to a user-selected
+    // project stays there.
+    const pending = sessionManager.tryGetActive();
+    if (pending && pending.messages.length === 0 && isDefaultWorkspaceContext(pending.cwd)) {
+      const ws = createConversationWorkspace(randomUUID());
+      currentWorkDir = ws;
+      sessionManager.setCwd(pending.id, ws);
     }
 
     // The session id this stream belongs to — captured as a local so every push
@@ -745,12 +740,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle('session:create', async (_event, opts?: { title?: string }) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
+    // Park a brand-new conversation on the default-workspace base until the
+    // first message mints its hash subdir — unless a specific project is open,
+    // in which case the conversation lives in that project.
+    const parked = isDefaultWorkspaceContext(currentWorkDir)
+      ? getDefaultWorkspaceDir()
+      : currentWorkDir;
     const session = sessionManager.create({
       title: opts?.title ?? '新对话',
-      cwd: resolveNewSessionCwd(),
+      cwd: parked,
       model: currentModel,
     });
-    return { id: session.id, title: session.title, turnCount: session.turnCount };
+    return { id: session.id, title: session.title, turnCount: session.turnCount, cwd: session.cwd };
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
@@ -2279,7 +2280,7 @@ function createConversationWorkspace(seed: string): string {
  * True when `cwd` is the default workspace base dir, or a conversation hash
  * subdir directly under it — i.e. the user has not chosen an explicit project.
  */
-function isDefaultWorkspaceContext(cwd: string): boolean {
+export function isDefaultWorkspaceContext(cwd: string): boolean {
   const base = resolve(getDefaultWorkspaceDir());
   const c = resolve(cwd);
   return c === base || dirname(c) === base;
@@ -2324,17 +2325,20 @@ function rememberProject(path: string): string[] {
 /**
  * The most recent workspace that should be restored on app startup.
  *
- * `recent_projects.json` is the persistence source, but the app's own launch
- * directory (`process.cwd()`) gets written to it by `project:get` on a fresh
- * start — in dev that's the `coderix-desktop` package dir, which is never the
- * workspace the user actually wants. Skip it (and any dir that no longer
- * exists) so a restart reopens the user's last project instead of the app dir.
+ * `recent_projects.json` is the persistence source, but it accumulates noise —
+ * the app's own launch directory (`process.cwd()`, e.g. `packages/coderix-desktop`
+ * in dev), a stale legacy base from an older app (`~/.agentstation/apps`), the
+ * filesystem root, etc. Restore only directories that actually live inside the
+ * default workspace (the base or a conversation hash subdir); external projects
+ * are reopened explicitly through the library, and anything unrecognized falls
+ * back to the default-workspace base.
  */
 export function getLastWorkspace(): string | undefined {
   const launchDir = resolve(process.cwd());
   for (const p of readRecentProjects()) {
     if (!p || !existsSync(p)) continue;
     if (resolve(p) === launchDir) continue;
+    if (!isDefaultWorkspaceContext(p)) continue;
     return p;
   }
   return undefined;

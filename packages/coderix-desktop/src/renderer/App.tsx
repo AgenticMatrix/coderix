@@ -640,7 +640,10 @@ export function App(): React.ReactElement {
     // A fresh session inherits the global default model.
     setSessionModelState(null);
     setSelectedSkills([]);
-    await createSession();
+    const cwd = await createSession();
+    // A new conversation always lands in a fresh hash subdir under the default
+    // workspace — reflect it in the workspace label immediately.
+    if (cwd) setProjectPath(cwd);
     const newSid = useSessionStore.getState().currentSessionId;
     if (newSid) {
       // Route the swap through the per-session stores (never abort the previous
@@ -751,7 +754,8 @@ export function App(): React.ReactElement {
       // Auto-create a session if none exists yet
       let currentSid = useChatStore.getState().sessionId;
       if (!currentSid) {
-        await createSession();
+        const cwd = await createSession();
+        if (cwd) setProjectPath(cwd);
         currentSid = useSessionStore.getState().currentSessionId;
         if (currentSid) {
           setSessionId(currentSid);
@@ -766,6 +770,11 @@ export function App(): React.ReactElement {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
           await submitQuery(value, currentSid, selectedSkills);
+          // The main process mints the conversation's hash subdir on the first
+          // message — refresh the workspace label so it reflects the new dir.
+          getProjectDirectory()
+            .then((r) => setProjectPath(r.path))
+            .catch(() => {});
         } catch (err) {
           console.error('[App] Failed to submit query:', err);
           useChatStore.getState().setError(

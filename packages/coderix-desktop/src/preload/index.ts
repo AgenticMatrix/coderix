@@ -319,7 +319,7 @@ const coderixAPI = {
 
   session: {
     /** Create a new session. */
-    create(opts?: { title?: string }): Promise<{ id: string; title: string; turnCount: number }> {
+    create(opts?: { title?: string }): Promise<{ id: string; title: string; turnCount: number; cwd: string }> {
       return ipcRenderer.invoke('session:create', opts ?? {});
     },
 
