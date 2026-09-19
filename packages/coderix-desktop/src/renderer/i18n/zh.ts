@@ -55,6 +55,10 @@ export const zh = {
   'engine.desc': '选择执行对话的底层引擎，保存后自动重载配置并生效。',
   'engine.builtin': '内置',
   'engine.sdk': 'SDK',
+  'engine.installed': '已装',
+  'engine.notInstalled': '未安装',
+  'engine.install': '安装',
+  'engine.installing': '安装中…',
   'engine.coderixDesc': '内置引擎，复用当前模型 Provider、权限与工具体系。',
   'engine.claudeCodeDesc': '使用官方 Claude Code SDK，由本机 claude CLI 驱动（需已安装并登录）。',
 

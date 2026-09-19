@@ -15,9 +15,9 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 // Keep in sync with the `@anthropic-ai/claude-agent-sdk` version pinned in
 // packages/coderix-desktop/package.json. The bundled SDK JS and the CLI binary
@@ -65,6 +65,38 @@ export function claudeCodeInstalled(): boolean {
   return findClaudeCodeBinary() !== null;
 }
 
+/**
+ * Installed-state report for the claude-code runtime, mirrored from
+ * agentstation-app's `claudeCodeStatus()` (`GET /api/runtimes`). "Installed"
+ * means the on-demand dir holds the native `claude` binary — a global `claude`
+ * on PATH is intentionally NOT counted, since it isn't the SDK we manage.
+ */
+export interface ClaudeCodeRuntimeStatus {
+  installed: boolean;
+  bin: string | null;
+  version: string | null;
+  installDir: string;
+}
+
+export function claudeCodeRuntimeStatus(): ClaudeCodeRuntimeStatus {
+  const bin = findClaudeCodeBinary();
+  let version: string | null = null;
+  if (bin) {
+    try {
+      const pkg = JSON.parse(
+        readFileSync(
+          join(CLAUDE_CODE_INSTALL_DIR, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json'),
+          'utf-8',
+        ),
+      );
+      version = typeof pkg.version === 'string' ? pkg.version : null;
+    } catch {
+      /* version is best-effort */
+    }
+  }
+  return { installed: bin !== null, bin, version, installDir: CLAUDE_CODE_INSTALL_DIR };
+}
+
 async function registryReachable(registry: string, timeoutMs = 5000): Promise<boolean> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -78,10 +110,63 @@ async function registryReachable(registry: string, timeoutMs = 5000): Promise<bo
   }
 }
 
+/** `~/.nvm/versions/node/<ver>/bin` dirs, newest first (so the latest Node wins). */
+function listNvmBins(home: string): string[] {
+  const base = join(home, '.nvm', 'versions', 'node');
+  try {
+    return readdirSync(base)
+      .filter((d) => !d.startsWith('.'))
+      .sort()
+      .reverse()
+      .map((v) => join(base, v, 'bin'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve an absolute path to `npm` (or `npm.cmd` on Windows). A packaged GUI app
+ * launched from Finder has a minimal PATH that omits Node's bin dir (nvm / fnm /
+ * `~/.local/bin` / Homebrew), so `spawn('npm')` would fail with ENOENT. Probe PATH
+ * entries plus well-known Node locations; fall back to the bare name so a
+ * dev/shell-launched app (full PATH) keeps working unchanged.
+ */
+function resolveNpmExecutable(): string {
+  const exe = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const dirs = (process.env.PATH ?? '').split(delimiter).filter(Boolean);
+
+  const extra = process.platform === 'win32'
+    ? [
+        join(process.env.ProgramFiles ?? 'C:\\Program Files', 'nodejs'),
+        join(process.env.APPDATA ?? '', 'npm'),
+      ]
+    : [
+        join(homedir(), '.local', 'bin'),
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        ...listNvmBins(homedir()),
+      ];
+
+  for (const dir of [...dirs, ...extra]) {
+    if (!dir) continue;
+    const candidate = join(dir, exe);
+    if (existsSync(candidate)) return candidate;
+  }
+  return exe;
+}
+
 /** Run `npm install` once, resolving to `{ code, stderr }` on completion. */
 function runNpmInstall(installDir: string, registry: string): Promise<{ code: number; stderr: string }> {
   return new Promise((resolve) => {
-    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const npm = resolveNpmExecutable();
+    const npmDir = dirname(npm);
+    // Prepend npm's dir to PATH so both `npm` and its `#!/usr/bin/env node`
+    // shebang resolve even in a packaged GUI app whose PATH lacks Node's bin dir.
+    const env = {
+      ...process.env,
+      PATH: npmDir !== '.' ? [npmDir, process.env.PATH ?? ''].join(delimiter) : process.env.PATH,
+    };
     const child = spawn(
       npm,
       [
@@ -93,7 +178,7 @@ function runNpmInstall(installDir: string, registry: string): Promise<{ code: nu
         `--registry=${registry}`,
         `@anthropic-ai/claude-agent-sdk@${CLAUDE_CODE_SDK_VERSION}`,
       ],
-      { env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' },
+      { env, stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' },
     );
 
     let stderr = '';

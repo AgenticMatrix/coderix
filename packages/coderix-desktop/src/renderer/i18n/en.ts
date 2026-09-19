@@ -59,6 +59,10 @@ export const en: Record<TranslationKey, string> = {
   'engine.desc': 'Choose the underlying engine that runs conversations. Reloads config on save.',
   'engine.builtin': 'Built-in',
   'engine.sdk': 'SDK',
+  'engine.installed': 'Installed',
+  'engine.notInstalled': 'Not installed',
+  'engine.install': 'Install',
+  'engine.installing': 'Installing…',
   'engine.coderixDesc': 'Built-in engine, reuses the current model provider, permissions, and tooling.',
   'engine.claudeCodeDesc': 'Uses the official Claude Code SDK, driven by the local claude CLI (must be installed and signed in).',
 

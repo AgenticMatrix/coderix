@@ -47,6 +47,8 @@ const CH = {
   CONFIG_SET: 'config:set',
   CONFIG_GET_MODEL_LIST: 'config:getModelList',
   CONFIG_TEST_CONNECTION: 'config:testConnection',
+  CLAUDE_CODE_RUNTIME_STATUS: 'claudeCode:runtimeStatus',
+  CLAUDE_CODE_RUNTIME_INSTALL: 'claudeCode:runtimeInstall',
   DEFAULT_WORKSPACE_GET: 'defaultWorkspace:get',
   DEFAULT_WORKSPACE_SET: 'defaultWorkspace:set',
   DEFAULT_WORKSPACE_SELECT: 'defaultWorkspace:select',
@@ -521,6 +523,19 @@ const coderixAPI = {
     /** Hot-reload QueryEngine with updated config (after model/API key change). */
     reload(): Promise<{ status: string }> {
       return ipcRenderer.invoke('config:reload');
+    },
+  },
+
+  // ── Runtime ──────────────────────────────────────────────────────────
+
+  runtime: {
+    /** Report whether the on-demand claude-code runtime is installed. */
+    claudeCodeStatus(): Promise<{ installed: boolean; bin: string | null; version: string | null; installDir: string }> {
+      return ipcRenderer.invoke(CH.CLAUDE_CODE_RUNTIME_STATUS);
+    },
+    /** Install the on-demand claude-code runtime (resolves when finished). */
+    claudeCodeInstall(): Promise<{ installed: boolean; bin: string | null; version: string | null; installDir: string }> {
+      return ipcRenderer.invoke(CH.CLAUDE_CODE_RUNTIME_INSTALL);
     },
   },
 

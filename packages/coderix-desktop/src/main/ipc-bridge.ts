@@ -35,6 +35,7 @@ import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillReg
 import type { QueryEngineEvent, AgentEngine } from '@coderix/core';
 import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
+import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
 
@@ -109,6 +110,8 @@ export const IPC_CHANNELS = {
   CONFIG_SET: 'config:set',
   CONFIG_GET_MODEL_LIST: 'config:getModelList',
   CONFIG_TEST_CONNECTION: 'config:testConnection',
+  CLAUDE_CODE_RUNTIME_STATUS: 'claudeCode:runtimeStatus',
+  CLAUDE_CODE_RUNTIME_INSTALL: 'claudeCode:runtimeInstall',
   APP_VERSION: 'app:version',
   APP_CHECK_UPDATE: 'app:checkUpdate',
   APP_QUIT: 'app:quit',
@@ -1579,6 +1582,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return loadSettings();
   });
 
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_CODE_RUNTIME_STATUS, async () => {
+    return claudeCodeRuntimeStatus();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLAUDE_CODE_RUNTIME_INSTALL, async () => {
+    await ensureClaudeCodeInstalled();
+    return claudeCodeRuntimeStatus();
+  });
+
   ipcMain.handle(IPC_CHANNELS.CONFIG_SET, async (_event, payload: { key: string; value: unknown }) => {
     const settingsDir = join(homedir(), '.coderix');
     const settingsPath = join(settingsDir, 'settings.json');
@@ -2038,6 +2050,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_SET);
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_GET_MODEL_LIST);
       ipcMain.removeHandler(IPC_CHANNELS.CONFIG_TEST_CONNECTION);
+      ipcMain.removeHandler(IPC_CHANNELS.CLAUDE_CODE_RUNTIME_STATUS);
+      ipcMain.removeHandler(IPC_CHANNELS.CLAUDE_CODE_RUNTIME_INSTALL);
       ipcMain.removeHandler(IPC_CHANNELS.APP_VERSION);
       ipcMain.removeHandler(IPC_CHANNELS.APP_CHECK_UPDATE);
       ipcMain.removeHandler(IPC_CHANNELS.APP_OPEN_EXTERNAL);

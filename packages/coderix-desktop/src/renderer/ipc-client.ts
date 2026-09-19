@@ -496,6 +496,30 @@ export async function setConfig(key: string, value: unknown): Promise<unknown> {
   );
 }
 
+/** Installed-state of the on-demand claude-code runtime. */
+export interface ClaudeCodeRuntimeStatus {
+  installed: boolean;
+  bin: string | null;
+  version: string | null;
+  installDir: string;
+}
+
+/** Report whether the on-demand claude-code runtime (native CLI) is installed. */
+export async function getClaudeCodeRuntimeStatus(): Promise<ClaudeCodeRuntimeStatus> {
+  return invokeWithTimeout<ClaudeCodeRuntimeStatus>('claudeCode:runtimeStatus', () =>
+    getAPI().runtime.claudeCodeStatus(),
+  );
+}
+
+/** Install the on-demand claude-code runtime (resolves when finished). */
+export async function installClaudeCodeRuntime(): Promise<ClaudeCodeRuntimeStatus> {
+  return invokeWithTimeout<ClaudeCodeRuntimeStatus>(
+    'claudeCode:runtimeInstall',
+    () => getAPI().runtime.claudeCodeInstall(),
+    10 * 60 * 1000,
+  );
+}
+
 /** Result of probing a provider's baseUrl + apiKey (test connection). */
 export interface ConnectionTestResult {
   ok: boolean;

@@ -7,7 +7,7 @@ import ProviderEditor from './ProviderEditor.js';
 import { providerLabel, ProviderLogo } from './providerMeta.js';
 import { useT, type TranslationKey } from '../../i18n/index.js';
 import type { Language } from '../../i18n/types.js';
-import { getDefaultWorkspace, setDefaultWorkspace, selectDefaultWorkspace } from '../../ipc-client.js';
+import { getDefaultWorkspace, setDefaultWorkspace, selectDefaultWorkspace, getClaudeCodeRuntimeStatus, installClaudeCodeRuntime } from '../../ipc-client.js';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -52,9 +52,33 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
 
   const [workspaceValue, setWorkspaceValue] = useState('');
   const [workspaceFeedback, setWorkspaceFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const [claudeCodeStatus, setClaudeCodeStatus] = useState<{ installed: boolean; version: string | null } | null>(null);
+  const [claudeCodeInstalling, setClaudeCodeInstalling] = useState(false);
 
   // Reload from file every time settings panel opens
   useEffect(() => { load(); }, [load]);
+
+  // Refresh the claude-code install status whenever the engine tab is shown.
+  useEffect(() => {
+    if (activeTab !== 'engine') return;
+    let cancelled = false;
+    getClaudeCodeRuntimeStatus()
+      .then((s) => { if (!cancelled) setClaudeCodeStatus(s); })
+      .catch(() => { if (!cancelled) setClaudeCodeStatus(null); });
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
+  const handleInstallClaudeCode = useCallback(async () => {
+    setClaudeCodeInstalling(true);
+    try {
+      const s = await installClaudeCodeRuntime();
+      setClaudeCodeStatus(s);
+    } catch {
+      /* keep current status */
+    } finally {
+      setClaudeCodeInstalling(false);
+    }
+  }, []);
 
   useEffect(() => {
     window.coderixAPI?.app?.getVersion?.()
@@ -346,18 +370,59 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                 {([
                   { id: 'coderix' as AgentEngine, title: 'Coderix', desc: t('engine.coderixDesc'), badge: t('engine.builtin') },
                   { id: 'claude-code' as AgentEngine, title: 'Claude Code', desc: t('engine.claudeCodeDesc'), badge: t('engine.sdk') },
-                ]).map(({ id, title, desc, badge }) => (
-                  <button key={id} onClick={() => updateDraft({ engine: id })} style={S.engineBtn((draft.engine ?? 'coderix') === id)}>
-                    <Cpu size={18} className="flex-shrink-0" style={{ color: (draft.engine ?? 'coderix') === id ? 'var(--color-brand)' : 'var(--color-text-tertiary)' }} />
-                    <div className="min-w-0 flex-1">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{title}</span>
-                        <span style={{ fontSize: 'var(--text-xs)', padding: '1px 8px', borderRadius: 'var(--radius-full)', background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}>{badge}</span>
+                ]).map(({ id, title, desc, badge }) => {
+                  const isClaudeCode = id === 'claude-code';
+                  const installed = claudeCodeStatus?.installed;
+                  const label = isClaudeCode
+                    ? (installed === true ? t('engine.installed') : installed === false ? t('engine.notInstalled') : badge)
+                    : badge;
+                  const badgeStyle: React.CSSProperties = {
+                    fontSize: 'var(--text-xs)', padding: '1px 8px', borderRadius: 'var(--radius-full)', background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)',
+                  };
+                  if (isClaudeCode && installed === true) {
+                    badgeStyle.background = 'var(--color-success-muted)';
+                    badgeStyle.color = 'var(--color-success)';
+                  } else if (isClaudeCode && installed === false) {
+                    badgeStyle.background = 'var(--color-warning-muted)';
+                    badgeStyle.color = 'var(--color-warning)';
+                  }
+                  return (
+                    <button key={id} onClick={() => updateDraft({ engine: id })} style={S.engineBtn((draft.engine ?? 'coderix') === id)}>
+                      <Cpu size={18} className="flex-shrink-0" style={{ color: (draft.engine ?? 'coderix') === id ? 'var(--color-brand)' : 'var(--color-text-tertiary)' }} />
+                      <div className="min-w-0 flex-1">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{title}</span>
+                          <span style={badgeStyle}>{label}</span>
+                          {isClaudeCode && claudeCodeStatus?.version ? (
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>v{claudeCodeStatus.version}</span>
+                          ) : null}
+                        </div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
+                        {isClaudeCode && installed === false ? (
+                          <div style={{ marginTop: '10px' }}>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); void handleInstallClaudeCode(); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); void handleInstallClaudeCode(); } }}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                fontSize: 'var(--text-xs)', fontWeight: 600,
+                                padding: '5px 12px', borderRadius: 'var(--radius-md)',
+                                background: claudeCodeInstalling ? 'var(--color-bg-tertiary)' : 'var(--color-brand)',
+                                color: claudeCodeInstalling ? 'var(--color-text-secondary)' : '#ffffff',
+                                cursor: claudeCodeInstalling ? 'default' : 'pointer',
+                                pointerEvents: claudeCodeInstalling ? 'none' : 'auto',
+                              }}
+                            >
+                              {claudeCodeInstalling ? t('engine.installing') : t('engine.install')}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>{desc}</div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
