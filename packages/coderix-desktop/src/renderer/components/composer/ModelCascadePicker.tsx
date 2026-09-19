@@ -38,21 +38,35 @@ export interface ModelCascadePickerProps {
 export function ModelCascadePicker({ model = '', onModelChange, sessionId }: ModelCascadePickerProps): React.ReactElement {
   const t = useT();
   const providers = useSettingsStore((s) => s.settings?.providers ?? EMPTY_PROVIDERS);
+  const defaultModel = useSettingsStore((s) => s.settings?.defaultModel ?? '');
   const [open, setOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
   // Current provider slug. For "provider/model" take the prefix directly; for a
   // bare model name, locate the provider that lists it (older sessions persist
-  // bare names, e.g. "Atria-Dawn-Preview" without the "astria/" prefix). Falls
-  // back to null when neither matches.
+  // bare names, e.g. "Atria-Dawn-Preview" without the "astria/" prefix). Model
+  // ids collide across providers (e.g. "deepseek-v4-pro" on both the official
+  // and a relay provider), so when several providers list the bare name prefer
+  // the one named by the desktop default — mirroring core resolveModelByName.
+  // Falls back to null when neither matches.
   const currentProvider = useMemo(() => {
     const idx = model.indexOf('/');
     if (idx > 0) return model.slice(0, idx).toLowerCase();
     const bare = model.toLowerCase();
-    const owner = providers.find((p) => p.models.some((m) => m.name.toLowerCase() === bare));
-    return owner ? owner.name.toLowerCase() : null;
-  }, [model, providers]);
+    const matches = providers.filter((p) => p.models.some((m) => m.name.toLowerCase() === bare));
+    if (matches.length === 0) return null;
+    const defaultProvider = defaultModel.split('/')[0]?.toLowerCase();
+    const owner = matches.find((p) => p.name.toLowerCase() === defaultProvider) ?? matches[0]!;
+    return owner.name.toLowerCase();
+  }, [model, providers, defaultModel]);
+
+  // Model name without the "provider/" prefix, for a cleaner label next to the
+  // provider tag.
+  const modelName = useMemo(() => {
+    const idx = model.indexOf('/');
+    return idx > 0 ? model.slice(idx + 1) : model;
+  }, [model]);
 
   const providerModels = useMemo(() => {
     if (!selectedProvider) return [];
@@ -103,8 +117,12 @@ export function ModelCascadePicker({ model = '', onModelChange, sessionId }: Mod
         onClick={toggleOpen}
         title={t('modelpicker.switch')}
       >
-        <Cpu size={13} />
-        <span className="model-cascade-label">{model || t('modelpicker.unconfigured')}</span>
+        {currentProvider ? <ProviderLogo provider={currentProvider} size={14} /> : <Cpu size={13} />}
+        {currentProvider && (
+          <span className="model-cascade-provider-tag">{providerLabel(currentProvider)}</span>
+        )}
+        {currentProvider && <span className="model-cascade-sep">/</span>}
+        <span className="model-cascade-label">{modelName || t('modelpicker.unconfigured')}</span>
         <ChevronDown size={10} />
       </button>
 

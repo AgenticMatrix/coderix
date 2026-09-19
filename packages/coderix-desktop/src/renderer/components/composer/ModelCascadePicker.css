@@ -14,6 +14,20 @@
   white-space: nowrap;
 }
 
+.model-cascade-provider-tag {
+  flex-shrink: 0;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.model-cascade-sep {
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+
 /* Popup — opens upward from the model button (composer sits at the bottom) */
 .model-cascade-popup {
   position: absolute;
