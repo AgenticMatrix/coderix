@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Box, Text } from '@coderix/ink';
-import type { Color } from '@coderix/ink';
-import { useTerminalSize } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
+import type { Color } from '@coderix/tui';
+import { useTerminalSize } from '@coderix/tui';
 
 import { renderLatex } from './latex-to-unicode.js';
 import { highlightCode } from './highlight.js';

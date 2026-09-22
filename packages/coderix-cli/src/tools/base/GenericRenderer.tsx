@@ -1,4 +1,4 @@
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 import { BaseToolRenderer, } from './BaseToolRenderer.js';
 import { BaseToolResultRenderer } from './BaseToolResultRenderer.js';
 import type { ToolUseRendererProps, ToolResultRendererProps } from '../types.js';

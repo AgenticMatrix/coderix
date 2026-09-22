@@ -1,4 +1,4 @@
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 import { listCommandNames, findSlashCommand } from '../../commands/index.js';
 
 interface CommandHintProps {

@@ -1,4 +1,4 @@
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 import type { TurnSummary } from '../../../types.js';
 
 export interface TurnBoundaryRendererProps {

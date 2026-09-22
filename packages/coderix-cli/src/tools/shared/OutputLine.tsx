@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Text } from '@coderix/ink';
+import { Text } from '@coderix/tui';
 
 export interface OutputLineProps {
   line: string;

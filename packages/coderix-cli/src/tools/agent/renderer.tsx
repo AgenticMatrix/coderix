@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { ToolUseRendererProps } from '../types.js';
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Text } from '@coderix/ink';
-import { useInput } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
+import { useInput } from '@coderix/tui';
 
 export interface QuestionPromptProps {
   questions: Array<{

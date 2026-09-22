@@ -6,7 +6,7 @@
  */
 
 import hljs from 'highlight.js';
-import type { Color } from '@coderix/ink';
+import type { Color } from '@coderix/tui';
 
 /** Get the default text color based on theme. */
 function defaultColor(theme?: string): Color {

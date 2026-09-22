@@ -1,5 +1,5 @@
-import { Box, Text } from '@coderix/ink';
-import { useTerminalSize } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
+import { useTerminalSize } from '@coderix/tui';
 import { useState, useEffect, memo } from 'react';
 
 import type {

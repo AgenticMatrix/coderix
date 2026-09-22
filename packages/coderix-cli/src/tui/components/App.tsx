@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { Box, Text, ScrollBox, Divider } from '@coderix/ink';
-import type { ScrollBoxHandle } from '@coderix/ink';
-import { useTerminalSize } from '@coderix/ink';
+import { Box, Text, ScrollBox, Divider } from '@coderix/tui';
+import type { ScrollBoxHandle } from '@coderix/tui';
+import { useTerminalSize } from '@coderix/tui';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock, TokenUsage } from '../../types.js';

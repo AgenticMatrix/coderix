@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 import { ShellTimeDisplay } from './ShellTimeDisplay.js';
 
 export interface ToolResultCardProps {

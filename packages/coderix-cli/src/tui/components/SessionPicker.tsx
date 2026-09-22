@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from '@coderix/ink';
+import { Box, Text, useInput } from '@coderix/tui';
 import { useMemo, useState } from 'react';
 import { displayWidth } from './MarkdownRenderer.js';
 

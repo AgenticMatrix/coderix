@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from '@coderix/ink';
-import type { Color } from '@coderix/ink';
+import { Box, Text, useInput } from '@coderix/tui';
+import type { Color } from '@coderix/tui';
 import { listTeams, loadTeamConfig } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamMember } from '@coderix/core';

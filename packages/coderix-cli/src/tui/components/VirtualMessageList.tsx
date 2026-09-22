@@ -1,8 +1,8 @@
 import { useRef, memo } from 'react';
-import { Box } from '@coderix/ink';
-import type { DOMElement } from '@coderix/ink';
-import type { ScrollBoxHandle } from '@coderix/ink';
-import { useVirtualScroll } from '@coderix/ink';
+import { Box } from '@coderix/tui';
+import type { DOMElement } from '@coderix/tui';
+import type { ScrollBoxHandle } from '@coderix/tui';
+import { useVirtualScroll } from '@coderix/tui';
 import type { Message } from '../../types.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 
@@ -31,7 +31,7 @@ export interface VirtualMessageListProps {
  * viewport plus overscan; screen-外 items are represented by spacer boxes
  * that preserve the scroll position at O(1) fiber cost.
  *
- * Integrates with @coderix/ink's ScrollBox — attach `scrollRef` to the
+ * Integrates with @coderix/tui's ScrollBox — attach `scrollRef` to the
  * parent ScrollBox via its imperative handle ref.
  */
 export const VirtualMessageList = memo(function VirtualMessageList({

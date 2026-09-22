@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useInput } from '@coderix/ink';
+import { useInput } from '@coderix/tui';
 
 import type { Message, ChatAction } from '../../types.js';
 import { expandPasteMarkers } from './useChatReducer.js';

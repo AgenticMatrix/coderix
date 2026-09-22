@@ -570,7 +570,7 @@ async function main(): Promise<void> {
   const { attachPersistence } = await import('../state/persistence-bridge.js');
   attachPersistence(appStore);
 
-  const { renderSync } = await import('@coderix/ink');
+  const { renderSync } = await import('@coderix/tui');
   const { App } = await import('../tui/components/App.js');
   const { AppStateProvider } = await import('../state/AppStateContext.js');
   const { waitUntilExit, unmount } = renderSync(

@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from '@coderix/ink';
+import { Box, Text, useInput } from '@coderix/tui';
 import { useState, useEffect, useRef } from 'react';
 import { homedir } from 'os';
 import { resolve } from 'path';

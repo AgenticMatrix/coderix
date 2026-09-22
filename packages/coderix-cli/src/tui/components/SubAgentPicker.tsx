@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from '@coderix/ink';
+import { Box, Text, useInput } from '@coderix/tui';
 import { useState } from 'react';
 import { getSubAgentRegistry } from '@coderix/core';
 

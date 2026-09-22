@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text } from '@coderix/ink';
-import type { Color } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
+import type { Color } from '@coderix/tui';
 import { listTasks } from '@coderix/core';
 import type { Task } from '@coderix/core';
 

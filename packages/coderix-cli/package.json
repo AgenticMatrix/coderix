@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@coderix/core": "workspace:*",
-    "@coderix/ink": "workspace:*",
+    "@coderix/tui": "workspace:*",
     "react": "^19.2.0"
   },
   "devDependencies": {

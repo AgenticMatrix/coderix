@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 
 interface Props {
   children: ReactNode;

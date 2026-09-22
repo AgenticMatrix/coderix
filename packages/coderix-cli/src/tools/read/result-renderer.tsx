@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 import { OutputLine } from '../shared/OutputLine.js';
 import type { ToolResultRendererProps } from '../types.js';
 

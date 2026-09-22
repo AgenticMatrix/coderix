@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text } from '@coderix/ink';
+import { Box, Text } from '@coderix/tui';
 
 interface CompactSummaryProps {
   /** The formatted compact summary content. */

@@ -6,7 +6,7 @@
  *
  * Ported from Coderix's prompts.tsx ApprovalPrompt.
  */
-import { Box, Text, useInput } from '@coderix/ink';
+import { Box, Text, useInput } from '@coderix/tui';
 import { useState } from 'react';
 import type { ApprovalRequest } from '../../types.js';
 
