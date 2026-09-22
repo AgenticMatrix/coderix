@@ -4,6 +4,14 @@ import type { DOMElement } from 'ink';
 import { resolveColor } from './color-types.js';
 
 /**
+ * The "inactive" gray used for `dimColor`. This replicates the previous
+ * renderer's theme behavior: `dimColor` replaced the text color with the dark
+ * theme's `inactive` token (`rgb(153,153,153)`), rather than emitting the ANSI
+ * faint (`\x1b[2m`) attribute.
+ */
+const INACTIVE_COLOR = 'rgb(153,153,153)' as const;
+
+/**
  * Color-bearing props that need `ansi:*` normalization before they reach
  * ink's chalk-backed colorizer.
  */
@@ -41,12 +49,19 @@ export const Box = React.forwardRef<DOMElement, React.ComponentProps<typeof InkB
 
 /**
  * `Text` — displays styled text, identical to `ink`'s Text except that
- * `ansi:*` color spellings are normalized to chalk color names.
+ * `ansi:*` color spellings are normalized and `dimColor` replicates the old
+ * renderer's "replace color with inactive gray" semantics (overriding any
+ * explicit `color`, and never emitting the ANSI faint attribute).
  */
 export const Text = React.forwardRef<DOMElement, React.ComponentProps<typeof InkText>>(
   function Text(props, ref) {
     const next = { ...props } as Record<string, unknown>;
-    if (next.color !== undefined) next.color = normalizeColor(next.color);
+    if (props.dimColor) {
+      next.color = INACTIVE_COLOR;
+      next.dimColor = false;
+    } else if (next.color !== undefined) {
+      next.color = normalizeColor(next.color);
+    }
     if (next.backgroundColor !== undefined) next.backgroundColor = normalizeColor(next.backgroundColor);
     return React.createElement(InkText, { ...next, ref } as React.ComponentProps<typeof InkText>);
   },
