@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from '@coderix/tui';
+import { Box, Text, useInput, SAFE_BORDER } from '@coderix/tui';
 import { useMemo, useState } from 'react';
 import { displayWidth } from './MarkdownRenderer.js';
 
@@ -143,7 +143,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
 
   if (sessions.length === 0) {
     return (
-      <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+      <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
         <Text bold color="ansi:cyan">Sessions</Text>
         <Text dimColor>No previous sessions found.</Text>
         <Text dimColor>Press Esc to close.</Text>
@@ -152,7 +152,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
   }
 
   return (
-    <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+    <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
       <Text bold color="ansi:cyan">
         Sessions ({filtered.length}) — select one to resume
       </Text>
@@ -184,7 +184,7 @@ export function SessionPicker({ sessions, onSelect, onCancel }: SessionPickerPro
 
       <Text>{' '}</Text>
       <Text dimColor>
-        Up/Down select  ·  Type to filter  ·  Enter confirm  ·  1-9 quick pick  ·  Esc / Ctrl+C cancel
+        Up/Down select  ∙  Type to filter  ∙  Enter confirm  ∙  1-9 quick pick  ∙  Esc / Ctrl+C cancel
       </Text>
     </Box>
   );

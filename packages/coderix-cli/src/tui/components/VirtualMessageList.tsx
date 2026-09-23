@@ -1,6 +1,5 @@
 import { useRef, memo } from 'react';
-import { Box } from '@coderix/tui';
-import type { DOMElement } from '@coderix/tui';
+import { Box, MeasuredItem } from '@coderix/tui';
 import type { ScrollBoxHandle } from '@coderix/tui';
 import { useVirtualScroll } from '@coderix/tui';
 import type { Message } from '../../types.js';
@@ -11,7 +10,8 @@ const OVERSCAN = 40;
 const DEFAULT_ESTIMATE = 3;
 
 export interface VirtualMessageListProps {
-  messages: Message[];
+  /** Read-only: the list is sliced for the visible window, never mutated. */
+  messages: readonly Message[];
   scrollRef: React.RefObject<ScrollBoxHandle | null>;
   columns: number;
   /**
@@ -67,7 +67,7 @@ export const VirtualMessageList = memo(function VirtualMessageList({
   prevKeyFn.current = getKey;
   const keys = keysRef.current;
 
-  const { range, topSpacer, bottomSpacer, measureRef, spacerRef } =
+  const { range, topSpacer, bottomSpacer, onMeasure, spacerRef } =
     useVirtualScroll(scrollRef, keys, columns, {
       maxMounted: MAX_MOUNTED,
       overscan: OVERSCAN,
@@ -88,9 +88,9 @@ export const VirtualMessageList = memo(function VirtualMessageList({
         const key = keys[idx]!;
         return (
           <ErrorBoundary key={key} name={`Msg-${msg.role}-${key}`}>
-            <Box ref={measureRef(key)} flexDirection="column">
+            <MeasuredItem itemKey={key} onMeasure={onMeasure}>
               {renderMessage(msg, idx)}
-            </Box>
+            </MeasuredItem>
           </ErrorBoundary>
         );
       })}

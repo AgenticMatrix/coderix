@@ -231,6 +231,19 @@ export interface ChatState extends CoreState {
   pastePreviewVisible: boolean;
   /** Global toggle for content-level expansion (thinking, tool results). */
   contentExpanded: boolean;
+  /**
+   * Bumped whenever an action rewrites how ALREADY-RENDERED messages look —
+   * the expand/collapse toggles, which rewrite per-message `toolsExpanded` /
+   * `thinkingExpanded` flags across the whole transcript.
+   *
+   * `contentExpanded` alone cannot stand in for this: `TOGGLE_ALL_CONTENT`
+   * leaves it unchanged when it only needs to expand the still-collapsed
+   * thinking blocks, and `TOGGLE_ALL_EXPAND` never touches it at all. Rows
+   * already committed to the terminal's scrollback cannot be edited in place,
+   * so the transcript has to be reprinted — see `transcript-commit.ts`, which
+   * keys ink's `<Static>` off this counter.
+   */
+  renderRevision: number;
   /** When set, renders a sub-agent transcript view instead of the main chat. */
   subAgentView: { agentId: string } | null;
   /** Saved main chat messages when viewing a sub-agent. Restored on exit. */

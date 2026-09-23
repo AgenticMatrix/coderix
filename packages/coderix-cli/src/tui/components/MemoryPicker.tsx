@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from '@coderix/tui';
+import { Box, Text, useInput, SAFE_BORDER } from '@coderix/tui';
 import { useState, useEffect, useRef } from 'react';
 import { homedir } from 'os';
 import { resolve } from 'path';
@@ -85,7 +85,7 @@ export function MemoryPicker({ cwd, onSelect, onCancel }: MemoryPickerProps) {
   const statusColor = config.enabled ? 'ansi:green' : 'ansi:yellow';
 
   return (
-    <Box borderStyle="round" borderColor="ansi:cyan" flexDirection="column" paddingX={1} paddingY={1}>
+    <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1} paddingY={1}>
       <Text bold color="ansi:cyan">
         Memory
       </Text>

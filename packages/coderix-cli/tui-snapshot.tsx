@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import React from 'react';
-import { renderSync, Box, Text, Divider, ScrollBox, useVirtualScroll } from '@coderix/tui';
+import { renderSync, Box, Text, Divider, ScrollBox, useVirtualScroll, MeasuredItem } from '@coderix/tui';
 import type { ScrollBoxHandle } from '@coderix/tui';
 import { MarkdownRenderer } from './src/tui/components/MarkdownRenderer.js';
 
@@ -67,7 +67,7 @@ function VirtualListFixture() {
   return (
     <Box flexDirection="column" height={8}>
       <Text>HEADER</Text>
-      <ScrollBox ref={scrollRef} flexGrow={1} stickyScroll>
+      <ScrollBox ref={scrollRef} height={6} stickyScroll>
         <InnerList items={items} scrollRef={scrollRef} />
       </ScrollBox>
       <Text>FOOTER</Text>
@@ -82,7 +82,7 @@ function InnerList({
   items: string[];
   scrollRef: React.RefObject<ScrollBoxHandle | null>;
 }) {
-  const { range, topSpacer, bottomSpacer, measureRef, spacerRef } = useVirtualScroll(
+  const { range, topSpacer, bottomSpacer, onMeasure, spacerRef } = useVirtualScroll(
     scrollRef,
     items,
     WIDTH,
@@ -93,9 +93,9 @@ function InnerList({
     <>
       <Box ref={spacerRef} height={topSpacer} flexShrink={0} />
       {items.slice(s, e).map((it, i) => (
-        <Box key={items[s + i]} ref={measureRef(items[s + i]!)} flexDirection="column">
+        <MeasuredItem key={items[s + i]} itemKey={items[s + i]!} onMeasure={onMeasure}>
           <Text>{it}</Text>
-        </Box>
+        </MeasuredItem>
       ))}
       {bottomSpacer > 0 && <Box height={bottomSpacer} flexShrink={0} />}
     </>

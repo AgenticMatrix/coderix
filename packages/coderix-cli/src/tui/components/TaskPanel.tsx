@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text } from '@coderix/tui';
+import { Box, Text, SAFE_BORDER } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { listTasks } from '@coderix/core';
 import type { Task } from '@coderix/core';
@@ -16,7 +16,7 @@ const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
 const SPINNER_INTERVAL_MS = 80;
 
 const STATUS_ICON: Record<string, string> = {
-  pending: '○',
+  pending: '▱',
   in_progress: '⟳',
   completed: '✓',
 };
@@ -131,7 +131,7 @@ export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelP
   }
 
   return (
-    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
+    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle={SAFE_BORDER} borderColor="ansi:blackBright">
       <Box>
         <Text bold>Tasks </Text>
         <Text dimColor>

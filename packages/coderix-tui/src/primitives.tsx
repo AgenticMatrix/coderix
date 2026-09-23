@@ -1,7 +1,9 @@
 import React from 'react';
 import { Box as InkBox, Text as InkText, useWindowSize } from 'ink';
 import type { DOMElement } from 'ink';
+import stringWidth from 'string-width';
 import { resolveColor } from './color-types.js';
+import { HORIZONTAL_RULE } from './safe-glyphs.js';
 
 /**
  * The "inactive" gray used for `dimColor`. This replicates the previous
@@ -72,7 +74,17 @@ export type DividerProps = {
   width?: number;
   /** Color for the divider line. */
   color?: string;
-  /** Character to repeat for the divider line. */
+  /**
+   * Character to repeat for the divider line.
+   *
+   * Defaults to `HORIZONTAL_RULE` (U+23AF ⎯), which is East Asian **Neutral** —
+   * exactly 1 column in every terminal. The conventional choice, U+2500 ─, is
+   * **Ambiguous**: 1 column to `string-width` but 2 in a CJK-locale terminal.
+   * Since a divider spans the whole terminal width, that would double its
+   * length and wrap it onto a second row that ink does not know it drew,
+   * corrupting every subsequent in-place repaint. Override only with another
+   * single-column glyph — see `safe-glyphs.ts`.
+   */
   char?: string;
   /** Padding to subtract from the width. */
   padding?: number;
@@ -81,12 +93,12 @@ export type DividerProps = {
 };
 
 /**
- * A horizontal divider line.
+ * A horizontal divider line, optionally with a centered title.
  */
 export function Divider({
   width,
   color,
-  char = '─',
+  char = HORIZONTAL_RULE,
   padding = 0,
   title,
 }: DividerProps): React.ReactNode {
@@ -94,7 +106,9 @@ export function Divider({
   const effectiveWidth = Math.max(0, (width ?? terminalWidth) - padding);
 
   if (title) {
-    const titleWidth = title.length + 2; // +2 for spaces around the title
+    // Measure in display columns, not code units: `.length` counts a wide CJK
+    // title character as 1, which would make the rule overshoot and wrap.
+    const titleWidth = stringWidth(title) + 2; // +2 for the spaces around it
     const sideWidth = Math.max(0, effectiveWidth - titleWidth);
     const leftWidth = Math.floor(sideWidth / 2);
     const rightWidth = sideWidth - leftWidth;

@@ -1,8 +1,8 @@
-import { Box, Text } from '@coderix/tui';
+import { Box, Text, ARROW_UP, ARROW_DOWN } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { useState, useEffect } from 'react';
 
-const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
+const SPINNER_FRAMES = ['∙', '✢', '✱', '✶', '✻', '✽'];
 
 export type ActivityPhase = 'idle' | 'thinking' | 'executing' | 'streaming' | 'compacting';
 
@@ -133,7 +133,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
           </Box>
           <Box flexDirection="column" flexGrow={1}>
             <Text color="#EAB308">
-              Interrupted… (↓ {tokenStr} tokens, {timeStr})
+              Interrupted... (↓ {tokenStr} tokens, {timeStr})
             </Text>
           </Box>
         </Box>
@@ -145,11 +145,11 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
     return (
       <Box flexDirection="row" marginBottom={1}>
         <Box width={2} flexShrink={0}>
-          <Text dimColor>●</Text>
+          <Text dimColor>▪</Text>
         </Box>
         <Box flexDirection="column" flexGrow={1}>
           <Text dimColor>
-            Done… (↓ {tokenStr} tokens, {timeStr} since last input)
+            Done... (↓ {tokenStr} tokens, {timeStr} since last input)
           </Text>
         </Box>
       </Box>
@@ -165,7 +165,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
           <SpinnerGlyph active={true} />
           <Box flexDirection="column" flexGrow={1}>
             <Text>
-              <Text color="#A855F7">{PHASE_NAMES[phase]}…</Text>
+              <Text color="#A855F7">{PHASE_NAMES[phase]}...</Text>
               <Text dimColor> ({timeStr})</Text>
             </Text>
           </Box>
@@ -178,15 +178,15 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
   const timeStr = formatTime(turnElapsed);
   const phaseName = PHASE_NAMES[phase];
   const tokenStr = formatTokens(turnOutputTokens);
-  const arrow = phase === 'streaming' ? '↑' : '↓';
+  const arrow = phase === 'streaming' ? ARROW_UP : ARROW_DOWN;
 
   return (
     <Box flexDirection="row" marginBottom={1}>
       <SpinnerGlyph active={true} />
       <Box flexDirection="column" flexGrow={1}>
         <Text>
-          <ShimmerText text={`${phaseName}…`} active={phase === 'thinking'} color="#A855F7" />
-          <Text dimColor> ({timeStr} · {arrow} {tokenStr} tokens)</Text>
+          <ShimmerText text={`${phaseName}...`} active={phase === 'thinking'} color="#A855F7" />
+          <Text dimColor> ({timeStr} ∙ {arrow} {tokenStr} tokens)</Text>
         </Text>
       </Box>
     </Box>

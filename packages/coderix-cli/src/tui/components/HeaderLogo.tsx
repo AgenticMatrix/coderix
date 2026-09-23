@@ -1,7 +1,25 @@
 import React from 'react';
-import { Box, Text } from '@coderix/tui';
+import {
+  Box,
+  Text,
+  HORIZONTAL_RULE,
+  VERTICAL_SEPARATOR,
+  CORNER_TOP_LEFT,
+  CORNER_TOP_RIGHT,
+  CORNER_BOTTOM_LEFT,
+  CORNER_BOTTOM_RIGHT,
+  toSafeGlyphs,
+} from '@coderix/tui';
 import { getSkillRegistry } from '@coderix/core';;
 
+/**
+ * The art is written with the familiar ● and · so the shape stays readable in
+ * source, then passed through `toSafeGlyphs` so what actually reaches the
+ * terminal is single-column in every locale. Both ● (U+25CF) and · (U+00B7) are
+ * East Asian **Ambiguous**: a CJK-locale terminal draws them 2 columns wide,
+ * which would double the logo's width, wrap every line, and desynchronize ink's
+ * cursor arithmetic for the whole frame. See `safe-glyphs.ts`.
+ */
 const CADUCEUS_ART = [
   '               ················',
   '             ··●●●●●●●●●●●●●··',
@@ -19,7 +37,7 @@ const CADUCEUS_ART = [
   '            ··●●●●··              ',
   '           ··●●··                 ',
   '           ····                    ',
-];
+].map(toSafeGlyphs);
 
 export function HeaderLogo() {
   const logoLines = CADUCEUS_ART;
@@ -147,8 +165,20 @@ export function HeaderLogo() {
 
   const artDashLen = artMaxLen + 2;
   const rightDashLen = rightMaxLen + 2;
-  const topBorder = `┌${'─'.repeat(artDashLen)}┬${'─'.repeat(rightDashLen)}┐`;
-  const botBorder = `└${'─'.repeat(artDashLen)}┴${'─'.repeat(rightDashLen)}┘`;
+  // The tee glyphs ┬ / ┴ have no single-column counterpart, so the rule simply
+  // runs through the join. See the corner notes in `safe-glyphs.ts`.
+  const topBorder =
+    CORNER_TOP_LEFT +
+    HORIZONTAL_RULE.repeat(artDashLen) +
+    HORIZONTAL_RULE +
+    HORIZONTAL_RULE.repeat(rightDashLen) +
+    CORNER_TOP_RIGHT;
+  const botBorder =
+    CORNER_BOTTOM_LEFT +
+    HORIZONTAL_RULE.repeat(artDashLen) +
+    HORIZONTAL_RULE +
+    HORIZONTAL_RULE.repeat(rightDashLen) +
+    CORNER_BOTTOM_RIGHT;
 
   const renderLine = (lineIdx: number): React.ReactNode => {
     const artLine = lineIdx < logoLines.length ? logoLines[lineIdx] : '';
@@ -161,11 +191,11 @@ export function HeaderLogo() {
 
     return (
       <Text key={lineIdx}>
-        <Text color="ansi:blackBright">│ </Text>
+        <Text color="ansi:blackBright">{`${VERTICAL_SEPARATOR} `}</Text>
         <Text color="#AB47BC">{artPadded}</Text>
-        <Text color="ansi:blackBright"> │ </Text>
+        <Text color="ansi:blackBright">{` ${VERTICAL_SEPARATOR} `}</Text>
         {rightJsx}
-        <Text color="ansi:blackBright"> │</Text>
+        <Text color="ansi:blackBright">{` ${VERTICAL_SEPARATOR}`}</Text>
       </Text>
     );
   };

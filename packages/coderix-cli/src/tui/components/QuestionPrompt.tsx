@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Text } from '@coderix/tui';
+import { Box, Text, SAFE_BORDER } from '@coderix/tui';
 import { useInput } from '@coderix/tui';
 
 export interface QuestionPromptProps {
@@ -114,7 +114,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
   });
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="ansi:cyan" paddingX={1} paddingY={1}>
+    <Box flexDirection="column" borderStyle={SAFE_BORDER} borderColor="ansi:cyan" paddingX={1} paddingY={1}>
       {/* Progress indicator for multi-question */}
       {questions.length > 1 && (
         <Text dimColor>
@@ -138,7 +138,7 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
               <Box key={i}>
                 <Text color={isCursor ? 'ansi:cyan' : isSelected ? 'ansi:green' : 'ansi:white'}>
                   {isCursor ? '❯' : ' '}{' '}
-                  {isSelected ? (q.multiSelect ? '[x]' : '●') : (q.multiSelect ? '[ ]' : '○')}{' '}
+                  {isSelected ? (q.multiSelect ? '[x]' : '▪') : (q.multiSelect ? '[ ]' : '▱')}{' '}
                   {i + 1}. {opt.label}
                 </Text>
                 <Text dimColor> — {opt.description}</Text>
@@ -151,16 +151,16 @@ export function QuestionPrompt({ questions, onAnswer }: QuestionPromptProps) {
       {options.length === 0 && (
         <Box marginTop={1}>
           <Text dimColor>Your answer: </Text>
-          <Text color="ansi:white">{customText || '█'}</Text>
+          <Text color="ansi:white">{customText || '▰'}</Text>
         </Box>
       )}
 
       <Box marginTop={1}>
         <Text dimColor>
           {q.multiSelect
-            ? 'Space to select · Enter to submit · Esc to skip'
-            : 'Enter to submit · Esc to skip'}
-          {questions.length > 1 ? ` · ${qIndex + 1}/${questions.length}` : ''}
+            ? 'Space to select ∙ Enter to submit ∙ Esc to skip'
+            : 'Enter to submit ∙ Esc to skip'}
+          {questions.length > 1 ? ` ∙ ${qIndex + 1}/${questions.length}` : ''}
         </Text>
       </Box>
     </Box>

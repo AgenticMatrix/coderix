@@ -1,187 +1,199 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { measureElement } from 'ink';
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Box, useBoxMetrics } from 'ink';
 import type { DOMElement } from 'ink';
 import type { ScrollBoxHandle } from './scroll-viewport.js';
 
-const MAX_MOUNTED_DEFAULT = 200;
+const DEFAULT_MAX_MOUNTED = 200;
+const DEFAULT_OVERSCAN = 20;
 const DEFAULT_ESTIMATE = 3;
 
 export type VirtualScrollOptions = {
-  /** Maximum items mounted at once (default 200). */
+  /** Upper bound on simultaneously mounted items (default 200). */
   maxMounted?: number;
-  /** Extra rows beyond the viewport to keep mounted (default 40). */
+  /** Extra rows rendered above and below the viewport (default 20). */
   overscan?: number;
-  /** Height estimate for unmeasured items in rows (default 3). */
+  /** Row height assumed for items that have never been measured (default 3). */
   estimateHeight?: number;
 };
 
 export type VirtualScrollResult = {
-  /** [startIndex, endIndex) half-open slice of items to render. */
+  /** Half-open `[start, end)` slice of items to mount. */
   range: readonly [number, number];
-  /** Height in rows of the spacer before the first rendered item. */
+  /** Rows of filler standing in for the unmounted items above `start`. */
   topSpacer: number;
-  /** Height in rows of the spacer after the last rendered item. */
+  /** Rows of filler standing in for the unmounted items below `end`. */
   bottomSpacer: number;
-  /** Callback ref factory. Attach `measureRef(itemKey)` to each item's root Box. */
-  measureRef: (key: string) => (el: DOMElement | null) => void;
-  /** Ref for the top spacer Box. */
-  spacerRef: React.RefObject<DOMElement | null>;
-  /** Cumulative y-position of each item in content-wrapper coordinates. */
-  offsets: ArrayLike<number>;
-  /** Read the computed top offset for the item at index. */
-  getItemTop: (index: number) => number;
-  /** Get the mounted DOMElement for the item at index, or null. */
-  getItemElement: (index: number) => DOMElement | null;
-  /** Measured height, or undefined if not yet measured. */
-  getItemHeight: (index: number) => number | undefined;
-  /** Scroll so item `i` is visible. */
-  scrollToIndex: (i: number) => void;
+  /** Reports an item's measured height. Stable identity. */
+  onMeasure: (key: string, height: number) => void;
+  /** Attach to the top spacer box (kept for API compatibility). */
+  spacerRef: RefObject<DOMElement | null>;
+  /** Total height of all items: measured where known, estimated elsewhere. */
+  totalHeight: number;
+  /** Scroll so the item at `index` is brought into view. */
+  scrollToIndex: (index: number) => void;
 };
 
 /**
- * Bottom-anchored windowed list virtualization.
+ * Wraps one list item and reports its height as laid out by Yoga.
  *
- * Coderix's transcript always follows the bottom, so we compute the trailing
- * suffix of items that fits the viewport and render only that, with a top
- * spacer holding the remaining height so the window stays bottom-aligned. Item
- * heights are measured with ink's public `measureElement` and cached;
- * unmeasured items fall back to `estimateHeight` until the next measurement
- * pass converges.
+ * `useBoxMetrics` tracks the live layout, so a height change (text rewrapping
+ * after a resize, a streaming message growing) is reported without polling.
+ */
+export function MeasuredItem({
+  itemKey,
+  onMeasure,
+  children,
+}: {
+  itemKey: string;
+  onMeasure: (key: string, height: number) => void;
+  children?: ReactNode;
+}): ReactNode {
+  const ref = useRef<DOMElement | null>(null);
+  const { height, hasMeasured } = useBoxMetrics(ref);
+
+  useEffect(() => {
+    if (hasMeasured) onMeasure(itemKey, height);
+  }, [itemKey, height, hasMeasured, onMeasure]);
+
+  return createElement(Box, { ref, flexDirection: 'column', flexShrink: 0 }, children);
+}
+
+/**
+ * Windowed rendering for a long list inside a clipping `ScrollBox`.
+ *
+ * Only the items overlapping the visible window (plus `overscan` rows of
+ * margin) are mounted; the rest are replaced by two spacer boxes whose heights
+ * add up to the space those items would have occupied. Total content height is
+ * therefore unchanged, which keeps the parent viewport's scroll arithmetic
+ * honest.
+ *
+ * The window is derived from the viewport's real scroll offset, read from the
+ * `ScrollBox` handle — not guessed. Heights are measured by `MeasuredItem` and
+ * cached; anything not yet measured contributes `estimateHeight`, and the
+ * window is recomputed as real measurements arrive.
  */
 export function useVirtualScroll(
-  scrollRef: React.RefObject<ScrollBoxHandle | null>,
+  scrollRef: RefObject<ScrollBoxHandle | null>,
   itemKeys: readonly string[],
   _columns: number,
   options?: VirtualScrollOptions,
 ): VirtualScrollResult {
-  const maxMounted = options?.maxMounted ?? MAX_MOUNTED_DEFAULT;
+  const maxMounted = options?.maxMounted ?? DEFAULT_MAX_MOUNTED;
+  const overscan = options?.overscan ?? DEFAULT_OVERSCAN;
   const estimateHeight = options?.estimateHeight ?? DEFAULT_ESTIMATE;
 
-  const heightsRef = useRef(new Map<string, number>());
-  const itemElsRef = useRef(new Map<string, DOMElement>());
-  const [measuredTick, setMeasuredTick] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
+  const heights = useRef(new Map<string, number>());
+  const [measureTick, setMeasureTick] = useState(0);
+  const [viewport, setViewport] = useState({ top: 0, height: 0 });
 
-  const n = itemKeys.length;
+  const count = itemKeys.length;
 
-  // Track the viewport height from the parent ScrollBox handle.
+  // Track the parent viewport's scroll offset and height.
   useEffect(() => {
     const handle = scrollRef.current;
     if (!handle) return;
-    setViewportHeight(handle.getViewportHeight());
-    return handle.subscribe(() => setViewportHeight(handle.getViewportHeight()));
+
+    const read = () => {
+      const top = handle.getScrollTop();
+      const height = handle.getViewportHeight();
+      setViewport((prev) => (prev.top === top && prev.height === height ? prev : { top, height }));
+    };
+
+    read();
+    return handle.subscribe(read);
   }, [scrollRef]);
 
-  // Measure mounted items after each commit, deferred until ink's layout pass
-  // has run (measureElement reports stale heights if called synchronously in
-  // the effect). Cache heights and re-render when any value changes; converges
-  // once heights stabilize.
+  const onMeasure = useCallback((key: string, height: number) => {
+    if (height <= 0) return;
+    if (heights.current.get(key) === height) return;
+    heights.current.set(key, height);
+    setMeasureTick((tick) => tick + 1);
+  }, []);
+
+  // Drop cached heights for items that no longer exist, so the map does not
+  // grow without bound across compaction and /clear.
   useEffect(() => {
-    let cancelled = false;
-    const id = setTimeout(() => {
-      if (cancelled) return;
-      let changed = false;
-      for (const [key, el] of itemElsRef.current) {
-        const height = measureElement(el).height;
-        if (height > 0 && heightsRef.current.get(key) !== height) {
-          heightsRef.current.set(key, height);
-          changed = true;
-        }
-      }
-      if (changed) setMeasuredTick((tick) => tick + 1);
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
-  });
-
-  // Cumulative heights using cached measurements, falling back to the estimate.
-  const offsets = useMemo(() => {
-    const arr = new Array<number>(n + 1);
-    arr[0] = 0;
-    for (let i = 0; i < n; i++) {
-      arr[i + 1] = arr[i] + (heightsRef.current.get(itemKeys[i]!) ?? estimateHeight);
+    if (heights.current.size <= itemKeys.length * 2) return;
+    const live = new Set(itemKeys);
+    for (const key of heights.current.keys()) {
+      if (!live.has(key)) heights.current.delete(key);
     }
-    return arr;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itemKeys, n, measuredTick, estimateHeight]);
+  }, [itemKeys]);
 
-  const totalHeight = offsets[n] ?? 0;
+  /** Prefix sums: `offsets[i]` is the y position of item `i`. */
+  const offsets = useMemo(() => {
+    const sums = new Array<number>(count + 1);
+    sums[0] = 0;
+    for (let i = 0; i < count; i++) {
+      sums[i + 1] = sums[i]! + (heights.current.get(itemKeys[i]!) ?? estimateHeight);
+    }
+    return sums;
+    // `measureTick` intentionally invalidates this when a height is learned.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemKeys, count, measureTick, estimateHeight]);
+
+  const totalHeight = offsets[count] ?? 0;
 
   const { range, topSpacer, bottomSpacer } = useMemo(() => {
-    if (n === 0) {
+    if (count === 0) {
       return { range: [0, 0] as const, topSpacer: 0, bottomSpacer: 0 };
     }
-    const height = viewportHeight;
 
-    // Cold start (height not measured yet): render everything top-aligned so
-    // the viewport can be measured on the next layout pass.
-    if (height <= 0) {
-      const start = Math.max(0, n - maxMounted);
-      return { range: [start, n] as const, topSpacer: 0, bottomSpacer: 0 };
+    // Before the first layout pass the viewport height is unknown. Mount the
+    // most recent items so the next pass has something to measure.
+    if (viewport.height <= 0) {
+      return {
+        range: [Math.max(0, count - maxMounted), count] as const,
+        topSpacer: 0,
+        bottomSpacer: 0,
+      };
     }
 
-    // Everything fits: render all items from the top.
-    if (totalHeight <= height) {
-      return { range: [0, n] as const, topSpacer: 0, bottomSpacer: 0 };
-    }
+    const windowTop = viewport.top - overscan;
+    const windowBottom = viewport.top + viewport.height + overscan;
 
-    // Tall content: find the trailing suffix that fits within the viewport.
-    let start = n;
-    let acc = 0;
-    while (start > 0) {
-      const h = heightsRef.current.get(itemKeys[start - 1]!) ?? estimateHeight;
-      if (acc + h > height) break;
-      acc += h;
-      start -= 1;
-    }
-    // Always keep at least the last item mounted (e.g. one item taller than the viewport).
-    if (start >= n) start = n - 1;
-    if (n - start > maxMounted) start = n - maxMounted;
+    // Last item starting at or before the window's top edge.
+    let start = lastIndexAtOrBefore(offsets, windowTop, count);
+    // Advance past every item that begins before the window's bottom edge.
+    let end = start;
+    while (end < count && offsets[end]! < windowBottom) end += 1;
+    if (end === start && start < count) end = start + 1;
 
-    const windowHeight = offsets[n]! - offsets[start]!;
-    const spacer = Math.max(0, height - windowHeight);
+    // Cap the mounted count, keeping the window anchored near the viewport.
+    if (end - start > maxMounted) start = Math.max(0, end - maxMounted);
 
-    return { range: [start, n] as const, topSpacer: spacer, bottomSpacer: 0 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [n, viewportHeight, totalHeight, offsets, maxMounted, estimateHeight, itemKeys]);
-
-  const measureRef = useCallback((key: string) => {
-    return (el: DOMElement | null) => {
-      if (el) itemElsRef.current.set(key, el);
-      else itemElsRef.current.delete(key);
+    return {
+      range: [start, end] as const,
+      topSpacer: offsets[start] ?? 0,
+      bottomSpacer: Math.max(0, (offsets[count] ?? 0) - (offsets[end] ?? 0)),
     };
-  }, []);
+  }, [count, viewport, offsets, overscan, maxMounted]);
 
   const spacerRef = useRef<DOMElement | null>(null);
 
-  const getItemTop = useCallback((index: number) => offsets[index] ?? 0, [offsets]);
-  const getItemElement = useCallback(
-    (index: number) => itemElsRef.current.get(itemKeys[index] ?? '') ?? null,
-    [itemKeys],
-  );
-  const getItemHeight = useCallback(
-    (index: number) => heightsRef.current.get(itemKeys[index] ?? ''),
-    [itemKeys],
-  );
   const scrollToIndex = useCallback(
-    (i: number) => {
-      scrollRef.current?.scrollTo(offsets[i] ?? 0);
+    (index: number) => {
+      const clamped = Math.max(0, Math.min(index, Math.max(0, count - 1)));
+      scrollRef.current?.scrollTo(offsets[clamped] ?? 0);
     },
-    [scrollRef, offsets],
+    [scrollRef, offsets, count],
   );
 
-  return {
-    range,
-    topSpacer,
-    bottomSpacer,
-    measureRef,
-    spacerRef,
-    offsets,
-    getItemTop,
-    getItemElement,
-    getItemHeight,
-    scrollToIndex,
-  };
+  return { range, topSpacer, bottomSpacer, onMeasure, spacerRef, totalHeight, scrollToIndex };
+}
+
+/**
+ * Index of the last entry in the ascending prefix-sum array whose value is at
+ * or below `target`, clamped into `[0, count)`.
+ */
+function lastIndexAtOrBefore(offsets: readonly number[], target: number, count: number): number {
+  if (target <= 0) return 0;
+  let low = 0;
+  let high = count;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (offsets[mid]! <= target) low = mid + 1;
+    else high = mid;
+  }
+  return Math.max(0, low - 1);
 }
