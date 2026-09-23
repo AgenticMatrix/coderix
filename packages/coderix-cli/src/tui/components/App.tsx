@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { Box, Text, ScrollBox, Divider } from '@coderix/tui';
-import type { ScrollBoxHandle } from '@coderix/tui';
+import { Box, Text, ScrollBox, Static, Divider, useBoxMetrics } from '@coderix/tui';
+import type { ScrollBoxHandle, DOMElement } from '@coderix/tui';
 import { useTerminalSize } from '@coderix/tui';
 
 import type { QueryEngine } from '@coderix/core';
@@ -23,6 +23,7 @@ import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { CommandHint } from './CommandHint.js';
 import { VirtualMessageList } from './VirtualMessageList.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
+import { splitTranscript, shouldFlush, initialEpoch, advanceEpoch } from './transcript-commit.js';
 import { useChatReducer, convertTranscriptToMessages } from '../hooks/useChatReducer.js';;
 import { useAgentBridge } from '../hooks/useAgentBridge.js';;
 import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
@@ -951,8 +952,45 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     ? state.messages.length - frozenRef.current.length
     : 0;
 
-  // ── ScrollBox ref for virtual scrolling ─────────────────────────
+  // ── ScrollBox ref for the live tail ─────────────────────────────
   const scrollRef = useRef<ScrollBoxHandle | null>(null);
+
+  // ── Viewport arithmetic ─────────────────────────────────────────
+  // The transcript is rendered in two halves (see `transcript-commit.ts`):
+  // finished messages are handed to `<Static>`, which writes them to the
+  // terminal's own scrollback and never repaints them, while the live tail and
+  // the input chrome stay in the repainted frame.
+  //
+  // This split is what makes the transcript scrollable at all. Scrolling is the
+  // terminal's job — the wheel, the scrollbar, Cmd+F and copy-paste all act on
+  // its scrollback buffer — so there is nothing to scroll unless rows actually
+  // reach that buffer, and nothing survives unless the buffer is never erased.
+  // Ink erases it (`ESC[3J`) for any frame that fills the viewport, so the
+  // repainted half has to stay strictly shorter than the terminal while history
+  // grows past it. Static rows are excluded from the height ink measures, which
+  // is precisely what allows both at once.
+  //
+  // Hence the root claims one row FEWER than the terminal has: ink treats a
+  // frame as fullscreen at `height >= terminalRows`, and every one of its
+  // clearing branches is behind that test. Staying a row short makes them all
+  // unreachable.
+  const footerRef = useRef<DOMElement | null>(null);
+  const footerMetrics = useBoxMetrics(footerRef);
+
+  const ROOT_PADDING_TOP = 1;
+  const rootRows = Math.max(1, rows - 1);
+
+  // Whatever the footer — command hints, paste preview, input, status — does not
+  // claim is left for the live tail. Measured from the live layout rather than
+  // hard-coded, because the footer grows and shrinks and a stale constant would
+  // silently reintroduce the overflow this exists to prevent.
+  //
+  // Until the first layout pass reports a real footer height, claim a single
+  // row. Starting small can only under-fill the screen for one frame; starting
+  // large would overflow it, which is the failure mode being avoided.
+  const liveRows = footerMetrics.hasMeasured
+    ? Math.max(1, rootRows - ROOT_PADDING_TOP - footerMetrics.height)
+    : 1;
 
   // Track the last assistant message ID during streaming for
   // LRU-cached markdown rendering.
@@ -964,7 +1002,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     streamingMsgIdRef.current = null;
   }
 
-  // ── Message renderer for VirtualMessageList ─────────────────────
+  // ── Message renderer, shared by both halves of the transcript ───
   const renderMessage = useCallback(
     (msg: Message, _idx: number) => (
       <MessageBubble
@@ -979,18 +1017,126 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     [state.contentExpanded, config.theme, state.isStreaming],
   );
 
-  return (
-    <Box flexDirection="column" height="100%" paddingTop={1}>
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <HeaderLogo key="header" />
+  // ── Commit boundary ─────────────────────────────────────────────
+  // Everything before the first message that can still change MAY be handed to
+  // `<Static>` and become permanent scrollback; the rest stays in the frame.
+  //
+  // "May", not "is": committing is visible. Ink clears the interactive region,
+  // writes the static rows, then repaints, and because that clear is sized from
+  // the previous frame's line count it can leave a stale row of chrome on
+  // screen. So the transcript is flushed only when the live half is running out
+  // of room — see `shouldFlush`. Between flushes the split is held still, which
+  // is why `committedCount` is state rather than derived.
+  //
+  // While the display is frozen the boundary is pinned where it was: freezing
+  // exists so the user can read without the view moving underneath them, and
+  // committing during a freeze would print rows the user has not asked to see.
+  const committableCount = useMemo(
+    () => splitTranscript(displayMessages).committed.length,
+    [displayMessages],
+  );
 
-      {/* ── Scrollable message area with virtual scrolling ─────── */}
+  const liveRef = useRef<DOMElement | null>(null);
+  const liveMetrics = useBoxMetrics(liveRef);
+
+  const [committedCount, setCommittedCount] = useState(0);
+
+  // A flush is a render-time decision about what the NEXT frame commits, so it
+  // is applied in an effect rather than mid-render.
+  useEffect(() => {
+    if (state.isFrozen) return;
+    const next = shouldFlush({
+      committableCount,
+      liveContentRows: liveMetrics.height,
+      liveRegionRows: liveRows,
+      alreadyCommitted: committedCount,
+    });
+    if (next > 0) setCommittedCount(next);
+  }, [state.isFrozen, committableCount, liveMetrics.height, liveRows, committedCount]);
+
+  // History that shrank (cleared, undone, replaced) can never stay committed:
+  // scrollback cannot retract rows, so the count is clamped and `advanceEpoch`
+  // turns the shrinkage into a reprint.
+  const effectiveCommitted = Math.min(committedCount, committableCount);
+  const committedMessages = displayMessages.slice(0, effectiveCommitted);
+  const liveMessages = displayMessages.slice(effectiveCommitted);
+
+  // `<Static>` remembers how many items it has already emitted, so it appends
+  // rather than reprinting — but only while it is the same instance. Changing
+  // its key mounts a fresh one, which ink detects (`onStaticChange`) and treats
+  // as "discard the accumulated output and emit everything again". That is the
+  // only way to honour a retroactive change to rows already written out.
+  const epochRef = useRef(initialEpoch());
+  epochRef.current = advanceEpoch(epochRef.current, {
+    renderRevision: state.renderRevision,
+    committedCount: effectiveCommitted,
+    subAgentId: state.subAgentView?.agentId,
+  });
+  const staticKey = epochRef.current.token;
+
+  // The banner rides along as the first static item so it is printed once and
+  // then lives in scrollback: it never changes, so keeping it in the repainted
+  // frame would spend ~20 of the live region's rows redrawing it identically
+  // every time. Scrolling up still reaches it, which is why it is committed
+  // rather than simply dropped once the conversation starts.
+  type CommittedItem = { readonly kind: 'banner' } | { readonly kind: 'message'; readonly message: Message };
+  const committedItems = useMemo<readonly CommittedItem[]>(
+    () => [
+      { kind: 'banner' },
+      ...committedMessages.map((message) => ({ kind: 'message' as const, message })),
+    ],
+    [committedMessages],
+  );
+
+  // `<Static>` calls this for each item it has not yet emitted, in order,
+  // exactly once.
+  const renderCommitted = useCallback(
+    (item: CommittedItem) => {
+      if (item.kind === 'banner') {
+        return <HeaderLogo key="header" />;
+      }
+      const msg = item.message;
+      return (
+        <ErrorBoundary key={msg.id} name={`Committed-${msg.role}-${msg.id}`}>
+          <Box flexDirection="column" paddingX={1}>
+            {renderMessage(msg, 0)}
+          </Box>
+        </ErrorBoundary>
+      );
+    },
+    [renderMessage],
+  );
+
+  return (
+    <Box flexDirection="column" height={rootRows} paddingTop={ROOT_PADDING_TOP}>
+      {/* ── Committed history ──────────────────────────────────────
+          Written to the terminal's scrollback once and never repainted, which
+          is what makes it scrollable with the wheel. The banner is the first
+          item, so it is printed once and then lives in scrollback rather than
+          being redrawn in every frame.
+
+          The key forces a reprint when committed rows would render differently
+          — see `advanceEpoch`. */}
+      <Static key={staticKey} items={committedItems}>
+        {renderCommitted}
+      </Static>
+
+      {/* ── Live tail ──────────────────────────────────────────────
+          Messages that can still change, plus the prompts and panels that
+          belong to the current turn.
+
+          `liveRows` is a CEILING, not a fixed size: `shrinkToContent` lets the
+          box collapse to its content so a short transcript sits just above the
+          input instead of being padded out to full height with dead space. The
+          ceiling is what keeps the frame shorter than the terminal, which is
+          what keeps ink off its scrollback-erasing repaint path. */}
       <ScrollBox
         ref={scrollRef}
-        flexGrow={1}
-        flexShrink={1}
+        height={liveRows}
         stickyScroll
+        shrinkToContent
         paddingX={1}
+        contentRef={liveRef}
       >
         {/* ── Freeze indicator ───────────────────────────────── */}
         {state.isFrozen && (
@@ -1030,11 +1176,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           </Box>
         )}
 
-        {/* ── Virtual-scrolled message list ───────────────────── */}
-        {displayMessages.length > 0 && (
+        {/* ── Live messages ───────────────────────────────────── */}
+        {liveMessages.length > 0 && (
           <ErrorBoundary name="VirtualMessageList">
             <VirtualMessageList
-              messages={displayMessages}
+              messages={liveMessages}
               scrollRef={scrollRef}
               columns={columns}
               renderMessage={renderMessage}
@@ -1158,7 +1304,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
         )}
       </ScrollBox>
 
-      <Box flexDirection="column" flexShrink={0}>
+      <Box ref={footerRef} flexDirection="column" flexShrink={0}>
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
         <Divider padding={2} />
         <InputBox

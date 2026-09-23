@@ -636,6 +636,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'TOGGLE_THINKING':
       return {
         ...state,
+        // The target is addressed by id, so it may sit anywhere in the
+        // transcript — including in the already-committed region.
+        renderRevision: state.renderRevision + 1,
         messages: state.messages.map((m) =>
           m.id === action.id
             ? { ...m, thinkingExpanded: !m.thinkingExpanded }
@@ -646,6 +649,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'TOGGLE_TOOLS':
       return {
         ...state,
+        renderRevision: state.renderRevision + 1,
         messages: state.messages.map((m) =>
           m.id === action.id
             ? { ...m, toolsExpanded: !m.toolsExpanded }
@@ -660,6 +664,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       });
       return {
         ...state,
+        renderRevision: state.renderRevision + 1,
         messages: state.messages.map((m) => ({
           ...m,
           toolsExpanded: hasCollapsedTools ? true : false,
@@ -676,6 +681,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         contentExpanded: expandContent,
+        renderRevision: state.renderRevision + 1,
         messages: state.messages.map((m) => ({
           ...m,
           thinkingExpanded: expandContent ? true : false,
@@ -1040,6 +1046,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     pasteBlocks: {},
     pastePreviewVisible: false,
     contentExpanded: false,
+    renderRevision: 0,
     subAgentView: null,
     savedMainMessages: null,
     subAgentMessageCache: {},

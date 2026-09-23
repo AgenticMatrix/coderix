@@ -58,7 +58,7 @@ export const InputBox = memo(function InputBox({ inputText, cursorPosition, isSt
             ))}
             {overflow > 0 && (
               <Box paddingX={2}>
-                <Text dimColor>  … +{overflow} more lines</Text>
+                <Text dimColor>  ⋯ +{overflow} more lines</Text>
               </Box>
             )}
           </Box>

@@ -1,4 +1,4 @@
-import { Box, Text } from '@coderix/tui';
+import { Box, Text, ARROW_UP, ARROW_DOWN, SAFE_BORDER } from '@coderix/tui';
 import { listCommandNames, findSlashCommand } from '../../commands/index.js';
 
 interface CommandHintProps {
@@ -44,7 +44,7 @@ export function CommandHint({ inputText, selectedIndex }: CommandHintProps) {
   );
 
   return (
-    <Box borderStyle="round" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+    <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
       <Text dimColor>Commands</Text>
       {displayGroup.map((cmd, i) => {
         const isSelected = i === selIdx;
@@ -62,7 +62,7 @@ export function CommandHint({ inputText, selectedIndex }: CommandHintProps) {
           </Text>
         );
       })}
-      <Text dimColor>↑↓ select · Tab / Enter fill</Text>
+      <Text dimColor>{`${ARROW_UP}${ARROW_DOWN} select ∙ Tab / Enter fill`}</Text>
     </Box>
   );
 }

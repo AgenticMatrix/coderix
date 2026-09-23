@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, memo } from 'react';
-import { Box, Text } from '@coderix/tui';
+import {
+  Box,
+  Text,
+  VERTICAL_SEPARATOR,
+  GAUGE_FILLED,
+  GAUGE_EMPTY,
+} from '@coderix/tui';
 
 import type { TokenUsage } from '../../types.js';
 
@@ -79,6 +85,10 @@ function formatMemory(bytes: number): string {
 /**
  * Render a battery-like bar for context usage.
  * Uses real API token counts (including cache) for the ctx total.
+ *
+ * The bar glyphs must be single-column in every terminal — this row is
+ * repainted every second, and a glyph the terminal renders wider than ink
+ * measured would wrap the row and strand the previous frame on screen.
  */
 function ContextBar({ used, max }: { used: number; max: number }) {
   const barWidth = 8;
@@ -91,8 +101,8 @@ function ContextBar({ used, max }: { used: number; max: number }) {
 
   return (
     <Text>
-      <Text color={barColor}>{'█'.repeat(filled)}</Text>
-      <Text dimColor>{'░'.repeat(empty)}</Text>
+      <Text color={barColor}>{GAUGE_FILLED.repeat(filled)}</Text>
+      <Text dimColor>{GAUGE_EMPTY.repeat(empty)}</Text>
       <Text dimColor> {pct}%</Text>
     </Text>
   );
@@ -100,12 +110,20 @@ function ContextBar({ used, max }: { used: number; max: number }) {
 
 /**
  * Bottom status bar showing:
- *   Ready | ctx [████░░░░] 40% 3.2K/128K | 0.0042 $ | 12m 34s | ⏲ 3s | Model: xxx ✓ | Mem 30M | Procs 4 | Ctrl+C to exit
+ *   ◉ busy ╎ ctx ▰▰▰▰░░░░ 40% 3.2K/128K ╎ 0.0042$ ╎ 12m 34s ╎ ⏲ 3s ╎
+ *   model: xxx ╎ mem 30M ╎ procs 4 ╎ ctrl+C to interrupt
  *
  * ctx = cache_read + cache_creation + output + input (real API tokens).
  * Mem = total RSS memory of Coderix process tree (main + sub-agents + tool subprocesses).
  * Procs = number of processes in the tree.
  * Timers update every second in real-time.
+ *
+ * IMPORTANT: every glyph on this row must occupy exactly one column in every
+ * terminal. This row is repainted once per second in place, so a glyph that the
+ * terminal draws wider than ink measured makes the row soft-wrap; ink then
+ * rewinds the cursor by too few rows and the previous bar is never erased,
+ * producing a stack of stale status bars. Take new glyphs from
+ * `safe-glyphs.ts`, never from the ambiguous-width box-drawing block.
  */
 export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, exitHint, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
@@ -156,7 +174,18 @@ export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen,
     ? Math.max(0, Math.round(compactThreshold * 100) - Math.round((ctxTokens / contextMax) * 100))
     : null;
 
-  const Sep = () => <Text dimColor color="ansi:blackBright"> │ </Text>;
+  // Phase markers. ◉ (U+25C9), ⏸, ⚠ and ⏲ are East Asian Neutral — 1 column
+  // everywhere — so they are used directly. The circle glyphs that would
+  // naturally pair with ◉, namely ◎ (U+25CE) and ○ (U+25CB), are Ambiguous and
+  // would render 2 columns wide in a CJK-locale terminal, wrapping this row and
+  // leaving the previous status bar stranded on screen. ◍ and ◌ are the Neutral
+  // members of the same circle family.
+  const PHASE_WAIT = '◍'; // ◍ CIRCLE WITH VERTICAL FILL (Neutral)
+  const PHASE_IDLE = '◌'; // ◌ DOTTED CIRCLE (Neutral)
+
+  const Sep = () => (
+    <Text dimColor color="ansi:blackBright">{` ${VERTICAL_SEPARATOR} `}</Text>
+  );
 
   return (
     <Box paddingX={1} flexDirection="row">
@@ -167,9 +196,9 @@ export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen,
       ) : statusPhase === 'busy' ? (
         <Text color="ansi:red">◉ busy</Text>
       ) : statusPhase === 'wait' ? (
-        <Text color="ansi:yellow">◎ wait</Text>
+        <Text color="ansi:yellow">{PHASE_WAIT} wait</Text>
       ) : (
-        <Text color="ansi:green">○ idle</Text>
+        <Text color="ansi:green">{PHASE_IDLE} idle</Text>
       )}
 
       <Sep />

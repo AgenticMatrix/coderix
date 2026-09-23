@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text, useInput } from '@coderix/tui';
+import { Box, Text, useInput, SAFE_BORDER } from '@coderix/tui';
 import { listTeams, loadTeamConfig, readTeamAgentMetadata } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
 import type { TeamConfig, TeamMember } from '@coderix/core';
@@ -296,14 +296,14 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
   if (errorCount > 0) parts.push(`${errorCount} error`);
 
   return (
-    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle="single" borderColor="ansi:blackBright">
+    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle={SAFE_BORDER} borderColor="ansi:blackBright">
       <Box>
         <Text bold>Agents </Text>
         <Text dimColor>({parts.join(', ')})</Text>
       </Box>
       {teamContext && (
         <Box>
-          <Text dimColor>  Leader: {teamContext.isLeader ? 'you' : 'leader'} · {Object.keys(teamContext.teammates).length} worker(s)</Text>
+          <Text dimColor>  Leader: {teamContext.isLeader ? 'you' : 'leader'} ∙ {Object.keys(teamContext.teammates).length} worker(s)</Text>
         </Box>
       )}
 
@@ -319,9 +319,9 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
                   {isCursor ? '>' : ' '}
                 </Text>
                 {' '}
-                <Text color={isViewed ? 'ansi:green' : 'ansi:blackBright'}>{isViewed ? '●' : '○'} </Text>
+                <Text color={isViewed ? 'ansi:green' : 'ansi:blackBright'}>{isViewed ? '▪' : '▱'} </Text>
                 <Text bold={isCursor}>main</Text>
-                <Text dimColor> · Return to main agent (Enter toggle, Esc defocus)</Text>
+                <Text dimColor> ∙ Return to main agent (Enter toggle, Esc defocus)</Text>
               </Text>
             </Box>
           );
@@ -329,7 +329,7 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
 
         const isCursor = focused && cursorIndex === i;
         const isViewed = viewedAgentId === m.agentId;
-        const icon = isViewed ? '●' : '○';
+        const icon = isViewed ? '▪' : '▱';
         const iconColor = isViewed ? 'ansi:green' : 'ansi:blackBright';
         const isAutoName = m.name.startsWith(`${m.agentType}-`) || m.name.startsWith('fork-');
         const teamOrSolo = m.teamName || 'solo';
@@ -346,11 +346,11 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
               {' '}
               <Text color={iconColor}>{icon} </Text>
               <Text bold={isCursor}>{m.agentType}</Text>
-              <Text dimColor> · </Text>
+              <Text dimColor> ∙ </Text>
               <Text dimColor={m.status === 'done'}>{teamOrSolo}</Text>
-              <Text dimColor> · </Text>
+              <Text dimColor> ∙ </Text>
               <Text dimColor={m.status === 'done'}>{middleLabel}</Text>
-              <Text dimColor> · </Text>
+              <Text dimColor> ∙ </Text>
               <Text color={statusColor} dimColor={m.status === 'done'}>{statusText}</Text>
             </Text>
           </Box>
@@ -365,12 +365,12 @@ export function TeamPanel({ dismissed, onDismissReset, focused, onFocusRequest, 
 
       {focused && (
         <Box>
-          <Text dimColor>    Up/Down navigate · Enter select · Esc defocus</Text>
+          <Text dimColor>    Up/Down navigate ∙ Enter select ∙ Esc defocus</Text>
         </Box>
       )}
       {!focused && hasRunning && (
         <Box>
-          <Text dimColor>    Up/Down navigate · Ctrl+K to toggle filter</Text>
+          <Text dimColor>    Up/Down navigate ∙ Ctrl+K to toggle filter</Text>
         </Box>
       )}
     </Box>

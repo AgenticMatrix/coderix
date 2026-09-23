@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Box, Text } from '@coderix/tui';
+import { Box, Text, SAFE_BORDER } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { useTerminalSize } from '@coderix/tui';
 
@@ -546,7 +546,7 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
           marginY={1}
           paddingX={2}
           paddingY={1}
-          borderStyle="single"
+          borderStyle={SAFE_BORDER}
           borderColor="ansi:blackBright"
         >
           {block.language ? (
@@ -576,7 +576,7 @@ function BlockElement({ block, termWidth, theme, textColor }: { block: Block; te
           marginY={1}
           paddingX={2}
           paddingY={1}
-          borderStyle="round"
+          borderStyle={SAFE_BORDER}
           borderColor="#88CCEE"
           flexDirection="column"
         >

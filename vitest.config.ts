@@ -9,6 +9,9 @@ export default defineConfig({
       'tests/**/*.spec.ts',
       'packages/*/src/**/__tests__/*.test.ts',
       'packages/*/src/**/__tests__/*.spec.ts',
+      // Tests that render real components need JSX.
+      'packages/*/src/**/__tests__/*.test.tsx',
+      'packages/*/src/**/__tests__/*.spec.tsx',
     ],
     setupFiles: ['./tests/test-setup.ts'],
     coverage: {

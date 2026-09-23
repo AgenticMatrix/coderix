@@ -1,4 +1,4 @@
-import { Box, Text } from '@coderix/tui';
+import { Box, Text, SAFE_BORDER } from '@coderix/tui';
 import type { TodoItem } from '../../../types.js';
 
 export interface TodoUpdateBlockRendererProps {
@@ -33,7 +33,7 @@ export function TodoUpdateBlockRenderer({ todos, oldTodos }: TodoUpdateBlockRend
   return (
     <Box
       flexDirection="column"
-      borderStyle="single"
+      borderStyle={SAFE_BORDER}
       borderColor="ansi:cyan"
       paddingX={1}
       marginBottom={1}

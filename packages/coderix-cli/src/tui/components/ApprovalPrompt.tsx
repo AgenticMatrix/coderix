@@ -6,7 +6,7 @@
  *
  * Ported from Coderix's prompts.tsx ApprovalPrompt.
  */
-import { Box, Text, useInput } from '@coderix/tui';
+import { Box, Text, useInput, SAFE_BORDER } from '@coderix/tui';
 import { useState } from 'react';
 import type { ApprovalRequest } from '../../types.js';
 
@@ -68,7 +68,7 @@ export function ApprovalPrompt({ req, onChoice }: ApprovalPromptProps) {
 
   return (
     <Box
-      borderStyle="double"
+      borderStyle={SAFE_BORDER}
       borderColor="ansi:yellow"
       flexDirection="column"
       paddingX={1}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Text, useInput } from '@coderix/tui';
+import { Box, Text, useInput, SAFE_BORDER } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { listTeams, loadTeamConfig } from '@coderix/core';
 import { getSubAgentRegistry } from '@coderix/core';
@@ -14,9 +14,9 @@ const AGENT_ICONS: Record<string, string> = {
 
 const STATUS_ICON: Record<string, string> = {
   running: '◉',
-  done: '●',
+  done: '▪',
   error: '✕',
-  stopped: '■',
+  stopped: '▪',
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -143,7 +143,7 @@ export function TeamAgentPicker({ onSelect, onCancel, sessionDir }: TeamAgentPic
 
   if (members.length === 0) {
     return (
-      <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+      <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
         <Text bold color="ansi:cyan">Team Members</Text>
         <Text dimColor>No selectable members.</Text>
         <Text dimColor>Sub-agents and team members will appear here when they are running.</Text>
@@ -154,7 +154,7 @@ export function TeamAgentPicker({ onSelect, onCancel, sessionDir }: TeamAgentPic
   }
 
   return (
-    <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+    <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
       <Text bold color="ansi:cyan">
         Team Members ({members.length}) — select to view transcript
       </Text>
@@ -191,7 +191,7 @@ export function TeamAgentPicker({ onSelect, onCancel, sessionDir }: TeamAgentPic
 
       <Text>{' '}</Text>
       <Text dimColor>
-        Up/Down select · Enter confirm · 1-9 quick pick · Esc cancel
+        Up/Down select ∙ Enter confirm ∙ 1-9 quick pick ∙ Esc cancel
       </Text>
     </Box>
   );

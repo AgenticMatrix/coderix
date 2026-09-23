@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from '@coderix/tui';
+import { Box, Text, useInput, SAFE_BORDER } from '@coderix/tui';
 import { useState } from 'react';
 import { getSubAgentRegistry } from '@coderix/core';
 
@@ -50,7 +50,7 @@ export function SubAgentPicker({ onSelect, onCancel }: SubAgentPickerProps) {
 
   if (agents.length === 0) {
     return (
-      <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+      <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
         <Text bold color="ansi:cyan">Sub-agents</Text>
         <Text dimColor>No sub-agents in this session.</Text>
         <Text dimColor>Sub-agents are created when the main agent uses the Agent tool.</Text>
@@ -60,7 +60,7 @@ export function SubAgentPicker({ onSelect, onCancel }: SubAgentPickerProps) {
   }
 
   return (
-    <Box borderStyle="double" borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
+    <Box borderStyle={SAFE_BORDER} borderColor="ansi:cyan" flexDirection="column" paddingX={1}>
       <Text bold color="ansi:cyan">
         Sub-agents ({agents.length}) — select one to view transcript
       </Text>
