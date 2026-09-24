@@ -1072,19 +1072,39 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   const liveRef = useRef<DOMElement | null>(null);
   const liveMetrics = useBoxMetrics(liveRef);
 
+  // The footer's height, measured — used ONLY to size up the live region's
+  // capacity for the flush policy below, never to lay anything out.
+  //
+  // Measuring it for LAYOUT is the defect that moved the live region to flex
+  // sizing in the first place: `useBoxMetrics` reports from an effect, so a
+  // value read during render is the previous layout's, and on the frame where
+  // the footer grows the two disagree and the frame overruns the root. Reading
+  // it for a cost decision is safe for exactly the reason the layout use was
+  // not — being a frame stale only shifts WHEN a flush happens, and the safety
+  // rule (never commit something that can still change) belongs to
+  // `splitTranscript` alone.
+  const footerRef = useRef<DOMElement | null>(null);
+  const footerMetrics = useBoxMetrics(footerRef);
+
   const [committedCount, setCommittedCount] = useState(0);
 
   // A flush is a render-time decision about what the NEXT frame commits, so it
   // is applied in an effect rather than mid-render.
   //
-  // The live region's size is read back from the ScrollBox rather than computed,
-  // since Yoga now decides it. Reading it in an effect means it can be one frame
-  // stale, which is harmless here: this governs only WHEN committing is worth
-  // its cost, never whether committing is safe. The safety rule — that a
-  // committed row can never be redrawn — is `splitTranscript`'s alone.
+  // `liveRegionRows` must be the region's CAPACITY — the rows it could use —
+  // not its current height. The region shrinks to its content, so its measured
+  // height IS the content height; handing that over would make the policy
+  // compare content against itself, read "full" on every frame, and flush per
+  // message. That is the behaviour `shouldFlush` exists to prevent, and
+  // `flush-capacity.test.ts` pins the distinction.
+  //
+  // So capacity is derived the way Yoga derives it: the root, less the blank
+  // row above the transcript, less whatever the footer claims. Being a frame
+  // stale here only shifts when a flush happens, never whether committing is
+  // safe — that rule is `splitTranscript`'s alone.
   useEffect(() => {
     if (state.isFrozen) return;
-    const liveRegionRows = scrollRef.current?.getViewportHeight() ?? 0;
+    const liveRegionRows = rootRows - 1 - footerMetrics.height;
     if (liveRegionRows <= 0) return;
     const next = shouldFlush({
       committableCount,
@@ -1093,7 +1113,14 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
       alreadyCommitted: committedCount,
     });
     if (next > 0) setCommittedCount(next);
-  }, [state.isFrozen, committableCount, liveMetrics.height, rows, committedCount]);
+  }, [
+    state.isFrozen,
+    committableCount,
+    liveMetrics.height,
+    footerMetrics.height,
+    rootRows,
+    committedCount,
+  ]);
 
   // History that shrank (cleared, undone, replaced) can never stay committed:
   // scrollback cannot retract rows, so the count is clamped and `advanceEpoch`
@@ -1184,10 +1211,25 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           frame shorter than the terminal on every frame, including the one
           where the footer changes size — which is what keeps ink off its
           scrollback-erasing repaint path, and what stops a second, stale copy
-          of the footer from being emitted below the first. */}
+          of the footer from being emitted below the first.
+
+          `flexShrink` WITHOUT `flexGrow` is the exact combination wanted, and
+          the distinction is not cosmetic. `flexGrow` makes the box claim the
+          whole leftover share, so a short reply is laid out at the TOP of a
+          full-height region and the unused rows below it become dead space —
+          which is how "the text jumps to the top of the window" looked. The
+          symmetrical mistake is to bottom-align the content inside that
+          full-height box: the dead rows simply move ABOVE the reply, opening a
+          gap between it and the committed turn it answers, and those blank
+          rows are real output that scrolls into history for good.
+
+          Shrinking instead means the box is only ever as tall as it needs to
+          be, so there are no spare rows to place anywhere. Clipping is
+          unaffected: Yoga caps the box at the leftover space, so a transcript
+          taller than that still gets a resolved height smaller than its
+          content, which is all `overflow: hidden` requires. */}
       <ScrollBox
         ref={scrollRef}
-        flexGrow={1}
         flexShrink={1}
         minHeight={0}
         stickyScroll
@@ -1362,11 +1404,13 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
 
       {/* ── Footer ────────────────────────────────────────────────
           `flexShrink={0}` is load-bearing: it makes the footer claim its full
-          height first, so the live tail above is handed only what remains. The
-          footer's height is never measured — measuring it would reintroduce the
-          one-frame lag that produced a second, stale frame whenever a panel
-          appeared. */}
-      <Box flexDirection="column" flexShrink={0}>
+          height first, so the live tail above is handed only what remains.
+
+          `footerRef` measures it for the flush policy's capacity arithmetic
+          ONLY. Nothing here is laid out from that measurement — doing so is
+          what produced a second, stale frame whenever a panel appeared, since
+          a measurement read during render is always a frame behind. */}
+      <Box ref={footerRef} flexDirection="column" flexShrink={0}>
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
         <Divider padding={2} />
         <InputBox
