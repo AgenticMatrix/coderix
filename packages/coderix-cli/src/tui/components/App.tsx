@@ -974,23 +974,51 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // frame as fullscreen at `height >= terminalRows`, and every one of its
   // clearing branches is behind that test. Staying a row short makes them all
   // unreachable.
-  const footerRef = useRef<DOMElement | null>(null);
-  const footerMetrics = useBoxMetrics(footerRef);
-
-  const ROOT_PADDING_TOP = 1;
+  // A blank row above the transcript, as a sibling rather than the root's
+  // `paddingTop`.
+  //
+  // Padding on the root SILENTLY DROPS THE LAST N COMMITTED ROWS. Ink renders
+  // the static region into a buffer sized from the static node's own computed
+  // height (`renderer.js`: `height: node.staticNode.yogaNode.getComputedHeight()`)
+  // but writes each row at `offsetY + getComputedTop()`. The root's padding
+  // shifts those rows down by N without enlarging the buffer, so the bottom N
+  // fall outside it and are discarded — never written to the terminal at all.
+  //
+  // Measured on the real writer: `paddingTop={1}` loses the last committed
+  // message, `paddingTop={2}` loses the last two, `paddingTop={0}` loses none.
+  // On screen that reads as a message vanishing at the moment it is committed,
+  // or — when the message is a tool that later settles — as its header
+  // appearing twice, once from the dropped commit and once from the live redraw.
+  //
+  // A zero-height sibling with a margin occupies the same row but is laid out
+  // INSIDE the flow, so the static node's height and its children's offsets
+  // agree.
   const rootRows = Math.max(1, rows - 1);
 
-  // Whatever the footer — command hints, paste preview, input, status — does not
-  // claim is left for the live tail. Measured from the live layout rather than
-  // hard-coded, because the footer grows and shrinks and a stale constant would
-  // silently reintroduce the overflow this exists to prevent.
+  // Whatever the footer — command hints, paste preview, input, status, and the
+  // task/team panels — does not claim is left for the live tail.
   //
-  // Until the first layout pass reports a real footer height, claim a single
-  // row. Starting small can only under-fill the screen for one frame; starting
-  // large would overflow it, which is the failure mode being avoided.
-  const liveRows = footerMetrics.hasMeasured
-    ? Math.max(1, rootRows - ROOT_PADDING_TOP - footerMetrics.height)
-    : 1;
+  // This division is left to Yoga (`flexGrow` on the live half, `flexShrink={0}`
+  // on the footer) rather than computed from a measured footer height, because
+  // measuring costs a frame. `useBoxMetrics` reports from an effect, so a
+  // measurement taken during render is always the PREVIOUS layout's. On the
+  // frame where the footer grows — a TaskPanel appearing because several tools
+  // started at once — the live half is still sized against the old, shorter
+  // footer, and the two together overrun the root.
+  //
+  // That overrun does not trip ink's clearing path (measured: zero `ESC[3J`),
+  // so nothing corrects it. Ink simply emits the too-tall frame, and the effect
+  // that finally applies the new measurement emits a SECOND full frame below
+  // the first. Both carry a footer, which is why the status bar appeared twice
+  // with different values in each copy — they are two different frames, not one
+  // frame drawn twice.
+  //
+  // Yoga divides a fixed-height parent in a single pass, so the live half and
+  // the footer are always consistent within one frame, whatever the footer does.
+  //
+  // `minHeight={0}` is required: a flex child's default minimum is its content,
+  // so without it the live half refuses to shrink below the transcript's full
+  // height and pushes the frame past the root anyway.
 
   // Track the last assistant message ID during streaming for
   // LRU-cached markdown rendering.
@@ -1031,9 +1059,14 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // While the display is frozen the boundary is pinned where it was: freezing
   // exists so the user can read without the view moving underneath them, and
   // committing during a freeze would print rows the user has not asked to see.
+  //
+  // `streaming` is what lets the LAST message commit. The live half is clipped
+  // and sticky, so rows above its window never reach the terminal at all; a
+  // finished answer taller than the viewport would lose its top forever. Once
+  // the turn ends nothing can still change it, so it must reach scrollback.
   const committableCount = useMemo(
-    () => splitTranscript(displayMessages).committed.length,
-    [displayMessages],
+    () => splitTranscript(displayMessages, { streaming: state.isStreaming }).committed.length,
+    [displayMessages, state.isStreaming],
   );
 
   const liveRef = useRef<DOMElement | null>(null);
@@ -1043,16 +1076,24 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
 
   // A flush is a render-time decision about what the NEXT frame commits, so it
   // is applied in an effect rather than mid-render.
+  //
+  // The live region's size is read back from the ScrollBox rather than computed,
+  // since Yoga now decides it. Reading it in an effect means it can be one frame
+  // stale, which is harmless here: this governs only WHEN committing is worth
+  // its cost, never whether committing is safe. The safety rule — that a
+  // committed row can never be redrawn — is `splitTranscript`'s alone.
   useEffect(() => {
     if (state.isFrozen) return;
+    const liveRegionRows = scrollRef.current?.getViewportHeight() ?? 0;
+    if (liveRegionRows <= 0) return;
     const next = shouldFlush({
       committableCount,
       liveContentRows: liveMetrics.height,
-      liveRegionRows: liveRows,
+      liveRegionRows,
       alreadyCommitted: committedCount,
     });
     if (next > 0) setCommittedCount(next);
-  }, [state.isFrozen, committableCount, liveMetrics.height, liveRows, committedCount]);
+  }, [state.isFrozen, committableCount, liveMetrics.height, rows, committedCount]);
 
   // History that shrank (cleared, undone, replaced) can never stay committed:
   // scrollback cannot retract rows, so the count is clamped and `advanceEpoch`
@@ -1108,7 +1149,15 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   );
 
   return (
-    <Box flexDirection="column" height={rootRows} paddingTop={ROOT_PADDING_TOP}>
+    <Box flexDirection="column" height={rootRows}>
+      {/* One blank row of breathing space above the transcript.
+
+          A sibling, NOT the root's `paddingTop`, and not `marginTop` on the
+          static region either — both shift the static rows down without
+          enlarging the buffer ink renders them into, which silently drops the
+          last one. See the note on `rootRows`. */}
+      <Box height={1} flexShrink={0} />
+
       {/* ── Committed history ──────────────────────────────────────
           Written to the terminal's scrollback once and never repainted, which
           is what makes it scrollable with the wheel. The banner is the first
@@ -1125,16 +1174,23 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           Messages that can still change, plus the prompts and panels that
           belong to the current turn.
 
-          `liveRows` is a CEILING, not a fixed size: `shrinkToContent` lets the
-          box collapse to its content so a short transcript sits just above the
-          input instead of being padded out to full height with dead space. The
-          ceiling is what keeps the frame shorter than the terminal, which is
-          what keeps ink off its scrollback-erasing repaint path. */}
+          No explicit height: the root is fixed and the footer refuses to
+          shrink, so Yoga hands this box exactly what is left over, in the same
+          layout pass. `minHeight={0}` is what allows it to give up space at all
+          — a flex child's default minimum is its own content, which for a long
+          transcript would push the frame past the root.
+
+          Taking the leftover space rather than computing it is what keeps the
+          frame shorter than the terminal on every frame, including the one
+          where the footer changes size — which is what keeps ink off its
+          scrollback-erasing repaint path, and what stops a second, stale copy
+          of the footer from being emitted below the first. */}
       <ScrollBox
         ref={scrollRef}
-        height={liveRows}
+        flexGrow={1}
+        flexShrink={1}
+        minHeight={0}
         stickyScroll
-        shrinkToContent
         paddingX={1}
         contentRef={liveRef}
       >
@@ -1304,7 +1360,13 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
         )}
       </ScrollBox>
 
-      <Box ref={footerRef} flexDirection="column" flexShrink={0}>
+      {/* ── Footer ────────────────────────────────────────────────
+          `flexShrink={0}` is load-bearing: it makes the footer claim its full
+          height first, so the live tail above is handed only what remains. The
+          footer's height is never measured — measuring it would reintroduce the
+          one-frame lag that produced a second, stale frame whenever a panel
+          appeared. */}
+      <Box flexDirection="column" flexShrink={0}>
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
         <Divider padding={2} />
         <InputBox

@@ -136,15 +136,18 @@ describe('splitTranscript', () => {
     expect(live).toHaveLength(0);
   });
 
-  it('respects keepLive=0 for callers that want everything committable', () => {
+  it('commits everything once the turn is no longer streaming', () => {
+    // The end-of-turn release: nothing can still change, so nothing needs to
+    // stay in the clipped live region. `final-answer-commits.test.ts` covers
+    // why that matters — rows held live above the viewport are unreachable.
     const a = msg([text('a')]);
     const b = msg([text('b')]);
-    expect(splitTranscript([a, b], 0).committed).toEqual([a, b]);
+    expect(splitTranscript([a, b], { streaming: false }).committed).toEqual([a, b]);
   });
 
-  it('does not let keepLive push the boundary negative', () => {
+  it('keeps the sole message live while the turn streams, never going negative', () => {
     const only = msg([text()]);
-    const { committed, live } = splitTranscript([only], 5);
+    const { committed, live } = splitTranscript([only], { streaming: true });
     expect(committed).toHaveLength(0);
     expect(live).toEqual([only]);
   });

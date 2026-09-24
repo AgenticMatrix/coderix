@@ -86,22 +86,38 @@ export type TranscriptSplit = {
  * order — so the scan stops at the first unsettled message even if later ones
  * happen to be complete.
  *
- * `keepLive` holds back that many trailing settled messages as well. Committed
- * rows cannot be redrawn, so the newest message is left live for one extra beat:
- * it is the one the user is watching, the one an arriving tool result is most
- * likely to touch, and the one whose height the sticky-scroll logic is tracking.
+ * WHY THE NEWEST MESSAGE IS SOMETIMES HELD BACK
+ * `SET_TOOL_USE_RESULT` scans every message for its `toolId`, so a result can
+ * land in a message that already looks settled. Since a committed row can never
+ * be redrawn, the newest message is kept live for one extra beat.
+ *
+ * But only while the turn is in flight. The live half is a clipped, sticky
+ * `ScrollBox`: it shows the bottom, and rows above the window are never written
+ * to the terminal — not on screen, not in scrollback, and no keybinding drives
+ * its scroll API. Holding a message back unconditionally therefore made the
+ * final answer of every turn the one message that could never commit, and a
+ * reply taller than the viewport lost its top rows permanently (a table would
+ * show its bottom border with the rows above it missing).
+ *
+ * Once nothing is streaming, nothing can still arrive, so there is nothing left
+ * to protect and the answer must reach scrollback where the terminal can scroll
+ * it. `streaming` defaults to `true` so a caller that omits it keeps the
+ * conservative behaviour.
  */
 export function splitTranscript(
   messages: readonly Message[],
-  keepLive = 1,
+  options: { readonly streaming?: boolean } = {},
 ): TranscriptSplit {
+  const { streaming = true } = options;
+
   let boundary = 0;
   while (boundary < messages.length && isMessageSettled(messages[boundary]!)) {
     boundary += 1;
   }
 
-  // Hold back the trailing settled messages, without ever reaching past the
-  // first unsettled one (which `boundary` already caps).
+  // Hold back the newest message only while the turn can still change it, and
+  // never reach past the first unsettled one (which `boundary` already caps).
+  const keepLive = streaming ? 1 : 0;
   const commitCount = Math.max(0, Math.min(boundary, messages.length - keepLive));
 
   return {
