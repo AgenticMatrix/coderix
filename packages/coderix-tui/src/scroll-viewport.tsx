@@ -25,14 +25,25 @@ export type ScrollBoxProps = Omit<
 > & {
   ref?: React.Ref<ScrollBoxHandle>;
   /**
-   * Viewport height in rows. **Required for clipping to work.**
+   * Viewport height in rows.
    *
-   * Ink only clips a box whose height is explicitly set — a `flexGrow` box is
-   * stretched by its own children, so the frame ends up taller than the
-   * terminal no matter what `overflow` says. See the note below on why that
-   * matters.
+   * Omit it to let the parent's flex layout decide the height instead, passing
+   * `flexGrow` / `minHeight={0}` through the usual style props. That is the
+   * better choice whenever the leftover space depends on a sibling whose height
+   * varies — a footer that grows when a panel appears, say. Computing such a
+   * height in the caller means measuring that sibling, and measurement costs a
+   * frame: `useBoxMetrics` reports from an effect, so a value read during
+   * render describes the PREVIOUS layout. On the one frame where the sibling
+   * changes size the two disagree, and the frame overruns its parent. Yoga
+   * divides a fixed-height parent in a single pass and has no such gap.
+   *
+   * **Clipping needs a height that Yoga has resolved — from either source.**
+   * What breaks clipping is a box sized BY its children, since it is then
+   * exactly as tall as they are and has nothing to clip. A `flexGrow` child of
+   * a fixed-height parent is sized by the parent, so it clips normally; a
+   * `flexGrow` box in an unbounded column is not, and does not.
    */
-  height: number;
+  height?: number;
   /** Follow the bottom as content grows (default true). */
   stickyScroll?: boolean;
   /**
@@ -44,6 +55,9 @@ export type ScrollBoxProps = Omit<
    * and whatever sits below (the input, the status bar) as dead space. The
    * clipping guarantee is unaffected — it only ever engages when the content is
    * TALLER than `height`, and in that case the height is unchanged.
+   *
+   * Ignored when `height` is omitted: in flex mode the parent decides the size,
+   * and shrinking to the content is expressed there with `flexShrink`.
    */
   shrinkToContent?: boolean;
   /**
@@ -92,6 +106,14 @@ function ScrollBox({
   const contentRef = useRef<DOMElement | null>(null);
   const { height: contentHeight } = useBoxMetrics(contentRef);
 
+  // In flex mode the height comes from the parent's layout, so it has to be
+  // read back off the outer box. Being a frame stale here costs nothing: this
+  // number only drives the scroll arithmetic, while the frame's height is
+  // guaranteed by Yoga. That is the whole point of deferring to flex — a stale
+  // measurement can no longer produce an oversized frame.
+  const outerRef = useRef<DOMElement | null>(null);
+  const { height: measuredOuter } = useBoxMetrics(outerRef);
+
   // Forward the content node to the caller's ref as well, so both this
   // component and the caller can measure it.
   const attachContent = useCallback(
@@ -127,8 +149,15 @@ function ScrollBox({
   // `contentHeight` is 0 until the first layout pass reports it; falling back to
   // `height` for that frame avoids collapsing the viewport to nothing before
   // there is anything to measure.
-  const viewportHeight =
-    shrinkToContent && contentHeight > 0 ? Math.min(height, contentHeight) : height;
+  const isFlexSized = height === undefined;
+  const fixedViewport =
+    height !== undefined && shrinkToContent && contentHeight > 0
+      ? Math.min(height, contentHeight)
+      : height;
+
+  // The height used for scroll arithmetic. In flex mode that is what the parent
+  // actually granted; in fixed mode it is the prop (optionally shrunk).
+  const viewportHeight = isFlexSized ? measuredOuter : fixedViewport!;
 
   // The imperative handle reports the height that is actually on screen, so
   // `scrollBy(getViewportHeight())` pages by what the user can see.
@@ -193,7 +222,18 @@ function ScrollBox({
   );
 
   return (
-    <Box {...style} height={viewportHeight} flexDirection="column" overflow="hidden">
+    // In flex mode no `height` is passed, so the parent's layout sets it and
+    // `style` carries the `flexGrow` / `minHeight` that express the share. In
+    // fixed mode the resolved height is applied directly. Either way Yoga ends
+    // up with a settled height on this box, which is what `overflow: hidden`
+    // needs in order to clip.
+    <Box
+      {...style}
+      ref={outerRef}
+      {...(isFlexSized ? {} : { height: fixedViewport })}
+      flexDirection="column"
+      overflow="hidden"
+    >
       <Box
         ref={attachContent}
         flexDirection="column"

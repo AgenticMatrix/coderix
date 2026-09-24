@@ -211,4 +211,95 @@ describe('committed transcript region', () => {
     // And the reprint did not cost the scrollback.
     expect(output.split(ERASE_SCROLLBACK).length - 1).toBe(0);
   });
+
+  /**
+   * Nothing may push the committed region DOWN the page.
+   *
+   * Ink renders it into a buffer sized from the static node's own computed
+   * height (`renderer.js`: `height: node.staticNode.yogaNode.getComputedHeight()`)
+   * while writing each row at `offsetY + getComputedTop()`. A vertical offset
+   * above the region therefore moves its rows without enlarging that buffer, and
+   * the rows pushed past the bottom are dropped — not clipped on screen, never
+   * written at all.
+   *
+   * The failure is silent and easy to reintroduce, since `paddingTop` on the
+   * root is the obvious way to put a blank row above the transcript. Its
+   * signature on screen is a message vanishing exactly as it is committed; when
+   * that message holds a tool that later settles, the live region redraws it and
+   * the header appears twice.
+   */
+  describe('vertical offsets above the region', () => {
+    const items = [0, 1, 2, 3, 4];
+
+    /**
+     * Renders the region with `total` items, having first rendered it with none,
+     * so the items arrive as a single append — the real commit path.
+     */
+    async function commitAll(node: (n: number) => React.ReactElement) {
+      const stdout = fakeTty(80, 24);
+      const instance = render(node(0), {
+        stdout,
+        stdin: fakeStdin(),
+        patchConsole: false,
+        exitOnCtrlC: false,
+      });
+      await nextTick();
+      instance.rerender(node(items.length));
+      for (let i = 0; i < 5; i += 1) await nextTick();
+      instance.unmount();
+      await nextTick();
+      return stdout.written();
+    }
+
+    it("emits every item when the root has no padding", async () => {
+      const output = await commitAll((n) => (
+        <Box flexDirection="column" height={23}>
+          <Static items={items.slice(0, n)}>
+            {(index) => <Text key={index}>row {index}</Text>}
+          </Static>
+          <Text>footer</Text>
+        </Box>
+      ));
+      for (const index of items) {
+        expect(countLines(output, `row ${index}`), `row ${index}`).toBe(1);
+      }
+    });
+
+    it('still emits every item when a blank row is added as a SIBLING', async () => {
+      // The supported way to get that blank row: laid out in the flow, so the
+      // region's height and its children's offsets agree.
+      const output = await commitAll((n) => (
+        <Box flexDirection="column" height={23}>
+          <Box height={1} flexShrink={0} />
+          <Static items={items.slice(0, n)}>
+            {(index) => <Text key={index}>row {index}</Text>}
+          </Static>
+          <Text>footer</Text>
+        </Box>
+      ));
+      for (const index of items) {
+        expect(countLines(output, `row ${index}`), `row ${index}`).toBe(1);
+      }
+    });
+
+    it("drops the last item for each row of the root's paddingTop", async () => {
+      // Pinned as the REASON the sibling spacer above is written the way it is.
+      // If a future ink release fixes this, these expectations flip and the
+      // comments in `App.tsx` should be revisited.
+      for (const padding of [1, 2]) {
+        const output = await commitAll((n) => (
+          <Box flexDirection="column" height={23} paddingTop={padding}>
+            <Static items={items.slice(0, n)}>
+              {(index) => <Text key={index}>row {index}</Text>}
+            </Static>
+            <Text>footer</Text>
+          </Box>
+        ));
+        const emitted = items.filter((i) => countLines(output, `row ${i}`) > 0);
+        expect(emitted, `paddingTop=${padding}`).toEqual(
+          items.slice(0, items.length - padding),
+        );
+      }
+    });
+  });
 });
