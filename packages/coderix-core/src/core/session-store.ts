@@ -139,10 +139,12 @@ function parseJsonlLines(raw: string, filePath: string): SessionEntry[] {
     try {
       entries.push(JSON.parse(line) as SessionEntry);
     } catch {
-      // Skip corrupted lines (partial writes on crash)
-      process.stderr.write(
-        `[session-store] Skipping corrupted JSONL line ${i + 1} in ${filePath}\n`,
-      );
+      // Skip corrupted lines (partial writes on crash).
+      // `console.error` rather than `process.stderr.write`: this runs while the
+      // TUI owns the terminal, and ink replays patched console output above its
+      // frame. A raw write would move the cursor without ink knowing, so its
+      // next repaint rewinds to the wrong row and strands the old frame.
+      console.error(`[session-store] Skipping corrupted JSONL line ${i + 1} in ${filePath}`);
     }
   }
   return entries;
@@ -551,9 +553,7 @@ export async function migrateLegacySession(dir: string): Promise<boolean> {
     const raw = readFileSync(legacyPath, 'utf-8');
     session = JSON.parse(raw) as Session;
   } catch {
-    process.stderr.write(
-      `[session-store] Failed to parse legacy session.json in ${dir}\n`,
-    );
+    console.error(`[session-store] Failed to parse legacy session.json in ${dir}`);
     return false;
   }
 
@@ -587,13 +587,11 @@ export async function migrateLegacySession(dir: string): Promise<boolean> {
   try {
     await rename(legacyPath, legacyPath + '.bak');
   } catch {
-    process.stderr.write(
-      `[session-store] Failed to rename legacy session.json in ${dir}\n`,
-    );
+    console.error(`[session-store] Failed to rename legacy session.json in ${dir}`);
   }
 
-  process.stderr.write(
-    `[session-store] Migrated legacy session: ${session.id} (${session.messages.length} messages)\n`,
+  console.error(
+    `[session-store] Migrated legacy session: ${session.id} (${session.messages.length} messages)`,
   );
   return true;
 }

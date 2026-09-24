@@ -26,9 +26,13 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     const cs = errorInfo.componentStack ?? 'N/A';
     this.setState({ componentStack: cs });
-    process.stderr.write(
+    // `console.error`, not `process.stderr.write`: ink patches the console and
+    // replays it above the current frame, keeping its cursor accounting intact.
+    // A raw write would move the cursor behind ink's back, so its next repaint
+    // would rewind to the wrong row and strand the frame it meant to erase.
+    console.error(
       `[ErrorBoundary:${this.props.name}] ${error.message}\n` +
-      `  Component stack: ${cs.replace(/\n/g, '\n  ')}\n`,
+      `  Component stack: ${cs.replace(/\n/g, '\n  ')}`,
     );
   }
 
