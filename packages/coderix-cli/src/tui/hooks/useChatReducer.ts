@@ -954,14 +954,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         (inputTokens / 1_000_000) * state.inputPrice +
         (outputTokens / 1_000_000) * state.outputPrice +
         (cacheReadInputTokens / 1_000_000) * state.cacheReadPrice;
-      // DEBUG: log pricing details to diagnose 0¥ issue
-      if (inputTokens > 0 || outputTokens > 0) {
-        process.stderr.write(
-          `[pricing] inputT=${inputTokens} outT=${outputTokens} cacheReadT=${cacheReadInputTokens} ` +
-          `iPrice=${state.inputPrice} oPrice=${state.outputPrice} crPrice=${state.cacheReadPrice} ` +
-          `turnCost=${turnCost} totalCost=${state.accumulatedCost + turnCost}\n`,
-        );
-      }
+      // NOTE: never write to process.stdout/stderr from here. This reducer runs
+      // while ink owns the terminal, and a write ink did not make moves the
+      // cursor without its knowledge — its next repaint then rewinds to the
+      // wrong row, stranding the previous frame instead of erasing it. Because
+      // this case fires on every usage update (main agent AND sub-agents), the
+      // stranded frames stack into a ladder of duplicated tool blocks and
+      // status bars. `patchConsole` does not help: it only wraps `console.*`.
       // skipDisplay: sub-agent tokens should accumulate cost without
       // overwriting the main agent's ctx display data
       const tokenUsage = action.skipDisplay

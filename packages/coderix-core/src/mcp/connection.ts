@@ -44,7 +44,13 @@ function createTransport(
         command: config.command,
         args: config.args ?? [],
         env: config.env as Record<string, string> | undefined,
-        stderr: 'inherit', // Forward stderr for debugging
+        // 'pipe', never 'inherit': an inherited stderr writes straight to the
+        // terminal while the TUI owns it, moving the cursor without ink's
+        // knowledge. Ink's next repaint then rewinds to the wrong row and
+        // strands the frame it meant to erase, stacking duplicate tool blocks
+        // and status bars. `connectToServer` drains this pipe into
+        // `console.error`, which ink patches and replays above its frame.
+        stderr: 'pipe',
       });
     }
 
@@ -140,6 +146,18 @@ export async function connectToServer(
       CONNECT_TIMEOUT_MS,
       `Connection to "${serverName}" timed out after ${CONNECT_TIMEOUT_MS / 1000}s`,
     );
+
+    // Drain the subprocess's stderr through the patched console, so its
+    // diagnostics reach the user without writing behind ink's back.
+    const childErr = (transport as { stderr?: NodeJS.ReadableStream | null }).stderr;
+    if (childErr) {
+      childErr.on('data', (chunk: Buffer | string) => {
+        const text = String(chunk).replace(/\n+$/, '');
+        if (text) console.error(`[mcp:${serverName}] ${text}`);
+      });
+      // A server that dies noisily must not take the session with it.
+      childErr.on('error', () => {});
+    }
 
     const capabilities = client.getServerCapabilities() ?? {};
     const serverInfo = client.getServerVersion()
