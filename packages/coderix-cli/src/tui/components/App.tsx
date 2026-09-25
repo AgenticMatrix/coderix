@@ -993,18 +993,55 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // A zero-height sibling with a margin occupies the same row but is laid out
   // INSIDE the flow, so the static node's height and its children's offsets
   // agree.
+  // A CEILING on the frame, not its size.
+  //
+  // `maxHeight` rather than `height`, and that distinction is the whole layout.
+  // A fixed height claims the entire screen however little is in it, and the
+  // spare rows that leaves cannot be deleted — only placed. Both placements are
+  // defects I shipped: below the reply they open a chasm between the answer and
+  // the input box; above it they shove the answer to the bottom of the screen
+  // and scroll the banner and the turn being answered out of view.
+  //
+  // A terminal does neither. It prints a short answer and leaves the prompt
+  // directly beneath it, wherever that lands. So the frame is as tall as its
+  // CONTENT, and then there are no spare rows to place at all: a short turn
+  // starts at the top of the screen with the input box just below it, and the
+  // input box travels DOWN as the answer grows.
+  //
+  // The ceiling is still required, because a frame taller than the viewport
+  // sends ink down `clearTerminal` — which includes `ESC[3J`, *erase
+  // scrollback*. Without it every frame past the first screenful destroys the
+  // user's history. Measured on the unbounded layout: `ESC[3J` emitted.
   const rootRows = Math.max(1, rows - 1);
 
   // Whatever the footer — command hints, paste preview, input, status, and the
-  // task/team panels — does not claim is left for the live tail.
+  // task/team panels — claims, the live tail gives way for, but only once the
+  // ceiling is reached.
   //
-  // This division is left to Yoga (`flexGrow` on the live half, `flexShrink={0}`
-  // on the footer) rather than computed from a measured footer height, because
-  // measuring costs a frame. `useBoxMetrics` reports from an effect, so a
-  // measurement taken during render is always the PREVIOUS layout's. On the
-  // frame where the footer grows — a TaskPanel appearing because several tools
-  // started at once — the live half is still sized against the old, shorter
-  // footer, and the two together overrun the root.
+  // That division is left to Yoga (a shrinkable live half against
+  // `flexShrink={0}` on the footer) rather than computed from a measured footer
+  // height, because measuring costs a frame. `useBoxMetrics` reports from an
+  // effect, so a measurement taken during render is always the PREVIOUS
+  // layout's. On the frame where the footer grows — a TaskPanel appearing
+  // because several tools started at once — the live half would still be sized
+  // against the old, shorter footer, and the two together would overrun the
+  // ceiling.
+  //
+  // That overrun does not trip ink's clearing path (measured: zero `ESC[3J`),
+  // so nothing corrects it. Ink simply emits the too-tall frame, and the effect
+  // that finally applies the new measurement emits a SECOND full frame below
+  // the first. Both carry a footer, which is why the status bar appeared twice
+  // with different values in each copy — they are two different frames, not one
+  // frame drawn twice.
+  //
+  // Yoga resolves a `maxHeight` parent and a shrinkable child in a single pass,
+  // so the live half and the footer are always consistent within one frame,
+  // whatever the footer does. Measured against a footer grown by six rows: one
+  // status bar, the frame within the viewport, zero `ESC[3J`.
+  //
+  // `minHeight={0}` is required: a flex child's default minimum is its content,
+  // so without it the live half refuses to shrink below the transcript's full
+  // height and pushes the frame past the ceiling.
   //
   // That overrun does not trip ink's clearing path (measured: zero `ESC[3J`),
   // so nothing corrects it. Ink simply emits the too-tall frame, and the effect
@@ -1176,7 +1213,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   );
 
   return (
-    <Box flexDirection="column" height={rootRows}>
+    <Box flexDirection="column" maxHeight={rootRows}>
       {/* One blank row of breathing space above the transcript.
 
           A sibling, NOT the root's `paddingTop`, and not `marginTop` on the
@@ -1201,33 +1238,35 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           Messages that can still change, plus the prompts and panels that
           belong to the current turn.
 
-          No explicit height: the root is fixed and the footer refuses to
-          shrink, so Yoga hands this box exactly what is left over, in the same
-          layout pass. `minHeight={0}` is what allows it to give up space at all
-          — a flex child's default minimum is its own content, which for a long
-          transcript would push the frame past the root.
+          No explicit height, and deliberately no `flexGrow`. The box is as
+          tall as its content until the root's ceiling is reached, at which
+          point it is the only thing that yields — the footer refuses to
+          shrink — so Yoga clips it within the same layout pass.
 
-          Taking the leftover space rather than computing it is what keeps the
-          frame shorter than the terminal on every frame, including the one
-          where the footer changes size — which is what keeps ink off its
-          scrollback-erasing repaint path, and what stops a second, stale copy
-          of the footer from being emitted below the first.
+          `flexGrow` used to be here, and it had to go with the fixed root
+          height. Its job was to claim the leftover share so the footer landed
+          on the last SCREEN row, which only mattered because the frame was
+          full-height regardless of content. Under a ceiling there is no
+          leftover share to claim, and re-adding it would re-inflate the frame
+          to the full screen and restore the very gap it was papering over.
+          (Measured: with a flowing root it changes nothing, because
+          `maxHeight` gives Yoga no definite space to distribute.)
 
-          `flexShrink` WITHOUT `flexGrow` is the exact combination wanted, and
-          the distinction is not cosmetic. `flexGrow` makes the box claim the
-          whole leftover share, so a short reply is laid out at the TOP of a
-          full-height region and the unused rows below it become dead space —
-          which is how "the text jumps to the top of the window" looked. The
-          symmetrical mistake is to bottom-align the content inside that
-          full-height box: the dead rows simply move ABOVE the reply, opening a
-          gap between it and the committed turn it answers, and those blank
-          rows are real output that scrolls into history for good.
+          `bottomAlign` went for the same reason. It padded the spare rows
+          ABOVE the reply to keep the newest line adjacent to the input box;
+          with no spare rows there is nothing to pad, and the newest line is
+          adjacent by construction.
 
-          Shrinking instead means the box is only ever as tall as it needs to
-          be, so there are no spare rows to place anywhere. Clipping is
-          unaffected: Yoga caps the box at the leftover space, so a transcript
-          taller than that still gets a resolved height smaller than its
-          content, which is all `overflow: hidden` requires. */}
+          `minHeight={0}` is what allows the box to give up space at all — a
+          flex child's default minimum is its own content, which for a long
+          transcript would push the frame past the ceiling and onto ink's
+          scrollback-erasing repaint path.
+
+          Verified in `natural-downward-flow.test.tsx`, which measures ABSOLUTE
+          SCREEN ROWS: a short answer leaves the input box near the top, the
+          input box only ever moves DOWN as the answer grows, growth stops at
+          the screen edge with zero `ESC[3J`, and the clipped region is still
+          scrollable. */}
       <ScrollBox
         ref={scrollRef}
         flexShrink={1}

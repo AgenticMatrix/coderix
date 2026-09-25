@@ -31,11 +31,29 @@ import { emulate } from '../testing/term-emulator.js';
  * trailing and get trimmed, while rows above the reply are real output that
  * scrolls into terminal history permanently.
  *
- * Shrinking is what removes the rows instead of relocating them — the box is
- * only ever as tall as its content, so there are no spare rows to place.
- * Clipping still works because Yoga caps the box at the leftover space, giving
- * a tall transcript a resolved height smaller than its content, which is all
- * `overflow: hidden` needs.
+ * Shrinking removes the rows instead of relocating them — but it also removes
+ * them from the FRAME, and a short frame sits against the top of the terminal.
+ * With a full-height root that carried the footer up the screen with it.
+ *
+ * ALL THREE OF THOSE ARE ANSWERS TO THE WRONG QUESTION
+ * They assume the frame must be the full height of the screen, so the spare
+ * rows exist and can only be placed. The accepted layout removes the premise:
+ * the root carries `maxHeight` rather than `height`, so the frame is as tall as
+ * its CONTENT. A short reply makes a short frame that starts at the TOP of the
+ * screen with the input box directly beneath it, and the input box moves DOWN
+ * as the reply grows — what a terminal does, and what the user asked for. The
+ * ceiling still clips a tall transcript, so ink never takes its
+ * scrollback-erasing path. See `natural-downward-flow.test.tsx`.
+ *
+ * The claim above that blank rows above the reply "scroll into terminal history
+ * permanently" was reasoned, not measured, and it is FALSE: those rows live in
+ * the repainted frame and are overwritten every frame. Measured blank rows in
+ * scrollback: zero, for both layouts.
+ *
+ * Every test below locates the footer within the FRAME, which is why none of
+ * them could see the footer leaving the bottom of the screen — nor, later, the
+ * banner being scrolled off the top by a frame that claimed rows it had no
+ * content for.
  */
 
 const COLS = 80;
@@ -271,9 +289,30 @@ describe('a transcript taller than the live region', () => {
 });
 
 describe('the live region in App.tsx', () => {
-  it('shrinks rather than claiming the whole leftover share', () => {
-    // Both failure modes are call-site shaped and both pass every behavioural
-    // test above, so the props themselves are pinned.
+  it('is as tall as its content, up to the frame ceiling', () => {
+    // This guard has now been wrong TWICE, in opposite directions, and both
+    // errors came from the same false premise.
+    //
+    // It first asserted `flexGrow` was ABSENT (which deletes the dead space
+    // below a short reply, but collapses the frame — and a short frame sits
+    // against the top of the terminal, so the input box rode up to screen row
+    // 4 of 24). It then asserted `flexGrow` and `bottomAlign` were both
+    // PRESENT (which pins the footer down and moves the spare rows above the
+    // reply — but a full-height frame anchors to the BOTTOM of the terminal,
+    // scrolling the banner and the turn being answered off the top).
+    //
+    // The premise both shared: that the frame must be the full height of the
+    // screen, leaving spare rows that can only be placed, never removed. It
+    // need not. The root now carries `maxHeight` instead of `height`, so the
+    // frame is as tall as its CONTENT and there are no spare rows at all —
+    // which is what a terminal does, and what the user asked for: 内容跟着往
+    // 下, 而不是输入框跟着往上.
+    //
+    // With no leftover share to claim, `flexGrow` would re-inflate the frame
+    // to full height and bring the first symptom back, and `bottomAlign` would
+    // have nothing to pad. Both are gone. See
+    // `coderix-cli/.../natural-downward-flow.test.tsx`, which measures
+    // ABSOLUTE screen rows — the distinction this file's assertions cannot see.
     const app = readFileSync(
       fileURLToPath(new URL('../../../coderix-cli/src/tui/components/App.tsx', import.meta.url)),
       'utf8',
@@ -284,9 +323,21 @@ describe('the live region in App.tsx', () => {
     expect(liveRegion, 'a flex child cannot shrink below its content without this').toMatch(
       /minHeight=\{0\}/,
     );
-    expect(liveRegion, 'claiming the whole share is what top-aligns a short reply').not.toMatch(
-      /flexGrow/,
-    );
+    expect(
+      liveRegion,
+      'flexGrow would re-inflate the frame to the full screen and reopen the gap above the input box',
+    ).not.toMatch(/flexGrow/);
+    expect(
+      liveRegion,
+      'bottomAlign has nothing to pad once the frame is only as tall as its content',
+    ).not.toMatch(/bottomAlign/);
+
+    const root = /<Box flexDirection="column" (?:max)?Height=\{rootRows\}|<Box flexDirection="column" maxHeight=\{rootRows\}/.exec(app)?.[0] ?? '';
+    expect(root, 'the root box must be found').not.toBe('');
+    expect(
+      root,
+      'a fixed root height claims the whole screen regardless of content — the ceiling must be a maximum',
+    ).toMatch(/maxHeight=\{rootRows\}/);
   });
 
   it('does not size the flush policy from the shrunken region', () => {
