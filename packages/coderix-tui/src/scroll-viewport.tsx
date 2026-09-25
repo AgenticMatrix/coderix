@@ -234,14 +234,14 @@ function ScrollBox({
       flexDirection="column"
       overflow="hidden"
     >
-      <Box
-        ref={attachContent}
-        flexDirection="column"
-        flexShrink={0}
-        width="100%"
-        marginTop={-scrollTop}
-      >
-        {children}
+      {/* The scroll offset lives on this wrapper rather than on the measured
+          content box, so that `contentRef` measures the content's NATURAL
+          height — a pure function of the children, unaffected by the offset or
+          by anything derived from the measurement itself. */}
+      <Box flexDirection="column" flexShrink={0} width="100%" marginTop={-scrollTop}>
+        <Box ref={attachContent} flexDirection="column" flexShrink={0} width="100%">
+          {children}
+        </Box>
       </Box>
     </Box>
   );
