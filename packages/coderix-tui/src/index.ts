@@ -16,6 +16,9 @@ export type { Color } from './color-types.js';
 export { useTerminalSize } from './use-viewport-size.js';
 export type { TerminalSize } from './use-viewport-size.js';
 
+// Column-accurate text measurement, for chrome assembled by padding strings.
+export { textWidth, truncateToWidth, padToWidth } from './text-width.js';
+
 // Scroll viewport + virtualization.
 export { default as ScrollBox } from './scroll-viewport.js';
 export type { ScrollBoxHandle, ScrollBoxProps } from './scroll-viewport.js';
