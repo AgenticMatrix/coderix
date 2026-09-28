@@ -235,8 +235,21 @@ export function entriesToMessages(entries: SessionEntry[]): Message[] {
   return chain.map((e) => e.message);
 }
 
+/**
+ * Strip the Claude Code SDK's continuation/auto-compact wrapper from a user
+ * message string. When a session is resumed, the SDK prepends a summary ending
+ * with a "[Latest message]" line — we keep only that final line.
+ */
+export function stripCompactWrapper(content: string): string {
+  const marker = '[Latest message]';
+  const idx = content.lastIndexOf(marker);
+  if (idx < 0) return content;
+  const after = content.slice(idx + marker.length).trim();
+  return after || content;
+}
+
 function extractUserText(content: unknown): string {
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') return stripCompactWrapper(content);
   if (Array.isArray(content)) {
     return (content as Array<{ type?: string; text?: string }>)
       .filter((b) => b.type === 'text')

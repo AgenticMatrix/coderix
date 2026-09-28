@@ -13,7 +13,10 @@ export const TrajectoryCallCard = React.memo(function TrajectoryCallCard({
   revealRowKeys?: Set<string>;
 }): React.ReactElement {
   const [userOpened, setUserOpened] = useState(false);
-  const hasWork = call.workRows.length > 0;
+  // Only show the "已工作" region when the turn actually ran tools. Thinking
+  // alone (e.g. a plain "你好" reply) is just the model's internal reasoning and
+  // reads as noise, so it is hidden for tool-free turns.
+  const hasWork = call.workRows.some((row) => row.kind === 'tool');
   const hasAnswer = call.answerBlocks.length > 0;
   // A search match on a work row force-opens the collapsed region (and the row
   // itself via the `reveal` prop), so hidden content is reachable while searching.
