@@ -42,6 +42,7 @@ import {
   writeSessionMeta,
   generateSessionTitle,
   isAutoTitle,
+  stripCompactWrapper,
 } from './session-store.js';
 
 // ---------------------------------------------------------------------------
@@ -49,7 +50,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function extractMessageText(message: Message): string {
-  if (typeof message.content === 'string') return message.content;
+  if (typeof message.content === 'string') return stripCompactWrapper(message.content);
   if (Array.isArray(message.content)) {
     return (message.content as Array<{ type?: string; text?: string }>)
       .filter((b) => b.type === 'text')

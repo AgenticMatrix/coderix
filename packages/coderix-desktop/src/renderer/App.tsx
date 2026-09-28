@@ -85,6 +85,20 @@ function getFolderName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
+/**
+ * Strip the Claude Code SDK's continuation/auto-compact wrapper from a user
+ * message string. When a session is resumed, the SDK prepends a summary of the
+ * earlier conversation, ending with a "[Latest message]" line. We keep only
+ * that final line — the actual text the user typed.
+ */
+function stripCompactWrapper(content: string): string {
+  const marker = '[Latest message]';
+  const idx = content.lastIndexOf(marker);
+  if (idx < 0) return content;
+  const after = content.slice(idx + marker.length).trim();
+  return after || content;
+}
+
 // ---------------------------------------------------------------------------
 // App Shell
 // ---------------------------------------------------------------------------
@@ -500,9 +514,10 @@ export function App(): React.ReactElement {
           if (session?.messages) {
             const chatMsgs = session.messages.map((m: any) => {
               let blocks = m.content || [];
-              // Convert string content to text block
+              // Convert string content to text block (strip the SDK's auto-compact
+              // continuation wrapper so only the user's actual input is shown).
               if (typeof blocks === 'string') {
-                blocks = [{ type: 'text', content: blocks, state: 'done' }];
+                blocks = [{ type: 'text', content: stripCompactWrapper(blocks), state: 'done' }];
               } else if (Array.isArray(blocks)) {
                 // Normalize content blocks: backend uses 'text' field, UI expects 'content' field
                 blocks = blocks.map((b: any) => {
