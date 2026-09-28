@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Generate the Coderix app icon (a "lightning bolt" mark) as a 1024x1024 PNG.
+Generate the Coderix app icon — a "lightning bolt" mark as a 1024x1024 PNG.
 
-Design:
+Design (语枢 / Coderix「对话闪电」logo):
   - Rounded-square background with a near-black -> deep-purple vertical gradient.
-  - A bold purple/violet lightning bolt with a soft glow, lit from the top.
+  - A bold amber -> rose lightning bolt with a soft warm glow.
+  - A few amber spark dots around the bolt.
 
 Only depends on Pillow (already available in the environment). Output is written
 to assets/icon.png; build-dmg.sh turns that into assets/icon.icns via sips/iconutil.
@@ -20,6 +21,13 @@ SIZE = 1024
 # --- background gradient (top -> bottom) ------------------------------------
 BG_TOP = (10, 9, 20)       # #0a0914  near-black
 BG_BOT = (40, 22, 80)      # #281450  deep purple
+
+# --- bolt gradient (top -> bottom), matches the「对话闪电」palette -----------
+BOLT_TOP = (253, 224, 71)  # #fde047  bright amber
+BOLT_BOT = (244, 63, 94)   # #f43f5e  rose
+
+GLOW_RGBA = (251, 146, 60, 150)   # orange glow  #fb923c
+SPARK_COLOR = (253, 224, 71)      # #fde047
 
 
 def vertical_gradient(top_rgb, bottom_rgb, size):
@@ -52,16 +60,16 @@ def main():
     tx, ty = 232, 186  # centers the bolt on the canvas
     pts = [(tx + x * scale, ty + y * scale) for (x, y) in bolt100]
 
-    # --- soft purple glow behind the bolt -----------------------------------
+    # --- soft warm glow behind the bolt -------------------------------------
     glow = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     ImageDraw.Draw(glow).polygon(
-        [(x * 1.06, y * 1.06) for (x, y) in pts], fill=(168, 85, 247, 150)
+        [(x * 1.06, y * 1.06) for (x, y) in pts], fill=GLOW_RGBA
     )
     glow = glow.filter(ImageFilter.GaussianBlur(60))
     img = Image.alpha_composite(img, glow)
 
-    # --- bolt body: near-white lavender top -> vivid purple bottom ----------
-    bolt_tex = vertical_gradient((245, 243, 255), (147, 51, 234), SIZE)  # #f5f3ff -> #9333ea
+    # --- bolt body: bright amber top -> vivid rose bottom -------------------
+    bolt_tex = vertical_gradient(BOLT_TOP, BOLT_BOT, SIZE)
     bolt_mask = Image.new("L", (SIZE, SIZE), 0)
     ImageDraw.Draw(bolt_mask).polygon(pts, fill=255)
     bolt = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
@@ -77,6 +85,12 @@ def main():
     core.paste((255, 255, 255, 230), (0, 0), core_mask)
     core = core.filter(ImageFilter.GaussianBlur(4))
     img = Image.alpha_composite(img, core)
+
+    draw = ImageDraw.Draw(img)
+
+    # --- spark dots ----------------------------------------------------------
+    for (cx, cy, r) in [(286, 276, 16), (744, 226, 13), (772, 704, 11)]:
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=SPARK_COLOR)
 
     out = "assets/icon.png"
     img.save(out, "PNG")

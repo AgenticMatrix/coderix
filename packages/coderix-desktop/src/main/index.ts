@@ -16,6 +16,10 @@ import { createTrayManager } from './tray-manager.js';
 import type { TrayManager } from './tray-manager.js';
 import { createBrowserViewManager } from './browser-view-manager.js';
 import type { BrowserViewManager } from './browser-view-manager.js';
+import { createCadViewerManager } from './cad-viewer-manager.js';
+import type { CadViewerManager } from './cad-viewer-manager.js';
+import { installCadSkills } from './cad-skills.js';
+import { applyCadEnv } from './cad-paths.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
@@ -67,6 +71,8 @@ import { schema as enterWorktreeSchema } from '../../../../packages/coderix-core
 import { execute as enterWorktreeExec } from '../../../../packages/coderix-core/src/tools/enter-worktree/executor.js';
 import { schema as exitWorktreeSchema } from '../../../../packages/coderix-core/src/tools/exit-worktree/schema.js';
 import { execute as exitWorktreeExec } from '../../../../packages/coderix-core/src/tools/exit-worktree/executor.js';
+import { schema as skillSchema } from '../../../../packages/coderix-core/src/tools/skill/schema.js';
+import { execute as skillExec } from '../../../../packages/coderix-core/src/tools/skill/executor.js';
 
 // ---------------------------------------------------------------------------
 // Prevent multiple instances (single-instance lock)
@@ -87,6 +93,7 @@ let fileWatcher: FileWatcherManager | null = null;
 let terminalManager: TerminalManager | null = null;
 let trayManager: TrayManager | null = null;
 let browserViewManager: BrowserViewManager | null = null;
+let cadViewerManager: CadViewerManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
@@ -104,6 +111,14 @@ async function bootstrap(): Promise<void> {
     // "No model configured" and the app would quit before any window opens.
     // Idempotent: existing settings.json / user-customized skills are preserved.
     bootstrapConfig();
+
+    // Make cad_harness's vendored `cad` + `cad-viewer` skills available to the
+    // engine (symlink into ~/.coderix/skills/). Idempotent; no-op if absent.
+    installCadSkills();
+
+    // Export the CAD toolchain paths (CAD_PYTHON etc.) so the engine's bash
+    // tool and the skill scripts it runs resolve the right Python interpreter.
+    applyCadEnv();
 
     const initialConfig = loadDesktopConfig();
     // Restore the last-used workspace across restarts. `loadConfig().cwd` is
@@ -127,6 +142,10 @@ async function bootstrap(): Promise<void> {
     // Step 1b: Create browser view manager (WebContentsView tabs) so its IPC
     // handlers are registered before the renderer loads.
     browserViewManager = createBrowserViewManager(windowManager);
+
+    // Step 1c: Create cad-viewer manager (spawns the 3D viewer on demand for the
+    // "apps" display panel) so its IPC handlers are registered before load.
+    cadViewerManager = createCadViewerManager(windowManager);
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
@@ -281,6 +300,7 @@ function buildSharedToolRegistry(): ToolRegistry {
     { schema: taskStopSchema, executor: taskStopExec },
     { schema: enterWorktreeSchema, executor: enterWorktreeExec },
     { schema: exitWorktreeSchema, executor: exitWorktreeExec },
+    { schema: skillSchema, executor: skillExec },
   ];
   for (const t of toolList) {
     if (!t.schema || !t.executor) continue;
@@ -451,6 +471,7 @@ app.on('before-quit', () => {
   windowManager?.saveWindowState();
   ipcBridge?.destroy();
   browserViewManager?.destroy();
+  cadViewerManager?.destroy();
   fileWatcher?.destroy();
   terminalManager?.destroyAll();
   trayManager?.destroy();

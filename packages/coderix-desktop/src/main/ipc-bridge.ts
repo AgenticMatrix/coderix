@@ -100,6 +100,7 @@ export const IPC_CHANNELS = {
   FS_READ_FILE: 'fs:readFile',
   FS_WRITE_FILE: 'fs:writeFile',
   FS_LIST_DIR: 'fs:listDir',
+  FS_LIST_CAD_FILES: 'fs:listCadFiles',
   FS_WATCH: 'fs:watch',
   FS_SEARCH: 'fs:search',
   TERMINAL_CREATE: 'terminal:create',
@@ -1054,6 +1055,45 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }),
     );
     return { path: dirPath, entries: result };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FS_LIST_CAD_FILES, async (_event, dirPath: string) => {
+    const root = resolveProjectPath(dirPath, currentWorkDir);
+
+    const CAD_EXTS = ['.step.py', '.step', '.stp', '.glb', '.stl', '.3mf'];
+    const SKIP_DIRS = new Set([
+      'node_modules', '.git', 'dist', 'build', '__pycache__', '.coderix',
+      '__cadgen__', '.cadgen', 'history', 'frames', 'cache', 'artifacts',
+    ]);
+    const isCad = (name: string): boolean => {
+      const lower = name.toLowerCase();
+      return CAD_EXTS.some((ext) => lower.endsWith(ext));
+    };
+
+    const walk = async (dir: string): Promise<Array<{ name: string; relativePath: string }>> => {
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return [];
+      }
+      const out: Array<{ name: string; relativePath: string }> = [];
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (SKIP_DIRS.has(entry.name)) continue;
+          out.push(...(await walk(full)));
+        } else if (entry.isFile() && isCad(entry.name)) {
+          out.push({ name: entry.name, relativePath: relative(root, full) });
+        }
+      }
+      return out;
+    };
+
+    const files = await walk(root);
+    files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    return { path: dirPath, files };
   });
 
   ipcMain.handle(IPC_CHANNELS.FS_SEARCH, async (_event, query: string) => {

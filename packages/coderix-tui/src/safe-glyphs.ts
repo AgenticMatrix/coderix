@@ -26,12 +26,28 @@
  * while visually-similar alternatives are **Neutral**, meaning 1 column in every
  * terminal regardless of locale:
  *
- *   U+254E ╎  Neutral     U+23AF ⎯  Neutral     U+25B0 ▰  Neutral
+ *   U+23B8 ⎸  Neutral     U+23AF ⎯  Neutral     U+25B0 ▰  Neutral
  *   U+25C9 ◉  Neutral     U+2591 ░  Neutral     U+25AA ▪  Neutral
  *
  * So the fix is a substitution, not a downgrade to ASCII: pick the Neutral glyph
  * that looks closest. Widths below are from the Unicode East_Asian_Width table
  * and are asserted by the unit test alongside this file.
+ *
+ * SOLID VERSUS DASHED IS A FREE CHOICE; AMBIGUOUS VERSUS NEUTRAL IS NOT
+ * The vertical separator was `╎` (U+254E, LIGHT DOUBLE DASH) — Neutral, but
+ * visibly dashed, which read as an unfinished border. The dashes were never the
+ * point: within U+2500..U+257F the dashed and half-line forms are the ONLY
+ * Neutral ones, so `╎` was reached for as the nearest safe thing to `│`.
+ *
+ * It is not the nearest. `⎸` (U+23B8, LEFT VERTICAL BOX LINE) is a full-height
+ * SOLID rule and is also Neutral, so the dashes can go without giving up the
+ * width guarantee. Other solid Neutral options, if the weight ever needs
+ * changing: `❘` U+2758 (light), `❙` U+2759 (medium), `❚` U+275A (heavy).
+ *
+ * What cannot be used, however much it is wanted, is `│` (U+2502) itself, or
+ * `┃` U+2503, or `─` U+2500 for the rule — all Ambiguous. Verified against the
+ * East_Asian_Width table rather than assumed; the test beside this file fails on
+ * any constant that regresses to an Ambiguous code point.
  *
  * WHEN TO USE THIS
  * ----------------
@@ -42,8 +58,13 @@
  * repainted, nor for genuine CJK text, where being wide is the point.
  */
 
-/** Vertical separator between status-bar fields. Neutral, unlike │ (U+2502). */
-export const VERTICAL_SEPARATOR = '╎'; // ╎ BOX DRAWINGS LIGHT DOUBLE DASH VERTICAL
+/**
+ * Vertical separator for framed chrome and status-bar fields.
+ *
+ * Solid and full-height, unlike the dashed `╎` it replaced, and Neutral unlike
+ * the `│` (U+2502) it resembles.
+ */
+export const VERTICAL_SEPARATOR = '⎸'; // ⎸ LEFT VERTICAL BOX LINE
 
 /** Horizontal rule for dividers. Neutral, unlike ─ (U+2500). */
 export const HORIZONTAL_RULE = '⎯'; // ⎯ HORIZONTAL LINE EXTENSION

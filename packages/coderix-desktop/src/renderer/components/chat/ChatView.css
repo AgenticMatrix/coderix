@@ -1,6 +1,6 @@
 /* ==========================================================================
-   ChatView — Claude Desk Flat Message Style
-   Full-width blocks, subtle separators, clean typography
+   ChatView — ZCode live-chat style
+   Per-turn "已工作 X 分 Y 秒" collapsible work region + always-visible answer.
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -16,18 +16,16 @@
   position: relative;
 }
 
-/* Scrollable message area */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px 0;
+  padding: 16px 0 24px;
   overscroll-behavior: contain;
   overflow-anchor: auto;
   scroll-behavior: auto;
 }
 
-/* Empty state */
 .chat-empty {
   display: flex;
   flex-direction: column;
@@ -65,146 +63,122 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. Message Layout — Flat Claude Desk Style (full-width blocks)
+   2. Turn / Call card
    -------------------------------------------------------------------------- */
 
-/* Each message row — full width block, centered content */
-.message-row {
-  display: block;
-  margin-bottom: 0;
-  padding: 0;
+.trajectory-call-wrapper {
+  padding: 0 var(--space-4);
 }
 
-/* User message — no special alignment */
-.message-row.user {
-  /* full width, no alignment needed */
-}
-
-/* Assistant message — avatar + content row, left-aligned 24px from edge */
-.message-row.assistant {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  max-width: 80%;
-  margin: 0 0 0 24px;
-  width: 100%;
-}
-
-/* Blank-line separator before a text turn; tool-only turns stay tight */
-.message-row.assistant.group-start {
-  margin-top: var(--space-5);
-}
-
-/* Blank-line separator before a user input that follows an assistant reply —
-   keeps the next question from crowding the response above it. */
-.message-row.assistant + .message-row.user {
-  margin-top: var(--space-5);
-}
-
-/* Circled avatar for assistant messages (the "C" mark) */
-.message-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-brand);
-  color: var(--color-text-inverse);
-  font-size: 15px;
-  font-weight: var(--font-bold);
-  line-height: 1;
-  user-select: none;
-}
-
-/* Wraps the bubble + meta so the avatar can sit beside it */
-.message-body {
-  flex: 1;
-  min-width: 0;
-}
-
-/* System message — centered, muted */
-.message-row.system {
-  display: flex;
-  justify-content: center;
-}
-
-/* === Message Block (replaces bubble) === */
-.message-bubble {
-  max-width: 80%;
-  margin: 0 auto;
-  width: 100%;
-  padding: 0 24px;
-  font-size: var(--text-body);
-  line-height: 1.65;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  position: relative;
-  color: var(--color-text-primary);
-  background: transparent;
-  border-radius: 0;
-}
-
-/* User message block — right-aligned */
-.message-bubble.user {
-  background-color: transparent;
-  color: var(--color-text-primary);
-  border-radius: 0;
-  margin-left: auto;
-  margin-right: 24px;
-  max-width: 80%;
+.trajectory-call {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-separator);
 }
 
-/* User message inline timestamp */
-.message-time-inline {
-  font-size: var(--text-caption1);
-  color: var(--color-text-tertiary);
-  margin-top: 4px;
-  user-select: none;
-}
-
-/* Assistant message block — left-aligned, avatar provides the left indent */
-.message-bubble.assistant {
-  background-color: transparent;
+/* User message — right-aligned, always visible */
+.trajectory-user {
+  font-size: var(--text-body);
+  line-height: 1.65;
   color: var(--color-text-primary);
-  border-radius: 0;
-  margin: 0;
-  max-width: 100%;
-  padding-left: 0;
+  padding: var(--space-1) 0;
+  align-self: flex-end;
+  max-width: 80%;
 }
 
-/* System bubble — subtle chip (kept for system messages) */
-.message-bubble.system {
-  background-color: var(--color-bg-tertiary);
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-caption1);
-  font-weight: var(--font-medium);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-  max-width: 320px;
-  width: auto;
-}
-
-/* No extra spacing between different-role messages */
-
-/* Streaming message animation */
-.message-bubble.streaming {
-  opacity: 0.95;
+/* Final answer — always visible, indented under the work header */
+.trajectory-answer {
+  font-size: var(--text-body);
+  line-height: 1.65;
+  color: var(--color-text-primary);
+  padding-top: var(--space-2);
+  padding-left: var(--space-6);
 }
 
 /* --------------------------------------------------------------------------
-   3. Message Content — Inline Markdown
+   3. 已工作 X 分 Y 秒 collapsible work region
    -------------------------------------------------------------------------- */
 
-/* Code blocks inside messages */
-.message-bubble pre {
+.trajectory-work-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1) 0;
+  width: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text-secondary);
+  font-size: var(--text-subhead);
+  border-radius: var(--radius-sm);
+}
+
+.trajectory-work-header:hover {
+  color: var(--color-text-primary);
+}
+
+.trajectory-work-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* The "C" avatar marking the start of the agent's work. */
+.trajectory-cplus {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  color: var(--color-text-inverse);
+  font-size: 14px;
+  font-weight: var(--font-bold);
+  line-height: 1;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.trajectory-work-label {
+  font-weight: var(--font-medium);
+}
+
+.trajectory-work-count {
+  margin-left: var(--space-1-5);
+  font-size: var(--text-caption1);
+  color: var(--color-text-tertiary);
+  user-select: none;
+}
+
+.trajectory-work-body {
+  overflow: hidden;
+}
+
+.trajectory-work-inner {
+  padding: var(--space-1) 0 var(--space-1) var(--space-5);
+  border-left: 2px solid var(--color-separator);
+  margin-left: var(--space-2);
+}
+
+.trajectory-row-divider {
+  height: 1px;
+  background: var(--color-separator);
+  margin: var(--space-1) 0;
+}
+
+/* --------------------------------------------------------------------------
+   4. Inline Markdown content (user + answer)
+   -------------------------------------------------------------------------- */
+
+.trajectory-user pre,
+.trajectory-answer pre {
   margin: var(--space-2) 0;
   padding: 14px 16px;
   background: var(--color-bg-secondary);
@@ -215,7 +189,8 @@
   line-height: var(--leading-code);
 }
 
-.message-bubble pre code {
+.trajectory-user pre code,
+.trajectory-answer pre code {
   background: none;
   border: none;
   padding: 0;
@@ -224,8 +199,8 @@
   color: inherit;
 }
 
-/* Inline code */
-.message-bubble code {
+.trajectory-user code,
+.trajectory-answer code {
   padding: 1px 5px;
   background: var(--color-bg-tertiary);
   border: 1px solid var(--color-separator);
@@ -234,19 +209,20 @@
   font-family: var(--font-mono);
 }
 
-/* Links inside messages */
-.message-bubble a {
+.trajectory-user a,
+.trajectory-answer a {
   color: var(--color-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.message-bubble a:hover {
+.trajectory-user a:hover,
+.trajectory-answer a:hover {
   color: var(--color-link-hover);
 }
 
-/* Blockquote inside messages */
-.message-bubble blockquote {
+.trajectory-user blockquote,
+.trajectory-answer blockquote {
   border-left: 3px solid var(--color-brand);
   padding-left: var(--space-3);
   margin: var(--space-2) 0;
@@ -254,43 +230,41 @@
   font-style: italic;
 }
 
-/* Lists inside messages */
-.message-bubble ul,
-.message-bubble ol {
+.trajectory-user ul,
+.trajectory-user ol,
+.trajectory-answer ul,
+.trajectory-answer ol {
   margin: var(--space-1) 0;
   padding-left: var(--space-5);
 }
 
-.message-bubble ul {
-  list-style-type: disc;
-}
+.trajectory-user ul,
+.trajectory-answer ul { list-style-type: disc; }
+.trajectory-user ol,
+.trajectory-answer ol { list-style-type: decimal; }
+.trajectory-user li,
+.trajectory-answer li { margin-bottom: var(--space-0); }
 
-.message-bubble ol {
-  list-style-type: decimal;
-}
+.trajectory-user h1,
+.trajectory-answer h1 { font-size: var(--text-title2); font-weight: var(--font-bold); margin: var(--space-3) 0 var(--space-2); }
+.trajectory-user h2,
+.trajectory-answer h2 { font-size: var(--text-title3); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1-5); }
+.trajectory-user h3,
+.trajectory-answer h3 { font-size: var(--text-headline); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1); }
 
-.message-bubble li {
-  margin-bottom: var(--space-0);
-}
-
-/* Headings inside messages */
-.message-bubble h1 { font-size: var(--text-title2); font-weight: var(--font-bold); margin: var(--space-3) 0 var(--space-2); }
-.message-bubble h2 { font-size: var(--text-title3); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1-5); }
-.message-bubble h3 { font-size: var(--text-headline); font-weight: var(--font-semibold); margin: var(--space-2) 0 var(--space-1); }
-
-/* Table container in messages */
-.message-bubble table {
+.trajectory-user table,
+.trajectory-answer table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-footnote);
   margin: var(--space-2) 0;
 }
 
-.message-bubble thead {
-  background: var(--color-bg-tertiary);
-}
+.trajectory-user thead,
+.trajectory-answer thead { background: var(--color-bg-tertiary); }
 
-.message-bubble th {
+.trajectory-user th,
+.trajectory-answer th {
   padding: 8px 12px;
   text-align: left;
   font-weight: var(--font-semibold);
@@ -300,103 +274,35 @@
   white-space: nowrap;
 }
 
-.message-bubble td {
+.trajectory-user td,
+.trajectory-answer td {
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-separator);
   color: var(--color-text-primary);
 }
 
-.message-bubble tbody tr:nth-child(even) {
-  background: var(--color-bg-secondary);
-}
+.trajectory-user tbody tr:nth-child(even),
+.trajectory-answer tbody tr:nth-child(even) { background: var(--color-bg-secondary); }
+.trajectory-user tbody tr:hover,
+.trajectory-answer tbody tr:hover { background: var(--color-bg-tertiary); }
 
-.message-bubble tbody tr:hover {
-  background: var(--color-bg-tertiary);
-}
-
-.message-bubble .table-wrapper {
-  overflow-x: auto;
-  margin: var(--space-2) 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-separator);
-}
-
-/* Horizontal rule */
-.message-bubble hr {
+.trajectory-user hr,
+.trajectory-answer hr {
   margin: var(--space-3) 0;
   border: none;
   border-top: 1px solid var(--color-separator);
   opacity: 0.5;
 }
 
-/* Paragraph spacing in messages */
-.message-bubble p {
-  margin: 0;
-}
-
-.message-bubble p + p {
-  margin-top: 8px;
-}
-
-/* --------------------------------------------------------------------------
-   4. Tool Call & Thinking Cards (inside chat)
-   -------------------------------------------------------------------------- */
-
-/* Thinking toggle — collapsible by default */
-.chat-thinking-block {
-  margin: var(--space-1) 0;
-}
-
-.chat-thinking-block .thinking-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-1-5) var(--space-3);
-  font-size: var(--text-subhead);
-  font-weight: var(--font-medium);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-default);
-  border: none;
-}
-
-.chat-thinking-block .thinking-toggle:hover {
-  background: var(--color-bg-tertiary);
-}
-
-.chat-thinking-block .thinking-toggle-icon {
-  display: flex;
-  align-items: center;
-  transition: transform var(--duration-fast) var(--ease-default);
-}
-
-.chat-thinking-block .thinking-toggle-icon.expanded {
-  transform: rotate(90deg);
-}
-
-.chat-thinking-block .thinking-content {
-  padding: var(--space-3) var(--space-3);
-  margin: var(--space-1) var(--space-2) 0;
-  background: var(--color-bg-secondary);
-  border-left: 2px solid var(--color-info);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-size: var(--text-subhead);
-  color: var(--color-text-secondary);
-  font-family: var(--font-mono);
-  line-height: var(--leading-code);
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-x: auto;
-}
+.trajectory-user p,
+.trajectory-answer p { margin: 0; }
+.trajectory-user p + p,
+.trajectory-answer p + p { margin-top: 8px; }
 
 /* --------------------------------------------------------------------------
    5. Streaming Indicator
    -------------------------------------------------------------------------- */
 
-/* Typing dots in assistant bubble */
 .typing-indicator {
   display: inline-flex;
   gap: 3px;
@@ -412,26 +318,14 @@
   animation: typingBounce 1.4s ease-in-out infinite;
 }
 
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes typingBounce {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.4;
-  }
-  30% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
 }
 
-/* Blinking cursor during streaming */
 .streaming-cursor {
   display: inline-block;
   width: 2px;
@@ -472,71 +366,133 @@
 }
 
 /* --------------------------------------------------------------------------
-   7. Message timestamp & meta
+   7. Search
    -------------------------------------------------------------------------- */
-.message-meta {
+
+.trajectory-search-toggle {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-4);
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-  padding: 0 var(--space-1);
-  font-size: var(--text-caption1);
-  color: var(--color-text-tertiary);
-  justify-content: flex-start;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-separator);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  z-index: var(--z-sticky);
+  transition: all var(--duration-fast) var(--ease-default);
 }
 
-/* Model badge on assistant messages */
-.model-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-0) var(--space-1-5);
+.trajectory-search-toggle:hover {
   background: var(--color-bg-tertiary);
-  border-radius: var(--radius-full);
-  font-size: var(--text-caption2);
-  font-weight: var(--font-medium);
+  color: var(--color-text-primary);
+}
+
+.trajectory-search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-separator);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.trajectory-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  background: var(--color-input-bg);
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  outline: none;
+}
+
+.trajectory-search-input:focus {
+  border-color: var(--color-border-focus);
+}
+
+.trajectory-search-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption1);
   color: var(--color-text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.trajectory-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.trajectory-search-btn:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
 }
 
 /* --------------------------------------------------------------------------
    8. KaTeX Math Rendering
    -------------------------------------------------------------------------- */
 
-/* Inline math */
-.message-bubble .katex {
-  font-size: 1.05em;
-}
+.trajectory-user .katex,
+.trajectory-answer .katex { font-size: 1.05em; }
 
-/* Block math — center and add spacing */
-.message-bubble .katex-display {
+.trajectory-user .katex-display,
+.trajectory-answer .katex-display {
   margin: var(--space-3) 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-/* Make KaTeX inherit text color in light and dark modes */
-.message-bubble .katex,
-.message-bubble .katex .mord,
-.message-bubble .katex .mbin,
-.message-bubble .katex .mrel,
-.message-bubble .katex .mopen,
-.message-bubble .katex .mclose,
-.message-bubble .katex .mpunct,
-.message-bubble .katex .minner {
+.trajectory-user .katex,
+.trajectory-answer .katex,
+.trajectory-user .katex .mord,
+.trajectory-answer .katex .mord,
+.trajectory-user .katex .mbin,
+.trajectory-answer .katex .mbin,
+.trajectory-user .katex .mrel,
+.trajectory-answer .katex .mrel,
+.trajectory-user .katex .mopen,
+.trajectory-answer .katex .mopen,
+.trajectory-user .katex .mclose,
+.trajectory-answer .katex .mclose,
+.trajectory-user .katex .mpunct,
+.trajectory-answer .katex .mpunct,
+.trajectory-user .katex .minner,
+.trajectory-answer .katex .minner {
   color: var(--color-text-primary);
 }
 
-/* Dark mode KaTeX — use explicit color for readability */
-[data-theme="dark"] .message-bubble .katex,
-[data-theme="dark"] .message-bubble .katex .mord,
-[data-theme="dark"] .message-bubble .katex .mbin,
-[data-theme="dark"] .message-bubble .katex .mrel,
-[data-theme="dark"] .message-bubble .katex .mopen,
-[data-theme="dark"] .message-bubble .katex .mclose,
-[data-theme="dark"] .message-bubble .katex .mpunct,
-[data-theme="dark"] .message-bubble .katex .minner {
+[data-theme="dark"] .trajectory-user .katex,
+[data-theme="dark"] .trajectory-answer .katex,
+[data-theme="dark"] .trajectory-user .katex .mord,
+[data-theme="dark"] .trajectory-answer .katex .mord,
+[data-theme="dark"] .trajectory-user .katex .mbin,
+[data-theme="dark"] .trajectory-answer .katex .mbin,
+[data-theme="dark"] .trajectory-user .katex .mrel,
+[data-theme="dark"] .trajectory-answer .katex .mrel,
+[data-theme="dark"] .trajectory-user .katex .mopen,
+[data-theme="dark"] .trajectory-answer .katex .mopen,
+[data-theme="dark"] .trajectory-user .katex .mclose,
+[data-theme="dark"] .trajectory-answer .katex .mclose,
+[data-theme="dark"] .trajectory-user .katex .mpunct,
+[data-theme="dark"] .trajectory-answer .katex .mpunct,
+[data-theme="dark"] .trajectory-user .katex .minner,
+[data-theme="dark"] .trajectory-answer .katex .minner {
   color: #EDEBE0;
 }
 
@@ -544,7 +500,6 @@
    9. Responsive / Small adjustments
    -------------------------------------------------------------------------- */
 
-/* Reduce spacing when sidebar/detail are visible */
 .chat-messages.compact {
   padding: 12px 0;
 }

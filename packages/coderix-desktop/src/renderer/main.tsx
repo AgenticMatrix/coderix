@@ -36,7 +36,7 @@ declare global {
       skills: { list(): Promise<Array<{ name: string; description: string; source: string }>>; listDirs(): Promise<string[]>; addDir(): Promise<{ canceled: boolean; dirs: string[]; skills: Array<{ name: string; description: string; source: string }> }>; removeDir(path: string): Promise<{ dirs: string[]; skills: Array<{ name: string; description: string; source: string }> }> };
       permission: { approve(toolUseId: string): Promise<{ status: string }>; approveSession(toolUseId: string): Promise<{ status: string }>; approveAlways(toolUseId: string): Promise<{ status: string }>; deny(toolUseId: string): Promise<{ status: string }>; setMode(mode: string): Promise<{ mode: string }> };
       question: { answer(toolUseId: string, answers: Record<string, string | string[]>): Promise<{ status: string }> };
-      fs: { readFile(filePath: string): Promise<{ content: string; path: string }>; writeFile(path: string, content: string): Promise<{ status: string; path: string }>; listDir(dirPath: string): Promise<{ path: string; entries: unknown[] }>; watch(watchPath: string): Promise<{ watcherId: string; path: string }>; search(query: string): Promise<{ matches: Array<{ path: string; name: string; type: 'file' | 'directory'; matched: 'name' | 'content'; line?: string }> }> };
+      fs: { readFile(filePath: string): Promise<{ content: string; path: string }>; writeFile(path: string, content: string): Promise<{ status: string; path: string }>; listDir(dirPath: string): Promise<{ path: string; entries: unknown[] }>; listCadFiles(dirPath: string): Promise<{ path: string; files: Array<{ name: string; relativePath: string }> }>; watch(watchPath: string): Promise<{ watcherId: string; path: string }>; search(query: string): Promise<{ matches: Array<{ path: string; name: string; type: 'file' | 'directory'; matched: 'name' | 'content'; line?: string }> }> };
       terminal: { create(opts?: { cwd?: string; rows?: number; cols?: number }): Promise<{ terminalId: string }>; write(sessionId: string, data: string): void; resize(sessionId: string, rows: number, cols: number): void; destroy(sessionId: string): void; onData(sessionId: string, callback: (data: string) => void): () => void; onExit(sessionId: string, callback: (exitCode: number) => void): () => void };
       config: { get(): Promise<unknown>; set(key: string, value: unknown): Promise<{ key: string; value: unknown; status: string }>; getModelList(): Promise<unknown[]>; testConnection(baseUrl: string, apiKey?: string): Promise<unknown>; reload(): Promise<{ status: string }> };
       runtime: { claudeCodeStatus(): Promise<{ installed: boolean; bin: string | null; version: string | null; installDir: string }>; claudeCodeInstall(): Promise<{ installed: boolean; bin: string | null; version: string | null; installDir: string }> };
@@ -85,6 +85,12 @@ declare global {
         onEvent(callback: (event: { tabId: string; type: string; url?: string; title?: string; canGoBack?: boolean; canGoForward?: boolean; errorDescription?: string }) => void): () => void;
         onOpenNewTab(callback: (url: string) => void): () => void;
         onOpenUrl(callback: (url: string) => void): () => void;
+      };
+      cadViewer: {
+        start(): Promise<{ status: string; port: number; baseUrl: string; error?: string }>;
+        stop(): Promise<{ status: string; port: number; baseUrl: string; error?: string }>;
+        status(): Promise<{ status: string; port: number; baseUrl: string; error?: string }>;
+        onStatusChanged(callback: (info: { status: string; error?: string }) => void): () => void;
       };
       onStreamEvent(callback: (event: unknown) => void): () => void;
       onPermissionRequest(callback: (req: unknown) => void): () => void;

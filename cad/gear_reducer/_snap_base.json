@@ -1,0 +1,11 @@
+{
+  "input": "base.step.py",
+  "mode": "view",
+  "outputs": [
+    { "path": "render/base_iso.png", "camera": "iso" },
+    { "path": "render/base_iso_opposite.png", "camera": { "direction": [-1, 1, -0.8] } },
+    { "path": "render/base_top.png", "camera": "top" },
+    { "path": "render/base_front.png", "camera": "front" }
+  ],
+  "render": { "viewLabels": true, "padding": 0.12, "sizeProfile": "diagnostic" }
+}

@@ -198,10 +198,7 @@ export const zh = {
   'nav.sessions': '会话',
   'nav.project': '项目开发',
   'nav.library': '库',
-  'nav.detailMode': '详细模式',
-  'nav.standardMode': '标准模式',
-  'nav.switchToDetail': '切换到详细模式',
-  'nav.switchToStandard': '切换到标准模式',
+  'nav.apps': '应用',
   'nav.darkMode': '深色模式',
   'nav.lightMode': '浅色模式',
   'nav.switchToDark': '切换到深色',
@@ -231,6 +228,13 @@ export const zh = {
   'library.knowledgeEmpty': '知识库功能开发中',
   'library.addProject': '添加项目',
   'library.currentProject': '当前项目',
+
+  // ── 应用 ──────────────────────────────────────────────
+  'apps.back': '返回',
+  'apps.viewerStarting': '正在启动 3D 查看器…',
+  'apps.viewerFailed': '3D 查看器启动失败',
+  'apps.artifacts': '产物',
+  'apps.noArtifacts': '暂无 CAD 产物，在左侧对话中生成后会出现在这里',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

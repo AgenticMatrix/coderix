@@ -10,6 +10,15 @@
 
 import { getSkillRegistry } from '../../skills/registry.js';
 import type { ToolExecutor } from '../types.js';
+import { dirname } from 'node:path';
+
+/**
+ * Toolchain env vars surfaced to the model when a skill is loaded, so skills
+ * whose launchers shell out to external toolchains (e.g. the `cad` skill's
+ * `scripts/gen` → build123d/OCP) can reference the right interpreter/paths.
+ * Only vars that are actually set are reported.
+ */
+const TOOLCHAIN_ENV_VARS = ['CAD_PYTHON', 'CAD_SKILL_DIR', 'CAD_VIEWER_DIR', 'STEP_PARTS_DIR'] as const;
 
 export const execute: ToolExecutor = async (input, _opts) => {
   const skillName = (input.skill as string)?.trim();
@@ -43,9 +52,18 @@ export const execute: ToolExecutor = async (input, _opts) => {
   // Record usage
   registry.recordUsage(skillName);
 
-  // Return the full skill body as instructions for the agent to follow
+  // Return the full skill body as instructions for the agent to follow.
+  // Include the skill's directory so the model can resolve relative paths in
+  // the body (e.g. a skill's own `scripts/...` launchers), plus any toolchain
+  // env vars the skill's scripts depend on.
+  const skillDir = dirname(skill.path);
+  const envHints = TOOLCHAIN_ENV_VARS.filter((k) => process.env[k]).map(
+    (k) => `${k}=${process.env[k]}`,
+  );
+  const envLine = envHints.length > 0 ? `\n_Environment: ${envHints.join(', ')}_\n` : '';
+
   return {
-    content: `[Skill: **${skill.metadata.name}**]\n_${skill.metadata.description}_\n\n${skill.body}`,
+    content: `[Skill: **${skill.metadata.name}**]\n_${skill.metadata.description}_\n\n_Skill directory: \`${skillDir}\`_${envLine}\n${skill.body}`,
     isError: false,
     metadata: {
       skillName,

@@ -21,8 +21,12 @@ import { FolderOpen, ChevronDown, Plus, MessageSquarePlus } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { LibraryView } from './components/library/LibraryView';
+import { AppsView } from './components/apps/AppsView';
+import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
+import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
-import type { ChatViewMessage } from './components/chat/ChatView';
+import { buildTrajectoryCalls } from './components/chat/trajectory';
+import type { TrajectoryCall } from './components/chat/trajectory';
 import { Composer } from './components/composer/Composer';
 import { ModelCascadePicker } from './components/composer/ModelCascadePicker';
 import { SkillPicker } from './components/composer/SkillPicker';
@@ -58,7 +62,7 @@ import {
   removeSkillDir,
 } from './ipc-client';
 import type { SkillInfo } from './ipc-client';
-import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
+import type { PermissionRequest, QuestionRequest } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,21 +75,6 @@ interface PendingPermission {
 
 interface PendingQuestion {
   request: QuestionRequest;
-}
-
-/**
- * Synthetic background task/agent notifications are injected into the
- * conversation as user messages so the model knows a background task
- * finished. They are model context, not user-visible turns — filter them
- * out of the rendered transcript (mirrors the CLI TUI behaviour).
- */
-function isBackgroundNotificationMessage(msg: { role: string; blocks: StreamBlock[] }): boolean {
-  return (
-    msg.role === 'user' &&
-    msg.blocks.some(
-      (b) => b.type === 'text' && typeof b.content === 'string' && b.content.startsWith('<background-agent-notifications>'),
-    )
-  );
 }
 
 /**
@@ -107,11 +96,12 @@ export function App(): React.ReactElement {
   const terminalOpen = useUIStore((s) => s.terminalOpen);
   const browserPanelOpen = useUIStore((s) => s.browserPanelOpen);
   const theme = useUIStore((s) => s.theme);
-  const standardMode = useUIStore((s) => s.standardMode);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const toggleDetailPanel = useUIStore((s) => s.toggleDetailPanel);
   const toggleTerminal = useUIStore((s) => s.toggleTerminal);
   const toggleBrowserPanel = useUIStore((s) => s.toggleBrowserPanel);
+  const activeAppId = useUIStore((s) => s.activeAppId);
+  const setActiveAppId = useUIStore((s) => s.setActiveAppId);
   const setTheme = useUIStore((s) => s.setTheme);
   const setTerminalOpen = useUIStore((s) => s.setTerminalOpen);
   const setPermissionMode = useUIStore((s) => s.setPermissionMode);
@@ -710,6 +700,22 @@ export function App(): React.ReactElement {
     setProjectManageOpen(false);
   }, []);
 
+  // Attach an app to the current conversation: enable its skills and surface its
+  // display page on the right, while the conversation continues on the left.
+  const handleOpenApp = useCallback(
+    (app: AppDefinition) => {
+      setActiveAppId(app.id);
+      const nextSkills = Array.from(new Set([...selectedSkills, ...app.skills]));
+      setSelectedSkills(nextSkills);
+      setSessionSkills(nextSkills, sessionId ?? undefined).catch(() => {});
+      // Left = the conversation, right = the app display.
+      setSidebarTab('sessions');
+      setProjectManageOpen(false);
+      useUIStore.getState().setSidebarOpen(true);
+    },
+    [setActiveAppId, selectedSkills, setSessionSkills, sessionId],
+  );
+
   // Double-click a project in the library: open its file/git management view
   // without a conversation, offering a "create conversation" action instead.
   const handleOpenProject = useCallback(async (path: string) => {
@@ -789,79 +795,17 @@ export function App(): React.ReactElement {
     [sendMessage, createSession, setSessionId, selectedSkills],
   );
 
-  // ── Build chat messages for ChatView ────────────────────────────────────
-  // Tool-only assistant turns (no text block) merge into the preceding
-  // assistant message so their "N tools used" group flows directly under the
-  // text instead of rendering as a separate block.
-  const chatViewMessages = useMemo<ChatViewMessage[]>(() => {
-    const result: ChatViewMessage[] = [];
+  // ── Build trajectory calls for the trajectory view ───────────────────────
+  // Group the flat message list (plus the in-flight streaming message) into
+  // ZCode-style calls — one user turn (INPUT) followed by the assistant
+  // response (OUTPUT). Thinking blocks are always shown (detailed mode is the
+  // only mode now).
+  const trajectoryCalls = useMemo<TrajectoryCall[]>(
+    () => buildTrajectoryCalls(messages, streamCurrentMessage),
+    [messages, streamCurrentMessage],
+  );
 
-    // In standard mode the model's reasoning/thinking blocks are hidden —
-    // filter them out here (single choke point for persisted + streaming).
-    const visibleBlocks = (blocks: StreamBlock[]): StreamBlock[] =>
-      standardMode ? blocks.filter((b) => b.type !== 'thinking') : blocks;
-
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i]!;
-      // Skip synthetic background task/agent notifications.
-      if (isBackgroundNotificationMessage(msg)) continue;
-      const blocks = visibleBlocks(msg.blocks);
-      // A message that only contained thinking becomes empty in standard mode.
-      if (blocks.length === 0) continue;
-      const hasText = blocks.some((b: StreamBlock) => b.type === 'text');
-      const hasThinking = blocks.some((b: StreamBlock) => b.type === 'thinking');
-      // Only purely-tool assistant turns (no text AND no thinking) merge into
-      // the preceding assistant message. A thinking block starts a new group,
-      // so tools under one thought never merge across a thought boundary.
-      const isToolOnlyAssistant =
-        msg.role === 'assistant' &&
-        !hasText &&
-        !hasThinking &&
-        blocks.some((b: StreamBlock) => b.type === 'tool_use');
-
-      if (isToolOnlyAssistant) {
-        const last = result[result.length - 1];
-        if (last && last.role === 'assistant') {
-          result[result.length - 1] = {
-            ...last,
-            blocks: [...last.blocks, ...blocks],
-          };
-          continue;
-        }
-      }
-
-      result.push({
-        id: msg.id,
-        role: msg.role,
-        blocks,
-        timestamp: msg.timestamp,
-        // A text or thinking turn starts a new "group" (blank-line separator
-        // above); purely-tool turns flow together with no separator.
-        isGroupStart: msg.role === 'assistant' && (hasText || hasThinking),
-      });
-    }
-
-    // Append streaming message (always fresh — blocks change every delta)
-    if (streamCurrentMessage) {
-      const streamBlocks = visibleBlocks(streamCurrentMessage.blocks);
-      if (streamBlocks.length > 0) {
-        result.push({
-          id: streamCurrentMessage.id,
-          role: 'assistant',
-          blocks: streamBlocks,
-          timestamp: Date.now(),
-          isStreaming: true,
-          isGroupStart: streamBlocks.some(
-            (b: StreamBlock) => b.type === 'text' || b.type === 'thinking',
-          ),
-        });
-      }
-    }
-
-    return result;
-  }, [messages, streamCurrentMessage, standardMode]);
-
-  const isEmpty = chatViewMessages.length === 0;
+  const isEmpty = trajectoryCalls.length === 0;
 
   // ── Agent status derivation ─────────────────────────────────────────────
   // While streaming, derive a finer-grained status from the blocks being
@@ -906,6 +850,9 @@ export function App(): React.ReactElement {
   // the folder name so the menu header reads like the project's name.
   const workspaceName = projectPath ? getFolderName(projectPath) : t('workspace.chooseDir');
 
+  // The currently-attached app (null when no app is open).
+  const activeApp = useMemo(() => APPS.find((a) => a.id === activeAppId) ?? null, [activeAppId]);
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <>
@@ -922,7 +869,7 @@ export function App(): React.ReactElement {
           projectPath={projectPath}
         />
       }
-        sidebarVisible={sidebarOpen && sidebarTab !== 'library'}
+        sidebarVisible={sidebarOpen && sidebarTab !== 'library' && sidebarTab !== 'apps'}
         iconActiveTab={sidebarTab}
         onIconTabChange={handleTabChange}
         onIconSettings={() => setSettingsOpen(true)}
@@ -932,6 +879,16 @@ export function App(): React.ReactElement {
         browserPanelVisible={browserPanelOpen && !settingsOpen}
         onToggleBrowserPanel={toggleBrowserPanel}
         onToggleDetailPanel={toggleDetailPanel}
+        appDisplayPanel={
+          activeApp ? (
+            <AppDisplayPanel
+              app={activeApp}
+              workspaceDir={projectPath}
+              onClose={() => setActiveAppId(null)}
+            />
+          ) : undefined
+        }
+        appDisplayVisible={activeApp !== null}
         statusBarProps={{
           engine: settings?.engine,
           agentStatus,
@@ -947,9 +904,11 @@ export function App(): React.ReactElement {
           onToggleTerminal: toggleTerminal,
         }}
       >
-        {/* Main content: library view when active, else project-manage prompt,
-            else chat + composer + terminal */}
-        {sidebarTab === 'library' ? (
+        {/* Main content: apps view when active, library view when active, else
+            project-manage prompt, else chat + composer + terminal */}
+        {sidebarTab === 'apps' ? (
+          <AppsView onOpenApp={handleOpenApp} />
+        ) : sidebarTab === 'library' ? (
           <LibraryView
             skills={availableSkills}
             selectedSkills={selectedSkills}
@@ -995,7 +954,7 @@ export function App(): React.ReactElement {
           )}
 
           <ChatView
-            messages={chatViewMessages}
+            calls={trajectoryCalls}
             isEmpty={isEmpty}
             isStreaming={isStreaming}
           />

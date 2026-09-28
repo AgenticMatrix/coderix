@@ -1,7 +1,16 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { PassThrough } from 'node:stream';
-import { renderSync, textWidth } from '@coderix/tui';
+import {
+  renderSync,
+  textWidth,
+  VERTICAL_SEPARATOR,
+  HORIZONTAL_RULE,
+  CORNER_TOP_LEFT,
+  CORNER_TOP_RIGHT,
+  CORNER_BOTTOM_LEFT,
+  CORNER_BOTTOM_RIGHT,
+} from '@coderix/tui';
 import { HeaderLogo } from '../HeaderLogo.js';
 
 /**
@@ -71,6 +80,23 @@ async function renderAt(columns: number): Promise<Rendered> {
 /** Widths a real user actually has. 80 and 120 are the common defaults. */
 const WIDTHS = [80, 100, 120, 160];
 
+/**
+ * A row made up entirely of frame glyphs — the top or bottom rule.
+ *
+ * Assembled from the exported constants rather than written out, so restyling
+ * the chrome (dashed `╎` to solid `⎸`, say) cannot leave this matching nothing
+ * and reporting a vacuous pass.
+ */
+const BORDER_ROW = new RegExp(
+  `^[\\s${[
+    CORNER_TOP_LEFT,
+    CORNER_TOP_RIGHT,
+    CORNER_BOTTOM_LEFT,
+    CORNER_BOTTOM_RIGHT,
+    HORIZONTAL_RULE,
+  ].join('')}]+$`,
+);
+
 describe('the startup banner', () => {
   it('draws each border as a single unwrapped row', async () => {
     // NOT "is every row narrower than the terminal" — that assertion cannot
@@ -82,9 +108,13 @@ describe('the startup banner', () => {
     // The border is the honest probe: it is one continuous run of rule glyphs
     // emitted as a single `<Text>`, so it occupies exactly one row if and only
     // if the box fits. When it doesn't, the tail spills onto a row of its own.
+    //
+    // The glyph set is built from the constants, so restyling the chrome cannot
+    // silently stop this from matching anything — which would make the count
+    // zero and the assertion fail loudly, rather than pass vacuously.
     for (const columns of WIDTHS) {
       const { rows } = await renderAt(columns);
-      const borderRows = rows.filter((r) => /^[\s⌜⌝⌞⌟⎯]+$/.test(r) && r.trim() !== '');
+      const borderRows = rows.filter((r) => BORDER_ROW.test(r) && r.trim() !== '');
       expect(
         borderRows.length,
         `at ${columns} columns: expected exactly 2 border rows (top and bottom), got ${borderRows.length} — a wrapped border means the banner is wider than the terminal`,
@@ -117,11 +147,19 @@ describe('the startup banner', () => {
   it('keeps its frame intact when the terminal is narrow', async () => {
     // Truncating must clip the CONTENT, not corrupt the box: a row that lost
     // its closing separator means the border was cut instead of the text.
+    //
+    // The separator is read from the constant rather than written out as a
+    // literal. A literal makes this assertion fail whenever the glyph is
+    // restyled — which it was, from dashed `╎` to solid `⎸` — reporting a
+    // cosmetic change as a broken border.
     const { rows } = await renderAt(80);
     const body = rows.filter((r) => r.includes('CodeRix') || r.includes('workspace:'));
     expect(body.length, 'the info column must still be rendered').toBeGreaterThan(0);
     for (const row of body) {
-      expect(row.trimEnd().endsWith('╎'), `row must keep its right border: ${row}`).toBe(true);
+      expect(
+        row.trimEnd().endsWith(VERTICAL_SEPARATOR),
+        `row must keep its right border: ${row}`,
+      ).toBe(true);
     }
   });
 

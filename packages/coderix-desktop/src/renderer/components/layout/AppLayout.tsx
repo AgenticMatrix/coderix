@@ -28,6 +28,8 @@ export interface AppLayoutProps {
   browserPanelVisible?: boolean;
   onToggleBrowserPanel?: () => void;
   onToggleDetailPanel?: () => void;
+  appDisplayPanel?: ReactNode;
+  appDisplayVisible?: boolean;
 }
 
 /** Fixed width of the embedded browser sidebar. */
@@ -91,11 +93,15 @@ export function AppLayout({
   browserPanelVisible = false,
   onToggleBrowserPanel,
   onToggleDetailPanel,
+  appDisplayPanel,
+  appDisplayVisible = false,
 }: AppLayoutProps): React.ReactElement {
   const t = useT();
   // Browser column width — lives here (not inside the panel) so it survives
   // the panel being closed and reopened.
   const [browserWidth, setBrowserWidth] = useState(BROWSER_WIDTH);
+  // App display column width — lives here so it survives the panel being closed.
+  const [appDisplayWidth, setAppDisplayWidth] = useState(560);
   // Detail width is lifted here (like browserWidth) so the header's spacer and
   // the resizable panel always agree. Otherwise the header's browser/sidebar
   // toggle buttons stay pinned to the default width while the panel drags.
@@ -153,7 +159,10 @@ export function AppLayout({
   const showSidebar = fsNone && sidebarVisible;
   const showChat = fsNone;
   const showDetail = fsNone ? detailVisible : fsDetail;
-  const showBrowser = fsNone ? browserPanelVisible : fsBrowser;
+  // The app display is a third right column; it is mutually exclusive with the
+  // browser column (both are native WebContentsViews that share one visible slot).
+  const showBrowser = fsNone ? browserPanelVisible && !appDisplayVisible : fsBrowser;
+  const showAppDisplay = fsNone && appDisplayVisible;
 
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
@@ -369,6 +378,21 @@ export function AppLayout({
               resizable={!fsBrowser}
             >
               {browserPanel}
+            </BrowserResizableColumn>
+          )}
+
+          {/* App display column — the right-hand "app page" for an attached app
+              (e.g. cad_harness's 3D viewer). Same resizable-column shell as the
+              browser; mutually exclusive with it (see showBrowser above). */}
+          {showAppDisplay && appDisplayPanel && (
+            <BrowserResizableColumn
+              width={appDisplayWidth}
+              onResize={setAppDisplayWidth}
+              minWidth={320}
+              maxWidth={browserMaxWidth}
+              resizable
+            >
+              {appDisplayPanel}
             </BrowserResizableColumn>
           )}
         </div>{/* closes main row */}
