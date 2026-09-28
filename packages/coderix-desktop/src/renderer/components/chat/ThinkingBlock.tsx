@@ -10,12 +10,18 @@ export interface ThinkingBlockProps {
   defaultExpanded?: boolean;
   /** Whether this is still streaming (shows spinner) */
   isStreaming?: boolean;
+  /** Force-open (search reveal) regardless of the collapsed preference. */
+  reveal?: boolean;
+  /** Completed-state header label override, e.g. "已思考 4s". */
+  label?: string;
 }
 
 export function ThinkingBlock({
   content,
   defaultExpanded = false,
   isStreaming = false,
+  reveal = false,
+  label,
 }: ThinkingBlockProps): React.ReactElement | null {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const t = useT();
@@ -27,16 +33,7 @@ export function ThinkingBlock({
   // shows a single truncated gray line, which during streaming reads as a
   // static "思考中" with no output — and looks like a hang. Once streaming
   // finishes we fall back to the user's collapsed/expanded preference.
-  const expanded = isExpanded || isStreaming;
-
-  // Collapsed preview shows just the first non-empty line plus a "... N more
-  // lines" hint instead of clamping two lines of raw reasoning.
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '');
-  const firstLine = lines[0] ?? '';
-  const remainingLines = Math.max(0, lines.length - 1);
+  const expanded = isExpanded || isStreaming || reveal;
 
   // Empty thinking blocks (a persisted block with no reasoning text) render
   // nothing — no "Thought" label, no brain icon, no copy button. During
@@ -57,16 +54,9 @@ export function ThinkingBlock({
             hover:text-[var(--color-text-primary)]
           `}
         >
-          <motion.span
-            animate={{ rotate: expanded ? 90 : 0 }}
-            transition={{ duration: 0.15 }}
-            className="flex-shrink-0"
-          >
-            <ChevronRight size={12} className="text-[var(--color-text-tertiary)]" />
-          </motion.span>
           <Brain size={13} className="text-[var(--color-info)] flex-shrink-0" />
           <span className="text-left">
-            {isStreaming ? t('thinking.thinking') : t('thinking.thought')}
+            {isStreaming ? t('thinking.thinking') : (label ?? t('thinking.thought'))}
           </span>
           {isStreaming && (
             <span className="inline-flex gap-0.5">
@@ -87,23 +77,15 @@ export function ThinkingBlock({
               />
             </span>
           )}
+          <motion.span
+            animate={{ rotate: expanded ? 90 : 0 }}
+            transition={{ duration: 0.15 }}
+            className="ml-auto flex-shrink-0"
+          >
+            <ChevronRight size={12} className="text-[var(--color-text-tertiary)]" />
+          </motion.span>
         </button>
       </div>
-
-      {/* Collapsed preview — one line of reasoning plus a "... N more lines"
-          hint. Rendered inline (no box, no gap) right below the header. */}
-      {!expanded && text.trim() !== '' && (
-        <div className="pl-5">
-          <div className="text-xs text-[var(--color-text-secondary)] font-mono leading-[18px] m-0 truncate">
-            {firstLine}
-          </div>
-          {remainingLines > 0 && (
-            <div className="text-xs text-[var(--color-text-tertiary)] font-mono leading-[18px] m-0">
-              {t(remainingLines === 1 ? 'thinking.moreLine' : 'thinking.moreLines', { n: remainingLines })}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Expanded content — also inline, no box, no gap */}
       <AnimatePresence>

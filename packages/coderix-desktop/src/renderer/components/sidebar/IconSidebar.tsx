@@ -1,11 +1,11 @@
 import React from 'react';
-import { MessageSquare, Code2, Library, Settings, Sun, Moon, Brain } from 'lucide-react';
+import { MessageSquare, Code2, Library, LayoutGrid, Settings, Sun, Moon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useT } from '../../i18n/index.js';
 import './IconSidebar.css';
 import styles from './IconSidebar.module.css';
 
-export type SidebarTab = 'sessions' | 'project' | 'library';
+export type SidebarTab = 'sessions' | 'project' | 'library' | 'apps';
 
 interface Props {
   activeTab: SidebarTab;
@@ -17,13 +17,11 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
   const t = useT();
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
-  const standardMode = useUIStore((s) => s.standardMode);
-  const toggleStandardMode = useUIStore((s) => s.toggleStandardMode);
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
   return (
-    <div className={`iconSidebar ${standardMode ? '' : 'detailMode'}`}>
+    <div className="iconSidebar">
       {/* macOS titlebar drag area */}
       <div className="dragArea" />
 
@@ -44,18 +42,15 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
           <Library size={22} strokeWidth={activeTab === 'library' ? 2.5 : 2} />
           <span className={styles.tooltip}>{t('nav.library')}</span>
         </button>
+        <button className={`${styles.iconButton} ${activeTab === 'apps' ? styles.active : ''}`}
+          onClick={() => onTabChange('apps')} title={t('nav.apps')}>
+          <LayoutGrid size={22} strokeWidth={activeTab === 'apps' ? 2.5 : 2} />
+          <span className={styles.tooltip}>{t('nav.apps')}</span>
+        </button>
       </nav>
 
       {/* Bottom actions */}
       <div className={styles.bottomActions}>
-        <button
-          className={`${styles.iconButton} ${standardMode ? '' : styles.active}`}
-          onClick={toggleStandardMode}
-          title={standardMode ? t('nav.switchToDetail') : t('nav.switchToStandard')}
-        >
-          <Brain size={20} strokeWidth={standardMode ? 2 : 2.5} />
-          <span className="tooltip">{standardMode ? t('nav.detailMode') : t('nav.standardMode')}</span>
-        </button>
         <button className={styles.iconButton} onClick={toggleTheme} title={theme === 'light' ? t('nav.switchToDark') : t('nav.switchToLight')}>
           {theme === 'light' ? <Sun size={20} strokeWidth={2} /> : <Moon size={20} strokeWidth={2} />}
           <span className="tooltip">{theme === 'light' ? t('nav.darkMode') : t('nav.lightMode')}</span>

@@ -202,10 +202,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.sessions': 'Sessions',
   'nav.project': 'Project Development',
   'nav.library': 'Library',
-  'nav.detailMode': 'Detailed mode',
-  'nav.standardMode': 'Standard mode',
-  'nav.switchToDetail': 'Switch to detailed mode',
-  'nav.switchToStandard': 'Switch to standard mode',
+  'nav.apps': 'Apps',
   'nav.darkMode': 'Dark Mode',
   'nav.lightMode': 'Light Mode',
   'nav.switchToDark': 'Switch to Dark',
@@ -235,6 +232,13 @@ export const en: Record<TranslationKey, string> = {
   'library.knowledgeEmpty': 'Knowledge base coming soon',
   'library.addProject': 'Add project',
   'library.currentProject': 'Current project',
+
+  // ── Apps ──────────────────────────────────────────────
+  'apps.back': 'Back',
+  'apps.viewerStarting': 'Starting 3D viewer…',
+  'apps.viewerFailed': 'Failed to start 3D viewer',
+  'apps.artifacts': 'Artifacts',
+  'apps.noArtifacts': 'No CAD artifacts yet — generate one in the conversation',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',

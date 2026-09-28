@@ -37,6 +37,7 @@ const CH = {
   FS_READ_FILE: 'fs:readFile',
   FS_WRITE_FILE: 'fs:writeFile',
   FS_LIST_DIR: 'fs:listDir',
+  FS_LIST_CAD_FILES: 'fs:listCadFiles',
   FS_WATCH: 'fs:watch',
   FS_SEARCH: 'fs:search',
   TERMINAL_CREATE: 'terminal:create',
@@ -116,6 +117,12 @@ const CH = {
   BROWSER_EVENT: 'browser:event',
   BROWSER_OPEN_NEW_TAB: 'browser:open-new-tab',
   BROWSER_OPEN_URL: 'browser:open-url',
+
+  // CAD viewer (embedded 3D viewer for apps)
+  CAD_VIEWER_START: 'cadViewer:start',
+  CAD_VIEWER_STOP: 'cadViewer:stop',
+  CAD_VIEWER_STATUS: 'cadViewer:status',
+  CAD_VIEWER_STATUS_CHANGED: 'cadViewer:statusChanged',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -434,6 +441,11 @@ const coderixAPI = {
     /** List directory contents. */
     listDir(dirPath: string): Promise<{ path: string; entries: unknown[] }> {
       return ipcRenderer.invoke(CH.FS_LIST_DIR, dirPath);
+    },
+
+    /** Recursively list CAD artifact files (.step.py/.step/.glb/...) in a dir. */
+    listCadFiles(dirPath: string): Promise<{ path: string; files: Array<{ name: string; relativePath: string }> }> {
+      return ipcRenderer.invoke(CH.FS_LIST_CAD_FILES, dirPath);
     },
 
     /** Start watching a path for changes. Returns watcher ID. */
@@ -755,6 +767,28 @@ const coderixAPI = {
       };
       ipcRenderer.on(CH.BROWSER_OPEN_URL, handler);
       return () => ipcRenderer.removeListener(CH.BROWSER_OPEN_URL, handler);
+    },
+  },
+
+  // ── CAD viewer (embedded 3D viewer for apps) ───────────────────────────
+
+  cadViewer: {
+    start(): Promise<{ status: string; port: number; baseUrl: string; error?: string }> {
+      return ipcRenderer.invoke(CH.CAD_VIEWER_START);
+    },
+    stop(): Promise<{ status: string; port: number; baseUrl: string; error?: string }> {
+      return ipcRenderer.invoke(CH.CAD_VIEWER_STOP);
+    },
+    status(): Promise<{ status: string; port: number; baseUrl: string; error?: string }> {
+      return ipcRenderer.invoke(CH.CAD_VIEWER_STATUS);
+    },
+    /** Subscribe to cad-viewer lifecycle changes (starting/running/error). */
+    onStatusChanged(callback: (info: { status: string; error?: string }) => void): () => void {
+      const handler = (_event: Electron.IpcRendererEvent, data: { status: string; error?: string }) => {
+        callback(data);
+      };
+      ipcRenderer.on(CH.CAD_VIEWER_STATUS_CHANGED, handler);
+      return () => ipcRenderer.removeListener(CH.CAD_VIEWER_STATUS_CHANGED, handler);
     },
   },
 

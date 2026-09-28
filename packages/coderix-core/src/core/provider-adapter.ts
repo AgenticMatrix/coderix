@@ -406,6 +406,32 @@ export function createCallModelFromClient(
       }
     } catch (err) {
       if (signal?.aborted) return;
+      // Diagnostic: log the request shape (not the full body) so provider 400s
+      // like DeepSeek's "messages 参数非法" can be traced to the offending field.
+      // Wrapped so a logging failure can never swallow the original error.
+      try {
+        console.error(
+          '[callModel] request rejected:',
+          JSON.stringify(
+            {
+              model,
+              systemLength: combinedSystem?.length ?? 0,
+              systemTail: combinedSystem?.slice(-600) ?? '',
+              messageRoles: apiMessages.map((m) => m.role),
+              messageContentTypes: apiMessages.map((m) =>
+                Array.isArray(m.content)
+                  ? (m.content as Array<{ type?: string }>).map((b) => b.type).join('|')
+                  : typeof m.content,
+              ),
+              toolNames: anthropicTools?.map((t) => t.name) ?? [],
+            },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        console.error('[callModel] request rejected (unserializable):', err);
+      }
       throw err;
     }
   };
@@ -440,7 +466,15 @@ function isOfficialAnthropic(baseUrl: string): boolean {
  */
 function resolveDefaultThinking(
   config: CallModelConfig,
+  model: string,
 ): Anthropic.MessageCreateParams['thinking'] {
+  // GLM models route their reasoning through an Anthropic→OpenAI gateway that
+  // loses the thinking-block signature across turns, so a multi-turn history
+  // with GLM thinking blocks is rejected upstream ("messages 参数非法").
+  // Disable thinking for GLM so tool-heavy conversations (e.g. CAD) don't trip it.
+  if (model.toLowerCase().includes('glm')) {
+    return undefined;
+  }
   const mode =
     config.thinkingMode ?? (isOfficialAnthropic(config.baseUrl) ? 'adaptive' : 'enabled');
   if (mode === 'adaptive') return { type: 'adaptive' };
@@ -470,5 +504,5 @@ export function createCallModel(
     baseURL: config.baseUrl,
     apiKey: config.apiKey,
   });
-  return createCallModelFromClient(client, model, resolveDefaultThinking(config));
+  return createCallModelFromClient(client, model, resolveDefaultThinking(config, model));
 }

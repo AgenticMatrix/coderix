@@ -8,7 +8,6 @@ export type Theme = 'dark' | 'light';
  *  the file + browser columns are collapsed, so "maximizing" it is just closing them. */
 export type MaximizedPanel = 'none' | 'detail' | 'browser';
 
-const STANDARD_MODE_KEY = 'coderix-standard-mode';
 const LANGUAGE_KEY = 'coderix-language';
 
 function loadLanguage(): Language {
@@ -19,18 +18,6 @@ function loadLanguage(): Language {
   } catch {
     // localStorage unavailable (e.g. strict privacy mode) — default to Chinese.
     return 'zh';
-  }
-}
-
-function loadStandardMode(): boolean {
-  try {
-    const stored = localStorage.getItem(STANDARD_MODE_KEY);
-    // First launch (nothing persisted yet) defaults to standard mode.
-    if (stored === null) return true;
-    return stored === '1';
-  } catch {
-    // localStorage unavailable (e.g. strict privacy mode) — default to standard.
-    return true;
   }
 }
 
@@ -50,9 +37,10 @@ export interface UIState {
   terminalOpen: boolean;
   browserPanelOpen: boolean;
   maximizedPanel: MaximizedPanel;
+  /** The app currently attached to the conversation (null = no app open). */
+  activeAppId: string | null;
   permissionMode: PermissionMode;
   theme: Theme;
-  standardMode: boolean;
   language: Language;
   notifications: AppNotification[];
   // Git state (written by GitPanel, read by StatusBar and FileExplorer)
@@ -68,10 +56,10 @@ export interface UIState {
   toggleTerminal: () => void;
   toggleBrowserPanel: () => void;
   setMaximizedPanel: (panel: MaximizedPanel) => void;
+  setActiveAppId: (id: string | null) => void;
   setTerminalOpen: (open: boolean) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setTheme: (theme: Theme) => void;
-  toggleStandardMode: () => void;
   setLanguage: (language: Language) => void;
   addNotification: (n: Omit<AppNotification, 'id'>) => void;
   removeNotification: (id: string) => void;
@@ -97,9 +85,9 @@ export const useUIStore = create<UIState>()((set) => ({
   terminalOpen: false,
   browserPanelOpen: false,
   maximizedPanel: 'none',
+  activeAppId: null,
   permissionMode: 'ask',
   theme: 'light',
-  standardMode: loadStandardMode(),
   language: loadLanguage(),
   notifications: [],
   gitBranch: '',
@@ -131,6 +119,10 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ maximizedPanel });
   },
 
+  setActiveAppId: (activeAppId) => {
+    set({ activeAppId });
+  },
+
   setTerminalOpen: (open: boolean) => {
     set({ terminalOpen: open });
   },
@@ -143,18 +135,6 @@ export const useUIStore = create<UIState>()((set) => ({
     set({ theme });
     // Sync with DOM
     document.documentElement.setAttribute('data-theme', theme);
-  },
-
-  toggleStandardMode: () => {
-    set((state) => {
-      const standardMode = !state.standardMode;
-      try {
-        localStorage.setItem(STANDARD_MODE_KEY, standardMode ? '1' : '0');
-      } catch {
-        // localStorage unavailable — keep the in-memory toggle only.
-      }
-      return { standardMode };
-    });
   },
 
   setLanguage: (language) => {

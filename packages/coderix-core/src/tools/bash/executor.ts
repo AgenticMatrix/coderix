@@ -33,15 +33,12 @@ const IS_POSIX_SHELL: boolean = IS_WINDOWS
 
 // ── Spawn defaults ──────────────────────────────────────────────────────
 
-/** Options applied to every spawn() on every platform. */
+/** Options applied to every spawn() on every platform. Env is resolved live at
+ *  spawn time (not snapshotted) so runtime env changes (e.g. CAD_PYTHON injected
+ *  at bootstrap) are visible to spawned commands. */
 const SPAWN_DEFAULTS = {
   windowsHide: true,
   shell: RESOLVED_SHELL,
-  env: {
-    ...process.env,
-    // Prevent Windows from searching CWD for executables (DLL hijacking mitigation)
-    NoDefaultCurrentDirectoryInExePath: '1',
-  },
 } as const;
 
 // ── Command preprocessing ────────────────────────────────────────────────
@@ -180,7 +177,7 @@ function runCommand(command: string, opts: {
       ...SPAWN_DEFAULTS,
       cwd: opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...SPAWN_DEFAULTS.env },
+      env: { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' },
     });
 
     const output = { stdout: '', stderr: '' };
@@ -261,7 +258,7 @@ function runBackgroundCommand(command: string, opts: {
       ...SPAWN_DEFAULTS,
       cwd: opts.cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...SPAWN_DEFAULTS.env },
+      env: { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' },
       detached: true,
     });
 

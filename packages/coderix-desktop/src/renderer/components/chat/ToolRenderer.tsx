@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock, ChevronRight, CheckCircle2, XCircle, Loader2, Copy, Check,
+  Clock, CheckCircle2, XCircle, Loader2, Copy, Check, Wrench,
+  Terminal, FileText, Search, Globe, Pencil, ListChecks, Sparkles, HelpCircle, GitBranch,
 } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { useT, type TranslationKey } from '../../i18n/index.js';
@@ -46,7 +47,7 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
   },
   bash: {
     name: 'Bash',
-    content: (i) => truncate((i.description as string) || '', 60),
+    content: (i) => truncate((i.command as string) || (i.description as string) || '', 60),
   },
   glob: {
     name: 'Glob',
@@ -159,10 +160,82 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
 };
 
 function getToolConfig(toolName: string): ToolDisplayConfig {
-  return toolConfigs[toolName.toLowerCase()] ?? {
+  const lower = toolName.toLowerCase();
+  const base = toolConfigs[lower] ?? {
     name: toolName,
     content: () => '',
   };
+  return { name: TOOL_LABEL[lower] ?? base.name, content: base.content };
+}
+
+const TOOL_LABEL: Record<string, string> = {
+  read: '查阅',
+  write: '编辑',
+  update: '编辑',
+  bash: '终端',
+  glob: '查阅',
+  grep: '查阅',
+  webfetch: '查阅',
+  websearch: '搜索',
+  taskcreate: '任务',
+  taskupdate: '任务',
+  tasklist: '任务',
+  taskget: '任务',
+  taskoutput: '任务',
+  taskstop: '任务',
+  todowrite: '计划',
+  skill: '技能',
+  askuserquestion: '提问',
+  enterplanmode: '计划',
+  exitplanmode: '计划',
+  notebookedit: '编辑',
+  agent: '智能体',
+  sendmessage: '消息',
+  enterworktree: '工作树',
+  exitworktree: '工作树',
+  workflow: '工作流',
+};
+
+const ICON_SIZE = 13;
+
+/** Per-tool-category icon (falls back to a generic wrench). */
+function getToolIcon(toolName: string): React.ReactNode {
+  const lower = toolName.toLowerCase();
+  switch (lower) {
+    case 'bash':
+      return <Terminal size={ICON_SIZE} />;
+    case 'read':
+      return <FileText size={ICON_SIZE} />;
+    case 'glob':
+    case 'grep':
+    case 'websearch':
+      return <Search size={ICON_SIZE} />;
+    case 'webfetch':
+      return <Globe size={ICON_SIZE} />;
+    case 'write':
+    case 'update':
+    case 'notebookedit':
+      return <Pencil size={ICON_SIZE} />;
+    case 'todowrite':
+    case 'taskcreate':
+    case 'taskupdate':
+    case 'tasklist':
+    case 'taskget':
+    case 'taskoutput':
+    case 'taskstop':
+    case 'enterplanmode':
+    case 'exitplanmode':
+      return <ListChecks size={ICON_SIZE} />;
+    case 'skill':
+      return <Sparkles size={ICON_SIZE} />;
+    case 'askuserquestion':
+      return <HelpCircle size={ICON_SIZE} />;
+    case 'enterworktree':
+    case 'exitworktree':
+      return <GitBranch size={ICON_SIZE} />;
+    default:
+      return <Wrench size={ICON_SIZE} />;
+  }
 }
 
 // ── State Config ───────────────────────────────────────────
@@ -213,6 +286,8 @@ export interface ToolRendererProps {
   toolId?: string;
   toolResult?: string;
   toolMetadata?: Record<string, unknown>;
+  /** Force-open (search reveal) regardless of the collapsed preference. */
+  reveal?: boolean;
 }
 
 export function ToolRenderer({
@@ -221,10 +296,12 @@ export function ToolRenderer({
   state = 'executing',
   toolResult,
   toolMetadata,
+  reveal = false,
 }: ToolRendererProps): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const t = useT();
+  const expanded = isExpanded || reveal;
 
   const config = getToolConfig(toolName);
   const labelContent = config.content(toolInput, t);
@@ -275,14 +352,10 @@ export function ToolRenderer({
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex items-center gap-1.5 py-1 text-xs cursor-pointer transition-colors duration-100 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full text-left"
       >
-        <motion.span
-          animate={{ rotate: isExpanded ? 90 : 0 }}
-          transition={{ duration: 0.15 }}
-          className="flex-shrink-0"
-        >
-          <ChevronRight size={10} className="text-[var(--color-text-tertiary)]" />
-        </motion.span>
         <span className="min-w-0 flex items-center gap-1 overflow-hidden whitespace-nowrap">
+          <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
+            {getToolIcon(toolName)}
+          </span>
           <span className="font-medium text-[var(--color-text-primary)] flex-shrink-0">
             {config.name}
           </span>
@@ -306,7 +379,7 @@ export function ToolRenderer({
 
       {/* Expanded detail */}
       <AnimatePresence>
-        {isExpanded && (
+        {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}

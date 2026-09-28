@@ -1,148 +1,60 @@
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Zap } from 'lucide-react';
-import type { StreamBlock } from '../../types';
-import { ContentBlockRenderer } from './ContentBlockRenderer';
-import { ToolGroup } from './ToolGroup';
+import { ChevronDown, Zap, Search } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
+import type { TrajectoryCall } from './trajectory/trajectoryTypes';
+import { TrajectoryCallCard } from './trajectory/TrajectoryCallCard';
+import { buildTrajectorySearchIndex } from './trajectory/TrajectorySearch';
+import { TrajectorySearchBar } from './trajectory/TrajectorySearchBar';
+import {
+  collectMatchRanges,
+  applyHighlights,
+  clearHighlights,
+  scrollRangeIntoView,
+} from './trajectory/TrajectorySearchHighlight';
 import './ChatView.css';
 
-export interface ChatViewMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  blocks: StreamBlock[];
-  /** Timestamp */
-  timestamp?: number;
-  /** Model name (for assistant messages) */
-  model?: string;
-  /** Whether the message is still streaming */
-  isStreaming?: boolean;
-  /** Whether this starts a new "group" (adds spacing above) */
-  isGroupStart?: boolean;
-}
-
 export interface ChatViewProps {
-  /** Messages to display */
-  messages?: ChatViewMessage[];
-  /** Whether to show the empty state */
-  isEmpty?: boolean;
-  /** Is a message currently streaming */
-  isStreaming?: boolean;
-  /** Callback when user scrolls to bottom */
-  onScrollToBottom?: () => void;
+  /** Conversation grouped into ZCode-style calls. */
+  calls: TrajectoryCall[];
+  /** Whether to show the empty state. */
+  isEmpty: boolean;
+  /** Whether a message is currently streaming. */
+  isStreaming: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// Memoized message bubble — prevents re-renders when AnimatePresence
-// re-processes children whose underlying data hasn't changed.
-// During streaming, only the last (streaming) message gets new blocks each
-// delta; all historical messages keep the same `blocks` reference, so
-// React.memo skips them entirely.
-// ---------------------------------------------------------------------------
-
-interface MessageBubbleContentProps {
-  message: ChatViewMessage;
-  isStreamingMsg: boolean;
-  isAssistant: boolean;
-}
-
-const MessageBubbleContent = React.memo(
-  function MessageBubbleContent({ message, isStreamingMsg, isAssistant }: MessageBubbleContentProps) {
-    // Tool_result blocks belong to assistant-side rendering even when stored
-    // in user-role messages (tool execution results are user messages in the API).
-    const hasToolResult = message.blocks.some((b) => b.type === 'tool_result');
-    const displayRole = hasToolResult && message.role === 'user' ? 'assistant' : message.role;
-    const displayAsAssistant = isAssistant || (hasToolResult && message.role === 'user');
-
-    // Tool calls render collapsed behind a single "N tools used" summary,
-    // placed after any text/thinking content. Keep original indices so the
-    // streaming flag still lands on the true last block.
-    const entries = message.blocks.map((block, idx) => ({ block, idx }));
-    const toolBlocks = entries
-      .filter((e) => e.block.type === 'tool_use')
-      .map((e) => e.block);
-    const otherBlocks = entries.filter((e) => e.block.type !== 'tool_use');
-
-    return (
-      <>
-        <div
-          className={`message-bubble ${displayRole} ${isStreamingMsg ? 'streaming' : ''}`}
-        >
-          {otherBlocks.map(({ block, idx }) => (
-            <ContentBlockRenderer
-              key={`${message.id}-block-${idx}`}
-              block={block}
-              isStreaming={
-                isStreamingMsg &&
-                idx === message.blocks.length - 1
-              }
-            />
-          ))}
-
-          {toolBlocks.length > 0 && <ToolGroup tools={toolBlocks} />}
-
-          {/* User message timestamp — inline at bottom-right */}
-          {!displayAsAssistant && message.timestamp && !isStreamingMsg && (
-            <span className="message-time-inline">
-              {formatMessageTime(message.timestamp)}
-            </span>
-          )}
-
-        </div>
-
-        {/* Assistant message model badge */}
-        {displayAsAssistant && message.model && !isStreamingMsg && (
-          <div className="message-meta">
-            <span className="model-badge">
-              <Zap size={10} />
-              {message.model}
-            </span>
-          </div>
-        )}
-      </>
-    );
-  },
-  (prev, next) => {
-    // Skip re-render when message data hasn't actually changed.
-    // `blocks` reference is stable for historical messages (same objects from
-    // Zustand store); the streaming message gets a new `blocks` each delta
-    // so it will still re-render on every stream update.
-    return (
-      prev.message.id === next.message.id &&
-      prev.message.blocks === next.message.blocks &&
-      prev.message.role === next.message.role &&
-      prev.isStreamingMsg === next.isStreamingMsg
-    );
-  },
-);
 
 /**
- * ChatView — WeChat / Apple Messages style chat interface.
- * iMessage-like bubbles with rounded corners, code blocks with syntax highlighting,
- * collapsible thinking blocks, and smooth auto-scroll behavior.
+ * ChatView — ZCode live-chat style conversation view.
+ *
+ * Each turn is a card: the user's message (always visible), a collapsible
+ * "已工作 X 分 Y 秒" region holding the agent's thinking + tool calls (collapsed
+ * by default, each block summarizing to one line), and the final answer text
+ * (always visible). A "C+" circle marks the start of the agent's work. A
+ * find-in-conversation search bar highlights and navigates matches across every
+ * message (including collapsed thinking/tool content).
  */
-export function ChatView({
-  messages = [],
-  isEmpty = true,
-  isStreaming = false,
-}: ChatViewProps): React.ReactElement {
+export function ChatView({ calls, isEmpty, isStreaming }: ChatViewProps): React.ReactElement {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const prevMessageCountRef = useRef(messages.length);
+  const prevCallCountRef = useRef(calls.length);
   const userScrolledUpRef = useRef(false);
   const t = useT();
+
+  // ── Search state ───────────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchActiveIndex, setSearchActiveIndex] = useState(0);
+  const [matchCount, setMatchCount] = useState(0);
+  const [revealedRowKeys, setRevealedRowKeys] = useState<Set<string>>(new Set());
+  const rangesRef = useRef<Range[]>([]);
 
   const scrollToBottom = useCallback(
     (smooth = true) => {
       const container = containerRef.current;
       if (!container) return;
-
       if (smooth) {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'end',
-        });
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       } else {
         container.scrollTop = container.scrollHeight;
       }
@@ -150,30 +62,25 @@ export function ChatView({
     [],
   );
 
-  // Track whether user has scrolled away from the bottom.
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-
     userScrolledUpRef.current = distanceFromBottom > 80;
     setShowScrollBtn(distanceFromBottom > 200);
   }, []);
 
-  // Auto-scroll on new messages (smooth).
+  // Auto-scroll on new calls (smooth).
   useEffect(() => {
-    const hasNewMessage = messages.length !== prevMessageCountRef.current;
-    prevMessageCountRef.current = messages.length;
-
-    if (hasNewMessage && !userScrolledUpRef.current) {
+    const hasNewCall = calls.length !== prevCallCountRef.current;
+    prevCallCountRef.current = calls.length;
+    if (hasNewCall && !userScrolledUpRef.current) {
       scrollToBottom(!isStreaming);
     }
-  }, [messages, isStreaming, scrollToBottom]);
+  }, [calls, isStreaming, scrollToBottom]);
 
-  // Auto-follow during streaming: useLayoutEffect runs synchronously after
-  // DOM mutations, before paint — sets scrollTop directly for zero jitter.
+  // Auto-follow during streaming.
   useLayoutEffect(() => {
     if (!isStreaming || userScrolledUpRef.current) return;
     const container = containerRef.current;
@@ -181,16 +88,73 @@ export function ChatView({
     container.scrollTop = container.scrollHeight;
   });
 
-  // Reset scroll state and scroll to bottom when a new stream starts or on mount.
   useEffect(() => {
-    if (isStreaming) {
-      userScrolledUpRef.current = false;
-    }
+    if (isStreaming) userScrolledUpRef.current = false;
     scrollToBottom(false);
   }, [scrollToBottom]);
 
-  // Empty state
-  if (isEmpty && messages.length === 0) {
+  // ── Search: expand matching rows from the data model ──────
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setRevealedRowKeys(new Set());
+      rangesRef.current = [];
+      setMatchCount(0);
+      clearHighlights();
+      return;
+    }
+    const { matchingRowKeys } = buildTrajectorySearchIndex(calls, searchQuery);
+    setRevealedRowKeys(matchingRowKeys);
+  }, [searchQuery, calls]);
+
+  // ── Search: collect DOM ranges + highlight after expansion ─
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    const root = containerRef.current;
+    if (!root) return;
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        const ranges = collectMatchRanges(root, searchQuery);
+        rangesRef.current = ranges;
+        const clamped = Math.min(searchActiveIndex, Math.max(0, ranges.length - 1));
+        setSearchActiveIndex(clamped);
+        setMatchCount(ranges.length);
+        applyHighlights(ranges, clamped);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [searchQuery, revealedRowKeys, calls]);
+
+  const navigateSearch = useCallback(
+    (direction: 1 | -1) => {
+      const ranges = rangesRef.current;
+      const container = containerRef.current;
+      if (!ranges.length || !container) return;
+      const next = (searchActiveIndex + direction + ranges.length) % ranges.length;
+      setSearchActiveIndex(next);
+      applyHighlights(ranges, next);
+      scrollRangeIntoView(ranges[next], container);
+    },
+    [searchActiveIndex],
+  );
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchActiveIndex(0);
+    setMatchCount(0);
+    setRevealedRowKeys(new Set());
+    rangesRef.current = [];
+    clearHighlights();
+  }, []);
+
+  // Cleanup highlights on unmount.
+  useEffect(() => clearHighlights, []);
+
+  if (isEmpty && calls.length === 0) {
     return (
       <div className="chat-container">
         <div className="chat-empty">
@@ -198,9 +162,7 @@ export function ChatView({
             <Zap size={24} className="text-[var(--color-brand)]" />
           </div>
           <h3 className="chat-empty-title">{t('chat.emptyTitle')}</h3>
-          <p className="chat-empty-subtitle">
-            {t('chat.emptySubtitle')}
-          </p>
+          <p className="chat-empty-subtitle">{t('chat.emptySubtitle')}</p>
         </div>
       </div>
     );
@@ -208,56 +170,47 @@ export function ChatView({
 
   return (
     <div className="chat-container">
-      {/* Messages area */}
-      <div
-        ref={containerRef}
-        className="chat-messages"
-        onScroll={handleScroll}
-      >
-        <AnimatePresence initial={false}>
-          {messages.map((message, index) => {
-            const isUser = message.role === 'user';
-            const isAssistant = message.role === 'assistant';
-            const isLastMessage = index === messages.length - 1;
-            const isStreamingMsg = isLastMessage && message.isStreaming;
-            const showAvatar =
-              isAssistant &&
-              message.blocks.some((b) => b.type === 'text' || b.type === 'tool_result');
+      {searchOpen && (
+        <TrajectorySearchBar
+          query={searchQuery}
+          onQueryChange={(q) => {
+            setSearchQuery(q);
+            setSearchActiveIndex(0);
+          }}
+          matchCount={matchCount}
+          activeIndex={searchActiveIndex}
+          onNext={() => navigateSearch(1)}
+          onPrev={() => navigateSearch(-1)}
+          onClose={closeSearch}
+        />
+      )}
 
-            return (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.2,
-                  ease: [0, 0, 0.2, 1],
-                }}
-                className={`message-row ${message.role} ${message.isGroupStart ? 'group-start' : ''}`}
-              >
-                {isAssistant && (
-                  <span
-                    className="message-avatar"
-                    style={showAvatar ? undefined : { visibility: 'hidden', height: 0, marginTop: 0 }}
-                    aria-hidden="true"
-                  >
-                    C
-                  </span>
-                )}
-                <div className="message-body">
-                  <MessageBubbleContent
-                    message={message}
-                    isStreamingMsg={isStreamingMsg ?? false}
-                    isAssistant={isAssistant}
-                  />
-                </div>
-              </motion.div>
-            );
-          })}
+      {/* Search toggle */}
+      <button
+        type="button"
+        className="trajectory-search-toggle"
+        onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+        title="Search"
+        aria-label="Search"
+      >
+        <Search size={14} />
+      </button>
+
+      <div ref={containerRef} className="chat-messages" onScroll={handleScroll}>
+        <AnimatePresence initial={false}>
+          {calls.map((call) => (
+            <motion.div
+              key={call.key}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
+              className="trajectory-call-wrapper"
+            >
+              <TrajectoryCallCard call={call} revealRowKeys={revealedRowKeys} />
+            </motion.div>
+          ))}
         </AnimatePresence>
 
-        {/* Invisible scroll anchor — outside AnimatePresence so it never
-            gets removed from the DOM during child reconciliation. */}
         <div ref={messagesEndRef} />
       </div>
 
@@ -282,23 +235,3 @@ export function ChatView({
 }
 
 ChatView.displayName = 'ChatView';
-
-function formatMessageTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-
-  if (isToday) {
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  return date.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
