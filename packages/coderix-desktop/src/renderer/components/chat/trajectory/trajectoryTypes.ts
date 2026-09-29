@@ -83,6 +83,7 @@ function isBackgroundNotification(entry: FlatEntry): boolean {
 export function buildTrajectoryCalls(
   messages: ChatMessage[],
   streamCurrentMessage: { id: string; blocks: StreamBlock[] } | null,
+  isStreaming: boolean,
 ): TrajectoryCall[] {
   const entries: FlatEntry[] = messages.map((m) => ({
     id: m.id,
@@ -141,6 +142,14 @@ export function buildTrajectoryCalls(
     } else if (entry.role === 'system') {
       call.userBlocks.push(...entry.blocks);
     }
+  }
+
+  // The chat-store streaming flag stays true for the whole user turn (across
+  // the tool_use → tool-result → next-turn gaps, where `streamCurrentMessage`
+  // is briefly null). Pin the last call to streaming so the header doesn't
+  // flicker between "正在工作…" and "已工作" at those transition instants.
+  if (isStreaming && rawCalls.length > 0) {
+    rawCalls[rawCalls.length - 1]!.isStreaming = true;
   }
 
   return rawCalls.map(finalizeCall);

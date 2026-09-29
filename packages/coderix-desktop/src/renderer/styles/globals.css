@@ -56,8 +56,6 @@
   --color-trajectory-reasoning:   #7c3aed;
   --color-trajectory-tool-call:   #d97706;
   --color-trajectory-tool-result: #0284c7;
-  --color-find-highlight:         #fde68a;
-  --color-find-highlight-active:  #facc15;
 
   /* === Borders / Separators === */
   --color-separator:             rgba(0, 0, 0, 0.05);
@@ -146,8 +144,6 @@
   --color-trajectory-reasoning:   #a78bfa;
   --color-trajectory-tool-call:   #f59e0b;
   --color-trajectory-tool-result: #38bdf8;
-  --color-find-highlight:         rgba(253, 230, 138, 0.35);
-  --color-find-highlight-active:  #facc15;
 
   /* === Borders / Separators === */
   --color-separator:             rgba(255, 255, 255, 0.06);
