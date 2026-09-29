@@ -85,7 +85,6 @@ export const TrajectoryCallCard = React.memo(function TrajectoryCallCard({
                       row={row}
                       isStreaming={!!call.isStreaming}
                       reveal={revealRowKeys?.has(row.key)}
-                      durationMs={call.durationMs}
                     />
                   ))}
                 </div>

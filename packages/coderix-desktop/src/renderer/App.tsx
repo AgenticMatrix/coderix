@@ -544,6 +544,8 @@ export function App(): React.ReactElement {
                     ...(b.name ? { toolName: b.name } : {}),
                     ...(b.input ? { toolInput: b.input } : {}),
                     ...(b.metadata ? { toolMetadata: b.metadata } : {}),
+                    ...(typeof b.startedAt === 'number' ? { startedAt: b.startedAt } : {}),
+                    ...(typeof b.endedAt === 'number' ? { endedAt: b.endedAt } : {}),
                   };
                 });
               }
