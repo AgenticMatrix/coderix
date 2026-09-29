@@ -362,6 +362,14 @@ export const zh = {
   'tool.copy': '复制',
   'tool.nItems': '{n} 项',
   'tool.addedRemoved': '{added} 行新增，{removed} 行删除',
+  'tool.filePath': '文件路径',
+  'tool.diff': '变更',
+  'tool.prompt': '提示词',
+  'tool.searchScope': '搜索范围',
+  'tool.status.pending': '待处理',
+  'tool.status.in_progress': '进行中',
+  'tool.status.completed': '已完成',
+  'tool.status.deleted': '已删除',
 
   // ── 思考块 ────────────────────────────────────────────
   'thinking.thinking': '思考中',

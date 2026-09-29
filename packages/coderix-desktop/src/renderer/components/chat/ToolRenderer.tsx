@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Clock, CheckCircle2, XCircle, Loader2, Copy, Check, Wrench,
   Terminal, FileText, Search, Globe, Pencil, ListChecks, Sparkles, HelpCircle, GitBranch,
+  Circle, Eye, Square, Info, RefreshCw, SquarePlus, ClipboardList,
+  Map as MapIcon, LogOut, ChevronRight,
 } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { useT, type TranslationKey } from '../../i18n/index.js';
@@ -11,7 +13,7 @@ type TFn = (key: TranslationKey, params?: Record<string, string | number>) => st
 
 // ── Tool Display Config ────────────────────────────────────
 // Each tool gets a display name + a `content` builder so the collapsed
-// header reads naturally, e.g. "Bash (npm install)", "Read (src/app.ts)".
+// header reads naturally, e.g. "终端 (npm install)", "查阅 (src/app.ts)".
 
 interface ToolDisplayConfig {
   name: string;
@@ -32,22 +34,49 @@ function truncatePath(path: string, max = 80): string {
   return `…/${parts[parts.length - 1]}`;
 }
 
+function basename(path: string): string {
+  const parts = path.split('/');
+  return parts[parts.length - 1] || path;
+}
+
+/** 中文枚举：A、B 和 C（顿号分隔，最后一项用「和」连接）。 */
+function joinHeaders(headers: string[]): string {
+  if (headers.length <= 1) return headers[0] ?? '';
+  return `${headers.slice(0, -1).join('、')} 和 ${headers[headers.length - 1]}`;
+}
+
 const toolConfigs: Record<string, ToolDisplayConfig> = {
   read: {
     name: 'Read',
-    content: (i) => truncatePath((i.file_path as string) || (i.path as string) || ''),
+    content: (i) => basename((i.file_path as string) || (i.path as string) || ''),
   },
   write: {
     name: 'Write',
-    content: (i) => truncatePath((i.file_path as string) || (i.path as string) || ''),
+    content: (i) => basename((i.file_path as string) || (i.path as string) || ''),
   },
   update: {
     name: 'Update',
-    content: (i) => truncatePath((i.file_path as string) || (i.path as string) || ''),
+    content: (i) => basename((i.file_path as string) || (i.path as string) || ''),
+  },
+  edit: {
+    name: 'Edit',
+    content: (i) => basename((i.file_path as string) || (i.path as string) || ''),
+  },
+  multiedit: {
+    name: 'MultiEdit',
+    content: (i) => {
+      const edits = i.edits as Array<Record<string, unknown>> | undefined;
+      const n = edits?.length ?? 0;
+      return n ? `${n} files` : '';
+    },
+  },
+  notebookedit: {
+    name: 'NotebookEdit',
+    content: (i) => truncatePath((i.notebook_path as string) || (i.file_path as string) || ''),
   },
   bash: {
     name: 'Bash',
-    content: (i) => truncate((i.command as string) || (i.description as string) || '', 60),
+    content: (i) => truncate((i.description as string) || (i.command as string) || '', 60),
   },
   glob: {
     name: 'Glob',
@@ -65,13 +94,15 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
     name: 'WebSearch',
     content: (i) => truncate((i.query as string) || '', 50),
   },
+  task: {
+    name: 'Task',
+    content: (i) => truncate((i.description as string) || '', 50),
+  },
   taskcreate: {
     name: 'TaskCreate',
     content: (i) => {
-      const af = i.activeForm as string | undefined;
-      const d = i.description as string | undefined;
-      if (af && d) return truncate(`${af}: ${d}`, 50);
-      return truncate(af || d || '', 50);
+      const s = (i.subject as string) || (i.activeForm as string) || '';
+      return truncate(s, 50);
     },
   },
   taskupdate: {
@@ -109,21 +140,10 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
   askuserquestion: {
     name: 'Ask',
     content: (i) => {
-      const qs = i.questions as Array<{ question?: string }> | undefined;
-      return truncate(qs?.[0]?.question || '', 50);
+      const qs = i.questions as Array<{ header?: string }> | undefined;
+      const headers = (qs ?? []).map((q) => q.header).filter((h): h is string => !!h);
+      return headers.length ? truncate(joinHeaders(headers), 60) : '';
     },
-  },
-  enterplanmode: {
-    name: 'Enter Plan Mode',
-    content: () => '',
-  },
-  exitplanmode: {
-    name: 'Exit Plan Mode',
-    content: () => '',
-  },
-  notebookedit: {
-    name: 'NotebookEdit',
-    content: (i) => truncatePath((i.notebook_path as string) || (i.file_path as string) || ''),
   },
   agent: {
     name: 'Agent',
@@ -145,6 +165,18 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
     name: 'Listen',
     content: (i) => truncate((i.duration as string) || '', 20),
   },
+  enterplanmode: {
+    name: 'Enter Plan Mode',
+    content: () => '',
+  },
+  exitplanmode: {
+    name: 'Exit Plan Mode',
+    content: () => '',
+  },
+  ls: {
+    name: 'LS',
+    content: (i) => truncatePath((i.path as string) || ''),
+  },
   enterworktree: {
     name: 'EnterWorktree',
     content: (i) => truncate((i.name as string) || (i.path as string) || '', 40),
@@ -159,24 +191,19 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
   },
 };
 
-function getToolConfig(toolName: string): ToolDisplayConfig {
-  const lower = toolName.toLowerCase();
-  const base = toolConfigs[lower] ?? {
-    name: toolName,
-    content: () => '',
-  };
-  return { name: TOOL_LABEL[lower] ?? base.name, content: base.content };
-}
-
 const TOOL_LABEL: Record<string, string> = {
   read: '查阅',
   write: '编辑',
   update: '编辑',
+  edit: '编辑',
+  multiedit: '编辑',
+  notebookedit: '编辑',
   bash: '终端',
   glob: '查阅',
   grep: '查阅',
   webfetch: '查阅',
   websearch: '搜索',
+  task: '任务',
   taskcreate: '任务',
   taskupdate: '任务',
   tasklist: '任务',
@@ -186,15 +213,27 @@ const TOOL_LABEL: Record<string, string> = {
   todowrite: '计划',
   skill: '技能',
   askuserquestion: '提问',
-  enterplanmode: '计划',
-  exitplanmode: '计划',
-  notebookedit: '编辑',
   agent: '智能体',
   sendmessage: '消息',
+  teamcreate: '团队',
+  teamdelete: '团队',
+  listen: '监听',
+  enterplanmode: '计划',
+  exitplanmode: '计划',
+  ls: '列表',
   enterworktree: '工作树',
   exitworktree: '工作树',
   workflow: '工作流',
 };
+
+function getToolConfig(toolName: string): ToolDisplayConfig {
+  const lower = toolName.toLowerCase();
+  const base = toolConfigs[lower] ?? {
+    name: toolName,
+    content: () => '',
+  };
+  return { name: TOOL_LABEL[lower] ?? base.name, content: base.content };
+}
 
 const ICON_SIZE = 13;
 
@@ -214,18 +253,28 @@ function getToolIcon(toolName: string): React.ReactNode {
       return <Globe size={ICON_SIZE} />;
     case 'write':
     case 'update':
+    case 'edit':
+    case 'multiedit':
     case 'notebookedit':
       return <Pencil size={ICON_SIZE} />;
     case 'todowrite':
-    case 'taskcreate':
-    case 'taskupdate':
-    case 'tasklist':
-    case 'taskget':
-    case 'taskoutput':
-    case 'taskstop':
-    case 'enterplanmode':
-    case 'exitplanmode':
       return <ListChecks size={ICON_SIZE} />;
+    case 'taskcreate':
+      return <SquarePlus size={ICON_SIZE} />;
+    case 'taskupdate':
+      return <RefreshCw size={ICON_SIZE} />;
+    case 'tasklist':
+      return <ClipboardList size={ICON_SIZE} />;
+    case 'taskget':
+      return <Info size={ICON_SIZE} />;
+    case 'taskoutput':
+      return <Eye size={ICON_SIZE} />;
+    case 'taskstop':
+      return <Square size={ICON_SIZE} />;
+    case 'enterplanmode':
+      return <MapIcon size={ICON_SIZE} />;
+    case 'exitplanmode':
+      return <LogOut size={ICON_SIZE} />;
     case 'skill':
       return <Sparkles size={ICON_SIZE} />;
     case 'askuserquestion':
@@ -235,6 +284,46 @@ function getToolIcon(toolName: string): React.ReactNode {
       return <GitBranch size={ICON_SIZE} />;
     default:
       return <Wrench size={ICON_SIZE} />;
+  }
+}
+
+// ── Collapsed header label ─────────────────────────────────
+// Mirrors agentstation's collapsed header: bash shows its `description`
+// directly ("List apps directory"), file tools read "查阅 app.ts", search and
+// task tools use a colon ("搜索: pattern"). `name` is empty for bash so only
+// the description renders.
+
+interface ToolHeaderParts {
+  name: string;
+  sep: string;
+  content: string;
+}
+
+function formatToolHeader(lower: string, name: string, content: string): ToolHeaderParts {
+  switch (lower) {
+    case 'bash':
+      // Just the description, no tool name or parentheses.
+      return content ? { name: '', sep: '', content } : { name, sep: '', content: '' };
+    case 'read':
+    case 'write':
+    case 'edit':
+    case 'update':
+    case 'todowrite':
+    case 'askuserquestion':
+      return { name, sep: content ? ' ' : '', content };
+    case 'glob':
+    case 'grep':
+    case 'webfetch':
+    case 'websearch':
+    case 'taskget':
+    case 'taskoutput':
+    case 'taskstop':
+    case 'taskcreate':
+      return { name, sep: content ? ': ' : '', content };
+    case 'taskupdate':
+      return { name, sep: content ? ' ' : '', content: content ? `#${content}` : '' };
+    default:
+      return { name, sep: content ? ' ' : '', content: content ? `(${content})` : '' };
   }
 }
 
@@ -308,19 +397,23 @@ export function ToolRenderer({
   const sc = stateConfigs[state] ?? stateConfigs.pending;
 
   const lower = toolName.toLowerCase();
+  const header = formatToolHeader(lower, config.name, labelContent);
   const isBash = lower === 'bash';
-  const isFileTool = ['read', 'write', 'edit', 'update', 'notebookedit', 'multiedit'].includes(lower);
   const isWrite = lower === 'write';
-  const writeStats = isWrite && toolMetadata
-    ? t('tool.addedRemoved', { added: Number(toolMetadata.addedLines ?? 0), removed: Number(toolMetadata.removedLines ?? 0) })
-    : undefined;
-  const writeContent = typeof toolInput.content === 'string' ? toolInput.content : '';
-
-  const filePath =
-    (toolInput.file_path as string) ||
-    (toolInput.notebook_path as string) ||
-    (toolInput.path as string) ||
-    '';
+  const isRead = lower === 'read';
+  const isGlob = lower === 'glob';
+  const isGrep = lower === 'grep';
+  const isEdit = lower === 'edit' || lower === 'update';
+  const isWebSearch = lower === 'websearch';
+  const isWebFetch = lower === 'webfetch';
+  const isAsk = lower === 'askuserquestion';
+  const isTodo = lower === 'todowrite';
+  const isTaskCreate = lower === 'taskcreate';
+  const isTaskUpdate = lower === 'taskupdate';
+  const isEnterPlanMode = lower === 'enterplanmode';
+  const isExitPlanMode = lower === 'exitplanmode';
+  const isFileTool = ['read', 'write', 'edit', 'update', 'notebookedit', 'multiedit'].includes(lower);
+  const isError = state === 'error';
 
   const handleCopy = (key: string, content: string) => {
     navigator.clipboard.writeText(content).then(() => {
@@ -332,7 +425,7 @@ export function ToolRenderer({
   const copyBtn = (key: string, content: string) => (
     <button
       type="button"
-      className="p-0.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-[var(--radius-xs)] transition-colors"
+      className="inline-flex items-center justify-center p-0.5 rounded-[var(--radius-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors flex-shrink-0"
       onClick={(e) => { e.stopPropagation(); handleCopy(key, content); }}
       title={t('tool.copy')}
     >
@@ -340,12 +433,39 @@ export function ToolRenderer({
     </button>
   );
 
+  const sectionHeader = (title: string, copyKey: string, copyValue: string) => (
+    <div className="flex items-center justify-between gap-2 mb-1">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+        {title}
+      </div>
+      {copyBtn(copyKey, copyValue)}
+    </div>
+  );
+
+  const filePath =
+    (toolInput.file_path as string) ||
+    (toolInput.notebook_path as string) ||
+    (toolInput.path as string) ||
+    '';
+  const writeContent = typeof toolInput.content === 'string' ? toolInput.content : '';
+  const oldString = toolInput.old_string as string | undefined;
+  const newString = toolInput.new_string as string | undefined;
+  const prompt = toolInput.prompt as string | undefined;
+  const taskSubject = (toolInput.subject as string) || (toolInput.activeForm as string) || '';
+  const taskDescription = toolInput.description as string || '';
+  const taskUpdateSubject = (toolMetadata?.subject as string) || taskSubject || '';
+  const oldStatus = toolMetadata?.oldStatus as string | undefined;
+  const newStatus = toolMetadata?.status as string | undefined;
+  const planContent = toolMetadata?.plan as string | undefined;
+  const writeStats = isWrite && toolMetadata
+    ? t('tool.addedRemoved', { added: Number(toolMetadata.addedLines ?? 0), removed: Number(toolMetadata.removedLines ?? 0) })
+    : undefined;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
-      className=""
     >
       {/* Compact header row */}
       <motion.button
@@ -356,15 +476,21 @@ export function ToolRenderer({
           <span className="text-[var(--color-text-tertiary)] flex-shrink-0">
             {getToolIcon(toolName)}
           </span>
-          <span className="font-medium text-[var(--color-text-primary)] flex-shrink-0">
-            {config.name}
-          </span>
-          {labelContent && (
+          {header.name && (
+            <span className="font-medium text-[var(--color-text-primary)] flex-shrink-0">
+              {header.name}{header.sep}
+            </span>
+          )}
+          {header.content && (
             <span className="text-[var(--color-text-secondary)] overflow-hidden text-ellipsis">
-              ({labelContent})
+              {header.content}
             </span>
           )}
         </span>
+        <ChevronRight
+          size={11}
+          className={`text-[var(--color-text-tertiary)] flex-shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+        />
         <span className="flex-1" />
         <span className={`flex items-center gap-1 text-[11px] font-medium flex-shrink-0 ${
           sc.className === 'pending' ? 'text-[var(--color-text-tertiary)]' :
@@ -388,16 +514,11 @@ export function ToolRenderer({
             className="overflow-hidden"
           >
             <div className="pl-6 pb-2 space-y-2">
-              {/* Input: bash shows the command; file tools show the path */}
+              {/* ── Per-tool input body ── */}
               {isBash ? (
                 toolInput.command != null ? (
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                        {t('tool.command')}
-                      </div>
-                      {copyBtn('command', String(toolInput.command))}
-                    </div>
+                    {sectionHeader(t('tool.command'), 'command', String(toolInput.command))}
                     <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-primary)] font-mono whitespace-pre-wrap break-all leading-[18px] m-0 max-h-48 overflow-y-auto">
                       {String(toolInput.command)}
                     </pre>
@@ -405,6 +526,82 @@ export function ToolRenderer({
                 ) : (
                   <KeyValueList input={toolInput} />
                 )
+              ) : isWrite ? (
+                <>
+                  {filePath && (
+                    <PathBoxSection title={t('tool.filePath')} copyKey="filePath" value={filePath} copiedKey={copiedKey} onCopy={handleCopy} />
+                  )}
+                  {writeStats && (
+                    <div className="text-xs text-[var(--color-text-secondary)]">{writeStats}</div>
+                  )}
+                  {writeContent !== '' && (
+                    <DiffSection oldText="" newText={writeContent} copiedKey={copiedKey} onCopy={handleCopy} />
+                  )}
+                </>
+              ) : isEdit ? (
+                <>
+                  {filePath && (
+                    <PathBoxSection title={t('tool.filePath')} copyKey="filePath" value={filePath} copiedKey={copiedKey} onCopy={handleCopy} />
+                  )}
+                  {newString != null && (
+                    <DiffSection oldText={oldString ?? ''} newText={newString} copiedKey={copiedKey} onCopy={handleCopy} />
+                  )}
+                </>
+              ) : isRead ? (
+                filePath ? (
+                  <PathBoxSection title={t('tool.filePath')} copyKey="filePath" value={filePath} copiedKey={copiedKey} onCopy={handleCopy} />
+                ) : null
+              ) : isGrep ? (
+                filePath ? (
+                  <PathBoxSection title={t('tool.searchScope')} copyKey="searchScope" value={filePath} copiedKey={copiedKey} onCopy={handleCopy} />
+                ) : null
+              ) : isGlob ? (
+                null
+              ) : isWebFetch ? (
+                prompt != null && prompt !== '' ? (
+                  <div>
+                    {sectionHeader(t('tool.prompt'), 'prompt', String(prompt))}
+                    <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-primary)] font-mono whitespace-pre-wrap break-all leading-[18px] m-0 max-h-48 overflow-y-auto">
+                      {String(prompt)}
+                    </pre>
+                  </div>
+                ) : null
+              ) : isWebSearch ? (
+                null
+              ) : isTodo ? (
+                <TodoInput input={toolInput} />
+              ) : isAsk ? (
+                <AskQuestionsInput input={toolInput} answers={toolMetadata?.answers as Record<string, unknown> | undefined} />
+              ) : isTaskCreate ? (
+                <ul className="list-none m-0 p-0 flex flex-col gap-0.5">
+                  <li className="text-xs text-[var(--color-text-secondary)] leading-relaxed flex items-baseline gap-1.5">
+                    <span className="flex-shrink-0 text-[var(--color-text-tertiary)]">○</span>
+                    <span>
+                      {taskSubject}
+                      {taskDescription ? `: ${taskDescription}` : ''}
+                    </span>
+                  </li>
+                </ul>
+              ) : isTaskUpdate ? (
+                (oldStatus || newStatus) ? (
+                  <div className="inline-flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] py-0.5">
+                    {formatTaskStatus(oldStatus, t)}
+                    <span className="text-[var(--color-text-tertiary)]">→</span>
+                    {formatTaskStatus(newStatus, t)}
+                    {taskUpdateSubject ? <span className="text-[var(--color-text-tertiary)]">({taskUpdateSubject})</span> : null}
+                  </div>
+                ) : null
+              ) : isEnterPlanMode ? (
+                null
+              ) : isExitPlanMode ? (
+                (planContent || toolResult) ? (
+                  <div>
+                    {sectionHeader(t('tool.result'), 'plan', planContent || toolResult || '')}
+                    <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 max-h-48 overflow-y-auto">
+                      {planContent || toolResult}
+                    </pre>
+                  </div>
+                ) : null
               ) : isFileTool && filePath ? (
                 <div className="text-xs font-mono text-[var(--color-info)] break-all">
                   {filePath}
@@ -413,30 +610,13 @@ export function ToolRenderer({
                 <KeyValueList input={toolInput} />
               ) : null}
 
-              {/* Write stats + content */}
-              {isWrite && writeStats && (
-                <div className="text-xs text-[var(--color-text-secondary)]">
-                  {writeStats}
-                </div>
-              )}
-              {isWrite && writeContent && (
-                <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-                  {writeContent}
-                </div>
-              )}
-
-              {/* Tool result — every tool shows its output, so each tool's
-                  input and output stay paired in one card (Write tools
-                  additionally show their file content above). */}
-              {toolResult != null && toolResult !== '' && (
+              {/* ── Tool result — every tool shows its output, so input and
+                  output stay paired in one card (write/edit/ask/task transitions
+                  render their own result inline above). ── */}
+              {!isWrite && !isEdit && !isAsk && !isTaskCreate && !isTaskUpdate && !isExitPlanMode && toolResult != null && toolResult !== '' && (
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                      {t('tool.result')}
-                    </div>
-                    {copyBtn('result', toolResult)}
-                  </div>
-                  <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 max-h-48 overflow-y-auto">
+                  {sectionHeader(t('tool.result'), 'result', toolResult)}
+                  <pre className={`p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs font-mono whitespace-pre-wrap break-words leading-[18px] m-0 max-h-48 overflow-y-auto ${isError ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-secondary)]'}`}>
                     {toolResult}
                   </pre>
                 </div>
@@ -450,3 +630,240 @@ export function ToolRenderer({
 }
 
 ToolRenderer.displayName = 'ToolRenderer';
+
+// ── Sections ───────────────────────────────────────────────
+
+function PathBoxSection({ title, copyKey, value, copiedKey, onCopy }: {
+  title: string;
+  copyKey: string;
+  value: string;
+  copiedKey: string | null;
+  onCopy: (key: string, content: string) => void;
+}) {
+  const t = useT();
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+          {title}
+        </div>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center p-0.5 rounded-[var(--radius-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors flex-shrink-0"
+          onClick={() => onCopy(copyKey, value)}
+          title={t('tool.copy')}
+        >
+          {copiedKey === copyKey ? <Check size={12} /> : <Copy size={12} />}
+        </button>
+      </div>
+      <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-info)] font-mono whitespace-pre-wrap break-all leading-[18px] m-0">
+        {value}
+      </pre>
+    </>
+  );
+}
+
+// ── Diff rendering (edit/write before → after) ────────────
+
+type DiffLineType = 'add' | 'del' | 'context';
+
+interface DiffLine {
+  type: DiffLineType;
+  text: string;
+}
+
+function diffLines(oldText: string, newText: string): DiffLine[] {
+  const a = oldText.split('\n');
+  const b = newText.split('\n');
+  const n = a.length;
+  const m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      lines.push({ type: 'context', text: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      lines.push({ type: 'del', text: a[i] });
+      i++;
+    } else {
+      lines.push({ type: 'add', text: b[j] });
+      j++;
+    }
+  }
+  while (i < n) lines.push({ type: 'del', text: a[i++] });
+  while (j < m) lines.push({ type: 'add', text: b[j++] });
+  return lines;
+}
+
+function diffText(oldText: string, newText: string): string {
+  return diffLines(oldText, newText)
+    .map((l) => `${l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' '}${l.text}`)
+    .join('\n');
+}
+
+function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
+  const lines = diffLines(oldText, newText);
+  let oldNum = 0;
+  let newNum = 0;
+  const annotated = lines.map((line) => {
+    let num: number | null = null;
+    if (line.type === 'context') {
+      oldNum++;
+      newNum++;
+      num = newNum;
+    } else if (line.type === 'del') {
+      oldNum++;
+      num = oldNum;
+    } else {
+      newNum++;
+      num = newNum;
+    }
+    return { ...line, num };
+  });
+  const numWidth = `${Math.max(1, ...annotated.map((l) => l.num ?? 0)).toString().length}ch`;
+  return (
+    <pre className="m-0 py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] font-mono text-xs leading-[1.5] overflow-x-auto overflow-y-auto max-h-60">
+      {annotated.map((line, i) => (
+        <div
+          key={i}
+          className={`flex gap-2 px-2.5 ${
+            line.type === 'add'
+              ? 'bg-[var(--color-success-muted)] text-[var(--color-success)]'
+              : line.type === 'del'
+                ? 'bg-[var(--color-danger-muted)] text-[var(--color-danger)]'
+                : 'text-[var(--color-text-secondary)]'
+          }`}
+        >
+          <span className="flex-shrink-0 text-right text-[var(--color-text-tertiary)] select-none" style={{ width: numWidth }}>
+            {line.num ?? ''}
+          </span>
+          <span className="flex-shrink-0 w-3 text-center select-none">
+            {line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' '}
+          </span>
+          <span className="flex-1 min-w-0 whitespace-pre-wrap break-all">{line.text || ' '}</span>
+        </div>
+      ))}
+    </pre>
+  );
+}
+
+function DiffSection({ oldText, newText, copiedKey, onCopy }: {
+  oldText: string;
+  newText: string;
+  copiedKey: string | null;
+  onCopy: (key: string, content: string) => void;
+}) {
+  const t = useT();
+  const text = diffText(oldText, newText);
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+          {t('tool.diff')}
+        </div>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center p-0.5 rounded-[var(--radius-xs)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors flex-shrink-0"
+          onClick={() => onCopy('diff', text)}
+          title={t('tool.copy')}
+        >
+          {copiedKey === 'diff' ? <Check size={12} /> : <Copy size={12} />}
+        </button>
+      </div>
+      <DiffView oldText={oldText} newText={newText} />
+    </>
+  );
+}
+
+// ── Todo list ─────────────────────────────────────────────
+
+function TodoInput({ input }: { input: Record<string, unknown> }) {
+  const todos = (input.newTodos || input.todos) as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(todos) || todos.length === 0) {
+    return <KeyValueList input={input} />;
+  }
+  return (
+    <ul className="list-none m-0 p-0 flex flex-col gap-0.5">
+      {todos.map((todo, i) => {
+        const done = todo.status === 'completed';
+        const text = (todo.content as string) || (todo.text as string) || String(i);
+        return (
+          <li key={`${text}-${i}`} className={`text-xs leading-relaxed flex items-baseline gap-1.5 ${done ? 'text-[var(--color-text-tertiary)] line-through' : 'text-[var(--color-text-secondary)]'}`}>
+            <span className={`flex-shrink-0 ${done ? 'text-[var(--color-success)]' : 'text-[var(--color-text-tertiary)]'}`}>
+              {done ? '✓' : '○'}
+            </span>
+            <span>{text}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// ── Ask questions ─────────────────────────────────────────
+
+function AskQuestionsInput({ input, answers }: { input: Record<string, unknown>; answers?: Record<string, unknown> }) {
+  const questions = input.questions as Array<{ question?: string; options?: Array<{ label?: string }> }> | undefined;
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return <KeyValueList input={input} />;
+  }
+
+  // `metadata.answers` is keyed by question text; a value is either an array of
+  // selected labels or a comma-joined string (multi-select).
+  const selectedFor = (question: string): string[] => {
+    const raw = answers?.[question];
+    if (Array.isArray(raw)) return raw.map(String);
+    if (typeof raw === 'string') return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    return [];
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {questions.map((q, qi) => {
+        const selected = selectedFor(q.question ?? '');
+        return (
+          <div key={qi}>
+            <div className="text-xs font-semibold text-[var(--color-text-primary)] mb-1">{q.question}</div>
+            <ul className="list-none m-0 p-0 flex flex-col gap-0.5">
+              {(q.options ?? []).map((opt, oi) => {
+                const label = opt.label ?? '';
+                const isSelected = selected.includes(label);
+                return (
+                  <li key={oi} className="flex items-center gap-1.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+                    <span className={`flex-shrink-0 inline-flex items-center justify-center w-3.5 ${isSelected ? 'text-[var(--color-success)]' : 'text-[var(--color-text-tertiary)]'}`}>
+                      {isSelected ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+                    </span>
+                    <span className={isSelected ? 'text-[var(--color-text-primary)]' : ''}>{label}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Task status transition ────────────────────────────────
+
+const TASK_STATUS_KEYS: Record<string, TranslationKey> = {
+  pending: 'tool.status.pending',
+  in_progress: 'tool.status.in_progress',
+  completed: 'tool.status.completed',
+  deleted: 'tool.status.deleted',
+};
+
+function formatTaskStatus(status: string | undefined, t: TFn): string {
+  if (!status) return '';
+  return TASK_STATUS_KEYS[status] ? t(TASK_STATUS_KEYS[status]) : status;
+}
