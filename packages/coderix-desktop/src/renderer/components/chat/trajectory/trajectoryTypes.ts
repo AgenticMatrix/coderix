@@ -20,6 +20,14 @@ export interface TrajectoryWorkRow {
   kind: TrajectoryWorkKind;
   /** For `tool`, the first block is the tool_use (result attached when matched). */
   blocks: StreamBlock[];
+  /** True only while this specific row is still streaming (the active thinking
+   *  block mid-turn). Finished rows render their completed state — a done LLM
+   *  call must not still show the "思考中" spinner. */
+  isStreaming?: boolean;
+  /** Wall-clock thinking duration for a reasoning row, computed from the
+   *  block's `startedAt`/`endedAt`. Per-turn — each LLM call counts its own
+   *  time independently rather than sharing the whole call's duration. */
+  durationMs?: number;
 }
 
 export interface TrajectoryCall {
@@ -176,10 +184,20 @@ function buildWorkRows(raw: RawCall, lastTextIndex: number): TrajectoryWorkRow[]
       if (typeof b.content !== 'string' || b.content.trim() === '') {
         if (!raw.isStreaming) continue;
       }
+      // A thinking block is only "still thinking" when it is the very last
+      // block of a live turn — once the model moves on to text or a tool call,
+      // this thinking block is finished and must render as completed.
+      const isActiveThinking = raw.isStreaming && i === raw.outputBlocks.length - 1;
+      const thinkingDuration =
+        typeof b.startedAt === 'number' && typeof b.endedAt === 'number'
+          ? Math.max(0, b.endedAt - b.startedAt)
+          : undefined;
       rows.push({
         key: `${raw.key}:work:reasoning:${rows.length}`,
         kind: 'reasoning',
         blocks: [b],
+        isStreaming: isActiveThinking,
+        durationMs: thinkingDuration,
       });
     } else if (b.type === 'text') {
       if (i === lastTextIndex) continue; // final answer, rendered separately

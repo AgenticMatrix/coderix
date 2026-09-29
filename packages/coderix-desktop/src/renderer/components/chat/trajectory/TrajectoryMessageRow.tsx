@@ -15,21 +15,19 @@ export function TrajectoryMessageRow({
   row,
   isStreaming = false,
   reveal = false,
-  durationMs,
 }: {
   row: TrajectoryWorkRow;
   isStreaming?: boolean;
   reveal?: boolean;
-  durationMs?: number;
 }): React.ReactElement | null {
   if (row.kind === 'reasoning') {
     const content = row.blocks.map((b) => b.content ?? '').join('\n');
     return (
       <ThinkingBlock
         content={content}
-        isStreaming={isStreaming}
+        isStreaming={row.isStreaming ?? isStreaming}
         reveal={reveal}
-        label={formatThinkingDuration(durationMs)}
+        label={formatThinkingDuration(row.durationMs)}
       />
     );
   }

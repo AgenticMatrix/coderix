@@ -1955,6 +1955,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (event.type === 'content_block_start') {
       const block = normalizeClaudeBlock(event.content_block);
       if (!block) return;
+      block.startedAt = Date.now();
       indexByStreamIndex.set(event.index, blocks.length);
       blocks.push(block);
       if (block.type === 'tool_use') {
@@ -1979,6 +1980,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const idx = indexByStreamIndex.get(event.index);
       if (idx === undefined) return;
       const block = blocks[idx]!;
+      block.endedAt = Date.now();
       if (block.type === 'tool_use') {
         const raw = rawInputByStreamIndex.get(event.index) ?? '';
         if (raw.trim()) {

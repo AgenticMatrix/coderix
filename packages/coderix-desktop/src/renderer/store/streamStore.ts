@@ -331,6 +331,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
           if (block.state) existing.state = block.state;
           if (block.toolInput) existing.toolInput = { ...existing.toolInput, ...block.toolInput };
           if (block.toolName) existing.toolName = block.toolName;
+          // Preserve block stream timing (set on blockStart/blockStop) so the
+          // per-turn thinking duration survives the upsert.
+          if (block.startedAt !== undefined) existing.startedAt = block.startedAt;
+          if (block.endedAt !== undefined) existing.endedAt = block.endedAt;
 
           updated[existingIdx] = existing;
           msg = { ...msg, blocks: updated };

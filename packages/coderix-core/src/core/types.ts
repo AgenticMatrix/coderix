@@ -18,6 +18,10 @@ export interface ContentBlock {
   source?: ImageSource;
   thinking?: string;
   signature?: string;
+  /** Wall-clock start/end of this block's stream (ms epoch). Thinking blocks
+   *  carry both so the UI can show each LLM turn's thinking time independently. */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export interface ImageSource {

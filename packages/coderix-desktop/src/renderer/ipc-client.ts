@@ -135,6 +135,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
           type: rendererType,
           state: 'pending',
           sessionId: event.sessionId,
+          startedAt: Date.now(),
         };
 
         if (cb.type === 'tool_use') {
@@ -185,6 +186,7 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         if (!existing) break;
 
         existing.state = 'done';
+        existing.endedAt = Date.now();
 
         // Parse accumulated input_json_delta into the real tool input object
         if (existing.type === 'tool_use') {

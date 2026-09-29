@@ -28,6 +28,10 @@ export interface StreamBlock {
   toolMetadata?: Record<string, unknown>;
   /** Session this block belongs to — used to drop late cross-session stream events */
   sessionId?: string;
+  /** Wall-clock start/end of this block's stream (ms epoch). Thinking blocks
+   *  carry both so each LLM turn's thinking time can be shown independently. */
+  startedAt?: number;
+  endedAt?: number;
 }
 
 // ── Token / Cost Types ────────────────────────────────────
