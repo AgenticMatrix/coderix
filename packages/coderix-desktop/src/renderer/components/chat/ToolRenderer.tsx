@@ -13,7 +13,7 @@ type TFn = (key: TranslationKey, params?: Record<string, string | number>) => st
 
 // ── Tool Display Config ────────────────────────────────────
 // Each tool gets a display name + a `content` builder so the collapsed
-// header reads naturally, e.g. "终端 (npm install)", "查阅 (src/app.ts)".
+// header reads naturally, e.g. "List apps directory", "读取 src/app.ts".
 
 interface ToolDisplayConfig {
   name: string;
@@ -192,37 +192,37 @@ const toolConfigs: Record<string, ToolDisplayConfig> = {
 };
 
 const TOOL_LABEL: Record<string, string> = {
-  read: '查阅',
-  write: '编辑',
+  read: '读取',
+  write: '创建文件',
   update: '编辑',
   edit: '编辑',
   multiedit: '编辑',
   notebookedit: '编辑',
   bash: '终端',
-  glob: '查阅',
-  grep: '查阅',
-  webfetch: '查阅',
-  websearch: '搜索',
-  task: '任务',
-  taskcreate: '任务',
-  taskupdate: '任务',
-  tasklist: '任务',
-  taskget: '任务',
-  taskoutput: '任务',
-  taskstop: '任务',
-  todowrite: '计划',
+  glob: '搜索文件',
+  grep: '搜索内容',
+  webfetch: '获取网页内容',
+  websearch: '网页搜索',
+  task: '委派任务',
+  taskcreate: '创建任务',
+  taskupdate: '更新任务',
+  tasklist: '查看任务清单',
+  taskget: '获取任务',
+  taskoutput: '查看任务 ID',
+  taskstop: '终止任务',
+  todowrite: '刷新任务清单',
   skill: '技能',
-  askuserquestion: '提问',
+  askuserquestion: '询问',
   agent: '智能体',
-  sendmessage: '消息',
-  teamcreate: '团队',
-  teamdelete: '团队',
+  sendmessage: '发送消息',
+  teamcreate: '创建团队',
+  teamdelete: '删除团队',
   listen: '监听',
-  enterplanmode: '计划',
-  exitplanmode: '计划',
-  ls: '列表',
-  enterworktree: '工作树',
-  exitworktree: '工作树',
+  enterplanmode: '进入计划模式',
+  exitplanmode: '退出计划模式',
+  ls: '列出',
+  enterworktree: '进入工作树',
+  exitworktree: '退出工作树',
   workflow: '工作流',
 };
 
@@ -289,9 +289,9 @@ function getToolIcon(toolName: string): React.ReactNode {
 
 // ── Collapsed header label ─────────────────────────────────
 // Mirrors agentstation's collapsed header: bash shows its `description`
-// directly ("List apps directory"), file tools read "查阅 app.ts", search and
-// task tools use a colon ("搜索: pattern"). `name` is empty for bash so only
-// the description renders.
+// directly ("List apps directory"), file tools read "读取 app.ts", search and
+// task tools use a colon ("搜索文件: pattern"). `name` is empty for bash so
+// only the description renders.
 
 interface ToolHeaderParts {
   name: string;
