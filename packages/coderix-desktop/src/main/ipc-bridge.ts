@@ -695,23 +695,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     sessionManager.addCost(streamSessionId, data.totalCost);
                   } catch { /* ignore */ }
                 }
-                // Report the turn's token usage to the renderer so the status
-                // bar's context meter stays populated for the claude-code engine
-                // (the coderix engine reports per-API-call via
-                // __internal_token_usage). The SDK's `usage` is the whole-query
-                // aggregate, so broadcasting it once at `done` matches the
-                // renderer's accumulating `onTokenUsage`.
-                if (data.usage) {
+                // Token usage now arrives via the per-turn `usage` events emitted
+                // by the claude-code engine (one per assistant message), which the
+                // renderer accumulates and uses the latest of for the ctx gauge.
+                // The SDK's `result.usage` is the whole-session aggregate, so only
+                // the whole-session cost is broadcast here — sending the aggregate
+                // tokens too would double-count the per-turn deltas.
+                if (data.totalCost) {
                   safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
-                    inputTokens: data.usage.input_tokens ?? 0,
-                    outputTokens: data.usage.output_tokens ?? 0,
-                    cacheReadInputTokens: data.usage.cache_read_input_tokens ?? 0,
-                    cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
-                    totalCost: data.totalCost ?? 0,
-                    contextTokens:
-                      (data.usage.input_tokens ?? 0) +
-                      (data.usage.output_tokens ?? 0) +
-                      (data.usage.cache_read_input_tokens ?? 0),
+                    totalCost: data.totalCost,
                     sessionId: streamSessionId,
                   });
                 }

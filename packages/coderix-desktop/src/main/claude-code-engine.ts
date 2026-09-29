@@ -506,6 +506,14 @@ export async function* runClaudeCodeQuery(
           break;
         case 'assistant':
           yield { type: 'message', data: { type: 'assistant', message: msg.message } };
+          // Emit the per-turn usage delta so the renderer accumulates session
+          // totals and shows the *latest turn's* context footprint — matching
+          // the in-process engine's `usage` event. The SDK's `result` only
+          // carries the whole-session aggregate, which overstates the current
+          // footprint (it sums cache reads across every turn).
+          if (msg.message.usage) {
+            yield { type: 'usage', data: { sessionId, usage: msg.message.usage } };
+          }
           break;
         case 'user':
           yield { type: 'message', data: { type: 'user', message: msg.message } };
