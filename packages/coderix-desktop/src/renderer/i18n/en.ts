@@ -366,6 +366,14 @@ export const en: Record<TranslationKey, string> = {
   'tool.copy': 'Copy',
   'tool.nItems': '{n} items',
   'tool.addedRemoved': '{added} added, {removed} removed',
+  'tool.filePath': 'File path',
+  'tool.diff': 'Diff',
+  'tool.prompt': 'Prompt',
+  'tool.searchScope': 'Search scope',
+  'tool.status.pending': 'Pending',
+  'tool.status.in_progress': 'In progress',
+  'tool.status.completed': 'Completed',
+  'tool.status.deleted': 'Deleted',
 
   // ── 思考块 ────────────────────────────────────────────
   'thinking.thinking': 'Thinking',

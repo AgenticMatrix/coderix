@@ -54,7 +54,7 @@ export function ThinkingBlock({
             hover:text-[var(--color-text-primary)]
           `}
         >
-          <Brain size={13} className="text-[var(--color-info)] flex-shrink-0" />
+          <Brain size={13} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
           <span className="text-left">
             {isStreaming ? t('thinking.thinking') : (label ?? t('thinking.thought'))}
           </span>
