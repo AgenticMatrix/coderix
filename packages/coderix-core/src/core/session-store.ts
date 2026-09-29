@@ -23,6 +23,7 @@ import type {
   SessionEntry,
   TranscriptEntry,
   Message,
+  TokenUsageSummary,
 } from './types.js';
 import { isTranscriptEntry } from './types.js';
 
@@ -377,6 +378,12 @@ export interface SessionMeta {
   model?: string;
   /** Skills selected for this session (Claude Code skill names). Empty array = no skills enabled. */
   skills?: string[];
+  /** Cumulative token usage across all turns, persisted for resume. */
+  tokenUsage?: TokenUsageSummary;
+  /** Cumulative cost in USD, persisted for resume. */
+  totalCost?: number;
+  /** Real context footprint (most recent call's input + output + cache_read). */
+  contextTokens?: number;
 }
 
 /**

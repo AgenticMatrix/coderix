@@ -31,6 +31,8 @@ export interface AggregatedTokenUsage {
   cacheWriteTokens: number;
   totalCost: number;
   currency: string;
+  /** Current context footprint (last call's input + output + cache_read). */
+  contextTokens: number;
 }
 
 /** Create a unique ID */

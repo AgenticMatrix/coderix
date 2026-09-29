@@ -615,6 +615,30 @@ export function App(): React.ReactElement {
             // disk, so a just-streamed turn isn't clobbered by a stale read.
             if (!hadCached) {
               useChatStore.setState({ messages: chatMsgs, isStreaming: false });
+
+              // Hydrate the status bar's token/cost state from the persisted
+              // snapshot so a reloaded session doesn't show 0 until its next turn.
+              if (useChatStore.getState().sessionId === id) {
+                const tu = session?.tokenUsage as
+                  | {
+                      inputTokens?: number;
+                      outputTokens?: number;
+                      cacheReadInputTokens?: number;
+                      cacheCreationInputTokens?: number;
+                    }
+                  | undefined;
+                if (tu) {
+                  useStreamStore.getState().hydrateTokenUsage({
+                    inputTokens: tu.inputTokens ?? 0,
+                    outputTokens: tu.outputTokens ?? 0,
+                    cacheReadTokens: tu.cacheReadInputTokens ?? 0,
+                    cacheWriteTokens: tu.cacheCreationInputTokens ?? 0,
+                    totalCost: session?.totalCost ?? 0,
+                    currency: 'USD',
+                    contextTokens: session?.contextTokens ?? 0,
+                  });
+                }
+              }
             }
           }
         }
@@ -912,6 +936,7 @@ export function App(): React.ReactElement {
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
           cacheReadTokens: tokenUsage.cacheReadTokens || undefined,
+          contextTokens: tokenUsage.contextTokens || undefined,
           contextMax,
           cost: tokenUsage.totalCost || undefined,
           gitBranch: gitBranch || undefined,

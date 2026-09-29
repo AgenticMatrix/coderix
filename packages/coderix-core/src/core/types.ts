@@ -225,7 +225,8 @@ export type QueryMessage =
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
   | { type: 'system'; subtype: 'tool_completed'; data: { toolUseId: string; duration?: number; content: string | TextBlock[]; isError?: boolean; metadata?: Record<string, unknown> } }
   | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission }
-  | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion };
+  | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion }
+  | { type: 'usage'; sessionId: string; usage: CompletionUsage };
 
 // ── Permission ────────────────────────────────────────────────────────
 
@@ -502,6 +503,8 @@ export interface Session {
   skills?: string[];
   tokenUsage: TokenUsageSummary;
   metadata: SessionMetadata;
+  /** Last known context footprint (most recent call's input + output + cache_read). */
+  contextTokens?: number;
 }
 
 // ── JSONL Entry types (append-only session storage) ────────────────────

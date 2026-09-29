@@ -1255,15 +1255,23 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     });
     if (usage.totalCost) sessionManager.addCost(usage.totalCost);
 
-    // Yield cumulative session token usage so sub-agents can forward
-    // per-turn tokens to the TUI for real-time cost accumulation.
-    const sessionUsage = sessionManager.getActive()?.tokenUsage;
-    if (sessionUsage) {
-      yield {
-        type: 'system', subtype: 'progress',
-        data: { tokenUsage: { ...sessionUsage } },
-      };
-    }
+    // Yield a first-class per-turn usage delta. Consumers (e.g. the desktop
+    // bridge) accumulate these deltas into session totals and use the latest
+    // one as the current context footprint — the engine stays the single source
+    // of truth, and no consumer has to re-derive tokens from message history.
+    yield {
+      type: 'usage',
+      sessionId: config.sessionId,
+      usage,
+    };
+
+    // Persist the real context footprint so a reloaded session pre-populates
+    // the status bar's ctx gauge instead of showing 0 until the next turn.
+    const footprint =
+      (usage.input_tokens ?? 0) +
+      (usage.output_tokens ?? 0) +
+      (usage.cache_read_input_tokens ?? 0);
+    writeSessionMeta(sessionDir(config.sessionId), { contextTokens: footprint }).catch(() => {});
 
     // === Stop hook (end-of-turn) ===
     if (hookManager) {

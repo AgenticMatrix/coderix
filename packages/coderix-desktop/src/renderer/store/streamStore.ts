@@ -51,12 +51,13 @@ function emptyTokenUsage(): AggregatedTokenUsage {
     cacheWriteTokens: 0,
     totalCost: 0,
     currency: 'USD',
+    contextTokens: 0,
   };
 }
 
 function accumulateTokenUsage(
   acc: AggregatedTokenUsage,
-  stats: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number; currency?: string },
+  stats: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number; currency?: string; contextTokens?: number },
 ): AggregatedTokenUsage {
   return {
     inputTokens: (acc.inputTokens ?? 0) + (stats.inputTokens ?? 0),
@@ -65,6 +66,9 @@ function accumulateTokenUsage(
     cacheWriteTokens: (acc.cacheWriteTokens ?? 0) + (stats.cacheWriteTokens ?? 0),
     totalCost: (acc.totalCost ?? 0) + (stats.cost ?? 0),
     currency: stats.currency || acc.currency,
+    // Context footprint is the *latest* turn's footprint, not a running total —
+    // replace rather than accumulate.
+    contextTokens: stats.contextTokens ?? acc.contextTokens ?? 0,
   };
 }
 
@@ -95,6 +99,9 @@ export interface StreamState {
   /** Swap the viewed session: stash the current session's stream state and load
    *  the target's cached state (coordinated with chatStore.setSessionId). */
   setViewedSession: (id: string | null) => void;
+  /** Hydrate the viewed session's token usage from a persisted snapshot (loaded
+   *  from disk when a cold session is opened). */
+  hydrateTokenUsage: (usage: AggregatedTokenUsage) => void;
 }
 
 /**
@@ -144,6 +151,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       currentMessageBySession,
       tokenUsageBySession,
     });
+  },
+
+  hydrateTokenUsage: (usage: AggregatedTokenUsage) => {
+    set({ tokenUsage: usage });
   },
 
   startListening: () => {

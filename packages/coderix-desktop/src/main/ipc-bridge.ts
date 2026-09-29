@@ -591,6 +591,30 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               }
               break;
             }
+            case 'usage': {
+              // The Coderix engine emits a first-class per-turn usage delta at
+              // each turn boundary. Forward it so the renderer accumulates it
+              // into session totals and uses the latest delta as the context
+              // footprint (input + output + cache_read).
+              const u = event.data as {
+                sessionId?: string;
+                usage?: CompletionUsage;
+              };
+              const usage: Partial<CompletionUsage> = u.usage ?? {};
+              safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
+                inputTokens: usage.input_tokens ?? 0,
+                outputTokens: usage.output_tokens ?? 0,
+                cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+                cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+                totalCost: usage.totalCost ?? 0,
+                contextTokens:
+                  (usage.input_tokens ?? 0) +
+                  (usage.output_tokens ?? 0) +
+                  (usage.cache_read_input_tokens ?? 0),
+                sessionId: streamSessionId,
+              });
+              break;
+            }
             case 'permission_required': {
               const deferred = event.deferred as DeferredPermission;
               pendingPermissions.set(deferred.toolUseId, {
@@ -684,6 +708,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     cacheReadInputTokens: data.usage.cache_read_input_tokens ?? 0,
                     cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
                     totalCost: data.totalCost ?? 0,
+                    contextTokens:
+                      (data.usage.input_tokens ?? 0) +
+                      (data.usage.output_tokens ?? 0) +
+                      (data.usage.cache_read_input_tokens ?? 0),
                     sessionId: streamSessionId,
                   });
                 }
@@ -815,7 +843,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       await config.reloadQueryEngine(reloadWorkDir, reloadModel);
     }
 
-    return { id: session.id, title: session.title, messages: session.messages, turnCount: session.turnCount, cwd: session.cwd, model: session.model, skills: session.skills ?? [] };
+    return {
+      id: session.id,
+      title: session.title,
+      messages: session.messages,
+      turnCount: session.turnCount,
+      cwd: session.cwd,
+      model: session.model,
+      skills: session.skills ?? [],
+      tokenUsage: session.tokenUsage,
+      totalCost: session.totalCost,
+      contextTokens: session.contextTokens,
+    };
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_FORK, async (_event, sessionId: string) => {
@@ -1993,30 +2032,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       indexByStreamIndex.delete(event.index);
     }
   }
-
-  // -----------------------------------------------------------------------
-  // Token usage tracking
-  // -----------------------------------------------------------------------
-
-  let lastTokenUsage: CompletionUsage | null = null;
-
-  ipcMain.on('__internal_token_usage', (_event, usage: CompletionUsage) => {
-    lastTokenUsage = usage;
-    const mw = getMainWindow(windowManager);
-    if (mw) {
-      safeSend(mw, IPC_CHANNELS.STATE_TOKEN_USAGE, {
-        inputTokens: usage.input_tokens,
-        outputTokens: usage.output_tokens,
-        cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
-        cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
-        totalCost: usage.totalCost ?? 0,
-        // Legacy channel with no active sender; the active pointer is kept as a
-        // best-effort owner. Per-session usage is reported via the `done` event
-        // and STATE_TOKEN_USAGE instead.
-        sessionId: sessionManager?.getActive()?.id ?? '',
-      });
-    }
-  });
 
   // -----------------------------------------------------------------------
   // Cleanup handler
