@@ -21,7 +21,11 @@ export const TrajectoryCallCard = React.memo(function TrajectoryCallCard({
   // A search match on a work row force-opens the collapsed region (and the row
   // itself via the `reveal` prop), so hidden content is reachable while searching.
   const hasMatchingWorkRow = call.workRows.some((r) => revealRowKeys?.has(r.key));
-  const workOpen = call.isStreaming || userOpened || hasMatchingWorkRow;
+  // Keep the 已工作 region collapsed while the agent is streaming — the live
+  // text is rendered below it in the answer section, so expanding the work
+  // mid-stream would just show intermediate noise. Only a user click or a
+  // search hit force-opens it.
+  const workOpen = userOpened || hasMatchingWorkRow;
   const duration = formatWorkDuration(call.durationMs);
 
   return (
