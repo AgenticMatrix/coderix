@@ -44,6 +44,8 @@ export interface TokenUsage {
   cacheWriteTokens?: number;
   cost?: number;
   currency?: string;
+  /** Current context footprint (last call's input + output + cache_read). */
+  contextTokens?: number;
 }
 
 // ── Permission Types ──────────────────────────────────────

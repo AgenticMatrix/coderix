@@ -666,7 +666,13 @@ export class SessionManager {
    */
   private appendMetadata(session: Session): void {
     const dir = getSessionDir(session.id);
-    writeSessionMeta(dir, { title: session.title, workDir: session.cwd, model: session.model }).catch(() => {});
+    writeSessionMeta(dir, {
+      title: session.title,
+      workDir: session.cwd,
+      model: session.model,
+      totalCost: session.totalCost,
+      tokenUsage: session.tokenUsage,
+    }).catch(() => {});
   }
 
   /**
@@ -1011,20 +1017,21 @@ export class SessionManager {
         status: 'active',
         messages,
         turnCount: messages.filter((m) => m.role === 'assistant').length,
-        totalCost: 0,
+        totalCost: meta?.totalCost ?? 0,
         createdAt: now,
         updatedAt: now,
         cwd: meta?.workDir ?? process.cwd(),
         model: meta?.model ?? 'unknown',
         provider: 'anthropic',
         skills: meta?.skills ?? [],
-        tokenUsage: {
+        tokenUsage: meta?.tokenUsage ?? {
           inputTokens: persistedContextLength,
           outputTokens: 0,
           cacheCreationInputTokens: 0,
           cacheReadInputTokens: 0,
           totalTokens: persistedContextLength,
         },
+        contextTokens: meta?.contextTokens,
         metadata: {
           filesModified,
           toolsUsed,

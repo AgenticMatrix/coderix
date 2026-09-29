@@ -108,7 +108,7 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage';
   data?: unknown;
   deferred?: DeferredPermission | DeferredQuestion;
 }
@@ -602,6 +602,12 @@ export class QueryEngine {
               yield event;
             }
             break;
+          case 'usage': {
+            const event = { type: 'usage' as const, data: msg };
+            emit(event);
+            yield event;
+            break;
+          }
         }
       }
       const doneEvent: QueryEngineEvent = { type: 'done', data: { sessionId: session.id } };
@@ -984,21 +990,6 @@ export class QueryEngine {
             break;
           }
           case 'system': {
-            if (msg.subtype === 'progress') {
-              const usage = subSessionManager.getActive().tokenUsage;
-              subAgentRegistry.update(agentId, {
-                turnCount: agent.turnCount + assistantTurnCount,
-                messageCount: transcript.length + newTranscript.length,
-                toolCount: agent.toolCount + toolCount,
-                tokenUsage: {
-                  inputTokens: usage.inputTokens,
-                  outputTokens: usage.outputTokens,
-                  cacheCreationInputTokens: usage.cacheCreationInputTokens,
-                  cacheReadInputTokens: usage.cacheReadInputTokens,
-                  totalTokens: usage.totalTokens,
-                },
-              });
-            }
             if (msg.subtype === 'permission_required') {
               yield { type: 'permission_required', deferred: msg.deferred };
             } else if (msg.subtype === 'question_required') {
@@ -1008,6 +999,24 @@ export class QueryEngine {
             } else {
               yield { type: 'message', data: msg };
             }
+            break;
+          }
+          case 'usage': {
+            // Update the sub-agent's rolling token usage from the engine's
+            // authoritative snapshot (read straight from its session manager).
+            const usage = subSessionManager.getActive().tokenUsage;
+            subAgentRegistry.update(agentId, {
+              turnCount: agent.turnCount + assistantTurnCount,
+              messageCount: transcript.length + newTranscript.length,
+              toolCount: agent.toolCount + toolCount,
+              tokenUsage: {
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                cacheCreationInputTokens: usage.cacheCreationInputTokens,
+                cacheReadInputTokens: usage.cacheReadInputTokens,
+                totalTokens: usage.totalTokens,
+              },
+            });
             break;
           }
         }

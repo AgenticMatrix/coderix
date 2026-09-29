@@ -644,6 +644,7 @@ export function onTokenUsage(callback: (stats: TokenUsage, sessionId?: string) =
       cacheReadInputTokens?: number;
       cacheCreationInputTokens?: number;
       totalCost?: number;
+      contextTokens?: number;
       sessionId?: string;
     };
 
@@ -653,6 +654,7 @@ export function onTokenUsage(callback: (stats: TokenUsage, sessionId?: string) =
       cacheReadTokens: raw.cacheReadInputTokens,
       cacheWriteTokens: raw.cacheCreationInputTokens,
       cost: raw.totalCost,
+      contextTokens: raw.contextTokens,
     }, raw.sessionId);
   });
 }

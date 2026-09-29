@@ -12,6 +12,8 @@ export interface StatusBarProps {
   outputTokens?: number;
   /** Cache-read tokens (accumulated, part of the context footprint) */
   cacheReadTokens?: number;
+  /** Current context footprint in tokens (last turn's input + output + cache-read) */
+  contextTokens?: number;
   /** Maximum context window size in tokens */
   contextMax?: number;
   /** Cost in USD */
@@ -61,6 +63,7 @@ export function StatusBar({
   inputTokens,
   outputTokens,
   cacheReadTokens,
+  contextTokens: contextFootprint,
   contextMax,
   cost,
   gitBranch,
@@ -74,8 +77,12 @@ export function StatusBar({
   const t = useT();
   const status = statusConfig[agentStatus];
 
-  // Context footprint mirrors the CLI: output + input + cache-read tokens.
-  const contextTokens = (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheReadTokens ?? 0);
+  // Context footprint mirrors the CLI: output + input + cache-read tokens for
+  // the *current* turn. Prefer the engine-supplied footprint; fall back to the
+  // accumulated counters for callers that don't pass it.
+  const contextTokens =
+    contextFootprint ??
+    (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheReadTokens ?? 0);
   const contextRatio = contextMax && contextMax > 0 ? contextTokens / contextMax : 0;
   const contextPercent = Math.min(100, Math.round(contextRatio * 100));
   const contextColor = contextRatio > 0.9
