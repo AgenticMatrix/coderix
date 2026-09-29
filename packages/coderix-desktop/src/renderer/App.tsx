@@ -818,8 +818,8 @@ export function App(): React.ReactElement {
   // response (OUTPUT). Thinking blocks are always shown (detailed mode is the
   // only mode now).
   const trajectoryCalls = useMemo<TrajectoryCall[]>(
-    () => buildTrajectoryCalls(messages, streamCurrentMessage),
-    [messages, streamCurrentMessage],
+    () => buildTrajectoryCalls(messages, streamCurrentMessage, isStreaming),
+    [messages, streamCurrentMessage, isStreaming],
   );
 
   const isEmpty = trajectoryCalls.length === 0;

@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import { ContentBlockRenderer } from '../ContentBlockRenderer';
 import { TrajectoryMessageRow } from './TrajectoryMessageRow';
 import { formatWorkDuration, type TrajectoryCall } from './trajectoryTypes';
+
+/** Grace period after streaming stops before the header flips to 已工作, so a
+ *  brief inter-turn gap (tool result → next turn) doesn't flash the label. */
+const FINISH_GRACE_MS = 5000;
 
 export const TrajectoryCallCard = React.memo(function TrajectoryCallCard({
   call,
@@ -27,6 +31,21 @@ export const TrajectoryCallCard = React.memo(function TrajectoryCallCard({
   // search hit force-opens it.
   const workOpen = userOpened || hasMatchingWorkRow;
   const duration = formatWorkDuration(call.durationMs);
+
+  // The turn is "finished" only after streaming stops AND the grace period
+  // passes with no new event — this avoids the 正在工作/已工作 label flickering
+  // across the thinking → tool → responding transitions.
+  const [finished, setFinished] = useState(!call.isStreaming);
+  useEffect(() => {
+    if (call.isStreaming) {
+      setFinished(false);
+      return;
+    }
+    const timer = setTimeout(() => setFinished(true), FINISH_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [call.isStreaming]);
+
+  const showWorking = call.isStreaming || !finished;
 
   return (
     <article data-trajectory-call="" className="trajectory-call">
@@ -53,7 +72,7 @@ export const TrajectoryCallCard = React.memo(function TrajectoryCallCard({
               C
             </span>
             <span className="trajectory-work-label">
-              {call.isStreaming ? '正在工作…' : `已工作 ${duration}`}
+              {showWorking ? '正在工作…' : `已工作 ${duration}`}
             </span>
             {!workOpen && call.workRows.length > 0 && (
               <span className="trajectory-work-count">
