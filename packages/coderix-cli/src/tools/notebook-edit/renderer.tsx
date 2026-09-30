@@ -28,7 +28,7 @@ export function NotebookEditRenderer(
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">{'❌'} </Text>
           <Text bold>NotebookEdit</Text>
@@ -42,7 +42,7 @@ export function NotebookEditRenderer(
   if (isDone) {
     const result = props.result?.content ?? '';
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:green">{'●'} </Text>
           <Text bold>NotebookEdit</Text>
@@ -58,7 +58,7 @@ export function NotebookEditRenderer(
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>NotebookEdit</Text>

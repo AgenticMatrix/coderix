@@ -202,7 +202,7 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={0}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">✕ </Text>
           <Text bold>{headerLine1}{headerLine1Close}</Text>
@@ -213,7 +213,7 @@ export function TeamAgentRenderer(props: ToolUseRendererProps): React.ReactNode 
   }
 
   return (
-    <Box flexDirection="column" marginBottom={0}>
+    <Box flexDirection="column" marginBottom={2}>
       {/* Header — splits into two lines when prompt wraps */}
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>

@@ -74,7 +74,7 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
   }
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       {hasPath ? (
         <>
           <Text>

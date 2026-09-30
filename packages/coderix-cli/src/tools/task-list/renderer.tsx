@@ -29,7 +29,7 @@ export function TaskListRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Error state
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>TaskList</Text>
@@ -42,7 +42,7 @@ export function TaskListRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Done state — show tasks inline
   if (isDone && tasks.length > 0) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TaskList</Text>
@@ -63,7 +63,7 @@ export function TaskListRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Done but empty
   if (isDone) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TaskList</Text>
@@ -77,7 +77,7 @@ export function TaskListRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>TaskList</Text>

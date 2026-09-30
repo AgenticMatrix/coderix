@@ -39,7 +39,7 @@ export function ExitPlanModeRenderer(
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">{'❌ '}</Text>
           <Text bold>ExitPlanMode</Text>
@@ -57,7 +57,7 @@ export function ExitPlanModeRenderer(
     const isRevision = exitChoice === 'request-changes';
 
     return (
-      <Box flexDirection="column" marginTop={1}>
+      <Box flexDirection="column" marginBottom={2}>
         {plan ? (
           <Box flexDirection="column" paddingLeft={1}>
             <Text dimColor>{SEP}</Text>
@@ -105,7 +105,7 @@ export function ExitPlanModeRenderer(
 
   if (diskPlan) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Box flexDirection="column" marginTop={1} paddingLeft={1}>
           <Text dimColor>{SEP}</Text>
           <Text bold> Here is Coderix's plan:</Text>
@@ -130,7 +130,7 @@ export function ExitPlanModeRenderer(
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>ExitPlanMode</Text>

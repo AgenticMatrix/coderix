@@ -117,7 +117,7 @@ export function ListenRenderer(props: ToolUseRendererProps) {
   const displayProcesses = isActive ? processes : lastProcessesRef.current;
 
   return (
-    <Box flexDirection="column" marginBottom={0}>
+    <Box flexDirection="column" marginBottom={2}>
       {/* Title bar */}
       <Box flexDirection="row">
         <Box width={2} flexShrink={0}>
