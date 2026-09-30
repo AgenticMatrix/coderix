@@ -3,6 +3,7 @@ import { FileText, Plus, RotateCcw, Bot } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useEditorStore, type DiffTab } from '../../store/editorStore.js';
 import { EditorPanel } from '../editor/EditorPanel.js';
+import { ProjectPanel } from '../sidebar/ProjectPanel';
 import { useT } from '../../i18n/index.js';
 
 interface Hunk {
@@ -328,29 +329,38 @@ function DiffView({ data }: { data: DiffTab }): React.ReactElement {
 DiffView.displayName = 'DiffView';
 
 /**
- * DetailPanel — the right-hand column's body. Renders the active tab: the Monaco
- * editor for a file tab, the merge/diff view for a diff tab, or an empty prompt
- * when nothing is open. Files and diffs coexist as tabs in the same strip.
+ * DetailPanel — the right-hand column's body. The file/git panel (ProjectPanel:
+ * file list + source control) sits on the left; to its right is the active tab:
+ * the Monaco editor for a file tab, the merge/diff view for a diff tab, or an
+ * empty prompt when nothing is open. Files and diffs coexist as tabs.
  */
-export function DetailPanel(): React.ReactElement | null {
+export function DetailPanel({ projectPath }: { projectPath?: string }): React.ReactElement {
   const t = useT();
   const { tabs, activeTabId } = useEditorStore();
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
-  if (!activeTab) {
-    return (
-      <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
-        {t('detail.clickToDiff')}
+  return (
+    <div className="flex h-full min-w-0">
+      {/* File list + git — on the left of the open-file surface. */}
+      <div className="w-[240px] flex-shrink-0 overflow-hidden border-r border-[var(--color-separator)]">
+        <ProjectPanel projectPath={projectPath} />
       </div>
-    );
-  }
 
-  if (activeTab.kind === 'file') {
-    return <EditorPanel />;
-  }
-
-  return <DiffView key={activeTab.diff.path} data={activeTab.diff} />;
+      {/* Editor / diff / empty prompt */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {!activeTab ? (
+          <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-tertiary)]">
+            {t('detail.clickToDiff')}
+          </div>
+        ) : activeTab.kind === 'file' ? (
+          <EditorPanel />
+        ) : (
+          <DiffView key={activeTab.diff.path} data={activeTab.diff} />
+        )}
+      </div>
+    </div>
+  );
 }
 
 DetailPanel.displayName = 'DetailPanel';

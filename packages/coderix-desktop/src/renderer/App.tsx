@@ -763,11 +763,11 @@ export function App(): React.ReactElement {
     try {
       const result = await setProjectDirectory(path);
       await switchToProject(result.path);
-      // Reveal the sidebar (file/git management) and swap the chat area for
-      // the "create conversation" prompt.
+      // Reveal the sidebar (its persistent file list now points at this
+      // project) and swap the chat area for the "create conversation" prompt.
       useUIStore.getState().setSidebarOpen(true);
       setProjectManageOpen(true);
-      setSidebarTab('project');
+      setSidebarTab('sessions');
     } catch (err) {
       console.error('[App] Failed to open project:', err);
     }
@@ -902,18 +902,13 @@ export function App(): React.ReactElement {
           activeSessionId={currentSessionId ?? undefined}
           onSessionSelect={handleSessionSelect}
           onNewSession={handleNewSession}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onSelectProject={handleProjectSelect}
-          activeTab={sidebarTab}
-          onTabChange={handleTabChange}
-          projectPath={projectPath}
         />
       }
         sidebarVisible={sidebarOpen && sidebarTab !== 'library'}
         iconActiveTab={sidebarTab}
         onIconTabChange={handleTabChange}
         onIconSettings={() => setSettingsOpen(true)}
-        detailPanel={<DetailPanel />}
+        detailPanel={<DetailPanel projectPath={projectPath} />}
         detailVisible={detailPanelOpen}
         browserPanel={<BrowserPanel onClose={toggleBrowserPanel} />}
         browserPanelVisible={browserPanelOpen && !settingsOpen}

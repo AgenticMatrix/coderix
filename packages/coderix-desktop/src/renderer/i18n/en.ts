@@ -213,6 +213,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.restore': 'Restore',
 
   // ── Project management ────────────────────────────────
+  'project.title': 'Project',
   'project.tabFiles': 'Files',
   'project.tabGit': 'Git',
   'project.searchFiles': 'Search files or content…',
