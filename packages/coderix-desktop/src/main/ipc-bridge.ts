@@ -674,6 +674,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   stopReason?: string | null;
                   usage?: CompletionUsage;
                   totalCost?: number;
+                  lastUsage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
                 };
                 // Flush the final assistant turn, then persist the accumulated
                 // interleaved transcript (thinking + tool cards + final text) so
@@ -695,15 +696,23 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     sessionManager.addCost(streamSessionId, data.totalCost);
                   } catch { /* ignore */ }
                 }
-                // Token usage now arrives via the per-turn `usage` events emitted
-                // by the claude-code engine (one per assistant message), which the
-                // renderer accumulates and uses the latest of for the ctx gauge.
-                // The SDK's `result.usage` is the whole-session aggregate, so only
-                // the whole-session cost is broadcast here — sending the aggregate
-                // tokens too would double-count the per-turn deltas.
-                if (data.totalCost) {
+                // Report the whole-session aggregate as the cumulative input/output
+                // (for the ↑/↓ arrows and cost) plus the last turn's per-call usage
+                // as the *current* context footprint. The SDK's `usage` is the
+                // aggregate (it sums cache reads across every turn); `lastUsage` is
+                // the latest assistant turn's usage, captured by the engine.
+                if (data.usage) {
+                  const last = data.lastUsage;
+                  const contextTokens = last
+                    ? (last.input_tokens ?? 0) + (last.output_tokens ?? 0) + (last.cache_read_input_tokens ?? 0)
+                    : (data.usage.input_tokens ?? 0) + (data.usage.output_tokens ?? 0) + (data.usage.cache_read_input_tokens ?? 0);
                   safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
-                    totalCost: data.totalCost,
+                    inputTokens: data.usage.input_tokens ?? 0,
+                    outputTokens: data.usage.output_tokens ?? 0,
+                    cacheReadInputTokens: data.usage.cache_read_input_tokens ?? 0,
+                    cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
+                    totalCost: data.totalCost ?? 0,
+                    contextTokens,
                     sessionId: streamSessionId,
                   });
                 }
