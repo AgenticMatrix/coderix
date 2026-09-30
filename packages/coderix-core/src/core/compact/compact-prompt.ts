@@ -1,75 +1,74 @@
 /**
- * compact-prompt.ts — Compact summarization prompt templates.
+ * compact-prompt.ts — prompts used to summarize a conversation during compaction.
  *
- * Ported from claude-code-best's prompt.ts. Provides the full 9-section
- * compact prompt, partial compact prompt variants, and utility functions
- * for formatting compact summaries.
+ * Provides the no-tools preamble and trailer, the full multi-section compact
+ * prompt, and the helpers that format the resulting summary for display.
  */
 
 // ---------------------------------------------------------------------------
-// Preamble / Trailer
+// Preamble / trailer
 // ---------------------------------------------------------------------------
 
-const NO_TOOLS_PREAMBLE = `CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.
+const NO_TOOLS_PREAMBLE = `CRITICAL: your reply must be TEXT ONLY. Do not invoke any tool.
 
-- Do NOT use Read, Bash, Grep, Glob, Edit, Write, or ANY other tool.
-- You already have all the context you need in the conversation above.
-- Tool calls will be REJECTED and will waste your only turn — you will fail the task.
-- Your entire response must be plain text: an <analysis> block followed by a <summary> block.
+- No Read, no Bash, no Grep, no Glob, no Edit, no Write — nothing at all.
+- Everything you need is already present in the conversation above.
+- Any tool call will be rejected and will burn your only turn, failing the task.
+- Your whole reply must be plain text: an <analysis> block followed by a <summary> block.
 
 `;
 
 const NO_TOOLS_TRAILER =
-  '\n\nREMINDER: Do NOT call any tools. Respond with plain text only — ' +
+  '\n\nREMINDER: do not invoke any tool. Reply in plain text only — ' +
   'an <analysis> block followed by a <summary> block. ' +
-  'Tool calls will be rejected and you will fail the task.';
+  'A tool call will be rejected and the task will fail.';
 
 // ---------------------------------------------------------------------------
 // Analysis instruction
 // ---------------------------------------------------------------------------
 
-const DETAILED_ANALYSIS_INSTRUCTION = `Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+const DETAILED_ANALYSIS_INSTRUCTION = `Before you write the summary itself, think the conversation through inside <analysis> tags so that nothing important slips past you. As you go:
 
-1. Chronologically analyze each message and section of the conversation. For each section thoroughly identify:
-   - The user's explicit requests and intents
-   - Your approach to addressing the user's requests
-   - Key decisions, technical concepts and code patterns
-   - Specific details like:
+1. Walk the conversation in order, message by message, and for each part pin down:
+   - what the user explicitly asked for
+   - how you set about fulfilling it
+   - the important decisions, technical concepts, and code patterns
+   - concrete details such as:
      - file names
-     - full code snippets
+     - complete code snippets
      - function signatures
      - file edits
-   - Errors that you ran into and how you fixed them
-   - Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
-2. Double-check for technical accuracy and completeness, addressing each required element thoroughly.`;
+   - the errors you hit and how you resolved them
+   - any specific feedback the user gave you, especially when they told you to do something differently
+2. Re-check the result for technical accuracy and completeness, making sure every required element is covered.`;
 
 // ---------------------------------------------------------------------------
-// Base compact prompt — full conversation summarization
+// Base compact prompt — summarizing the whole conversation
 // ---------------------------------------------------------------------------
 
-const BASE_COMPACT_PROMPT = `Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
-This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
+const BASE_COMPACT_PROMPT = `Produce a detailed summary of the conversation so far, tracking closely what the user asked for and what you did in response.
+The summary has to be thorough about technical details, code patterns, and architectural decisions, so that development can continue seamlessly once the context is gone.
 
 ${DETAILED_ANALYSIS_INSTRUCTION}
 
-Your summary should include the following sections:
+Include these sections in your summary:
 
-1. Primary Request and Intent: Capture all of the user's explicit requests and intents in detail
-2. Key Technical Concepts: List all important technical concepts, technologies, and frameworks discussed.
-3. Files and Code Sections: Enumerate specific files and code sections examined, modified, or created. Pay special attention to the most recent messages and include full code snippets where applicable and include a summary of why this file read or edit is important.
-4. Errors and fixes: List all errors that you ran into, and how you fixed them. Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
-5. Problem Solving: Document problems solved and any ongoing troubleshooting efforts.
-6. All user messages: List ALL user messages that are not tool results. These are critical for understanding the users' feedback and changing intent.
-7. Pending Tasks: Outline any pending tasks that you have explicitly been asked to work on.
-8. Current Work: Describe in detail precisely what was being worked on immediately before this summary request, paying special attention to the most recent messages from both user and assistant. Include file names and code snippets where applicable.
-9. Optional Next Step: List the next step that you will take that is related to the most recent work you were doing. IMPORTANT: ensure that this step is DIRECTLY in line with the user's most recent explicit requests, and the task you were working on immediately before this summary request. If your last task was concluded, then only list next steps if they are explicitly in line with the users request. Do not start on tangential requests or really old requests that were already completed without confirming with the user first.
-                       If there is a next step, include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off. This should be verbatim to ensure there's no drift in task interpretation.
+1. Primary Request and Intent: Lay out every explicit request and intent from the user in full.
+2. Key Technical Concepts: List the significant technical concepts, technologies, and frameworks that came up.
+3. Files and Code Sections: Enumerate the files and code sections you looked at, changed, or created. Give the most recent messages the most weight, include complete snippets where they matter, and note why each file read or edit mattered.
+4. Errors and fixes: List every error you ran into and how you resolved it. Pay particular attention to feedback the user gave you, especially when they told you to do something differently.
+5. Problem Solving: Describe the problems you solved and any troubleshooting still in progress.
+6. All user messages: List every user message that is not a tool result. These matter for understanding the user's feedback and how their intent shifted.
+7. Pending Tasks: Outline the tasks you have explicitly been asked to do but have not yet finished.
+8. Current Work: Describe precisely what you were doing right before this summary was requested, focusing on the most recent user and assistant messages, and include file names and snippets where useful.
+9. Optional Next Step: State the next step tied to your most recent work. IMPORTANT: it must follow DIRECTLY from the user's latest explicit request and the task you were on immediately before this summary. If that task already wrapped up, list a next step only when it is explicitly in line with the user's request; do not wander into tangential or long-finished requests without checking with the user first.
+                       When there is a next step, quote the most recent conversation directly so it is clear exactly where you left off. Quote verbatim, so the task cannot be misinterpreted.
 
-Here's an example of how your output should be structured:
+Here is the structure your output should follow:
 
 <example>
 <analysis>
-[Your thought process, ensuring all points are covered thoroughly and accurately]
+[Your reasoning, covering every point thoroughly and accurately]
 </analysis>
 
 <summary>
@@ -83,8 +82,8 @@ Here's an example of how your output should be structured:
 
 3. Files and Code Sections:
    - [File Name 1]
-      - [Summary of why this file is important]
-      - [Summary of the changes made to this file, if any]
+      - [Why this file matters]
+      - [What changed in it, if anything]
       - [Important Code Snippet]
    - [File Name 2]
       - [Important Code Snippet]
@@ -92,15 +91,15 @@ Here's an example of how your output should be structured:
 
 4. Errors and fixes:
     - [Detailed description of error 1]:
-      - [How you fixed the error]
-      - [User feedback on the error if any]
+      - [How you fixed it]
+      - [Any user feedback about the error]
     - [...]
 
 5. Problem Solving:
-   [Description of solved problems and ongoing troubleshooting]
+   [Solved problems and ongoing troubleshooting]
 
 6. All user messages:
-    - [Detailed non tool use user message]
+    - [Detailed non-tool-use user message]
     - [...]
 
 7. Pending Tasks:
@@ -109,25 +108,25 @@ Here's an example of how your output should be structured:
    - [...]
 
 8. Current Work:
-   [Precise description of current work]
+   [Precise description of what you were doing]
 
 9. Optional Next Step:
-   [Optional Next step to take]
+   [The next step to take, if any]
 
 </summary>
 </example>
 
-Please provide your summary based on the conversation so far, following this structure and ensuring precision and thoroughness in your response.
+Write your summary of the conversation so far in this structure, keeping it precise and complete.
 
-There may be additional summarization instructions provided in the included context. If so, remember to follow these instructions when creating the above summary. Examples of instructions include:
+There may be extra summarization instructions in the context you were given. If so, follow them when writing the summary. Examples of such instructions:
 <example>
 ## Compact Instructions
-When summarizing the conversation focus on typescript code changes and also remember the mistakes you made and how you fixed them.
+Focus the summary on TypeScript edits, and call out the mistakes you made and how you corrected them.
 </example>
 
 <example>
 # Summary instructions
-When you are using compact - please focus on test output and code changes. Include file reads verbatim.
+While compacting, emphasize test output and code changes, and quote file reads in full.
 </example>
 `;
 
