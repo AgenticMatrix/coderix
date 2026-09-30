@@ -175,13 +175,13 @@ export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen,
     : null;
 
   // Phase markers. ◉ (U+25C9), ⏸, ⚠ and ⏲ are East Asian Neutral — 1 column
-  // everywhere — so they are used directly. The circle glyphs that would
-  // naturally pair with ◉, namely ◎ (U+25CE) and ○ (U+25CB), are Ambiguous and
-  // would render 2 columns wide in a CJK-locale terminal, wrapping this row and
-  // leaving the previous status bar stranded on screen. ◍ and ◌ are the Neutral
-  // members of the same circle family.
+  // everywhere — so they are used directly. ◎ (U+25CE), ○ (U+25CB) and
+  // ● (U+25CF) are Ambiguous and would render 2 columns wide in a CJK-locale
+  // terminal, wrapping this row and leaving the previous status bar stranded on
+  // screen. ◍ is the Neutral member of the same circle family; idle uses ●
+  // (rendered green) for a standard-size solid circle.
   const PHASE_WAIT = '◍'; // ◍ CIRCLE WITH VERTICAL FILL (Neutral)
-  const PHASE_IDLE = '◌'; // ◌ DOTTED CIRCLE (Neutral)
+  const PHASE_IDLE = '●'; // ● BLACK CIRCLE (Ambiguous)
 
   const Sep = () => (
     <Text dimColor color="ansi:blackBright">{` ${VERTICAL_SEPARATOR} `}</Text>

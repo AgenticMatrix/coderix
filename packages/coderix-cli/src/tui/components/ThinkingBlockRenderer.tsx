@@ -145,7 +145,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
     return (
       <Box flexDirection="row" marginBottom={1}>
         <Box width={2} flexShrink={0}>
-          <Text dimColor>▪</Text>
+          <Text dimColor>●</Text>
         </Box>
         <Box flexDirection="column" flexGrow={1}>
           <Text dimColor>
