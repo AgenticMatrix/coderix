@@ -292,7 +292,7 @@ export function AppLayout({
               <div className="h-full flex items-stretch w-full">
                 {/* File/git panel title — aligns with the project panel column in
                     the detail body below. */}
-                <div className="flex-shrink-0 flex items-center px-3 border-r border-[var(--color-separator)]" style={{ width: 240 }}>
+                <div className="flex-shrink-0 flex items-center px-3 border-r border-[var(--color-separator)] titlebar-drag" style={{ width: 240 }}>
                   <span className="text-xs font-medium text-[var(--color-text-secondary)] truncate">{t('project.title')}</span>
                 </div>
                 <div className="flex-1 min-w-0 overflow-hidden">
