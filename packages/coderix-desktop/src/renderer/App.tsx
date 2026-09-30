@@ -21,7 +21,6 @@ import { FolderOpen, ChevronDown, Plus, MessageSquarePlus } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { LibraryView } from './components/library/LibraryView';
-import { AppsView } from './components/apps/AppsView';
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
@@ -910,7 +909,7 @@ export function App(): React.ReactElement {
           projectPath={projectPath}
         />
       }
-        sidebarVisible={sidebarOpen && sidebarTab !== 'library' && sidebarTab !== 'apps'}
+        sidebarVisible={sidebarOpen && sidebarTab !== 'library'}
         iconActiveTab={sidebarTab}
         onIconTabChange={handleTabChange}
         onIconSettings={() => setSettingsOpen(true)}
@@ -946,11 +945,9 @@ export function App(): React.ReactElement {
           onToggleTerminal: toggleTerminal,
         }}
       >
-        {/* Main content: apps view when active, library view when active, else
-            project-manage prompt, else chat + composer + terminal */}
-        {sidebarTab === 'apps' ? (
-          <AppsView onOpenApp={handleOpenApp} />
-        ) : sidebarTab === 'library' ? (
+        {/* Main content: library view when active, else project-manage prompt,
+            else chat + composer + terminal */}
+        {sidebarTab === 'library' ? (
           <LibraryView
             skills={availableSkills}
             selectedSkills={selectedSkills}
@@ -959,6 +956,7 @@ export function App(): React.ReactElement {
             currentProject={projectPath}
             onOpenProject={handleOpenProject}
             onAddProject={handleProjectSelect}
+            onOpenApp={handleOpenApp}
           />
         ) : projectManageOpen ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center">

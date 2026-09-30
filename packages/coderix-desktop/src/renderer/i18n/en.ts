@@ -202,7 +202,6 @@ export const en: Record<TranslationKey, string> = {
   'nav.sessions': 'Sessions',
   'nav.project': 'Project Development',
   'nav.library': 'Library',
-  'nav.apps': 'Apps',
   'nav.darkMode': 'Dark Mode',
   'nav.lightMode': 'Light Mode',
   'nav.switchToDark': 'Switch to Dark',
@@ -225,10 +224,11 @@ export const en: Record<TranslationKey, string> = {
   'project.createConversation': 'Create conversation',
   'project.createConversationDesc': 'Start a new conversation in this project',
 
-  // ── Library (Skills / Knowledge / Projects) ──────────
+  // ── Library (Skills / Knowledge / Projects / Plugins) ─
   'library.tabSkills': 'Skills',
   'library.tabKnowledge': 'Knowledge',
   'library.tabProjects': 'Projects',
+  'library.tabPlugins': 'Plugins',
   'library.knowledgeEmpty': 'Knowledge base coming soon',
   'library.addProject': 'Add project',
   'library.currentProject': 'Current project',

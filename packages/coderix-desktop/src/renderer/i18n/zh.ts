@@ -198,7 +198,6 @@ export const zh = {
   'nav.sessions': '会话',
   'nav.project': '项目开发',
   'nav.library': '库',
-  'nav.apps': '应用',
   'nav.darkMode': '深色模式',
   'nav.lightMode': '浅色模式',
   'nav.switchToDark': '切换到深色',
@@ -221,10 +220,11 @@ export const zh = {
   'project.createConversation': '创建对话',
   'project.createConversationDesc': '在此项目下开始一个新对话',
 
-  // ── 库（Skills / 知识库 / 项目） ─────────────────────
+  // ── 库（Skills / 知识库 / 项目 / 插件） ───────────────
   'library.tabSkills': 'Skills',
   'library.tabKnowledge': '知识库',
   'library.tabProjects': '项目',
+  'library.tabPlugins': '插件',
   'library.knowledgeEmpty': '知识库功能开发中',
   'library.addProject': '添加项目',
   'library.currentProject': '当前项目',
