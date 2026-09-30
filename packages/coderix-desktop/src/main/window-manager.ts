@@ -101,7 +101,7 @@ export function createWindowManager(): WindowManager {
         ...(isMac
           ? {
               titleBarStyle: 'hidden' as const,
-              trafficLightPosition: { x: 6, y: 11 },
+              trafficLightPosition: { x: 6, y: 10 },
               // NOTE: deliberately NO `vibrancy` here. On macOS, vibrancy makes
               // the NSVisualEffectView draw over the window's child
               // WebContentsView, so the embedded browser renders blank. The
