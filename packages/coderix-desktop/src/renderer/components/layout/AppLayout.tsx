@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FolderGit2, Globe, Maximize2, Minimize2 } from 'lucide-react';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
-import { IconSidebar } from '../sidebar/IconSidebar';
-import type { SidebarTab } from '../sidebar/IconSidebar';
 import { EditorTabs } from '../editor/EditorTabs';
 import { useT } from '../../i18n/index.js';
 import { useUIStore } from '../../store/uiStore';
@@ -21,9 +19,6 @@ export interface AppLayoutProps {
   onDetailResize?: (width: number) => void;
   statusBarProps?: StatusBarProps;
   headerActions?: ReactNode;
-  iconActiveTab: SidebarTab;
-  onIconTabChange: (tab: SidebarTab) => void;
-  onIconSettings: () => void;
   browserPanel?: ReactNode;
   browserPanelVisible?: boolean;
   onToggleBrowserPanel?: () => void;
@@ -40,8 +35,6 @@ const BROWSER_MIN_WIDTH = 200;
 const CHAT_MIN_WIDTH = 200;
 /** Maximum width the file/detail column can be dragged out to. */
 const DETAIL_MAX_WIDTH = 1600;
-/** Fixed width of the icon rail on the far left. */
-const ICON_SIDEBAR_WIDTH = 65;
 
 /**
  * WeChat × Apple animation presets:
@@ -86,9 +79,6 @@ export function AppLayout({
   onDetailResize,
   statusBarProps,
   headerActions,
-  iconActiveTab,
-  onIconTabChange,
-  onIconSettings,
   browserPanel,
   browserPanelVisible = false,
   onToggleBrowserPanel,
@@ -136,7 +126,7 @@ export function AppLayout({
     (sidebarVisible ? (sidebarWidth || 260) : 0) + CHAT_MIN_WIDTH;
   const browserMaxWidth = Math.max(
     BROWSER_MIN_WIDTH,
-    windowWidth - ICON_SIDEBAR_WIDTH - leftColumnMinWidth,
+    windowWidth - leftColumnMinWidth,
   );
 
   // If the window shrinks after the browser was dragged wide, clamp the state so
@@ -166,18 +156,6 @@ export function AppLayout({
 
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
-      <IconSidebar
-        activeTab={iconActiveTab}
-        onTabChange={(tab) => {
-          // Switching views leaves fullscreen. While a panel is maximized its
-          // restore button may be hidden (e.g. the chat), so a tab click is the
-          // reliable way back to the normal layout.
-          setMaximizedPanel('none');
-          onIconTabChange(tab);
-        }}
-        onSettings={onIconSettings}
-      />
-
       <div className="flex-1 flex flex-col min-w-0">
         {/* Main row: header+content (sidebar | chat | detail) on the left,
             full-height browser column on the right. */}
@@ -376,10 +354,10 @@ export function AppLayout({
               otherwise cover it. */}
           {showBrowser && browserPanel && (
             <BrowserResizableColumn
-              width={fsBrowser ? Math.max(0, windowWidth - ICON_SIDEBAR_WIDTH) : browserWidth}
+              width={fsBrowser ? Math.max(0, windowWidth) : browserWidth}
               onResize={setBrowserWidth}
               minWidth={BROWSER_MIN_WIDTH}
-              maxWidth={fsBrowser ? Math.max(0, windowWidth - ICON_SIDEBAR_WIDTH) : browserMaxWidth}
+              maxWidth={fsBrowser ? Math.max(0, windowWidth) : browserMaxWidth}
               resizable={!fsBrowser}
             >
               {browserPanel}
@@ -402,8 +380,9 @@ export function AppLayout({
           )}
         </div>{/* closes main row */}
 
-      {/* Status bar */}
-      <StatusBar {...statusBarProps} />
+      {/* Status bar — leading slot matches the sidebar column so its
+          engine/status content stays clear of the sidebar when it is open. */}
+      <StatusBar {...statusBarProps} leadingWidth={showSidebar ? (sidebarWidth || 260) : 0} />
       </div>{/* closes flex-1 flex-col min-w-0 */}
 
       {/* Toast notifications — fixed overlay */}

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal, Gauge } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal, Gauge, Sun, Moon, Settings } from 'lucide-react';
 import { Badge, type BadgeProps } from './Badge';
 import { useT, type TranslationKey } from '../../i18n/index.js';
+import { useUIStore } from '../../store/uiStore';
 import './StatusBar.css';
 
 export interface StatusBarProps {
@@ -29,6 +30,12 @@ export interface StatusBarProps {
   terminalOpen?: boolean;
   /** Toggle the terminal panel */
   onToggleTerminal?: () => void;
+  /** Open the settings modal */
+  onOpenSettings?: () => void;
+  /** Width of the left sidebar column. When > 0, theme + settings render in a
+   *  fixed-width leading slot so the engine/status items stay clear of the
+   *  sidebar (mirrors the header's sidebar/chat split). */
+  leadingWidth?: number;
   /** Additional CSS classes */
   className?: string;
 }
@@ -72,10 +79,16 @@ export function StatusBar({
   agentStatus = 'idle',
   terminalOpen = false,
   onToggleTerminal,
+  onOpenSettings,
+  leadingWidth = 0,
   className = '',
 }: StatusBarProps): React.ReactElement {
   const t = useT();
+  const theme = useUIStore((s) => s.theme);
+  const setTheme = useUIStore((s) => s.setTheme);
   const status = statusConfig[agentStatus];
+
+  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
   // Context footprint mirrors the CLI: output + input + cache-read tokens for
   // the *current* turn. Prefer the engine-supplied footprint; fall back to the
@@ -91,16 +104,59 @@ export function StatusBar({
       ? 'var(--color-warning)'
       : 'var(--color-success)';
 
+  const leading = (
+    <>
+      {/* Theme toggle */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="inline-flex items-center gap-1 transition-colors cursor-pointer text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+        title={theme === 'light' ? t('nav.switchToDark') : t('nav.switchToLight')}
+        aria-label={theme === 'light' ? t('nav.darkMode') : t('nav.lightMode')}
+      >
+        {theme === 'light' ? <Sun size={12} /> : <Moon size={12} />}
+      </button>
+
+      {/* Settings */}
+      {onOpenSettings && (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex items-center gap-1 transition-colors cursor-pointer text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+          title={t('nav.settings')}
+          aria-label={t('nav.settings')}
+        >
+          <Settings size={12} />
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div
       className={`
-        h-8 flex items-center px-4 gap-4 text-xs
+        h-8 flex items-stretch
         bg-[var(--color-bg-secondary)] border-t border-[var(--color-separator)]
         select-none font-sans text-[var(--color-text-secondary)]
         ${className}
       `}
     >
-      {/* Engine */}
+      {/* Leading slot — theme + settings, pinned to the sidebar's width so the
+          engine/status items below stay clear of the sidebar. */}
+      {leadingWidth > 0 && (
+        <div
+          className="flex-shrink-0 h-full flex items-center px-4 gap-4 text-xs border-r border-[var(--color-separator)]"
+          style={{ width: leadingWidth }}
+        >
+          {leading}
+        </div>
+      )}
+
+      <div className="flex-1 flex items-center px-4 gap-4 text-xs min-w-0">
+        {leadingWidth === 0 && leading}
+        {leadingWidth === 0 && <div className="w-px h-3 bg-[var(--color-separator)]" />}
+
+        {/* Engine */}
       {engine && (
         <>
           <span className="inline-flex items-center gap-1 text-[var(--color-text-secondary)]" title={t('status.engine')}>
@@ -218,6 +274,7 @@ export function StatusBar({
           </button>
         </>
       )}
+      </div>
     </div>
   );
 }
