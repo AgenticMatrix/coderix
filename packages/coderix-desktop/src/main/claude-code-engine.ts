@@ -491,6 +491,11 @@ export async function* runClaudeCodeQuery(
   };
   resetIdleTimer();
 
+  // Latest turn's per-call usage (captured from the assistant messages) — used
+  // at `result` to report the *current* context footprint rather than the
+  // whole-session aggregate.
+  let lastTurnUsage: unknown = undefined;
+
   try {
     for await (const msg of stream) {
       resetIdleTimer();
@@ -506,13 +511,12 @@ export async function* runClaudeCodeQuery(
           break;
         case 'assistant':
           yield { type: 'message', data: { type: 'assistant', message: msg.message } };
-          // Emit the per-turn usage delta so the renderer accumulates session
-          // totals and shows the *latest turn's* context footprint — matching
-          // the in-process engine's `usage` event. The SDK's `result` only
-          // carries the whole-session aggregate, which overstates the current
-          // footprint (it sums cache reads across every turn).
+          // Remember the latest turn's per-call usage so the final `result` can
+          // report the *current* context footprint. The SDK's `result.usage` is
+          // the whole-session aggregate (it sums input/cache-read across every
+          // turn), so it can't be used to show the current footprint.
           if (msg.message.usage) {
-            yield { type: 'usage', data: { sessionId, usage: msg.message.usage } };
+            lastTurnUsage = msg.message.usage;
           }
           break;
         case 'user':
@@ -542,6 +546,7 @@ export async function* runClaudeCodeQuery(
                 stopReason: msg.stop_reason,
                 usage: msg.usage,
                 totalCost: msg.total_cost_usd,
+                lastUsage: lastTurnUsage,
               },
             };
           }
