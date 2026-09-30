@@ -79,10 +79,10 @@ export function LibraryView({
       {/* Tab bar — near the top of the library view */}
       <div className="flex-shrink-0 px-6 pt-3 border-b border-[var(--color-separator)]">
         <div className="flex items-center gap-1">
-          <TabButton active={tab === 'projects'} onClick={() => setTab('projects')} label={t('library.tabProjects')} />
           <TabButton active={tab === 'skills'} onClick={() => setTab('skills')} label={t('library.tabSkills')} />
-          <TabButton active={tab === 'knowledge'} onClick={() => setTab('knowledge')} label={t('library.tabKnowledge')} />
           <TabButton active={tab === 'plugins'} onClick={() => setTab('plugins')} label={t('library.tabPlugins')} />
+          <TabButton active={tab === 'projects'} onClick={() => setTab('projects')} label={t('library.tabProjects')} />
+          <TabButton active={tab === 'knowledge'} onClick={() => setTab('knowledge')} label={t('library.tabKnowledge')} />
         </div>
       </div>
 
