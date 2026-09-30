@@ -19,8 +19,8 @@ import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react'
 import { createPortal } from 'react-dom';
 import { FolderOpen, ChevronDown, Plus, MessageSquarePlus } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
-import { Sidebar } from './components/sidebar/Sidebar';
-import { LibraryView } from './components/library/LibraryView';
+import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
+import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
@@ -37,8 +37,6 @@ import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
 import { BrowserPanel } from './components/browser';
 import { GlobalModal } from './components/modals';
-import type { SidebarTab } from './components/sidebar/IconSidebar';
-
 import { useUIStore, useChatStore, useSessionStore, useStreamStore, useBrowserStore } from './store';
 import { HOME_URL } from './store/browserStore.js';
 import { useSettingsStore } from './store/settingsStore.js';
@@ -734,12 +732,19 @@ export function App(): React.ReactElement {
     }
   }, [projectPath, switchToProject]);
 
-  // Switch the active icon-sidebar tab, always leaving the "project manage"
-  // (no-conversation) mode behind — only a library double-click re-enters it.
-  const handleTabChange = useCallback((tab: SidebarTab) => {
-    setSidebarTab(tab);
+  // Switch the main-area surface (技能 / 插件 / 库), always leaving the
+  // "project manage" (no-conversation) mode behind — only a library
+  // double-click re-enters it.「新建任务」always lands back in the conversation.
+  const handleNavigate = useCallback((view: SidebarTab) => {
+    setSidebarTab(view);
     setProjectManageOpen(false);
   }, []);
+
+  const handleSidebarNewTask = useCallback(async () => {
+    setSidebarTab('sessions');
+    setProjectManageOpen(false);
+    await handleNewSession();
+  }, [handleNewSession]);
 
   // Attach an app to the current conversation: enable its skills and surface its
   // display page on the right, while the conversation continues on the left.
@@ -921,13 +926,12 @@ export function App(): React.ReactElement {
         <Sidebar
           activeSessionId={currentSessionId ?? undefined}
           onSessionSelect={handleSessionSelect}
-          onNewSession={handleNewSession}
+          onNewSession={handleSidebarNewTask}
+          activeView={sidebarTab}
+          onNavigate={handleNavigate}
         />
       }
-        sidebarVisible={sidebarOpen && sidebarTab !== 'library'}
-        iconActiveTab={sidebarTab}
-        onIconTabChange={handleTabChange}
-        onIconSettings={() => setSettingsOpen(true)}
+        sidebarVisible={sidebarOpen}
         detailPanel={<DetailPanel projectPath={projectPath} />}
         detailVisible={detailPanelOpen}
         browserPanel={<BrowserPanel onClose={toggleBrowserPanel} />}
@@ -958,20 +962,25 @@ export function App(): React.ReactElement {
           gitBehind: gitBehind || undefined,
           terminalOpen,
           onToggleTerminal: toggleTerminal,
+          onOpenSettings: () => setSettingsOpen(true),
         }}
       >
-        {/* Main content: library view when active, else project-manage prompt,
-            else chat + composer + terminal */}
-        {sidebarTab === 'library' ? (
-          <LibraryView
+        {/* Main content: skills / plugins / library surface when active, else
+            project-manage prompt, else chat + composer + terminal */}
+        {sidebarTab === 'skills' ? (
+          <SkillsView
             skills={availableSkills}
             selectedSkills={selectedSkills}
             onSkillsChange={handleSkillsChange}
+          />
+        ) : sidebarTab === 'plugins' ? (
+          <PluginsView onOpenApp={handleOpenApp} />
+        ) : sidebarTab === 'library' ? (
+          <LibraryView
             projects={recentProjects}
             currentProject={projectPath}
             onOpenProject={handleOpenProject}
             onAddProject={handleProjectSelect}
-            onOpenApp={handleOpenApp}
           />
         ) : projectManageOpen ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center">

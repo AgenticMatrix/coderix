@@ -4,26 +4,7 @@ import type { SkillInfo } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
 import { APPS, type AppDefinition } from '../apps/registry';
 
-type LibraryTab = 'skills' | 'knowledge' | 'projects' | 'plugins';
-
-export interface LibraryViewProps {
-  /** All discoverable skills (from `skills:list`). */
-  skills: SkillInfo[];
-  /** Names of the skills currently selected for the active session. */
-  selectedSkills: string[];
-  /** Called with the next selection whenever a skill card is toggled. */
-  onSkillsChange: (next: string[]) => void;
-  /** Recent project directories (absolute paths). */
-  projects: string[];
-  /** Currently active project path (highlighted in the projects grid). */
-  currentProject?: string;
-  /** Open an existing project's management view (double-click a card). */
-  onOpenProject: (path: string) => void;
-  /** Open the directory picker to add a new project. */
-  onAddProject: () => void;
-  /** Attach an app (plugin) to the current conversation. */
-  onOpenApp: (app: AppDefinition) => void;
-}
+type LibraryTab = 'projects' | 'knowledge';
 
 /** Last path segment (folder name) without pulling in Node's `path`. */
 function folderName(p: string): string {
@@ -47,23 +28,26 @@ const clamp2: React.CSSProperties = {
   overflow: 'hidden',
 };
 
+// ── Skills view ────────────────────────────────────────────────────────────
+
+export interface SkillsViewProps {
+  /** All discoverable skills (from `skills:list`). */
+  skills: SkillInfo[];
+  /** Names of the skills currently selected for the active session. */
+  selectedSkills: string[];
+  /** Called with the next selection whenever a skill card is toggled. */
+  onSkillsChange: (next: string[]) => void;
+}
+
 /**
- * LibraryView — the full-page 「库」 surface. Replaces the chat column while the
- * library icon is active. Three tabs sit near the top of the interface, and
- * each tab's content renders as a tiled card grid (块平铺, product-card style)
- * rather than a file list.
+ * SkillsView — the full-page 「技能」 surface reached from the sidebar. Shows the
+ * discoverable skills as a tiled card grid (mirrors the former library tab).
  */
-export function LibraryView({
+export function SkillsView({
   skills,
   selectedSkills,
   onSkillsChange,
-  projects,
-  currentProject,
-  onOpenProject,
-  onAddProject,
-  onOpenApp,
-}: LibraryViewProps): React.ReactElement {
-  const [tab, setTab] = useState<LibraryTab>('skills');
+}: SkillsViewProps): React.ReactElement {
   const t = useT();
   const selectedSet = new Set(selectedSkills);
 
@@ -76,11 +60,138 @@ export function LibraryView({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[var(--color-bg-primary)]">
+      <div className="flex-shrink-0 px-6 pt-3 pb-2 border-b border-[var(--color-separator)]">
+        <span className="text-sm font-semibold text-[var(--color-text-primary)]">{t('library.tabSkills')}</span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+        {skills.length === 0 ? (
+          <EmptyState icon={<Sparkles size={20} />} text={t('skills.empty')} />
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+            {skills.map((s) => {
+              const active = selectedSet.has(s.name);
+              return (
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => toggleSkill(s.name)}
+                  className={`flex flex-col text-left p-4 rounded-[var(--radius-lg)] border transition-colors cursor-pointer
+                    ${active
+                      ? 'border-[var(--color-brand)] bg-[var(--color-brand-muted)]'
+                      : 'border-[var(--color-separator)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-bg-tertiary)]'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
+                      <Sparkles size={18} />
+                    </span>
+                    {active && (
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-brand)] text-white">
+                        <Check size={12} strokeWidth={3} />
+                      </span>
+                    )}
+                  </div>
+                  <span className="mt-3 text-sm font-semibold text-[var(--color-text-primary)] truncate">{s.name}</span>
+                  <span className="mt-1 text-xs text-[var(--color-text-tertiary)] leading-snug" style={clamp2}>
+                    {s.description}
+                  </span>
+                  <span className="mt-3 pt-2 border-t border-[var(--color-separator)]/60 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand)]" />
+                    {SOURCE_LABEL[s.source]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+SkillsView.displayName = 'SkillsView';
+
+// ── Plugins view ───────────────────────────────────────────────────────────
+
+export interface PluginsViewProps {
+  /** Attach an app (plugin) to the current conversation. */
+  onOpenApp: (app: AppDefinition) => void;
+}
+
+/**
+ * PluginsView — the full-page 「插件」 surface reached from the sidebar. Lists the
+ * registered plugins as cards; clicking one attaches it to the conversation.
+ */
+export function PluginsView({ onOpenApp }: PluginsViewProps): React.ReactElement {
+  const t = useT();
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[var(--color-bg-primary)]">
+      <div className="flex-shrink-0 px-6 pt-3 pb-2 border-b border-[var(--color-separator)]">
+        <span className="text-sm font-semibold text-[var(--color-text-primary)]">{t('library.tabPlugins')}</span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+          {APPS.map((app) => {
+            const Icon = app.icon;
+            return (
+              <button
+                key={app.id}
+                type="button"
+                onClick={() => onOpenApp(app)}
+                className="flex flex-col items-start gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+              >
+                <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
+                  <Icon size={20} />
+                </span>
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium text-[var(--color-text-primary)]">{app.name}</span>
+                  <span className="block text-xs text-[var(--color-text-tertiary)]">{app.description}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+PluginsView.displayName = 'PluginsView';
+
+// ── Library view (projects + knowledge) ────────────────────────────────────
+
+export interface LibraryViewProps {
+  /** Recent project directories (absolute paths). */
+  projects: string[];
+  /** Currently active project path (highlighted in the projects grid). */
+  currentProject?: string;
+  /** Open an existing project's management view (double-click a card). */
+  onOpenProject: (path: string) => void;
+  /** Open the directory picker to add a new project. */
+  onAddProject: () => void;
+}
+
+/**
+ * LibraryView — the 「库」 surface reached from the sidebar. Its skills/plugins
+ * tabs have moved up into the sidebar, so only 项目 (projects) and 知识库
+ * (knowledge) remain here.
+ */
+export function LibraryView({
+  projects,
+  currentProject,
+  onOpenProject,
+  onAddProject,
+}: LibraryViewProps): React.ReactElement {
+  const [tab, setTab] = useState<LibraryTab>('projects');
+  const t = useT();
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[var(--color-bg-primary)]">
       {/* Tab bar — near the top of the library view */}
       <div className="flex-shrink-0 px-6 pt-3 border-b border-[var(--color-separator)]">
         <div className="flex items-center gap-1">
-          <TabButton active={tab === 'skills'} onClick={() => setTab('skills')} label={t('library.tabSkills')} />
-          <TabButton active={tab === 'plugins'} onClick={() => setTab('plugins')} label={t('library.tabPlugins')} />
           <TabButton active={tab === 'projects'} onClick={() => setTab('projects')} label={t('library.tabProjects')} />
           <TabButton active={tab === 'knowledge'} onClick={() => setTab('knowledge')} label={t('library.tabKnowledge')} />
         </div>
@@ -88,72 +199,7 @@ export function LibraryView({
 
       {/* Content — tiled card grid */}
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-        {tab === 'skills' &&
-          (skills.length === 0 ? (
-            <EmptyState icon={<Sparkles size={20} />} text={t('skills.empty')} />
-          ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-              {skills.map((s) => {
-                const active = selectedSet.has(s.name);
-                return (
-                  <button
-                    key={s.name}
-                    type="button"
-                    onClick={() => toggleSkill(s.name)}
-                    className={`flex flex-col text-left p-4 rounded-[var(--radius-lg)] border transition-colors cursor-pointer
-                      ${active
-                        ? 'border-[var(--color-brand)] bg-[var(--color-brand-muted)]'
-                        : 'border-[var(--color-separator)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-bg-tertiary)]'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
-                        <Sparkles size={18} />
-                      </span>
-                      {active && (
-                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[var(--color-brand)] text-white">
-                          <Check size={12} strokeWidth={3} />
-                        </span>
-                      )}
-                    </div>
-                    <span className="mt-3 text-sm font-semibold text-[var(--color-text-primary)] truncate">{s.name}</span>
-                    <span className="mt-1 text-xs text-[var(--color-text-tertiary)] leading-snug" style={clamp2}>
-                      {s.description}
-                    </span>
-                    <span className="mt-3 pt-2 border-t border-[var(--color-separator)]/60 flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--color-text-tertiary)]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-brand)]" />
-                      {SOURCE_LABEL[s.source]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-
         {tab === 'knowledge' && <EmptyState icon={<BookOpen size={20} />} text={t('library.knowledgeEmpty')} />}
-
-        {tab === 'plugins' && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-            {APPS.map((app) => {
-              const Icon = app.icon;
-              return (
-                <button
-                  key={app.id}
-                  type="button"
-                  onClick={() => onOpenApp(app)}
-                  className="flex flex-col items-start gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
-                >
-                  <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
-                    <Icon size={20} />
-                  </span>
-                  <span className="space-y-1">
-                    <span className="block text-sm font-medium text-[var(--color-text-primary)]">{app.name}</span>
-                    <span className="block text-xs text-[var(--color-text-tertiary)]">{app.description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         {tab === 'projects' && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
