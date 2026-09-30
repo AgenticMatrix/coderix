@@ -11,6 +11,7 @@
   --color-brand:                 #D97757;
   --color-brand-hover:           #C56A4B;
   --color-brand-active:          #B05D3F;
+  --color-brand-light:           #E09076;
   --color-brand-muted:           rgba(217, 119, 87, 0.1);
 
   /* WeChat Green accent (secondary / success emphasis) */
@@ -100,6 +101,7 @@
   --color-brand:                 #D97757;
   --color-brand-hover:           #C56A4B;
   --color-brand-active:          #B05D3F;
+  --color-brand-light:           #E09076;
   --color-brand-muted:           rgba(217, 119, 87, 0.15);
 
   --color-wechat-green:          #07C160;
