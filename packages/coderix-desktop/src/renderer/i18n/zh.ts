@@ -209,6 +209,7 @@ export const zh = {
   'nav.restore': '退出全屏',
 
   // ── 项目开发 ──────────────────────────────────────────
+  'project.title': '项目',
   'project.tabFiles': '文件',
   'project.tabGit': 'Git',
   'project.searchFiles': '搜索文件或内容…',

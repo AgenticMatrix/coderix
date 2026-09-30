@@ -1,11 +1,11 @@
 import React from 'react';
-import { MessageSquare, Code2, Library, Settings, Sun, Moon } from 'lucide-react';
+import { MessageSquare, Library, Settings, Sun, Moon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useT } from '../../i18n/index.js';
 import './IconSidebar.css';
 import styles from './IconSidebar.module.css';
 
-export type SidebarTab = 'sessions' | 'project' | 'library';
+export type SidebarTab = 'sessions' | 'library';
 
 interface Props {
   activeTab: SidebarTab;
@@ -31,11 +31,6 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
           onClick={() => onTabChange('sessions')} title={t('nav.sessions')}>
           <MessageSquare size={22} strokeWidth={activeTab === 'sessions' ? 2.5 : 2} />
           <span className={styles.tooltip}>{t('nav.sessions')}</span>
-        </button>
-        <button className={`${styles.iconButton} ${activeTab === 'project' ? styles.active : ''}`}
-          onClick={() => onTabChange('project')} title={t('nav.project')}>
-          <Code2 size={22} strokeWidth={activeTab === 'project' ? 2.5 : 2} />
-          <span className={styles.tooltip}>{t('nav.project')}</span>
         </button>
         <button className={`${styles.iconButton} ${activeTab === 'library' ? styles.active : ''}`}
           onClick={() => onTabChange('library')} title={t('nav.library')}>
