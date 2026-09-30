@@ -221,7 +221,7 @@ export const zh = {
   'project.createConversationDesc': '在此项目下开始一个新对话',
 
   // ── 库（Skills / 知识库 / 项目 / 插件） ───────────────
-  'library.tabSkills': 'Skills',
+  'library.tabSkills': '技能',
   'library.tabKnowledge': '知识库',
   'library.tabProjects': '项目',
   'library.tabPlugins': '插件',
