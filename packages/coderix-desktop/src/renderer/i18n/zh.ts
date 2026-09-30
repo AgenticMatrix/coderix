@@ -175,6 +175,12 @@ export const zh = {
   'skills.removeDir': '移除',
   'skills.noCustomDirs': '暂无自定义目录',
 
+  // ── 插件选择器 ───────────────────────────────────────
+  'plugins.title': '选择插件',
+  'plugins.button': '插件',
+  'plugins.selectedCount': '插件 · {count}',
+  'plugins.empty': '暂无可用插件',
+
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',
   'explorer.loading': '加载文件中...',

@@ -29,6 +29,7 @@ import type { TrajectoryCall } from './components/chat/trajectory';
 import { Composer } from './components/composer/Composer';
 import { ModelCascadePicker } from './components/composer/ModelCascadePicker';
 import { SkillPicker } from './components/composer/SkillPicker';
+import { PluginPicker } from './components/composer/PluginPicker';
 import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { QuestionPrompt } from './components/composer/QuestionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
@@ -756,6 +757,25 @@ export function App(): React.ReactElement {
     [setActiveAppId, selectedSkills, setSessionSkills, sessionId],
   );
 
+  // Toggle a plugin from the composer picker: checking it enables the plugin's
+  // skills (and surfaces its display page); unchecking removes them.
+  const handleTogglePlugin = useCallback(
+    (plugin: AppDefinition, checked: boolean) => {
+      const pluginSkillSet = new Set(plugin.skills);
+      let nextSkills: string[];
+      if (checked) {
+        nextSkills = Array.from(new Set([...selectedSkills, ...plugin.skills]));
+        setActiveAppId(plugin.id);
+      } else {
+        nextSkills = selectedSkills.filter((s) => !pluginSkillSet.has(s));
+        if (activeAppId === plugin.id) setActiveAppId(null);
+      }
+      setSelectedSkills(nextSkills);
+      setSessionSkills(nextSkills, sessionId ?? undefined).catch(() => {});
+    },
+    [selectedSkills, activeAppId, setActiveAppId, setSessionSkills, sessionId],
+  );
+
   // Double-click a project in the library: open its file/git management view
   // without a conversation, offering a "create conversation" action instead.
   const handleOpenProject = useCallback(async (path: string) => {
@@ -1071,6 +1091,12 @@ export function App(): React.ReactElement {
               customDirs={customSkillDirs}
               onAddDir={handleAddSkillDir}
               onRemoveDir={handleRemoveSkillDir}
+            />
+
+            <PluginPicker
+              plugins={APPS}
+              selectedSkills={selectedSkills}
+              onToggle={handleTogglePlugin}
             />
           </div>
 
