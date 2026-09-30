@@ -196,7 +196,7 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>{headerText}</Text>
@@ -214,7 +214,7 @@ export function AgentRenderer(props: ToolUseRendererProps): React.ReactNode {
   const showTimer = (isExecuting || isPending || bgRunning) && !trulyDone;
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>{headerText}</Text>

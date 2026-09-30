@@ -27,7 +27,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">✕ </Text>
           <Text bold>WebFetch</Text>
@@ -49,7 +49,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
     if (byteLength !== undefined) parts.push(formatBytes(byteLength));
 
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:green">⏺ </Text>
           <Text bold>WebFetch</Text>
@@ -74,7 +74,7 @@ export function WebFetchRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>WebFetch</Text>

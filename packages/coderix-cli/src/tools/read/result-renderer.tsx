@@ -6,7 +6,7 @@ import type { ToolResultRendererProps } from '../types.js';
 export function ReadResultRenderer(props: ToolResultRendererProps): React.ReactNode {
   const { content, isError } = props;
 
-  const lines = content ? content.split('\n').filter(l => l !== '') : [];
+  const lines = content ? content.split('\n').filter(l => l.trim() !== '') : [];
   const emptiness = lines.length === 0;
 
   return (

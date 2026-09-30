@@ -36,7 +36,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
     // TaskOutput itself failed (e.g. invalid task_id) — metadata has no status
     if (props.result?.isError && !taskStatus) {
       return (
-        <Box flexDirection="column" marginBottom={0}>
+        <Box flexDirection="column" marginBottom={2}>
           <Text>
             <Text color="ansi:green">● </Text>
             <Text bold>TaskOutput</Text>
@@ -57,7 +57,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
     else statusLabel = 'Task completed successfully';
 
     return (
-      <Box flexDirection="column" marginBottom={0}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TaskOutput</Text>
@@ -104,7 +104,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
   const indicator = blinkOn ? '●' : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={0}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>TaskOutput</Text>

@@ -21,7 +21,7 @@ export function TaskCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   // Error state
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>TaskCreate</Text>
@@ -35,7 +35,7 @@ export function TaskCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   // Done state — show inline result
   if (isDone) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={2}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TaskCreate</Text>
@@ -52,7 +52,7 @@ export function TaskCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   const indicatorColor = 'ansi:yellow';
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>TaskCreate</Text>

@@ -28,12 +28,12 @@ export function ReadRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicatorColor = isDone ? 'ansi:green' : 'ansi:yellow';
 
   const resultLines = result?.content
-    ? result.content.split('\n').filter((l) => l !== '')
+    ? result.content.split('\n').filter((l) => l.trim() !== '')
     : [];
   const hasResult = isDone && result && resultLines.length > 0;
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={2}>
       {hasPath ? (
         <>
           <Text>
