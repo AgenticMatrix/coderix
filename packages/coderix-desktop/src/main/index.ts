@@ -398,12 +398,20 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
   return engine;
 }
 
-async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: string): Promise<void> {
+async function initQueryEngine(workDir?: string, modelOverride?: string): Promise<void> {
   if (!ipcBridge) {
     throw new Error('IPC bridge not initialized');
   }
 
-  activeWorkDir = workDir;
+  // A model-only reload (per-session model switch passes `workDir === undefined`)
+  // must NOT rebind the workspace. The conversation's minted subdir lives in the
+  // ipc-bridge's `currentWorkDir`; resetting it to the boot-time `activeWorkDir`
+  // here would make the next turn resume the Claude Code session from the wrong
+  // project directory ("No conversation found with session ID"). Only rebind
+  // when a real directory is explicitly supplied.
+  if (workDir !== undefined) {
+    activeWorkDir = workDir;
+  }
 
   // Load config from ~/.coderix/settings.json
   const appConfig = loadDesktopConfig();
@@ -431,7 +439,7 @@ async function initQueryEngine(workDir: string = activeWorkDir, modelOverride?: 
   buildSharedToolRegistry();
 
   await ipcBridge.initEngine({
-    cwd: activeWorkDir,
+    cwd: workDir !== undefined ? activeWorkDir : undefined,
     model: modelId,
     sessionManager: sessionManagerRef!,
   });

@@ -61,7 +61,8 @@ export interface IpcBridgeConfig {
 
 /** Shared state a fresh engine bootstrap needs (no per-session callModel here). */
 export interface EngineBootstrapConfig {
-  cwd: string;
+  /** Workspace to bind. Omit to keep the current workspace (model-only reload). */
+  cwd?: string;
   model: string;
   sessionManager: SessionManager;
 }
