@@ -1,11 +1,11 @@
 import React from 'react';
-import { MessageSquare, Code2, Library, LayoutGrid, Settings, Sun, Moon } from 'lucide-react';
+import { MessageSquare, Code2, Library, Settings, Sun, Moon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useT } from '../../i18n/index.js';
 import './IconSidebar.css';
 import styles from './IconSidebar.module.css';
 
-export type SidebarTab = 'sessions' | 'project' | 'library' | 'apps';
+export type SidebarTab = 'sessions' | 'project' | 'library';
 
 interface Props {
   activeTab: SidebarTab;
@@ -41,11 +41,6 @@ export function IconSidebar({ activeTab, onTabChange, onSettings }: Props): Reac
           onClick={() => onTabChange('library')} title={t('nav.library')}>
           <Library size={22} strokeWidth={activeTab === 'library' ? 2.5 : 2} />
           <span className={styles.tooltip}>{t('nav.library')}</span>
-        </button>
-        <button className={`${styles.iconButton} ${activeTab === 'apps' ? styles.active : ''}`}
-          onClick={() => onTabChange('apps')} title={t('nav.apps')}>
-          <LayoutGrid size={22} strokeWidth={activeTab === 'apps' ? 2.5 : 2} />
-          <span className={styles.tooltip}>{t('nav.apps')}</span>
         </button>
       </nav>
 

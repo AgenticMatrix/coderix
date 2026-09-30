@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Check, Sparkles, FolderOpen, Plus, BookOpen } from 'lucide-react';
 import type { SkillInfo } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
+import { APPS, type AppDefinition } from '../apps/registry';
 
-type LibraryTab = 'skills' | 'knowledge' | 'projects';
+type LibraryTab = 'skills' | 'knowledge' | 'projects' | 'plugins';
 
 export interface LibraryViewProps {
   /** All discoverable skills (from `skills:list`). */
@@ -20,6 +21,8 @@ export interface LibraryViewProps {
   onOpenProject: (path: string) => void;
   /** Open the directory picker to add a new project. */
   onAddProject: () => void;
+  /** Attach an app (plugin) to the current conversation. */
+  onOpenApp: (app: AppDefinition) => void;
 }
 
 /** Last path segment (folder name) without pulling in Node's `path`. */
@@ -58,6 +61,7 @@ export function LibraryView({
   currentProject,
   onOpenProject,
   onAddProject,
+  onOpenApp,
 }: LibraryViewProps): React.ReactElement {
   const [tab, setTab] = useState<LibraryTab>('skills');
   const t = useT();
@@ -78,6 +82,7 @@ export function LibraryView({
           <TabButton active={tab === 'projects'} onClick={() => setTab('projects')} label={t('library.tabProjects')} />
           <TabButton active={tab === 'skills'} onClick={() => setTab('skills')} label={t('library.tabSkills')} />
           <TabButton active={tab === 'knowledge'} onClick={() => setTab('knowledge')} label={t('library.tabKnowledge')} />
+          <TabButton active={tab === 'plugins'} onClick={() => setTab('plugins')} label={t('library.tabPlugins')} />
         </div>
       </div>
 
@@ -125,6 +130,30 @@ export function LibraryView({
           ))}
 
         {tab === 'knowledge' && <EmptyState icon={<BookOpen size={20} />} text={t('library.knowledgeEmpty')} />}
+
+        {tab === 'plugins' && (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+            {APPS.map((app) => {
+              const Icon = app.icon;
+              return (
+                <button
+                  key={app.id}
+                  type="button"
+                  onClick={() => onOpenApp(app)}
+                  className="flex flex-col items-start gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
+                    <Icon size={20} />
+                  </span>
+                  <span className="space-y-1">
+                    <span className="block text-sm font-medium text-[var(--color-text-primary)]">{app.name}</span>
+                    <span className="block text-xs text-[var(--color-text-tertiary)]">{app.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {tab === 'projects' && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
