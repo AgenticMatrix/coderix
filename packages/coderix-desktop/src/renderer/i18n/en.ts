@@ -179,6 +179,12 @@ export const en: Record<TranslationKey, string> = {
   'skills.removeDir': 'Remove',
   'skills.noCustomDirs': 'No custom directories',
 
+  // ── Plugin picker ─────────────────────────────────────
+  'plugins.title': 'Select plugins',
+  'plugins.button': 'Plugins',
+  'plugins.selectedCount': 'Plugins · {count}',
+  'plugins.empty': 'No plugins available',
+
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': 'Click a file to start editing',
   'explorer.loading': 'Loading files...',
