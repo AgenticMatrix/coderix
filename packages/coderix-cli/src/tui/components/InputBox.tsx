@@ -5,26 +5,17 @@ interface InputBoxProps {
   inputText: string;
   cursorPosition: number;
   isStreaming: boolean;
-  /** Paste block contents keyed by ID. */
-  pasteBlocks?: Record<number, string>;
-  /** When true, paste content preview is shown above the input line. */
-  pastePreviewVisible?: boolean;
   theme?: string;
 }
-
-const MAX_PREVIEW_LINES = 8;
 
 /**
  * Renders the text input at the bottom of the chat.
  * Supports multi-line input (Ctrl+Enter) with a cursor on the active line.
- * When pastePreviewVisible, pasted content is shown in a preview panel
- * above the input so the user can review it before sending.
  */
-export const InputBox = memo(function InputBox({ inputText, cursorPosition, isStreaming, pasteBlocks, pastePreviewVisible, theme }: InputBoxProps) {
+export const InputBox = memo(function InputBox({ inputText, cursorPosition, isStreaming, theme }: InputBoxProps) {
   const PROMPT_COLOR = '#A855F7';
   const CURSOR_COLOR = theme === 'light' ? '#000000' : '#FFFFFF';
   const CURSOR_TEXT_COLOR = theme === 'light' ? '#FFFFFF' : '#000000';
-  const showPreview = pastePreviewVisible && pasteBlocks && Object.keys(pasteBlocks).length > 0;
 
   // Split input into lines and locate which line holds the cursor
   const lines = inputText.split('\n');
@@ -43,39 +34,6 @@ export const InputBox = memo(function InputBox({ inputText, cursorPosition, isSt
 
   return (
     <Box flexDirection="column">
-      {/* ── Paste preview panel ────────────────────────────── */}
-      {showPreview && Object.entries(pasteBlocks!).map(([id, content]) => {
-        const plines = content.split(/\r?\n|\r/);
-        const shown = plines.slice(0, MAX_PREVIEW_LINES);
-        const overflow = plines.length - MAX_PREVIEW_LINES;
-
-        return (
-          <Box key={id} flexDirection="column">
-            {shown.map((line, i) => (
-              <Box key={i} paddingX={2}>
-                <Text dimColor>  {line}</Text>
-              </Box>
-            ))}
-            {overflow > 0 && (
-              <Box paddingX={2}>
-                <Text dimColor>  ⋯ +{overflow} more lines</Text>
-              </Box>
-            )}
-          </Box>
-        );
-      })}
-
-      {/* ── Hint line ──────────────────────────────────────── */}
-      {pasteBlocks && Object.keys(pasteBlocks).length > 0 && (
-        <Box paddingX={2}>
-          <Text dimColor>
-            {showPreview
-              ? 'Ctrl+V again to hide preview'
-              : 'Ctrl+V again to preview pasted text'}
-          </Text>
-        </Box>
-      )}
-
       {/* ── Multi-line input ───────────────────────────────── */}
       <Box
         paddingX={1}

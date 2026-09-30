@@ -481,13 +481,9 @@ export function useInputHandler({
       // Ignore non-printable characters
       if (!input || input.length === 0) return;
 
-      // Multi-line input → paste block, or toggle preview if blocks exist
+      // Multi-line input → paste block (marker placeholder + stored content)
       if (input.includes('\n') || input.includes('\r')) {
-        if (Object.keys(pasteBlocks).length > 0) {
-          dispatch({ type: 'TOGGLE_PASTE_PREVIEW' });
-        } else {
-          dispatch({ type: 'ADD_PASTE_BLOCK', text: input });
-        }
+        dispatch({ type: 'ADD_PASTE_BLOCK', text: input });
         return;
       }
 
