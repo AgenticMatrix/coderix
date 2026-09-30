@@ -2,12 +2,6 @@ import React from 'react';
 import {
   Box,
   Text,
-  HORIZONTAL_RULE,
-  VERTICAL_SEPARATOR,
-  CORNER_TOP_LEFT,
-  CORNER_TOP_RIGHT,
-  CORNER_BOTTOM_LEFT,
-  CORNER_BOTTOM_RIGHT,
   toSafeGlyphs,
   useTerminalSize,
   textWidth,
@@ -196,14 +190,14 @@ export function HeaderLogo() {
     : columns - CHROME_WITHOUT_ART;
   const infoWidth = Math.max(1, Math.min(naturalInfo, availableInfo));
 
-  const border = (left: string, right: string) =>
+  const border = (left: string, tee: string, right: string) =>
     showArt
       ? left +
-        HORIZONTAL_RULE.repeat(artMaxLen + 2) +
-        HORIZONTAL_RULE +
-        HORIZONTAL_RULE.repeat(infoWidth + 2) +
+        '─'.repeat(artMaxLen + 2) +
+        tee +
+        '─'.repeat(infoWidth + 2) +
         right
-      : left + HORIZONTAL_RULE.repeat(infoWidth + 2) + right;
+      : left + '─'.repeat(infoWidth + 2) + right;
 
   const renderRow = (index: number): React.ReactNode => {
     const info = infoLines[index];
@@ -213,15 +207,15 @@ export function HeaderLogo() {
 
     return (
       <Text key={index}>
-        <Text color="ansi:blackBright">{`${VERTICAL_SEPARATOR} `}</Text>
+        <Text color="ansi:blackBright">{'│ '}</Text>
         {showArt ? (
           <>
             <Text color="#AB47BC">{padToWidth(logoLines[index] ?? '', artMaxLen)}</Text>
-            <Text color="ansi:blackBright">{` ${VERTICAL_SEPARATOR} `}</Text>
+            <Text color="ansi:blackBright">{' │ '}</Text>
           </>
         ) : null}
         {infoJsx}
-        <Text color="ansi:blackBright">{` ${VERTICAL_SEPARATOR}`}</Text>
+        <Text color="ansi:blackBright">{' │'}</Text>
       </Text>
     );
   };
@@ -232,9 +226,9 @@ export function HeaderLogo() {
 
   return (
     <Box flexDirection="column" marginBottom={1} paddingX={2}>
-      <Text color="ansi:blackBright">{border(CORNER_TOP_LEFT, CORNER_TOP_RIGHT)}</Text>
+      <Text color="ansi:blackBright">{border('┌', '┬', '┐')}</Text>
       {Array.from({ length: totalRows }, (_, i) => renderRow(i))}
-      <Text color="ansi:blackBright">{border(CORNER_BOTTOM_LEFT, CORNER_BOTTOM_RIGHT)}</Text>
+      <Text color="ansi:blackBright">{border('└', '┴', '┘')}</Text>
     </Box>
   );
 }
