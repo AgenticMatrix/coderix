@@ -1456,8 +1456,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           inputText={state.inputText}
           cursorPosition={state.cursorPosition}
           isStreaming={state.isStreaming}
-          pasteBlocks={state.pasteBlocks}
-          pastePreviewVisible={state.pastePreviewVisible}
           theme={config.theme}
         />
         <Divider padding={2} />
