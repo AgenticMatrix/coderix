@@ -46,7 +46,7 @@ export function Sidebar({
           type="button"
           onClick={onNewSession}
           className="w-full flex items-center justify-center gap-2 h-8 text-[13px] font-medium
-                     rounded-[var(--radius-md)] bg-[var(--color-brand)] text-white
+                     rounded-[var(--radius-md)] bg-[var(--color-brand-light)] text-white
                      hover:opacity-90 transition-opacity"
         >
           <Plus size={15} />
