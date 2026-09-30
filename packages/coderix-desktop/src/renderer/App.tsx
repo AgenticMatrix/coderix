@@ -453,6 +453,12 @@ export function App(): React.ReactElement {
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
     async (id: string) => {
+      // Selecting a conversation always returns the main area to the chat view
+      // (leaving skills/plugins/library). Do this before the no-op guard so
+      // clicking the already-active session still navigates back to chat.
+      setSidebarTab('sessions');
+      setProjectManageOpen(false);
+
       // Clicking the already-active session is a no-op — re-selecting it must
       // not interrupt a running task or reload the transcript.
       if (id === useSessionStore.getState().currentSessionId) {
