@@ -36,6 +36,12 @@ const CHAT_MIN_WIDTH = 200;
 /** Maximum width the file/detail column can be dragged out to. */
 const DETAIL_MAX_WIDTH = 1600;
 
+/** macOS shows native traffic lights over the hidden titlebar; the app title
+ *  needs extra left clearance so it doesn't sit under them. */
+const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
+/** Left padding for the sidebar title — clears the traffic lights on macOS. */
+const TITLEBAR_LEFT_PADDING = isMac ? 72 : 16;
+
 /**
  * WeChat × Apple animation presets:
  * Fast, smooth, subtle — no bouncy overshoots.
@@ -122,8 +128,7 @@ export function AppLayout({
   // 260–400px sidebar still lets the browser be dragged wide enough to squeeze
   // the chat below 200px and clip the sidebar, which is the "sidebar shrunk /
   // layout broken" symptom.
-  const leftColumnMinWidth =
-    (sidebarVisible ? (sidebarWidth || 260) : 0) + CHAT_MIN_WIDTH;
+  const leftColumnMinWidth = (sidebarWidth || 260) + CHAT_MIN_WIDTH;
   const browserMaxWidth = Math.max(
     BROWSER_MIN_WIDTH,
     windowWidth - leftColumnMinWidth,
@@ -171,23 +176,37 @@ export function AppLayout({
                    bg-[var(--color-bg-primary)] border-b border-[var(--color-separator)]
                    select-none z-[var(--z-sticky)]"
       >
-        {/* Sidebar column header — app title. The sidebar (conversation list)
-            belongs to the main column, so it carries no maximize button of its
-            own — the main column's button lives in the chat header. */}
-        <AnimatePresence initial={false}>
-          {showSidebar && (
-            <motion.div {...sidebarAnimation} className="overflow-hidden flex-shrink-0">
-              <div
-                style={{ width: sidebarWidth || 260, minWidth: 200, maxWidth: 400 }}
-                className="h-full flex items-center px-4 titlebar-drag border-r border-[var(--color-separator)]"
-              >
-                <span className="text-[13px] font-semibold text-[var(--color-text-secondary)] tracking-tight">
-                  Coderix
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Sidebar column header — app title + sidebar toggle. Always visible
+            (independent of the sidebar body) so the brand and toggle never move. */}
+        <div className="overflow-hidden flex-shrink-0">
+          <div
+            style={{
+              width: sidebarWidth || 260,
+              minWidth: 200,
+              maxWidth: 400,
+              paddingLeft: TITLEBAR_LEFT_PADDING,
+            }}
+            className="h-full flex items-center justify-between pr-2 titlebar-drag border-r border-[var(--color-separator)]"
+          >
+            <span className="text-[13px] font-semibold text-[var(--color-text-secondary)] tracking-tight">
+              Coderix
+            </span>
+            {/* Sidebar toggle — always at the conversation list's right edge. */}
+            <button
+              className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
+                         text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
+                         hover:bg-[var(--color-bg-tertiary)] transition-colors"
+              onClick={() => window.dispatchEvent(new CustomEvent('coderix:toggle-sidebar'))}
+              title={t('nav.toggleSidebar')}
+              aria-label={t('nav.toggleSidebar')}
+            >
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
+                <path d="M5.5 2.5v10" />
+              </svg>
+            </button>
+          </div>
+        </div>
 
         {/* Chat column header — browser + sidebar toggles at this column's far right.
             Kept mounted (hidden via CSS) so the composer draft survives maximization. */}
@@ -209,21 +228,6 @@ export function AppLayout({
                 label={t('nav.maximize')}
               />
             )}
-            {/* Sidebar toggle */}
-            <button
-              className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
-                         text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
-                         hover:bg-[var(--color-bg-tertiary)] transition-colors"
-              onClick={() => window.dispatchEvent(new CustomEvent('coderix:toggle-sidebar'))}
-              title={t('nav.toggleSidebar')}
-              aria-label={t('nav.toggleSidebar')}
-            >
-              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.2">
-                <rect x="1.5" y="2.5" width="12" height="10" rx="1.5" />
-                <path d="M5.5 2.5v10" />
-              </svg>
-            </button>
-
             {/* File panel toggle — shown here only while the panel is collapsed,
                 so it acts as a "reopen" affordance. Once expanded it moves above
                 the file panel itself (see the detail column header). */}
