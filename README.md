@@ -4,10 +4,11 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-monorepo-orange)](https://pnpm.io)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 [![中文](https://img.shields.io/badge/🌐-中文_README-ff69b4?style=flat-square)](README.zh-CN.md)
 
-**A fully open-source (Apache 2.0) terminal AI programming assistant — the free alternative to Claude Code.**
+**An open-source AI coding agent for the terminal and desktop — a project for research and learning.**
 
 </div>
 
@@ -15,19 +16,33 @@
 <img src="./assets/screen.gif" width="80%" alt="Coderix Demo" />
 </div>
 
-Coderix is a powerful AI coding agent that runs in your terminal or as a desktop app. It can read, write, edit files, execute shell commands, search code, and more — all through natural language conversation. Built with Ink/React for a beautiful TUI experience, plus an Electron desktop app (React DOM + Monaco + xterm) that shares the same core engine.
+Coderix is an AI coding agent that runs in your terminal or as a desktop app. It can read, write, and edit files, execute shell commands, search code, and more — all through natural-language conversation. One core engine powers several front ends: an Ink/React terminal UI (TUI), an Electron desktop app (React DOM + Monaco + xterm), a VS Code extension, and TypeScript / Python SDKs.
 
 ---
 
-## Why Coderix?
+## Purpose & Scope
 
-| | Claude Code | Coderix |
-|---|---|---|
-| **License** | Proprietary | Apache 2.0 |
-| **Source** | Closed | Fully open |
-| **Provider** | Anthropic only | Anthropic / DeepSeek / OpenAI |
-| **Pricing** | Per-token billing | Bring your own key |
-| **Extensibility** | Limited | Full plugin architecture |
+Coderix is an **independent, open-source project for research and learning** — a study of how LLM coding agents are built: agent loops, tool execution, context management, permissions, and multi-agent orchestration.
+
+- It is **not affiliated with, endorsed by, or sponsored by Anthropic**. "Claude Code" is referenced for comparison only; Coderix is not a product of Anthropic.
+- It is meant for **research, education, and personal experimentation**.
+- Supported providers: Anthropic, DeepSeek, and any OpenAI-compatible endpoint — bring your own key.
+
+---
+
+## Repository Layout
+
+Coderix is a [pnpm](https://pnpm.io) monorepo:
+
+| Package | What it is |
+|---|---|
+| `packages/coderix-core` | Framework-agnostic agent engine — query loop, tools, context, providers |
+| `packages/coderix-cli` | CLI entry point + Ink/React TUI |
+| `packages/coderix-tui` | Reusable terminal-UI primitives |
+| `packages/coderix-desktop` | Electron desktop app (React DOM + Monaco + xterm) |
+| `packages/coderix-vscode` | VS Code extension |
+| `packages/coderix-sdk` | TypeScript SDK |
+| `packages/coderix-sdk-python` | Python SDK |
 
 ---
 
@@ -36,35 +51,45 @@ Coderix is a powerful AI coding agent that runs in your terminal or as a desktop
 ### Prerequisites
 
 - **Node.js >= 22**
-- An API key from [DeepSeek](https://platform.deepseek.com), [Anthropic](https://console.anthropic.com), or [OpenAI](https://platform.openai.com)
+- **[pnpm](https://pnpm.io/installation)** — the repository is a pnpm workspace
+- An API key from [Anthropic](https://console.anthropic.com), [DeepSeek](https://platform.deepseek.com), or [OpenAI](https://platform.openai.com)
 
 ### Install
 
 ```bash
 git clone https://github.com/AgenticMatrix/coderix.git
 cd coderix
-./install.sh --local
+
+./install.sh --local      # CLI only
+./install.sh --desktop    # Desktop app only
+./install.sh --all        # Both
 ```
 
 ### Development
 
-Coderix ships two interfaces backed by the same core engine:
+Coderix ships several interfaces backed by the same core engine:
 
 | Command | Interface |
 |---|---|
-| `npm run dev:cli` | **TUI** — the terminal interface (Ink/React) |
-| `npm run dev:desk` | **Desktop** — the Electron app (React DOM) |
+| `pnpm run dev:cli` | **TUI** — the terminal interface (Ink/React) |
+| `pnpm run dev:desk` | **Desktop** — the Electron app (React DOM) |
+| `pnpm run dev:vscode` | **VS Code** — the extension |
 
 ```bash
 # TUI (terminal) version
-npm run dev:cli
+pnpm run dev:cli
 
 # Desktop (Electron) version
-npm run dev:desk
+pnpm run dev:desk
 
-# Desktop (Electron) version — one-click launcher, auto-frees port 5173
+# Desktop — one-click launcher, auto-frees port 5173
 ./start_desk.sh
+
+# VS Code extension
+pnpm run dev:vscode
 ```
+
+Other useful scripts: `pnpm run build` (core + cli), `pnpm run build:all` (+ vscode), `pnpm run typecheck`, `pnpm test`.
 
 ### Configure
 
@@ -82,7 +107,7 @@ coderix setup
 coderix
 
 # One-shot query
-coderix --print "Explain the src/core/query-engine.ts file"
+coderix --print "Explain the agent loop in coderix-core"
 
 # Switch model
 coderix --model
@@ -103,9 +128,11 @@ coderix -m "deepseek/deepseek-v4-pro"
 - **Context Management** — Token budget tracking and automatic compaction
 - **Hook System** — Extensible lifecycle hooks
 - **Skills** — Pluggable skill modules
-- **Session Management** — Checkpoint, resume, fork sessions
+- **Session Management** — Checkpoint, resume (`--resume` / `--continue`), fork sessions
 - **Model Picker** — Interactive terminal model selection (`coderix --model` / `coderix setup`)
 - **Desktop App** — Electron desktop client with Monaco editor, xterm terminal, and source control
+- **VS Code Extension** — Coderix inside your editor
+- **SDKs** — TypeScript and Python SDKs for programmatic access
 
 ---
 
@@ -173,7 +200,7 @@ Edit `~/.coderix/settings.json`:
         "opus-4.8"
       ],
       "provider": "anthropic",
-      "base_url": "https://api.deepseek.com/anthropic",
+      "base_url": "https://api.anthropic.com",
       "auth_token_env": "YOUR_ANTHROPIC_API_KEY",
       "price": {
         "input": 3,
@@ -204,16 +231,26 @@ Edit `~/.coderix/settings.json`:
 
 | Command | Description |
 |---|---|
-| `coderix` | Start interactive session |
+| `coderix` | Start an interactive session |
 | `coderix "query"` | One-shot question |
-| `coderix --help` | Show help |
-| `coderix --version` | Print version |
-| `coderix --model` | Interactive model picker |
-| `coderix -m "provider/model"` | Set model directly |
-| `coderix setup` | First-time setup wizard |
+| `coderix --help, -h` | Show help |
+| `coderix --version, -V` | Print version |
+| `coderix --model, -m [name]` | Interactive model picker, or set the model directly |
+| `coderix --setup` / `coderix setup` | First-time setup wizard |
+| `coderix --print, -p <query>` | One-shot query |
+| `coderix --resume, -r [id]` | Resume a session by ID, or open the session picker |
+| `coderix --continue, -c` | Resume the most recent conversation |
+| `coderix --gateway, -g` | JSON-RPC gateway mode (stdin/stdout) |
+| `coderix --desktop, -d` | WebSocket gateway mode (for the desktop app) |
+| `coderix --desktop-port <port>` | WebSocket port for desktop mode (default 9754) |
+| `coderix --sdk` | SDK stream-json mode (stdin/stdout, for SDK clients) |
+| `coderix --chrome-mcp` | Start the Chrome MCP server (stdin/stdout) |
+| `coderix --chrome-mcp-port <n>` | CDP port for Chrome (default 9222) |
+| `coderix --computer-use-mcp` | Start the Computer Use MCP server (macOS) |
+| `coderix mcp` | Manage MCP servers |
 
 ---
 
 ## License
 
-Apache 2.0 — fully open source. Use it, modify it, ship it.
+Apache 2.0 — see [LICENSE](LICENSE).
