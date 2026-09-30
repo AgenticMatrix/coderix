@@ -26,7 +26,7 @@ export function EditorTabs(): React.ReactElement {
           <div
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1 px-3 h-full cursor-pointer border-r border-[var(--color-separator)] text-xs whitespace-nowrap select-none
+            className={`titlebar-no-drag flex items-center gap-1 px-3 h-full cursor-pointer border-r border-[var(--color-separator)] text-xs whitespace-nowrap select-none
               ${active
                 ? 'bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] border-b-2 border-b-[var(--color-brand)]'
                 : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)]'}`}
