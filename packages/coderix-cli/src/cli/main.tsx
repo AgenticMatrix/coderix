@@ -409,10 +409,11 @@ async function main(): Promise<void> {
           const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
           initialMessages = convert(session.messages);
           initialTokenUsage = {
-            inputTokens: session.tokenUsage.inputTokens,
-            outputTokens: session.tokenUsage.outputTokens,
-            cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
-            cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+            // ctx bar = input+output+cache_read; seed with last turn's contextTokens (tokenUsage is cumulative)
+            inputTokens: session.contextTokens ?? 0,
+            outputTokens: 0,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
           };
           hasPreloadedSession = true;
         }
@@ -435,10 +436,11 @@ async function main(): Promise<void> {
             const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
             initialMessages = convert(session.messages);
             initialTokenUsage = {
-            inputTokens: session.tokenUsage.inputTokens,
-            outputTokens: session.tokenUsage.outputTokens,
-            cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
-            cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+            // ctx bar = input+output+cache_read; seed with last turn's contextTokens (tokenUsage is cumulative)
+            inputTokens: session.contextTokens ?? 0,
+            outputTokens: 0,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
           };
             hasPreloadedSession = true;
           }
@@ -452,10 +454,11 @@ async function main(): Promise<void> {
           const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
           initialMessages = convert(session.messages);
           initialTokenUsage = {
-            inputTokens: session.tokenUsage.inputTokens,
-            outputTokens: session.tokenUsage.outputTokens,
-            cacheCreationInputTokens: session.tokenUsage.cacheCreationInputTokens ?? 0,
-            cacheReadInputTokens: session.tokenUsage.cacheReadInputTokens ?? 0,
+            // ctx bar = input+output+cache_read; seed with last turn's contextTokens (tokenUsage is cumulative)
+            inputTokens: session.contextTokens ?? 0,
+            outputTokens: 0,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
           };
           hasPreloadedSession = true;
         }
