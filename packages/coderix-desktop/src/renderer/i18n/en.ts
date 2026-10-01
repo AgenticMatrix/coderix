@@ -457,7 +457,13 @@ export const en: Record<TranslationKey, string> = {
   'error.retry': 'Try Again',
 
   // ── 终端 ────────────────────────────────────────────
+  'terminal.title': 'Terminal',
   'terminal.close': 'Close terminal',
+  'terminal.new': 'New terminal',
+  'terminal.closeTab': 'Close {title}',
+  'terminal.exited': 'Process exited',
+  'terminal.contextMenu.copy': 'Copy',
+  'terminal.contextMenu.paste': 'Paste',
 
   // ── Browser sidebar ──────────────────────────────────
   'nav.browser': 'Browser',

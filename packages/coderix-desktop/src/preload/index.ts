@@ -462,8 +462,16 @@ const coderixAPI = {
   // ── Terminal ─────────────────────────────────────────────────────────
 
   terminal: {
-    /** Create a new terminal session. Returns terminal ID. */
-    create(opts?: { cwd?: string; rows?: number; cols?: number }): Promise<{ terminalId: string }> {
+    /** Create a new terminal session. Returns the terminal ID plus its resolved shell and appearance profile. */
+    create(opts?: { cwd?: string; rows?: number; cols?: number }): Promise<{
+      terminalId: string;
+      shell: string;
+      fontFamily: string;
+      fontSize?: number;
+      theme?: Record<string, string>;
+      fontFamilySource: 'custom' | 'system' | 'fallback';
+      windowsPty?: { backend: 'conpty' | 'winpty'; buildNumber?: number };
+    }> {
       return ipcRenderer.invoke(CH.TERMINAL_CREATE, opts ?? {});
     },
 

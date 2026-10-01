@@ -19,6 +19,9 @@
     "@coderix/core": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-tooltip": "^1.1.0",
+    "@xterm/addon-clipboard": "^0.2.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "bytenode": "1.6.0",
     "chokidar": "^5.0.0",
     "electron-store": "^10.0.0",
@@ -34,9 +37,9 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "smol-toml": "^1.9.0",
     "undici": "^7.27.2",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0",
+    "yaml": "^2.9.1",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

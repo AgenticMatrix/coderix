@@ -425,30 +425,35 @@ export function App(): React.ReactElement {
   }, [toggleSidebar]);
 
   // ── Open agent-requested URLs in the embedded browser ────────────────────
+  // Open a URL in the embedded browser panel (shared by agent-driven `open <url>`
+  // commands and terminal http-link clicks).
+  const openUrlInBrowser = useCallback((url: string) => {
+    if (!url) return;
+    const a = window.coderixAPI?.browser;
+    const browserStore = useBrowserStore.getState();
+    const active = browserStore.tabs.find((t) => t.id === browserStore.activeTabId);
+    // Reuse the active tab if it is still on the default home page (fresh);
+    // otherwise open a new tab so we don't clobber the user's browsing.
+    if (active && (active.url === '' || active.url === HOME_URL)) {
+      browserStore.updateTab(active.id, { url, title: '', loadError: undefined });
+      a?.navigate(active.id, url).catch(() => {});
+    } else {
+      browserStore.openTab(url);
+    }
+    // Reveal the panel if it isn't already visible.
+    if (!useUIStore.getState().browserPanelOpen) {
+      useUIStore.getState().toggleBrowserPanel();
+    }
+  }, []);
+
   // When Claude Code runs `open <url>` / `xdg-open <url>` / `start <url>`, the
   // main process redirects it here (via `browser:open-url`) instead of the OS
   // default browser. Open the browser panel and show the URL in a tab.
   useEffect(() => {
     const a = window.coderixAPI?.browser;
     if (!a?.onOpenUrl) return;
-    return a.onOpenUrl((url) => {
-      if (!url) return;
-      const browserStore = useBrowserStore.getState();
-      const active = browserStore.tabs.find((t) => t.id === browserStore.activeTabId);
-      // Reuse the active tab if it is still on the default home page (fresh);
-      // otherwise open a new tab so we don't clobber the user's browsing.
-      if (active && (active.url === '' || active.url === HOME_URL)) {
-        browserStore.updateTab(active.id, { url, title: '', loadError: undefined });
-        a.navigate(active.id, url).catch(() => {});
-      } else {
-        browserStore.openTab(url);
-      }
-      // Reveal the panel if it isn't already visible.
-      if (!useUIStore.getState().browserPanelOpen) {
-        useUIStore.getState().toggleBrowserPanel();
-      }
-    });
-  }, []);
+    return a.onOpenUrl((url) => openUrlInBrowser(url));
+  }, [openUrlInBrowser]);
 
   // ── Callbacks ───────────────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
@@ -1130,7 +1135,12 @@ export function App(): React.ReactElement {
           />
 
           {/* Terminal — collapsible, toggled from the icon sidebar */}
-          <TerminalPanel isOpen={terminalOpen} onToggle={toggleTerminal} />
+          <TerminalPanel
+            isOpen={terminalOpen}
+            onToggle={toggleTerminal}
+            projectPath={projectPath}
+            onOpenBrowserUrl={openUrlInBrowser}
+          />
         </div>
         )}
       </AppLayout>
