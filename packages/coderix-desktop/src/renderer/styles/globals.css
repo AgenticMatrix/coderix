@@ -72,6 +72,27 @@
   --color-code-text:             #29261B;
   --color-terminal-bg:           #29261B;
   --color-terminal-text:         #FAF9F5;
+  --color-terminal-fg:           #FAF9F5;
+  --color-terminal-cursor:       #D97757;
+  --color-terminal-cursor-accent:#29261B;
+  --color-terminal-selection:           rgba(217, 119, 87, 0.35);
+  --color-terminal-selection-inactive:  rgba(217, 119, 87, 0.2);
+  --color-terminal-black:         #29261B;
+  --color-terminal-red:           #FF453A;
+  --color-terminal-green:         #30D158;
+  --color-terminal-yellow:        #FFD60A;
+  --color-terminal-blue:          #0A84FF;
+  --color-terminal-magenta:       #FF375F;
+  --color-terminal-cyan:          #5AC8FA;
+  --color-terminal-white:         #FAF9F5;
+  --color-terminal-bright-black:  #6B6860;
+  --color-terminal-bright-red:    #FF6961;
+  --color-terminal-bright-green:  #32D74B;
+  --color-terminal-bright-yellow: #FFD426;
+  --color-terminal-bright-blue:   #409CFF;
+  --color-terminal-bright-magenta:#FF6482;
+  --color-terminal-bright-cyan:   #70D7FF;
+  --color-terminal-bright-white:  #FFFFFF;
 
   /* === Links === */
   --color-link:                  #D97757;
@@ -161,6 +182,8 @@
   --color-code-text:             #EDEBE0;
   --color-terminal-bg:           #1E1E1C;
   --color-terminal-text:         #EDEBE0;
+  --color-terminal-fg:           #EDEBE0;
+  --color-terminal-cursor-accent:#1E1E1C;
 
   /* === Links === */
   --color-link:                  #E8A47A;

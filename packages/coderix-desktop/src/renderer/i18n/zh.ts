@@ -453,7 +453,13 @@ export const zh = {
   'error.retry': '重试',
 
   // ── 终端 ────────────────────────────────────────────
+  'terminal.title': '终端',
   'terminal.close': '关闭终端',
+  'terminal.new': '新建终端',
+  'terminal.closeTab': '关闭 {title}',
+  'terminal.exited': '进程已退出',
+  'terminal.contextMenu.copy': '复制',
+  'terminal.contextMenu.paste': '粘贴',
 
   // ── 浏览器侧栏 ─────────────────────────────────────
   'nav.browser': '浏览器',

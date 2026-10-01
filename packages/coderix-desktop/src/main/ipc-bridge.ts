@@ -1237,11 +1237,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
 
-    terminalManager.create(terminalId, {
+    const result = await terminalManager.create(terminalId, {
       cwd: opts.cwd ?? currentWorkDir,
       rows: opts.rows ?? 30,
       cols: opts.cols ?? 120,
-      startupCommand: 'coderix\n',
       onData: (data: string) => {
         safeSend(mainWindow, `terminal:${terminalId}:data`, data);
       },
@@ -1250,7 +1249,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       },
     });
 
-    return { terminalId };
+    return {
+      terminalId: result.id,
+      shell: result.shell,
+      fontFamily: result.fontFamily,
+      fontSize: result.fontSize,
+      theme: result.theme,
+      fontFamilySource: result.fontFamilySource,
+      windowsPty: result.windowsPty,
+    };
   });
 
   ipcMain.on(IPC_CHANNELS.TERMINAL_WRITE, (_event, payload: { sessionId: string; data: string }) => {
