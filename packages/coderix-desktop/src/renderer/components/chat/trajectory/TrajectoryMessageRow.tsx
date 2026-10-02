@@ -10,6 +10,9 @@ import { formatThinkingDuration, type TrajectoryWorkRow } from './trajectoryType
  *   - reasoning → ThinkingBlock ("思考" · 持续了几秒, collapsed by default)
  *   - tool      → ToolRenderer (Chinese label + summary, collapsed by default)
  *   - text      → intermediate assistant text (ContentBlockRenderer)
+ *
+ * Non-text rows render muted gray (see .trajectory-work-muted); text rows
+ * stay fully readable.
  */
 export function TrajectoryMessageRow({
   row,
@@ -23,12 +26,14 @@ export function TrajectoryMessageRow({
   if (row.kind === 'reasoning') {
     const content = row.blocks.map((b) => b.content ?? '').join('\n');
     return (
-      <ThinkingBlock
-        content={content}
-        isStreaming={row.isStreaming ?? isStreaming}
-        reveal={reveal}
-        label={formatThinkingDuration(row.durationMs)}
-      />
+      <div className="trajectory-work-muted">
+        <ThinkingBlock
+          content={content}
+          isStreaming={row.isStreaming ?? isStreaming}
+          reveal={reveal}
+          label={formatThinkingDuration(row.durationMs)}
+        />
+      </div>
     );
   }
 
@@ -45,15 +50,17 @@ export function TrajectoryMessageRow({
   const block = row.blocks[0];
   if (!block) return null;
   return (
-    <ToolRenderer
-      toolName={block.toolName ?? 'Tool'}
-      toolInput={block.toolInput}
-      state={block.state}
-      toolId={block.toolId}
-      toolResult={block.toolResult}
-      toolMetadata={block.toolMetadata}
-      reveal={reveal}
-    />
+    <div className="trajectory-work-muted">
+      <ToolRenderer
+        toolName={block.toolName ?? 'Tool'}
+        toolInput={block.toolInput}
+        state={block.state}
+        toolId={block.toolId}
+        toolResult={block.toolResult}
+        toolMetadata={block.toolMetadata}
+        reveal={reveal}
+      />
+    </div>
   );
 }
 
