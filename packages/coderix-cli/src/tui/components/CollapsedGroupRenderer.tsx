@@ -71,7 +71,7 @@ export function CollapsedGroupRenderer({
   }
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text dimColor>{summary}</Text>

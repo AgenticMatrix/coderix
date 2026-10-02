@@ -33,7 +33,7 @@ export function ReadRenderer(props: ToolUseRendererProps): React.ReactNode {
   const hasResult = isDone && result && resultLines.length > 0;
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       {hasPath ? (
         <>
           <Text>

@@ -17,7 +17,7 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Error state
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>Glob</Text>
@@ -36,7 +36,7 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Done state
   if (isDone) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>Glob</Text>
@@ -61,7 +61,7 @@ export function GlobRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>Glob</Text>

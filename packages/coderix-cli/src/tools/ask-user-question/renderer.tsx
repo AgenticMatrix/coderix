@@ -19,7 +19,7 @@ export function AskUserQuestionRenderer(
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>AskUserQuestion</Text>
@@ -35,7 +35,7 @@ export function AskUserQuestionRenderer(
       | undefined;
     const firstHeader = questions?.[0]?.header ?? '';
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>AskUserQuestion</Text>
@@ -64,7 +64,7 @@ export function AskUserQuestionRenderer(
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>AskUserQuestion</Text>

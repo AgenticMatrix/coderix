@@ -7,18 +7,19 @@ import { MessageBubble } from '../MessageBubble.js';
 import type { Message } from '../../../types.js';
 
 /**
- * BLOCK SPACING: TWO BLANK LINES, EVERYWHERE, COUNTED ONCE.
+ * BLOCK SPACING: ONE BLANK LINE, EVERYWHERE, COUNTED ONCE.
  *
- * The rule (commit 09a9a7b): tool blocks are separated by two blank lines.
- * The defect that kept reappearing: the two blank lines lived on the tool
- * renderer's root `marginBottom={2}`, while `MessageBubble` added a
- * message-level `marginBottom={1}` on top. Ink/Yoga does not collapse
- * margins across nesting levels, so a tool card ending a message — the
- * normal case, since a tool call ends the turn — rendered 2 + 1 = 3 blank
- * lines before the tool result, while a text block (no margin of its own)
- * got 0 lines to the next block and a result message got 1.
+ * The rule: blocks (text, tool cards, results, boundaries) are separated
+ * by exactly one blank line. The defect that kept reappearing when the
+ * gap was two: the blank lines lived on the tool renderer's root
+ * `marginBottom`, while `MessageBubble` added a message-level margin on
+ * top. Ink/Yoga does not collapse margins across nesting levels, so a
+ * tool card ending a message — the normal case, since a tool call ends
+ * the turn — rendered 2 + 1 = 3 blank lines before the tool result,
+ * while a text block (no margin of its own) got 0 lines to the next
+ * block and a result message got 1.
  *
- * The fix moves ALL vertical spacing to the block level; message-level
+ * The fix keeps ALL vertical spacing at the block level; message-level
  * containers carry none. These tests pin the rule by rendering the real
  * `MessageBubble` and counting blank rows in the emulated screen — what
  * the user sees, not what the margin props claim.
@@ -130,7 +131,7 @@ async function renderRows(messages: Message[]): Promise<string[]> {
 }
 
 describe('spacing between blocks', () => {
-  it('is exactly two blank lines between text, tool card and tool result', async () => {
+  it('is exactly one blank line between text, tool card and tool result', async () => {
     const rows = await renderRows([
       textMessage('First text block.'),
       bashToolMessage(),
@@ -145,18 +146,18 @@ describe('spacing between blocks', () => {
     const iText2 = firstRowWith(rows, 'Second text block');
 
     // text → tool card (same assistant message)
-    expect(gapBefore(rows, iTool)).toBe(2);
+    expect(gapBefore(rows, iTool)).toBe(1);
     // tool card → tool result (across the message boundary — the reported 3-line bug)
-    expect(gapBefore(rows, iResultBorder)).toBe(2);
+    expect(gapBefore(rows, iResultBorder)).toBe(1);
     // tool result → next text block
-    expect(gapBefore(rows, iText2)).toBe(2);
+    expect(gapBefore(rows, iText2)).toBe(1);
     // markers stay in order
     expect(iText1).toBeLessThan(iTool);
     expect(iTool).toBeLessThan(iResultBorder);
     expect(iResultBorder).toBeLessThan(iText2);
   });
 
-  it('is exactly two blank lines between consecutive tool cards', async () => {
+  it('is exactly one blank line between consecutive tool cards', async () => {
     const rows = await renderRows([
       {
         id: nextId++,
@@ -187,10 +188,10 @@ describe('spacing between blocks', () => {
     const iFirst = firstRowWith(rows, 'echo one');
     const iSecond = firstRowWith(rows, 'echo two');
     expect(iFirst).toBeLessThan(iSecond);
-    expect(gapBefore(rows, iSecond)).toBe(2);
+    expect(gapBefore(rows, iSecond)).toBe(1);
   });
 
-  it('is exactly two blank lines between consecutive tool results in one message', async () => {
+  it('is exactly one blank line between consecutive tool results in one message', async () => {
     const rows = await renderRows([
       {
         id: nextId++,
@@ -225,7 +226,7 @@ describe('spacing between blocks', () => {
       (r, i) => i > iFirst && r.trimStart().startsWith('┌'),
     );
     expect(iSecondBorder, 'second result card border should exist').toBeGreaterThan(-1);
-    expect(gapBefore(rows, iSecondBorder)).toBe(2);
+    expect(gapBefore(rows, iSecondBorder)).toBe(1);
   });
 
   it('indents the tool result card by the icon column once, not twice', async () => {

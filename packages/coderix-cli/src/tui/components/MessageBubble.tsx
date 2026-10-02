@@ -293,7 +293,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
       const tr = block as ToolResultBlock;
       const ResultRenderer = getToolResultRenderer(tr.toolName);
       return (
-        <Box key={idx} flexDirection="row" marginBottom={2}>
+        <Box key={idx} flexDirection="row" marginBottom={1}>
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
             <ResultRenderer
@@ -364,7 +364,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
     if (block.type === 'compaction') {
       const cb = block as CompactionBoundary;
       return (
-        <Box key={idx} flexDirection="row" marginBottom={2}>
+        <Box key={idx} flexDirection="row" marginBottom={1}>
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
             <CompactionBoundaryRenderer
@@ -412,7 +412,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
     if (block.type === 'subagent_boundary') {
       const sb = block as import('../../types.js').SubagentBoundaryBlock;
       return (
-        <Box key={idx} flexDirection="row" marginBottom={2}>
+        <Box key={idx} flexDirection="row" marginBottom={1}>
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
             <SubagentBoundaryRenderer
@@ -496,7 +496,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
                     ? truncateTextByLines(block.content, maxLines)
                     : block.content;
                   return (
-                    <Box key={idx} flexDirection="row" marginBottom={2}>
+                    <Box key={idx} flexDirection="row" marginBottom={1}>
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
                         <MarkdownRenderer
@@ -516,7 +516,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
 
         {/* Fallback: legacy string content when no blocks */}
         {!hasBlocks && displayContent ? (
-          <Box flexDirection="row" marginBottom={2}>
+          <Box flexDirection="row" marginBottom={1}>
             <Box width={2} flexShrink={0} />
             <Box flexGrow={1}>
               <MarkdownRenderer

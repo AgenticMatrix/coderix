@@ -95,7 +95,7 @@ export function BashRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Always return JSX to avoid null→JSX transition that may cause remount.
   // Render an empty placeholder until command is available.
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       {hasCommand ? (
         <>
           <Text>

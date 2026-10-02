@@ -52,7 +52,7 @@ export function BaseToolRenderer({
   const statusColor = (active ? 'ansi:yellow' : isDone ? 'ansi:green' : state === 'error' ? 'ansi:red' : 'ansi:blackBright') as Color;
 
   return (
-    <Box flexDirection="row" marginBottom={2}>
+    <Box flexDirection="row" marginBottom={1}>
       {/* Icon column */}
       <Box width={2} flexShrink={0}>
         <Text color={statusColor}>{statusIcon}</Text>
