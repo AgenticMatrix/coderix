@@ -296,6 +296,15 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
 
             case 'done':
               flushDeltas(true);
+              // Safety net: ensure isStreaming is reset even when message_stop
+              // was not received (non-streaming provider, compacted turn,
+              // aborted stream). Without this the visible flag survives past
+              // the end of the turn and the ActivityLine keeps rendering
+              // "Streaming…" forever while the status bar shows idle.
+              // Mirrors useAgentBridge's done handler.
+              dispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: currentAssistantId ?? 0 });
+              // The engine emitted `done`: only now may the activity phase
+              // fall back to idle (and show the Done line).
               dispatch({ type: 'FINISH_TURN' });
               break;
           }
