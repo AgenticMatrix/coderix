@@ -557,6 +557,15 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     [state.subAgentView, state.messages, state.savedMainMessages],
   );
 
+  // ── Viewed-agent liveness ─────────────────────────────────────
+  // In a sub-agent view, the viewed agent's registry status is ground truth
+  // for "something is still running". A turn whose flags say streaming but
+  // whose agent is no longer running is dead — nothing can still arrive.
+  // (Defined here so both statusPhase and currentPhase can use it.)
+  const viewedAgentId = state.subAgentView?.agentId ?? null;
+  const viewedAgentRunning =
+    viewedAgentId == null || agentsRef.current[viewedAgentId]?.status === 'running';
+
   // ── Status bar phase ──────────────────────────────────────────
   // busy: main agent is active (streaming / thinking / sync tool execution)
   // wait: sub-agents or background tools are running
@@ -582,9 +591,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     }
     // Between LLM calls (tools settling, next call not started yet) the turn
     // has NOT finished responding — stay 'wait' instead of flipping to idle.
-    if (!state.respondingDone) return 'wait';
+    // A dead turn (viewed sub-agent no longer running, so nothing can still
+    // arrive) falls through to idle, staying consistent with currentPhase.
+    if (!state.respondingDone && viewedAgentRunning) return 'wait';
     return 'idle';
-  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick, state.respondingDone]);
+  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick, state.respondingDone, viewedAgentRunning]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -866,6 +877,18 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // idle: no activity
   const latestThinking = useMemo(() => findLatestThinking(displayMessages), [displayMessages]);
 
+  // ── LLM liveness ─────────────────────────────────────────────
+  // `isStreaming` is set on message_start and cleared on message_stop /
+  // FINISH_ASSISTANT_RESPONSE / INTERRUPT / error. Two stale cases survive
+  // past the real end of a turn, and neither may render as live activity:
+  //   1. The engine emitted `done` (respondingDone) without a message_stop —
+  //      the flag is simply never reset.
+  //   2. A sub-agent turn ended silently (abort without INTERRUPT) — the
+  //      viewed agent is no longer running, so nothing can still arrive.
+  // In both cases the turn is dead: the ActivityLine must show Done, not
+  // Streaming…/Thinking….
+  const llmOutputting = state.isStreaming && viewedAgentRunning && !state.respondingDone;
+
   // Last computed phase — used to bridge the gaps BETWEEN LLM calls within
   // one turn (after a message_stop, while tools settle and the next call has
   // not started yet).  Until the engine emits `done` (respondingDone), the
@@ -876,9 +899,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     if (state.error) return 'idle';
     if (state.isCompacting) return 'compacting';
     // Only treat an unfinished thinking block as active thinking when the
-    // stream is still in progress.  If isStreaming is false the block is
-    // stale and we fall through so the ActivityLine can show Done/Interrupted.
-    if (latestThinking && latestThinking.duration == null && state.isStreaming) return 'thinking';
+    // LLM is actually still outputting. Otherwise the block is stale (the
+    // turn ended without finalizing it) and we fall through so the
+    // ActivityLine can show Done/Interrupted.
+    if (latestThinking && latestThinking.duration == null && llmOutputting) return 'thinking';
+    // Background tools / sub-agents still running — must NOT show Done.
     const lastMsg = state.messages[state.messages.length - 1];
     const hasActive =
       lastMsg?.blocks.some(
@@ -888,12 +913,14 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     for (const agent of Object.values(agentsRef.current)) {
       if (agent.status === 'running') return 'executing';
     }
-    if (state.isStreaming) return 'streaming';
-    // The model has not finished responding (engine `done` not yet received).
-    // Keep the current phase unchanged instead of showing a premature Done.
-    if (!state.respondingDone) return prevPhaseRef.current;
+    if (llmOutputting) return 'streaming';
+    // The model has not finished responding (engine `done` not yet received)
+    // and the turn is still alive — keep the current phase unchanged instead
+    // of showing a premature Done. A dead turn (no process running at all)
+    // falls through to idle.
+    if (!state.respondingDone && viewedAgentRunning) return prevPhaseRef.current;
     return 'idle';
-  }, [state.error, state.isCompacting, latestThinking, state.messages, state.isStreaming, agentTick, state.respondingDone]);
+  }, [state.error, state.isCompacting, latestThinking, state.messages, llmOutputting, agentTick, state.respondingDone, viewedAgentRunning]);
   prevPhaseRef.current = currentPhase;
 
   // Turn elapsed timer — starts on new user message, runs continuously until next user message
