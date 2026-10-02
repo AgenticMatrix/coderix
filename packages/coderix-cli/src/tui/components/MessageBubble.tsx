@@ -293,7 +293,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
       const tr = block as ToolResultBlock;
       const ResultRenderer = getToolResultRenderer(tr.toolName);
       return (
-        <Box key={idx} flexDirection="row">
+        <Box key={idx} flexDirection="row" marginBottom={2}>
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
             <ResultRenderer
@@ -364,7 +364,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
     if (block.type === 'compaction') {
       const cb = block as CompactionBoundary;
       return (
-        <Box key={idx} flexDirection="row">
+        <Box key={idx} flexDirection="row" marginBottom={2}>
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
             <CompactionBoundaryRenderer
@@ -412,7 +412,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
     if (block.type === 'subagent_boundary') {
       const sb = block as import('../../types.js').SubagentBoundaryBlock;
       return (
-        <Box key={idx} flexDirection="row">
+        <Box key={idx} flexDirection="row" marginBottom={2}>
           <Box width={2} flexShrink={0} />
           <Box flexGrow={1}>
             <SubagentBoundaryRenderer
@@ -439,15 +439,8 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
     });
     if (filteredBlocks.length === 0) return null;
     return (
-      <Box flexDirection="column" marginBottom={1}>
-        {filteredBlocks.map((block, idx) => (
-          <Box key={idx} flexDirection="row">
-            <Box width={2} flexShrink={0} />
-            <Box flexGrow={1}>
-              {renderBlock(block, idx)}
-            </Box>
-          </Box>
-        ))}
+      <Box flexDirection="column">
+        {filteredBlocks.map((block, idx) => renderBlock(block, idx))}
       </Box>
     );
   }
@@ -455,7 +448,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
   // ── Assistant ─────────────────────────────────────────────
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column">
       <Box flexDirection="column">
         {/* Render blocks in their natural order */}
         {hasBlocks
@@ -503,7 +496,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
                     ? truncateTextByLines(block.content, maxLines)
                     : block.content;
                   return (
-                    <Box key={idx} flexDirection="row">
+                    <Box key={idx} flexDirection="row" marginBottom={2}>
                       <Box width={2} flexShrink={0} />
                       <Box flexGrow={1}>
                         <MarkdownRenderer
@@ -523,7 +516,7 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
 
         {/* Fallback: legacy string content when no blocks */}
         {!hasBlocks && displayContent ? (
-          <Box flexDirection="row">
+          <Box flexDirection="row" marginBottom={2}>
             <Box width={2} flexShrink={0} />
             <Box flexGrow={1}>
               <MarkdownRenderer
