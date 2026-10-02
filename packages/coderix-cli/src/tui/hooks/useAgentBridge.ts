@@ -151,6 +151,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         case 'APPEND_ASSISTANT_TEXT':
         case 'APPEND_ASSISTANT_THINKING':
         case 'FINISH_ASSISTANT_RESPONSE':
+        case 'FINISH_TURN':
         case 'INTERRUPT':
         case 'UPDATE_TOKEN_USAGE':
         case 'QUEUED_MESSAGE':
@@ -530,6 +531,11 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
               flushDeltas(true);
               // Safety net: ensure isStreaming is false after turn completes
               routeDispatch({ type: 'FINISH_ASSISTANT_RESPONSE', id: 0 });
+              // The model has finished responding for this turn — only now
+              // may the activity phase go idle and show the Done line.
+              // (Between LLM calls, e.g. while tools settle, the phase
+              // keeps its current value instead of flipping to Done.)
+              routeDispatch({ type: 'FINISH_TURN' });
               routeDispatch({ type: 'DEQUEUED_MESSAGE' });
               break;
 

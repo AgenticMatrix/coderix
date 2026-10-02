@@ -290,6 +290,11 @@ export interface ChatState extends CoreState {
   queuedCount: number;
   /** When true, the current turn was interrupted via Ctrl+C. */
   interrupted: boolean;
+  /** When true, the model has finished responding (engine emitted `done`)
+   *  and no more LLM calls are expected this turn. False between LLM calls
+   *  (tool-execution gaps) so the UI keeps its current activity phase
+   *  instead of flipping to idle/showing Done prematurely. */
+  respondingDone: boolean;
   /** When true, /compact is actively running — used to show progress in ActivityLine. */
   isCompacting: boolean;
   /** Accumulated text from compact LLM summarization streaming. */
@@ -320,6 +325,7 @@ export type ChatAction =
   | { type: 'APPEND_ASSISTANT_THINKING'; id: number; text: string }
   // Lifecycle
   | { type: 'FINISH_ASSISTANT_RESPONSE'; id: number }
+  | { type: 'FINISH_TURN' }
   | { type: 'INTERRUPT' }
   | { type: 'INTERRUPT_AND_UNDO' }
   | { type: 'SHOW_EXIT_HINT' }

@@ -296,6 +296,7 @@ export function useSubAgentBridge({ engine, dispatch, setAppState }: SubAgentBri
 
             case 'done':
               flushDeltas(true);
+              dispatch({ type: 'FINISH_TURN' });
               break;
           }
         }

@@ -887,8 +887,20 @@ export function App(): React.ReactElement {
   // While streaming, derive a finer-grained status from the blocks being
   // built: an in-flight tool_use → "executing"; otherwise the most recent
   // block type drives the label (thinking → "thinking", text → "output").
+  //
+  // Only show 'idle' once the model has actually finished responding for this
+  // turn (respondingDone).  Between LLM calls (tools settling between two
+  // model turns) isStreaming can be momentarily false even though another
+  // response is coming — in that gap we keep the previous status instead of
+  // flashing idle.
+  const respondingDone = useChatStore((s) => s.respondingDone);
+  const prevAgentStatusRef = useRef<'idle' | 'thinking' | 'executing' | 'output'>('idle');
   const agentStatus = useMemo<'idle' | 'thinking' | 'executing' | 'output'>(() => {
-    if (!isStreaming) return 'idle';
+    if (!isStreaming) {
+      if (respondingDone) return 'idle';
+      // Turn still in flight (between LLM calls) — keep current status.
+      return prevAgentStatusRef.current;
+    }
     const blocks = streamCurrentMessage?.blocks ?? [];
     const toolRunning = blocks.some(
       (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
@@ -899,7 +911,8 @@ export function App(): React.ReactElement {
     if (last.type === 'thinking' || last.type === 'tool_result') return 'thinking';
     if (last.type === 'text') return 'output';
     return 'thinking';
-  }, [isStreaming, streamCurrentMessage]);
+  }, [isStreaming, respondingDone, streamCurrentMessage]);
+  prevAgentStatusRef.current = agentStatus;
 
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an
