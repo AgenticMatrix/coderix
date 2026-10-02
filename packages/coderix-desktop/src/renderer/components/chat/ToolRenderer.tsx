@@ -477,7 +477,7 @@ export function ToolRenderer({
             {getToolIcon(toolName)}
           </span>
           {header.name && (
-            <span className="font-medium text-[var(--color-text-primary)] flex-shrink-0">
+            <span className="text-[var(--color-text-primary)] flex-shrink-0">
               {header.name}{header.sep}
             </span>
           )}

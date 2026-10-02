@@ -167,6 +167,13 @@
   margin-left: var(--space-2);
 }
 
+/* Non-text rows (thinking + tool cards) render muted gray — they read as
+   secondary history noise; intermediate text rows stay fully readable. */
+.trajectory-work-muted {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
 .trajectory-row-divider {
   height: 1px;
   background: var(--color-separator);
