@@ -58,7 +58,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>SendMessage</Text>
@@ -79,7 +79,7 @@ export function SendMessageRenderer(props: ToolUseRendererProps): React.ReactNod
   const moreCount = wrappedLines.length - 1;
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>SendMessage</Text>

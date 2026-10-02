@@ -216,7 +216,7 @@ export function ThinkingBlockRenderer({ content, thinkingExpanded, thinkingDurat
     : thinkingLines;
 
   return (
-    <Box flexDirection="row" marginBottom={2}>
+    <Box flexDirection="row" marginBottom={1}>
       <Box flexDirection="column" flexGrow={1}>
         <Box paddingLeft={2} flexDirection="column">
           {logicalLines.map((line, i) => (

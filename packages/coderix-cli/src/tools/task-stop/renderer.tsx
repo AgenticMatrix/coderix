@@ -26,7 +26,7 @@ export function TaskStopRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Error state
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>TaskStop</Text>
@@ -40,7 +40,7 @@ export function TaskStopRenderer(props: ToolUseRendererProps): React.ReactNode {
   // Done state — show inline result
   if (isDone) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TaskStop</Text>
@@ -57,7 +57,7 @@ export function TaskStopRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicator = (isExecuting || isPending) ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>TaskStop</Text>

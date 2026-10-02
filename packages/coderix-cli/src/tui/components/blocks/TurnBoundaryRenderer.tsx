@@ -28,7 +28,7 @@ export function TurnBoundaryRenderer({ turnId, summary }: TurnBoundaryRendererPr
   const line = `──── ${parts.join(' · ')} ────`;
 
   return (
-    <Box flexDirection="row" marginBottom={2} marginTop={0}>
+    <Box flexDirection="row" marginBottom={1} marginTop={0}>
       <Text dimColor color="ansi:blackBright">{line}</Text>
     </Box>
   );

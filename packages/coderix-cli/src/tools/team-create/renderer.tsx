@@ -17,7 +17,7 @@ export function TeamCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   // Error state
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>TeamCreate</Text>
@@ -35,7 +35,7 @@ export function TeamCreateRenderer(props: ToolUseRendererProps): React.ReactNode
       : [];
 
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TeamCreate</Text>
@@ -65,7 +65,7 @@ export function TeamCreateRenderer(props: ToolUseRendererProps): React.ReactNode
   const indicatorColor = 'ansi:yellow';
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>TeamCreate</Text>

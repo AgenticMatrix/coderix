@@ -55,7 +55,7 @@ export function SubagentBlockRenderer({
   return (
     <Box
       flexDirection="row"
-      marginBottom={2}
+      marginBottom={1}
       paddingLeft={1}
     >
       <Text>

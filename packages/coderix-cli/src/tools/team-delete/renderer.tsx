@@ -15,7 +15,7 @@ export function TeamDeleteRenderer(props: ToolUseRendererProps): React.ReactNode
   // Error state
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">❌ </Text>
           <Text bold>TeamDelete</Text>
@@ -35,7 +35,7 @@ export function TeamDeleteRenderer(props: ToolUseRendererProps): React.ReactNode
     const extraLines = resultLines.length - 1;
 
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>TeamDelete</Text>
@@ -66,7 +66,7 @@ export function TeamDeleteRenderer(props: ToolUseRendererProps): React.ReactNode
   const indicatorColor = 'ansi:yellow';
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color={indicatorColor}>{indicator} </Text>
         <Text bold>TeamDelete</Text>

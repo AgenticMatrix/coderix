@@ -23,7 +23,7 @@ export function SpeculationBlockRenderer({ state }: SpeculationBlockRendererProp
   const { icon, color, label } = CONFIG[state];
 
   return (
-    <Box flexDirection="row" marginBottom={2} paddingLeft={1}>
+    <Box flexDirection="row" marginBottom={1} paddingLeft={1}>
       <Text
         dimColor={state === 'discarded'}
         color={color}

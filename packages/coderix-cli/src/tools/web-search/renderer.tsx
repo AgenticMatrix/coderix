@@ -16,7 +16,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
 
   if (isError) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:red">✕ </Text>
           <Text bold>WebSearch</Text>
@@ -29,7 +29,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
 
   if (isDone) {
     return (
-      <Box flexDirection="column" marginBottom={2}>
+      <Box flexDirection="column" marginBottom={1}>
         <Text>
           <Text color="ansi:green">● </Text>
           <Text bold>WebSearch</Text>
@@ -46,7 +46,7 @@ export function WebSearchRenderer(props: ToolUseRendererProps): React.ReactNode 
   const indicator = isExecuting ? (blinkOn ? '●' : '○') : '○';
 
   return (
-    <Box flexDirection="column" marginBottom={2}>
+    <Box flexDirection="column" marginBottom={1}>
       <Text>
         <Text color="ansi:yellow">{indicator} </Text>
         <Text bold>WebSearch</Text>

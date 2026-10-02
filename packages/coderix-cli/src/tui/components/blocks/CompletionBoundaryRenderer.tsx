@@ -20,7 +20,7 @@ export function CompletionBoundaryRenderer({ stopReason }: CompletionBoundaryRen
   const label = REASON_LABEL[stopReason] ?? stopReason;
 
   return (
-    <Box flexDirection="row" marginBottom={2} marginTop={0}>
+    <Box flexDirection="row" marginBottom={1} marginTop={0}>
       <Text dimColor color="ansi:green">
         ✓ {label}
         <Text dimColor color="ansi:blackBright"> ({stopReason})</Text>
