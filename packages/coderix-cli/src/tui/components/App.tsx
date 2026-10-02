@@ -580,8 +580,11 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     for (const agent of Object.values(agentsRef.current)) {
       if (agent.status === 'running') return 'wait';
     }
+    // Between LLM calls (tools settling, next call not started yet) the turn
+    // has NOT finished responding — stay 'wait' instead of flipping to idle.
+    if (!state.respondingDone) return 'wait';
     return 'idle';
-  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick]);
+  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick, state.respondingDone]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -863,6 +866,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // idle: no activity
   const latestThinking = useMemo(() => findLatestThinking(displayMessages), [displayMessages]);
 
+  // Last computed phase — used to bridge the gaps BETWEEN LLM calls within
+  // one turn (after a message_stop, while tools settle and the next call has
+  // not started yet).  Until the engine emits `done` (respondingDone), the
+  // phase must NOT fall through to idle, otherwise the ActivityLine would
+  // flash a premature "Done…" between two model calls.
+  const prevPhaseRef = useRef<ActivityPhase>('idle');
   const currentPhase = useMemo<ActivityPhase>(() => {
     if (state.error) return 'idle';
     if (state.isCompacting) return 'compacting';
@@ -880,8 +889,12 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
       if (agent.status === 'running') return 'executing';
     }
     if (state.isStreaming) return 'streaming';
+    // The model has not finished responding (engine `done` not yet received).
+    // Keep the current phase unchanged instead of showing a premature Done.
+    if (!state.respondingDone) return prevPhaseRef.current;
     return 'idle';
-  }, [state.error, state.isCompacting, latestThinking, state.messages, state.isStreaming, agentTick]);
+  }, [state.error, state.isCompacting, latestThinking, state.messages, state.isStreaming, agentTick, state.respondingDone]);
+  prevPhaseRef.current = currentPhase;
 
   // Turn elapsed timer — starts on new user message, runs continuously until next user message
   // Uses mainMessages (not state.messages) so the timer doesn't reset when
