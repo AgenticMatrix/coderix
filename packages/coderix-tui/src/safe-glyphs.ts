@@ -26,28 +26,29 @@
  * while visually-similar alternatives are **Neutral**, meaning 1 column in every
  * terminal regardless of locale:
  *
- *   U+23B8 ⎸  Neutral     U+23AF ⎯  Neutral     U+25B0 ▰  Neutral
+ *   U+2759 ❙  Neutral     U+23AF ⎯  Neutral     U+25B0 ▰  Neutral
  *   U+25C9 ◉  Neutral     U+2591 ░  Neutral     U+25AA ▪  Neutral
  *
  * So the fix is a substitution, not a downgrade to ASCII: pick the Neutral glyph
  * that looks closest. Widths below are from the Unicode East_Asian_Width table
  * and are asserted by the unit test alongside this file.
  *
- * SOLID VERSUS DASHED IS A FREE CHOICE; AMBIGUOUS VERSUS NEUTRAL IS NOT
+ * SOLID VERSUS DASHED, AND THE ONE DELIBERATE AMBIGUOUS EXCEPTION
  * The vertical separator was `╎` (U+254E, LIGHT DOUBLE DASH) — Neutral, but
- * visibly dashed, which read as an unfinished border. The dashes were never the
- * point: within U+2500..U+257F the dashed and half-line forms are the ONLY
- * Neutral ones, so `╎` was reached for as the nearest safe thing to `│`.
+ * visibly dashed, which read as an unfinished border. It was then tried as `⎸`
+ * (U+23B8) and the `❘❙❚` (U+2758..A) dingbat bars: all Neutral, but every one of
+ * them renders as a short centered stroke with blank space above and below, so
+ * stacked rows show gaps and the frame still reads as dashed. The only glyph
+ * that draws a genuinely full-height, continuous, thin vertical line is `│`
+ * (U+2502) itself.
  *
- * It is not the nearest. `⎸` (U+23B8, LEFT VERTICAL BOX LINE) is a full-height
- * SOLID rule and is also Neutral, so the dashes can go without giving up the
- * width guarantee. Other solid Neutral options, if the weight ever needs
- * changing: `❘` U+2758 (light), `❙` U+2759 (medium), `❚` U+275A (heavy).
- *
- * What cannot be used, however much it is wanted, is `│` (U+2502) itself, or
- * `┃` U+2503, or `─` U+2500 for the rule — all Ambiguous. Verified against the
- * East_Asian_Width table rather than assumed; the test beside this file fails on
- * any constant that regresses to an Ambiguous code point.
+ * `│` is East-Asian **Ambiguous**, so this is a deliberate, eyes-open exception
+ * to the Neutral-only rule: in a CJK-locale terminal that resolves Ambiguous to
+ * 2 columns it can wrap repainted chrome. It is accepted here because every
+ * Neutral alternative looks broken, and the unit test beside this file carves
+ * `VERTICAL_SEPARATOR` out explicitly rather than letting the exception spread.
+ * The horizontal rule and corners stay Neutral; do NOT reach for `┃` U+2503 or
+ * `─` U+2500 — they are Ambiguous with no redeeming full-height payoff.
  *
  * WHEN TO USE THIS
  * ----------------
@@ -61,10 +62,11 @@
 /**
  * Vertical separator for framed chrome and status-bar fields.
  *
- * Solid and full-height, unlike the dashed `╎` it replaced, and Neutral unlike
- * the `│` (U+2502) it resembles.
+ * `│` (U+2502) — the only glyph that renders as a full-height continuous thin
+ * line. It is East-Asian Ambiguous (see the deliberate-exception note in the
+ * file header); the unit test carves it out by name rather than banning it.
  */
-export const VERTICAL_SEPARATOR = '⎸'; // ⎸ LEFT VERTICAL BOX LINE
+export const VERTICAL_SEPARATOR = '│'; // │ BOX DRAWINGS LIGHT VERTICAL (U+2502)
 
 /** Horizontal rule for dividers. Neutral, unlike ─ (U+2500). */
 export const HORIZONTAL_RULE = '⎯'; // ⎯ HORIZONTAL LINE EXTENSION
@@ -99,42 +101,52 @@ export const ARROW_RIGHT = '⭢'; // ⭢ RIGHTWARDS TRIANGLE-HEADED ARROW
 /**
  * Box corners for framed chrome.
  *
- * Note that the ENTIRE box-drawing corner and tee repertoire (┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼
- * and the rounded ╭ ╮ ╯ ╰) is Ambiguous — within U+2500..U+257F only the dashed
- * and half-line forms are Neutral. So a frame cannot be built from box-drawing
- * characters at all without risking a wrap. These quine corners are Neutral and
- * read acceptably as a frame.
+ * These are the ordinary box-drawing corners `┌ ┐ └ ┘`. The ENTIRE box-drawing
+ * corner/tee repertoire is East-Asian **Ambiguous**, so — like `VERTICAL_SEPARATOR`
+ * — this is a deliberate, eyes-open exception to the Neutral-only rule: a frame
+ * built from the Neutral "quine" corners (`⌜ ⌝ ⌞ ⌟`) reads as four detached
+ * brackets rather than a connected table, which is worse than the wrap risk here.
+ * In a CJK-locale terminal that resolves Ambiguous to 2 columns these can wrap
+ * repainted chrome; that cost is accepted so the frame looks like a normal table.
  *
- * The same constraint applies to ink's own `borderStyle` prop, which draws from
- * `cli-boxes` and is therefore Ambiguous: avoid it on chrome that repaints.
+ * Note: ink's own named `borderStyle` presets are all Ambiguous too (and `classic`
+ * is pure ASCII); `SAFE_BORDER` below restates a box-drawing frame explicitly.
  */
-export const CORNER_TOP_LEFT = '⌜'; //     ⌜ TOP LEFT CORNER
-export const CORNER_TOP_RIGHT = '⌝'; //    ⌝ TOP RIGHT CORNER
-export const CORNER_BOTTOM_LEFT = '⌞'; //  ⌞ BOTTOM LEFT CORNER
-export const CORNER_BOTTOM_RIGHT = '⌟'; // ⌟ BOTTOM RIGHT CORNER
+export const CORNER_TOP_LEFT = '┌'; //     ┌ BOX DRAWINGS LIGHT DOWN AND RIGHT
+export const CORNER_TOP_RIGHT = '┐'; //    ┐ BOX DRAWINGS LIGHT DOWN AND LEFT
+export const CORNER_BOTTOM_LEFT = '└'; //  └ BOX DRAWINGS LIGHT UP AND RIGHT
+export const CORNER_BOTTOM_RIGHT = '┘'; // ┘ BOX DRAWINGS LIGHT UP AND LEFT
+
+/**
+ * Horizontal rule used for the top/bottom of `SAFE_BORDER`.
+ *
+ * This is `─` (U+2500), NOT the Neutral `HORIZONTAL_RULE` (`⎯`, U+23AF). The
+ * Neutral glyph floats at the character cell's mid-height, so it would leave a
+ * visible gap between the top rule and the `┌ ┐ └ ┘` corners. `─` is top-aligned
+ * and meets the corners cleanly, at the cost of being Ambiguous-width — the same
+ * deliberate exception the corners and `VERTICAL_SEPARATOR` already take. Kept
+ * separate from `HORIZONTAL_RULE` so the Neutral rule stays available for the
+ * `Divider` primitive, which does not need to connect to corners.
+ */
+const FRAME_RULE = '─'; // ─ BOX DRAWINGS LIGHT HORIZONTAL (U+2500)
 
 /**
  * Border presets for ink's `borderStyle`, which also accepts an explicit
  * `BoxStyle` object rather than only a named `cli-boxes` style.
  *
- * This matters because EVERY named style ink ships is built from Ambiguous-width
- * characters — `single` (┌─┐│┘└), `double` (╔═╗║╝╚), `round` (╭─╮│╯╰), `bold`
- * (┏━┓┃┛┗), `singleDouble`, `doubleSingle` and `arrow` (↑↓←→) alike. The sole
- * exception is `classic`, which is pure ASCII (+-|). So any bordered box in
- * chrome that repaints will wrap in a CJK-locale terminal unless it passes one
- * of these.
- *
- * `SAFE_BORDER` keeps a line-drawing look using Neutral glyphs; `SAFE_BORDER_ASCII`
- * is ink's `classic`, restated here so callers need not know that one named style
- * happens to be safe.
+ * `SAFE_BORDER` is an ordinary light box-drawing frame (`┌─┐│┘└`). Its glyphs are
+ * Ambiguous-width — a deliberate exception (see the corner and `VERTICAL_SEPARATOR`
+ * notes) taken so framed chrome looks like a normal connected table rather than
+ * detached brackets. `SAFE_BORDER_ASCII` is ink's `classic` (pure ASCII `+-|`),
+ * restated here for callers that want a guaranteed Neutral/Narrow frame.
  */
 export const SAFE_BORDER = Object.freeze({
   topLeft: CORNER_TOP_LEFT,
-  top: HORIZONTAL_RULE,
+  top: FRAME_RULE,
   topRight: CORNER_TOP_RIGHT,
   right: VERTICAL_SEPARATOR,
   bottomRight: CORNER_BOTTOM_RIGHT,
-  bottom: HORIZONTAL_RULE,
+  bottom: FRAME_RULE,
   bottomLeft: CORNER_BOTTOM_LEFT,
   left: VERTICAL_SEPARATOR,
 });
@@ -156,10 +168,10 @@ export const SAFE_BORDER_ASCII = Object.freeze({
  * regression, and so callers can migrate a string wholesale via `toSafeGlyphs`.
  */
 export const AMBIGUOUS_TO_SAFE: Readonly<Record<string, string>> = Object.freeze({
-  '│': VERTICAL_SEPARATOR, // │ -> ╎
-  '┃': VERTICAL_SEPARATOR, // ┃ -> ╎
-  '┆': VERTICAL_SEPARATOR, // ┆ -> ╎
-  '┊': VERTICAL_SEPARATOR, // ┊ -> ╎
+  // Vertical bars (│ ┃ ┆ ┊ ├ ┤) are intentionally NOT remapped: the only glyph
+  // that renders as a full-height continuous line is `│` itself, which is also
+  // Ambiguous, so there is no Neutral target to map them to. See the header's
+  // deliberate-exception note — chrome keeps `│` as-is.
   '─': HORIZONTAL_RULE, //    ─ -> ⎯
   '━': HORIZONTAL_RULE, //    ━ -> ⎯
   '┄': HORIZONTAL_RULE, //    ┄ -> ⎯
@@ -178,21 +190,15 @@ export const AMBIGUOUS_TO_SAFE: Readonly<Record<string, string>> = Object.freeze
   '↓': ARROW_DOWN, //         ↓ -> ⭣
   '←': ARROW_LEFT, //         ← -> ⭠
   '→': ARROW_RIGHT, //        → -> ⭢
-  '┌': CORNER_TOP_LEFT, //    ┌ -> ⌜
-  '╭': CORNER_TOP_LEFT, //    ╭ -> ⌜
-  '┐': CORNER_TOP_RIGHT, //   ┐ -> ⌝
-  '╮': CORNER_TOP_RIGHT, //   ╮ -> ⌝
-  '└': CORNER_BOTTOM_LEFT, // └ -> ⌞
-  '╰': CORNER_BOTTOM_LEFT, // ╰ -> ⌞
-  '┘': CORNER_BOTTOM_RIGHT, //┘ -> ⌟
-  '╯': CORNER_BOTTOM_RIGHT, //╯ -> ⌟
+  // Corners (┌ ╭ ┐ ╮ └ ╰ ┘ ╯) are intentionally NOT remapped: the frame now uses
+  // the ordinary box-drawing corners, which are themselves Ambiguous, so there is
+  // no Neutral target to map them to (mapping `┌`->`┌` would be a self-map). Same
+  // deliberate exception as the vertical bar — see the header note.
   // Tees and the cross have no Neutral box-drawing counterpart; the plain rule
   // is the least-bad substitute that keeps the line continuous.
   '┬': HORIZONTAL_RULE, //    ┬ -> ⎯
   '┴': HORIZONTAL_RULE, //    ┴ -> ⎯
   '┼': HORIZONTAL_RULE, //    ┼ -> ⎯
-  '├': VERTICAL_SEPARATOR, // ├ -> ╎
-  '┤': VERTICAL_SEPARATOR, // ┤ -> ╎
 });
 
 /**
