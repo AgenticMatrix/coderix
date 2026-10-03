@@ -32,9 +32,17 @@ import {
  * East Asian **Ambiguous** is exactly that trap: `string-width` resolves it to
  * 1 column, a CJK-locale terminal to 2. So the invariant is not merely
  * "width === 1" — it is "width === 1 *and* no locale can change that".
+ *
+ * `VERTICAL_SEPARATOR` and the four `CORNER_*` constants are DELIBERATE
+ * exceptions and are excluded here. `VERTICAL_SEPARATOR` is `│` (U+2502), the
+ * only glyph that renders a full-height continuous line; the corners are the
+ * ordinary box-drawing `┌ ┐ └ ┘`. All are Ambiguous, but every Neutral
+ * alternative (`⎸`/`❘❙❚`/`╎` for the bar, `⌜ ⌝ ⌞ ⌟` for the corners) reads as
+ * dashed bars or detached brackets rather than a connected table, so the width
+ * guarantee was traded away on purpose for these. See the header note in
+ * safe-glyphs.ts. They get their own assertions below.
  */
 const SAFE_GLYPHS = {
-  VERTICAL_SEPARATOR,
   HORIZONTAL_RULE,
   GAUGE_FILLED,
   GAUGE_EMPTY,
@@ -46,10 +54,6 @@ const SAFE_GLYPHS = {
   ARROW_DOWN,
   ARROW_LEFT,
   ARROW_RIGHT,
-  CORNER_TOP_LEFT,
-  CORNER_TOP_RIGHT,
-  CORNER_BOTTOM_LEFT,
-  CORNER_BOTTOM_RIGHT,
 };
 
 /** Width classes whose rendered column count depends on locale or is 2. */
@@ -76,6 +80,46 @@ describe('safe-glyphs', () => {
         expect(stringWidth(glyph)).toBe(1);
       });
     }
+  });
+
+  describe('VERTICAL_SEPARATOR is the one deliberate Ambiguous exception', () => {
+    it('is │ (U+2502), chosen for a full-height continuous line', () => {
+      expect(VERTICAL_SEPARATOR).toBe('│');
+      expect(VERTICAL_SEPARATOR.codePointAt(0)).toBe(0x2502);
+    });
+
+    it('is Ambiguous — accepted knowingly, and never added to AMBIGUOUS_TO_SAFE', () => {
+      // The whole point of the exception is that there is no Neutral glyph that
+      // renders a continuous line, so it must not appear as a remap source
+      // (that would map it to itself) nor target.
+      expect(eastAsianWidthType(VERTICAL_SEPARATOR.codePointAt(0)!)).toBe('ambiguous');
+      expect(AMBIGUOUS_TO_SAFE[VERTICAL_SEPARATOR]).toBeUndefined();
+      expect(Object.values(AMBIGUOUS_TO_SAFE)).not.toContain(VERTICAL_SEPARATOR);
+    });
+  });
+
+  describe('CORNER_* are deliberate Ambiguous exceptions (normal box corners)', () => {
+    const CORNERS = {
+      CORNER_TOP_LEFT: ['┌', 0x250c],
+      CORNER_TOP_RIGHT: ['┐', 0x2510],
+      CORNER_BOTTOM_LEFT: ['└', 0x2514],
+      CORNER_BOTTOM_RIGHT: ['┘', 0x2518],
+    } as const;
+    const VALUES = { CORNER_TOP_LEFT, CORNER_TOP_RIGHT, CORNER_BOTTOM_LEFT, CORNER_BOTTOM_RIGHT };
+
+    for (const [name, [glyph, cp]] of Object.entries(CORNERS)) {
+      it(`${name} is ${glyph} (U+${cp.toString(16).toUpperCase()})`, () => {
+        expect(VALUES[name as keyof typeof VALUES]).toBe(glyph);
+        expect(glyph.codePointAt(0)).toBe(cp);
+      });
+    }
+
+    it('are never added to AMBIGUOUS_TO_SAFE (would be self-maps)', () => {
+      for (const glyph of Object.values(VALUES)) {
+        expect(AMBIGUOUS_TO_SAFE[glyph]).toBeUndefined();
+        expect(Object.values(AMBIGUOUS_TO_SAFE)).not.toContain(glyph);
+      }
+    });
   });
 
   describe('AMBIGUOUS_TO_SAFE', () => {
@@ -111,9 +155,15 @@ describe('safe-glyphs', () => {
 
   describe('toSafeGlyphs', () => {
     it('substitutes ambiguous chrome glyphs', () => {
-      expect(toSafeGlyphs('│─█●○·')).toBe(
-        `${VERTICAL_SEPARATOR}${HORIZONTAL_RULE}${GAUGE_FILLED}${MARKER_SOLID}${MARKER_HOLLOW}${DOT_SEPARATOR}`,
+      expect(toSafeGlyphs('─█●○·')).toBe(
+        `${HORIZONTAL_RULE}${GAUGE_FILLED}${MARKER_SOLID}${MARKER_HOLLOW}${DOT_SEPARATOR}`,
       );
+    });
+
+    it('leaves │ untouched — it is the deliberate Ambiguous exception', () => {
+      // The vertical bar has no Neutral full-height counterpart, so it is kept
+      // verbatim rather than remapped.
+      expect(toSafeGlyphs('│')).toBe('│');
     });
 
     it('leaves ASCII untouched', () => {
