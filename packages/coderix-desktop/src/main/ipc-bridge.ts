@@ -1178,7 +1178,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (!path || typeof path !== 'string') {
       throw new Error('Invalid project path');
     }
-    const nextWorkDir = resolve(path);
+    // Expand a leading `~` (the workspace editor lets users type tilde paths).
+    const nextWorkDir = resolve(path.replace(/^~/, homedir()));
     if (!existsSync(nextWorkDir)) {
       throw new Error(`目录不存在: ${nextWorkDir}`);
     }
@@ -1217,6 +1218,33 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     return { canceled: false, path: nextWorkDir };
+  });
+
+  // Open a folder picker WITHOUT switching/remembering — the workspace editor
+  // previews the path in its input and only applies it on explicit confirm.
+  ipcMain.handle('project:pick', async () => {
+    const mainWindow = getMainWindow(windowManager);
+    if (!mainWindow) {
+      throw new Error('No main window');
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择项目目录',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: currentWorkDir };
+    }
+
+    return { canceled: false, path: resolve(result.filePaths[0]!) };
+  });
+
+  ipcMain.handle('project:remove', async (_event, path: string) => {
+    if (typeof path === 'string' && path.trim()) {
+      forgetProject(path);
+    }
+    return { paths: readRecentProjects() };
   });
 
   // ── Default workspace (per-conversation hash subdirs) ──────────────────
@@ -1798,6 +1826,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return { status: 'ok' };
   });
 
+  ipcMain.handle('app:homeDir', async () => ({ path: homedir() }));
+
   // -----------------------------------------------------------------------
   // Push channel registration helpers
   // -----------------------------------------------------------------------
@@ -2143,6 +2173,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler('project:list');
       ipcMain.removeHandler('project:set');
       ipcMain.removeHandler('project:select');
+      ipcMain.removeHandler('project:pick');
+      ipcMain.removeHandler('project:remove');
+      ipcMain.removeHandler('app:homeDir');
       ipcMain.removeHandler('defaultWorkspace:get');
       ipcMain.removeHandler('defaultWorkspace:set');
       ipcMain.removeHandler('defaultWorkspace:select');
@@ -2401,6 +2434,13 @@ function writeRecentProjects(paths: string[]): void {
 /** Move `path` to the front of the recent list and return the updated list. */
 function rememberProject(path: string): string[] {
   const next = [path, ...readRecentProjects().filter((p) => p !== path)].slice(0, MAX_RECENT_PROJECTS);
+  writeRecentProjects(next);
+  return next;
+}
+
+/** Remove `path` from the recent list and return the updated list. */
+function forgetProject(path: string): string[] {
+  const next = readRecentProjects().filter((p) => p !== path);
   writeRecentProjects(next);
   return next;
 }

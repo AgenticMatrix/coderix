@@ -17,6 +17,12 @@ export const zh = {
   'workspace.chooseDir': '选择目录',
   'workspace.chooseProject': '选择项目目录',
   'workspace.chooseNewDir': '选择新目录…',
+  'workspace.editTitle': '编辑工作区',
+  'workspace.browseFolder': '浏览文件夹',
+  'workspace.recentProjects': '最近项目',
+  'workspace.removeFromHistory': '从历史中移除',
+  'workspace.pathPlaceholder': '输入工作区路径…',
+  'workspace.invalidPath': '目录不存在或无法访问',
 
   // ── 设置 ──────────────────────────────────────────────
   'settings.title': '设置',

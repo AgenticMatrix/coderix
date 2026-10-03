@@ -552,6 +552,27 @@ export async function selectProjectDirectory(): Promise<{ canceled: boolean; pat
   );
 }
 
+/** Open a folder picker WITHOUT switching — returns the path for preview. */
+export async function pickProjectDirectory(): Promise<{ canceled: boolean; path: string }> {
+  return invokeWithTimeout('project:pick', () =>
+    getAPI().project.pick(),
+  );
+}
+
+/** Remove a path from the recent projects list. */
+export async function removeProjectDirectory(path: string): Promise<{ paths: string[] }> {
+  return invokeWithTimeout('project:remove', () =>
+    getAPI().project.remove(path),
+  );
+}
+
+/** Resolve the user's home directory (for `~` path expansion). */
+export async function getHomeDir(): Promise<{ path: string }> {
+  return invokeWithTimeout('app:homeDir', () =>
+    getAPI().app.homeDir(),
+  );
+}
+
 /** List recent project directories (most recent first). */
 export async function listProjectDirectories(): Promise<{ paths: string[] }> {
   return invokeWithTimeout('project:list', () =>

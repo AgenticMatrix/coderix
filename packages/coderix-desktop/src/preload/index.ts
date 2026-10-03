@@ -581,6 +581,16 @@ const coderixAPI = {
     select(): Promise<{ canceled: boolean; path: string }> {
       return ipcRenderer.invoke('project:select');
     },
+
+    /** Open a folder picker WITHOUT switching — returns the path for preview. */
+    pick(): Promise<{ canceled: boolean; path: string }> {
+      return ipcRenderer.invoke('project:pick');
+    },
+
+    /** Remove a path from the recent projects list. */
+    remove(path: string): Promise<{ paths: string[] }> {
+      return ipcRenderer.invoke('project:remove', path);
+    },
   },
 
   // ── Default workspace ────────────────────────────────────────────────────
@@ -819,6 +829,11 @@ const coderixAPI = {
     /** Open an http(s) URL in the system default browser. */
     openExternal(url: string): Promise<{ status: string; error?: string }> {
       return ipcRenderer.invoke(CH.APP_OPEN_EXTERNAL, url);
+    },
+
+    /** Resolve the user's home directory (for `~` path expansion). */
+    homeDir(): Promise<{ path: string }> {
+      return ipcRenderer.invoke('app:homeDir');
     },
   },
 
