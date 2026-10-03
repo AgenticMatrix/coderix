@@ -17,7 +17,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, ChevronDown, Plus, MessageSquarePlus } from 'lucide-react';
+import { FolderOpen, Folder, ChevronDown, MessageSquarePlus, Check, X } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
 import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
@@ -51,8 +51,11 @@ import {
   denyPermission,
   getProjectDirectory,
   selectProjectDirectory,
+  pickProjectDirectory,
   listProjectDirectories,
   setProjectDirectory,
+  removeProjectDirectory,
+  getHomeDir,
   listSkills,
   setSessionSkills,
   listSkillDirs,
@@ -154,6 +157,14 @@ export function App(): React.ReactElement {
   const [projectPath, setProjectPath] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
+  // Workspace editor popup state: the editable path, the filter query (kept in
+  // sync with the input), the resolved home dir for `~` previews, and any
+  // inline validation error shown when the typed path can't be switched to.
+  const [workspaceValue, setWorkspaceValue] = useState('');
+  const [workspaceQuery, setWorkspaceQuery] = useState('');
+  const [workspaceHome, setWorkspaceHome] = useState('');
+  const [workspaceError, setWorkspaceError] = useState('');
+  const workspaceInputRef = useRef<HTMLInputElement>(null);
   // The active session's own model ("provider/model" or bare name). Tracked
   // here (not read from the global default) so switching models in one session
   // never changes the model shown for any other session.
@@ -732,16 +743,54 @@ export function App(): React.ReactElement {
     }
   }, [switchToProject]);
 
-  const handleSelectRecentProject = useCallback(async (path: string) => {
-    setWorkspaceOpen(false);
-    if (!path || path === projectPath) return;
+  // ── Workspace editor popup ─────────────────────────────────────────────
+  // Confirm applies the typed/browsed path; browse only previews a picked dir
+  // into the input; remove drops an entry from the recent list. All mirror the
+  // agentstation WorkspaceButton flow (preview → confirm) rather than switching
+  // the moment a folder is picked.
+
+  const applyWorkspacePath = useCallback(
+    async (path: string) => {
+      const trimmed = path.trim();
+      if (!trimmed) return;
+      try {
+        const result = await setProjectDirectory(trimmed);
+        setWorkspaceError('');
+        await switchToProject(result.path);
+        setWorkspaceOpen(false);
+      } catch (err) {
+        console.error('[App] Failed to switch project directory:', err);
+        setWorkspaceError(t('workspace.invalidPath'));
+      }
+    },
+    [switchToProject, t],
+  );
+
+  const handleWorkspaceConfirm = useCallback(() => {
+    void applyWorkspacePath(workspaceValue);
+  }, [applyWorkspacePath, workspaceValue]);
+
+  const handleWorkspaceBrowse = useCallback(async () => {
     try {
-      const result = await setProjectDirectory(path);
-      await switchToProject(result.path);
+      const result = await pickProjectDirectory();
+      if (result.canceled) return;
+      setWorkspaceValue(result.path);
+      setWorkspaceQuery(result.path);
+      setWorkspaceError('');
+      workspaceInputRef.current?.focus();
     } catch (err) {
-      console.error('[App] Failed to switch project directory:', err);
+      console.error('[App] Failed to pick directory:', err);
     }
-  }, [projectPath, switchToProject]);
+  }, []);
+
+  const handleWorkspaceRemove = useCallback(async (path: string) => {
+    try {
+      const result = await removeProjectDirectory(path);
+      setRecentProjects(result.paths ?? []);
+    } catch (err) {
+      console.error('[App] Failed to remove recent project:', err);
+    }
+  }, []);
 
   // Switch the main-area surface (技能 / 插件 / 库), always leaving the
   // "project manage" (no-conversation) mode behind — only a library
@@ -821,13 +870,27 @@ export function App(): React.ReactElement {
     setWorkspaceOpen((prev) => {
       const next = !prev;
       if (next) {
+        // Seed the editor with the current workspace path and clear any stale
+        // filter/error, then focus + select the input for quick retyping.
+        setWorkspaceValue(projectPath);
+        setWorkspaceQuery('');
+        setWorkspaceError('');
         listProjectDirectories()
           .then((result) => setRecentProjects(result.paths ?? []))
           .catch(() => {});
+        if (!workspaceHome) {
+          getHomeDir()
+            .then((r) => setWorkspaceHome(r.path))
+            .catch(() => {});
+        }
+        setTimeout(() => {
+          workspaceInputRef.current?.focus();
+          workspaceInputRef.current?.select();
+        }, 0);
       }
       return next;
     });
-  }, []);
+  }, [projectPath, workspaceHome]);
 
   const handleComposerSubmit = useCallback(
     async (value: string) => {
@@ -938,6 +1001,21 @@ export function App(): React.ReactElement {
   // Workspace display name — the last path segment (folder name). Defaults to
   // the folder name so the menu header reads like the project's name.
   const workspaceName = projectPath ? getFolderName(projectPath) : t('workspace.chooseDir');
+
+  // Recent projects filtered by the workspace editor's query (case-insensitive
+  // substring match against the full path, like the agentstation picker).
+  const filteredRecentProjects = useMemo(() => {
+    if (!workspaceQuery.trim()) return recentProjects;
+    const lower = workspaceQuery.toLowerCase();
+    return recentProjects.filter((p) => p.toLowerCase().includes(lower));
+  }, [recentProjects, workspaceQuery]);
+
+  // Expand a leading `~` in the typed path using the resolved home dir, so the
+  // preview can show the concrete directory a tilde path resolves to.
+  const expandedWorkspaceValue = useMemo(() => {
+    if (!workspaceHome || !workspaceValue.startsWith('~')) return workspaceValue;
+    return workspaceHome + workspaceValue.slice(1);
+  }, [workspaceValue, workspaceHome]);
 
   // The currently-attached app (null when no app is open).
   const activeApp = useMemo(() => APPS.find((a) => a.id === activeAppId) ?? null, [activeAppId]);
@@ -1077,38 +1155,108 @@ export function App(): React.ReactElement {
             </button>
 
             {workspaceOpen && (
-              <div className="absolute bottom-full left-11 mb-1 z-50 w-72 max-w-[calc(100vw-4rem)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] rounded-[var(--radius-md)] shadow-lg py-1">
-                {recentProjects.length > 0 && (
-                  <>
-                    {recentProjects.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => handleSelectRecentProject(p)}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-bg-tertiary)] ${p === projectPath ? 'text-[var(--color-brand)]' : 'text-[var(--color-text-primary)]'}`}
-                        title={p}
-                      >
-                        <span className="flex items-center gap-2">
-                          <FolderOpen size={12} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
-                          <span className="truncate">
-                            <span className="font-medium">{getFolderName(p)}</span>
-                            <span className="text-[var(--color-text-tertiary)]">  {p}</span>
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                    <div className="my-1 h-px bg-[var(--color-separator)]" />
-                  </>
-                )}
+              <div className="absolute bottom-full left-11 mb-1 z-50 w-[min(500px,calc(100vw-4rem))] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] rounded-[var(--radius-md)] shadow-lg overflow-hidden">
+                {/* Header — title + cancel/confirm */}
+                <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-[var(--color-separator)]">
+                  <span className="text-xs font-semibold text-[var(--color-text-primary)]">{t('workspace.editTitle')}</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceOpen(false)}
+                      className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                    >
+                      <X size={13} />
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleWorkspaceConfirm}
+                      disabled={!workspaceValue.trim()}
+                      className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-quaternary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Check size={13} />
+                      {t('common.confirm')}
+                    </button>
+                  </div>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => { setWorkspaceOpen(false); void handleProjectSelect(); }}
-                  className="w-full text-left px-3 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] flex items-center gap-2"
-                >
-                  <Plus size={12} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
-                  <span>{t('workspace.chooseNewDir')}</span>
-                </button>
+                {/* Body */}
+                <div className="p-3.5">
+                  {/* Path input + browse */}
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      ref={workspaceInputRef}
+                      className="flex-1 min-w-0 px-2.5 py-1.5 border border-[var(--color-separator)] rounded-[var(--radius-sm)] text-[13px] font-mono text-[var(--color-text-primary)] bg-[var(--color-bg-secondary)] outline-none focus:border-[var(--color-brand)] transition-colors"
+                      value={workspaceValue}
+                      onChange={(e) => {
+                        setWorkspaceValue(e.target.value);
+                        setWorkspaceQuery(e.target.value);
+                        setWorkspaceError('');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); handleWorkspaceConfirm(); }
+                        else if (e.key === 'Escape') { setWorkspaceOpen(false); }
+                      }}
+                      placeholder={t('workspace.pathPlaceholder')}
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleWorkspaceBrowse}
+                      title={t('workspace.browseFolder')}
+                      className="flex items-center justify-center w-8 h-8 border border-[var(--color-separator)] rounded-[var(--radius-sm)] bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] transition-colors flex-shrink-0"
+                    >
+                      <FolderOpen size={14} />
+                    </button>
+                  </div>
+
+                  {/* Inline error */}
+                  {workspaceError && (
+                    <div className="mt-1.5 text-[11px] text-[var(--color-danger)]">{workspaceError}</div>
+                  )}
+
+                  {/* Recent projects */}
+                  {filteredRecentProjects.length > 0 && (
+                    <div className="pt-2 pb-0.5 text-[11px] font-semibold text-[var(--color-text-tertiary)]">{t('workspace.recentProjects')}</div>
+                  )}
+                  {filteredRecentProjects.length > 0 && (
+                    <div className="mt-1.5 flex flex-col gap-0.5 max-h-40 overflow-y-auto border border-[var(--color-separator)] rounded-[var(--radius-sm)] p-1 bg-[var(--color-bg-primary)]">
+                      {filteredRecentProjects.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => {
+                            setWorkspaceValue(p);
+                            setWorkspaceQuery(p);
+                            setWorkspaceError('');
+                            workspaceInputRef.current?.focus();
+                          }}
+                          title={p}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-left text-xs leading-snug hover:bg-[var(--color-bg-secondary)] transition-colors w-full ${workspaceValue === p ? 'bg-[var(--color-brand-muted)]' : 'text-[var(--color-text-primary)]'}`}
+                        >
+                          <Folder size={13} className="flex-shrink-0 text-[var(--color-text-tertiary)]" />
+                          <span className="font-medium whitespace-nowrap">{getFolderName(p)}</span>
+                          <span className="text-[var(--color-text-tertiary)] text-[10px] truncate flex-1 min-w-0">{p}</span>
+                          <span
+                            className="flex-shrink-0 w-[18px] h-[18px] flex items-center justify-center rounded text-[13px] text-[var(--color-text-tertiary)] hover:bg-[var(--color-danger-muted)] hover:text-[var(--color-danger)] transition-colors"
+                            title={t('workspace.removeFromHistory')}
+                            onClick={(e) => { e.stopPropagation(); void handleWorkspaceRemove(p); }}
+                          >
+                            ×
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Tilde expansion preview */}
+                  {expandedWorkspaceValue !== workspaceValue && (
+                    <div className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--color-bg-secondary)] rounded-[var(--radius-sm)] text-xs font-mono text-[var(--color-text-secondary)]">
+                      <Folder size={12} className="flex-shrink-0" />
+                      <span className="truncate">{expandedWorkspaceValue}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

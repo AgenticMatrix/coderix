@@ -21,6 +21,12 @@ export const en: Record<TranslationKey, string> = {
   'workspace.chooseDir': 'Choose directory',
   'workspace.chooseProject': 'Choose project directory',
   'workspace.chooseNewDir': 'Choose new directory…',
+  'workspace.editTitle': 'Edit workspace',
+  'workspace.browseFolder': 'Browse folder',
+  'workspace.recentProjects': 'Recent projects',
+  'workspace.removeFromHistory': 'Remove from history',
+  'workspace.pathPlaceholder': 'Enter a workspace path…',
+  'workspace.invalidPath': 'Directory does not exist or is not accessible',
 
   // ── 设置 ──────────────────────────────────────────────
   'settings.title': 'Settings',
