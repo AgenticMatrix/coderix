@@ -13,7 +13,14 @@
 </div>
 
 <div align="center">
-<img src="./assets/screen.gif" width="80%" alt="Coderix Demo" />
+  <details open>
+    <summary><b>Desktop</b></summary>
+    <img src="./assets/desk_screen.gif" width="80%" alt="Coderix Desktop Demo" />
+  </details>
+  <details>
+    <summary><b>Terminal</b></summary>
+    <img src="./assets/screen.gif" width="80%" alt="Coderix Demo" />
+  </details>
 </div>
 
 Coderix is an AI coding agent that runs in your terminal or as a desktop app. It can read, write, and edit files, execute shell commands, search code, and more — all through natural-language conversation. One core engine powers several front ends: an Ink/React terminal UI (TUI), an Electron desktop app (React DOM + Monaco + xterm), a VS Code extension, and TypeScript / Python SDKs.
