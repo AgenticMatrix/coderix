@@ -692,27 +692,44 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                     sessionManager.addMessage(streamSessionId, { role: 'assistant', content: data.result });
                   }
                 } catch { /* ignore — best-effort persistence */ }
-                if (data.totalCost) {
+                // The emitted `usage` is this turn's *delta* (see claude-code-engine),
+                // so price it directly from the model's configured price rather than
+                // trusting the SDK's `total_cost_usd` (which uses the SDK's hardcoded
+                // pricing and ignores the user's settings).
+                const inputTokens = data.usage?.input_tokens ?? 0;
+                const outputTokens = data.usage?.output_tokens ?? 0;
+                const cacheReadTokens = data.usage?.cache_read_input_tokens ?? 0;
+                const inputPrice = sessionResolved?.inputPrice ?? activeConfig.inputPrice ?? 0;
+                const outputPrice = sessionResolved?.outputPrice ?? activeConfig.outputPrice ?? 0;
+                const cacheReadPrice = sessionResolved?.cacheReadPrice ?? activeConfig.cacheReadPrice ?? 0;
+                const currency = sessionResolved?.currency ?? activeConfig.currency ?? 'USD';
+                const turnCost =
+                  (inputTokens / 1_000_000) * inputPrice +
+                  (outputTokens / 1_000_000) * outputPrice +
+                  (cacheReadTokens / 1_000_000) * cacheReadPrice;
+                if (data.usage) {
                   try {
-                    sessionManager.addCost(streamSessionId, data.totalCost);
+                    sessionManager.addCost(streamSessionId, turnCost);
+                    // addCost only mutates the in-memory session; persist the
+                    // running total so a reloaded session doesn't reset to zero.
+                    const session = sessionManager.get(streamSessionId);
+                    if (session) sessionManager.saveSession(session);
                   } catch { /* ignore */ }
                 }
-                // Report the whole-session aggregate as the cumulative input/output
-                // (for the ↑/↓ arrows and cost) plus the last turn's per-call usage
-                // as the *current* context footprint. The SDK's `usage` is the
-                // aggregate (it sums cache reads across every turn); `lastUsage` is
-                // the latest assistant turn's usage, captured by the engine.
+                // Report this turn's delta (for the ↑/↓ arrows and cost) plus the
+                // last turn's per-call usage as the *current* context footprint.
                 if (data.usage) {
                   const last = data.lastUsage;
                   const contextTokens = last
                     ? (last.input_tokens ?? 0) + (last.output_tokens ?? 0) + (last.cache_read_input_tokens ?? 0)
-                    : (data.usage.input_tokens ?? 0) + (data.usage.output_tokens ?? 0) + (data.usage.cache_read_input_tokens ?? 0);
+                    : inputTokens + outputTokens + cacheReadTokens;
                   safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
-                    inputTokens: data.usage.input_tokens ?? 0,
-                    outputTokens: data.usage.output_tokens ?? 0,
-                    cacheReadInputTokens: data.usage.cache_read_input_tokens ?? 0,
+                    inputTokens,
+                    outputTokens,
+                    cacheReadInputTokens: cacheReadTokens,
                     cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
-                    totalCost: data.totalCost ?? 0,
+                    totalCost: turnCost,
+                    currency,
                     contextTokens,
                     sessionId: streamSessionId,
                   });

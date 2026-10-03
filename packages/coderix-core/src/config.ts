@@ -428,6 +428,11 @@ export interface ResolvedModel {
   maxTokens?: number;
   provider: string;
   protocol: 'anthropic' | 'openai';
+  /** Per-1M-token pricing (undefined when the model entry carries no price). */
+  currency?: string;
+  inputPrice?: number;
+  outputPrice?: number;
+  cacheReadPrice?: number;
 }
 
 /**
@@ -455,6 +460,7 @@ export function resolveModelByName(name: string): ResolvedModel | undefined {
       : entry.model[0];
     if (!found) return undefined;
     const selectedModel = modelName(found);
+    const price = typeof found === 'object' ? found.price : undefined;
     return {
       model: selectedModel,
       baseUrl: entry.base_url ?? '',
@@ -463,6 +469,10 @@ export function resolveModelByName(name: string): ResolvedModel | undefined {
       maxTokens: entry.max_tokens,
       provider: entry.provider ?? inferProvider(selectedModel),
       protocol: entry.protocol ?? detectProtocol(entry.base_url ?? ''),
+      currency: price?.currency,
+      inputPrice: price?.input,
+      outputPrice: price?.output,
+      cacheReadPrice: price?.cache_read_input,
     };
   };
 

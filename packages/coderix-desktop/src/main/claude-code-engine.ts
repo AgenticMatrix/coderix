@@ -33,6 +33,13 @@ import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-r
 const claudeSessionByCoderixSession = new Map<string, string>();
 
 /**
+ * Tracks the SDK's cumulative `result.usage` per Coderix session so each turn
+ * can report its own *delta* (the SDK reports whole-session aggregates, which
+ * the ipc-bridge would otherwise accumulate into inflated totals).
+ */
+const previousUsageBySession = new Map<string, { input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number }>();
+
+/**
  * Idle timeout for a Claude Code turn. The spawned `claude` CLI streams events
  * continuously while it runs (thinking deltas, tool progress, text), so a
  * genuinely silent stream means the subprocess is wedged (a hung model call,
@@ -538,13 +545,34 @@ export async function* runClaudeCodeQuery(
             // assistant turn to the Coderix session store (the in-process
             // engine does this itself; the SDK engine must hand it over).
             const result = (msg as { result?: string }).result;
+            // The SDK's `result.usage` is the whole-session aggregate (it sums
+            // input/cache-read across every resumed turn). Subtract the previous
+            // aggregate so the emitted usage is this turn's *delta*; the
+            // ipc-bridge then accumulates deltas into session totals and prices
+            // this turn's cost from the delta.
+            const cur = {
+              input_tokens: msg.usage.input_tokens ?? 0,
+              output_tokens: msg.usage.output_tokens ?? 0,
+              cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
+              cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
+            };
+            const prev = previousUsageBySession.get(sessionId);
+            const deltaUsage = prev
+              ? {
+                  input_tokens: cur.input_tokens - prev.input_tokens,
+                  output_tokens: cur.output_tokens - prev.output_tokens,
+                  cache_creation_input_tokens: cur.cache_creation_input_tokens - prev.cache_creation_input_tokens,
+                  cache_read_input_tokens: cur.cache_read_input_tokens - prev.cache_read_input_tokens,
+                }
+              : cur;
+            previousUsageBySession.set(sessionId, cur);
             yield {
               type: 'done',
               data: {
                 sessionId,
                 result,
                 stopReason: msg.stop_reason,
-                usage: msg.usage,
+                usage: deltaUsage,
                 totalCost: msg.total_cost_usd,
                 lastUsage: lastTurnUsage,
               },

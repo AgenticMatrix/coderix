@@ -981,6 +981,7 @@ export function App(): React.ReactElement {
           contextTokens: tokenUsage.contextTokens || undefined,
           contextMax,
           cost: tokenUsage.totalCost || undefined,
+          currency: tokenUsage.currency || undefined,
           gitBranch: gitBranch || undefined,
           gitAhead: gitAhead || undefined,
           gitBehind: gitBehind || undefined,
