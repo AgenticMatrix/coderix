@@ -13,7 +13,14 @@
 </div>
 
 <div align="center">
-<img src="./assets/screen.gif" width="80%" alt="Coderix 演示" />
+  <details open>
+    <summary><b>桌面版</b></summary>
+    <img src="./assets/desk_screen.gif" width="80%" alt="Coderix 桌面版演示" />
+  </details>
+  <details>
+    <summary><b>终端版</b></summary>
+    <img src="./assets/screen.gif" width="80%" alt="Coderix 演示" />
+  </details>
 </div>
 
 Coderix 是一个 AI 编程助手，可在终端或桌面应用中使用。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。同一套核心引擎驱动多个前端：Ink/React 终端界面（TUI）、Electron 桌面应用（React DOM + Monaco + xterm）、VS Code 扩展，以及 TypeScript / Python SDK。
