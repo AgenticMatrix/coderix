@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, ArrowUp, ArrowDown, DollarSign, GitBranch, Command, Terminal, Gauge, Sun, Moon, Settings } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDown, GitBranch, Command, Terminal, Gauge, Sun, Moon, Settings } from 'lucide-react';
 import { Badge, type BadgeProps } from './Badge';
 import { useT, type TranslationKey } from '../../i18n/index.js';
 import { useUIStore } from '../../store/uiStore';
@@ -17,8 +17,10 @@ export interface StatusBarProps {
   contextTokens?: number;
   /** Maximum context window size in tokens */
   contextMax?: number;
-  /** Cost in USD */
+  /** Cost */
   cost?: number;
+  /** Currency code for the cost (e.g. "USD", "CNY", "EUR"). */
+  currency?: string;
   /** Git branch */
   gitBranch?: string;
   /** Git ahead/behind counts */
@@ -45,10 +47,22 @@ function formatTokens(num: number): string {
   return String(num);
 }
 
-function formatCost(cost: number): string {
-  if (cost >= 1) return `$${cost.toFixed(2)}`;
-  if (cost >= 0.01) return `$${cost.toFixed(2)}`;
-  return '<$0.01';
+function currencySymbol(currency?: string): string {
+  switch ((currency ?? 'USD').toUpperCase()) {
+    case 'USD': return '$';
+    case 'CNY': return '¥';
+    case 'EUR': return '€';
+    case 'GBP': return '£';
+    case 'JPY': return '¥';
+    case 'KRW': return '₩';
+    default: return '$';
+  }
+}
+
+function formatCost(cost: number, currency?: string): string {
+  const sym = currencySymbol(currency);
+  if (cost >= 0.01) return `${sym}${cost.toFixed(2)}`;
+  return `<${sym}0.01`;
 }
 
 const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKey: TranslationKey; variant: NonNullable<BadgeProps['variant']> }> = {
@@ -73,6 +87,7 @@ export function StatusBar({
   contextTokens: contextFootprint,
   contextMax,
   cost,
+  currency,
   gitBranch,
   gitAhead = 0,
   gitBehind = 0,
@@ -191,10 +206,7 @@ export function StatusBar({
       {/* Cost */}
       {cost !== undefined && (
         <>
-          <span className="inline-flex items-center gap-1">
-            <DollarSign size={10} className="text-[var(--color-text-tertiary)]" />
-            <span>{formatCost(cost)}</span>
-          </span>
+          <span>{formatCost(cost, currency)}</span>
           <div className="w-px h-3 bg-[var(--color-separator)]" />
         </>
       )}
