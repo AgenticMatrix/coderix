@@ -948,19 +948,31 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     setCompletedTurn(null);
   }
 
-  // Show "Done" line when idle, clear it when activity resumes
+  // Show "Done" line when a turn has actually completed, clear it otherwise.
+  // Two guards keep it from showing on a bare launch / resume / mid-turn gap:
+  //   - turnStartedAt > 0: a user message was sent this session (ADD_USER_MESSAGE
+  //     stamps it; LOAD_CHAT does not, so initial load and resume stay 0).
+  //   - respondingDone: the engine emitted `done` for this turn. Without it the
+  //     brief window between ADD_USER_MESSAGE and the first message_start (where
+  //     currentPhase is still 'idle') would flash a premature "Done (0 tokens)".
+  // Elapsed is computed directly from turnStartRef rather than turnElapsedRef:
+  // turnElapsedRef is only refreshed by the 1s interval (during the active phase)
+  // and by the timer effect's idle branch (which runs AFTER this effect), so a
+  // turn finishing before the first tick read a stale 0, never set completedTurn,
+  // and left the sticky ActivityLine snapshot stuck on "✽ Streaming…" forever.
   useEffect(() => {
-    if (currentPhase === 'idle') {
-      if (turnElapsedRef.current > 0) {
+    if (currentPhase === 'idle' && state.respondingDone && state.turnStartedAt > 0) {
+      const elapsed = Date.now() - turnStartRef.current;
+      if (elapsed > 0) {
         setCompletedTurn({
-          elapsed: turnElapsedRef.current,
+          elapsed,
           tokens: state.turnOutputTokens,
         });
       }
     } else {
       setCompletedTurn(null);
     }
-  }, [currentPhase === 'idle', state.turnOutputTokens]);
+  }, [currentPhase === 'idle', state.respondingDone, state.turnStartedAt, state.turnOutputTokens]);
 
   // Elapsed timer — stops completely when idle, ticks at 1s when active.
   // Only calls setState when the displayed second changes to minimize re-renders.
