@@ -427,12 +427,13 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
   const compactFailures = { count: 0 };
   const MAX_AUTOCOMPACT_FAILURES = 3;
 
-  // Prevent infinite reactive-compact loops (only one per turn)
-  let thisTurnDidReactiveCompact = false;
+  // At most one compaction per turn. Prevents a successful compaction from
+  // immediately triggering a second one (manual → auto, or reactive loops).
+  let didCompactThisTurn = false;
 
   while (true) {
     // ── Per-turn reset ──────────────────────────────────────────────
-    thisTurnDidReactiveCompact = false;
+    didCompactThisTurn = false;
 
     // ── Manual /compact check ──────────────────────────────────────
     if (consumeManualCompactRequest()) {
@@ -444,6 +445,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         abortController.signal,
         { count: 0 },
       );
+      // Block the end-of-turn auto-compact check from running a 2nd compaction.
+      didCompactThisTurn = true;
     }
 
     // === Exit conditions ===
@@ -1199,8 +1202,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
       // ── Reactive Compact: context_too_large → compact + retry ──
       const classified = classifyError(err);
-      if (classified.category === 'context_too_large' && !thisTurnDidReactiveCompact) {
-        thisTurnDidReactiveCompact = true;
+      if (classified.category === 'context_too_large' && !didCompactThisTurn) {
+        didCompactThisTurn = true;
         hookManager?.onNotification(
           sessionId, cwd, 'warn',
           'Context too large — compacting and retrying...',
@@ -1625,7 +1628,8 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
     // === Context compaction check ===
     const currentTokens = tokenCountWithEstimation(messages);
-    if (autoCompactEnabled !== false && currentTokens / contextBudget > compactThreshold) {
+    if (autoCompactEnabled !== false && !didCompactThisTurn && currentTokens / contextBudget > compactThreshold) {
+      didCompactThisTurn = true;
       messages = yield* runCompaction(
         messages,
         currentTokens,
