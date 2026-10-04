@@ -58,3 +58,55 @@ describe('the flush policy needs capacity, not the shrunk height', () => {
     ).toBe(5);
   });
 });
+
+/**
+ * `eager` bypasses the capacity wait.
+ *
+ * The 75% policy trades flush-flicker against the room a flush buys, on the
+ * assumption that a committable message is safe to leave sitting in the live
+ * region for a few more frames. A newly-arrived user message breaks that
+ * assumption: it is inert and clipped by the sticky-bottom live window, so a
+ * frame spent uncommitted is a frame it is INVISIBLE — and unrecoverable, since
+ * only `<Static>` reaches terminal scrollback. The call site sets `eager` when
+ * the committable prefix just gained a user message, and the one flush is
+ * cheaper than a vanished row.
+ */
+describe('eager flush for a newly-committable user message', () => {
+  it('commits the whole prefix even when the content is short (room to spare)', () => {
+    // Without eager this returns 0 (there is room — see the test above).
+    expect(
+      shouldFlush({
+        committableCount: 5,
+        alreadyCommitted: 1,
+        liveContentRows: 3,
+        liveRegionRows: 23,
+        eager: true,
+      }),
+    ).toBe(5);
+  });
+
+  it('is a no-op when there is nothing new to commit, eager or not', () => {
+    expect(
+      shouldFlush({
+        committableCount: 2,
+        alreadyCommitted: 2,
+        liveContentRows: 3,
+        liveRegionRows: 23,
+        eager: true,
+      }),
+    ).toBe(0);
+  });
+
+  it('matches the normal path once the content already crowds the ceiling', () => {
+    // When a flush was due anyway, eager changes nothing.
+    expect(
+      shouldFlush({
+        committableCount: 5,
+        alreadyCommitted: 1,
+        liveContentRows: 18,
+        liveRegionRows: 23,
+        eager: true,
+      }),
+    ).toBe(5);
+  });
+});

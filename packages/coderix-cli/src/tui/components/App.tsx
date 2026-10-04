@@ -1178,6 +1178,20 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
 
   const [committedCount, setCommittedCount] = useState(0);
 
+  // Does the not-yet-committed, now-committable slice contain a user message?
+  // A user message is inert (plain text / complete tool_result) and is clipped
+  // by the sticky-bottom live region the moment the assistant reply grows past
+  // the window — so a frame spent uncommitted is a frame it is invisible, with
+  // no path to scrollback (only `<Static>` reaches it). When one appears in the
+  // committable prefix we flush eagerly, bypassing the 75% capacity wait, so the
+  // user's own message can never vanish between being typed and being committed.
+  const committablePrefixHasUser = useMemo(() => {
+    for (let i = committedCount; i < committableCount; i++) {
+      if (displayMessages[i]?.role === 'user') return true;
+    }
+    return false;
+  }, [displayMessages, committedCount, committableCount]);
+
   // A flush is a render-time decision about what the NEXT frame commits, so it
   // is applied in an effect rather than mid-render.
   //
@@ -1201,6 +1215,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
       liveContentRows: liveMetrics.height,
       liveRegionRows,
       alreadyCommitted: committedCount,
+      eager: committablePrefixHasUser,
     });
     if (next > 0) setCommittedCount(next);
   }, [
@@ -1210,6 +1225,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
     footerMetrics.height,
     rootRows,
     committedCount,
+    committablePrefixHasUser,
   ]);
 
   // History that shrank (cleared, undone, replaced) can never stay committed:

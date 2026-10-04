@@ -40,6 +40,16 @@ function settled(text = 'answer'): Message {
   } as Message;
 }
 
+function userText(text = 'question'): Message {
+  return {
+    id: nextId++,
+    role: 'user',
+    content: text,
+    blocks: [{ type: 'text', content: text }],
+    timestamp: Date.now(),
+  } as Message;
+}
+
 function withRunningTool(): Message {
   return {
     id: nextId++,
@@ -100,6 +110,31 @@ describe('the commit boundary at the end of a turn', () => {
     // un-migrated call site cannot silently commit a streaming message.
     const messages = [settled('first'), settled('second')];
     expect(splitTranscript(messages).committed.length).toBe(1);
+  });
+
+  it('commits a trailing user message immediately, even mid-stream', () => {
+    // The reported bug: the user types into a live turn, so the newest message
+    // is their own inert text. Holding it live (keepLive=1) left it clipped in
+    // the sticky-bottom ScrollBox the instant the assistant reply grew tall —
+    // invisible and unrecoverable. A user message is inert, so it must commit
+    // the moment it arrives, streaming or not.
+    const messages = [settled('first'), userText('用一个 子 agent 调研')];
+    const { committed, live } = splitTranscript(messages, { streaming: true });
+
+    expect(committed.length, 'both the prior answer and the user message commit').toBe(2);
+    expect(live, 'nothing is trapped in the clipped live region').toEqual([]);
+  });
+
+  it('still holds back a trailing streaming ASSISTANT message after a user message', () => {
+    // The guard still applies to what it was meant for: an assistant reply that
+    // can still change. A user message followed by a streaming assistant reply
+    // commits the user row but keeps the assistant reply live.
+    const messages = [settled('first'), userText('q'), settled('assistant reply')];
+    const { committed, live } = splitTranscript(messages, { streaming: true });
+
+    expect(committed.length).toBe(2);
+    expect(live.length).toBe(1);
+    expect(live[0]!.content).toBe('assistant reply');
   });
 
   it('is actually told the turn state by App.tsx', () => {
