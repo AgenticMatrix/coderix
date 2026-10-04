@@ -387,6 +387,11 @@ export const en: Record<TranslationKey, string> = {
   'tool.status.in_progress': 'In progress',
   'tool.status.completed': 'Completed',
   'tool.status.deleted': 'Deleted',
+  'tool.agent.label': 'Subagent',
+  'tool.agent.background': 'Background',
+  'tool.agent.stats': '{turns} turns · {tools} tools',
+  'tool.agent.stopped': 'Stopped',
+  'tool.agent.open': 'Open on the right',
 
   // ── 思考块 ────────────────────────────────────────────
   'thinking.thinking': 'Thinking',

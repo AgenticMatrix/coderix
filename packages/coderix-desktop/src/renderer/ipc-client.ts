@@ -681,3 +681,58 @@ export function onTokenUsage(callback: (stats: TokenUsage, sessionId?: string) =
     }, raw.sessionId);
   });
 }
+
+/** A sanitized sub-agent record forwarded from the main process. */
+export interface SubagentSummary {
+  id: string;
+  name?: string;
+  agentType?: string;
+  status: 'running' | 'done' | 'error' | 'stopped';
+  prompt?: string;
+  description?: string;
+  createdAt?: number;
+  finishedAt?: number;
+  turnCount?: number;
+  messageCount?: number;
+  toolCount?: number;
+  result?: string;
+  error?: string;
+  outputPath?: string;
+  toolUseId?: string;
+  /** Live transcript (core Message[]) — the sub-agent's running conversation. */
+  transcript?: unknown[];
+}
+
+export interface AgentLifecycleEvent {
+  type: 'agent_register' | 'agent_update' | 'agent_remove';
+  agentId: string;
+  agent?: SubagentSummary;
+}
+
+export function onAgentEvent(callback: (event: AgentLifecycleEvent) => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onAgentEvent((event) => {
+    callback({
+      type: event.type,
+      agentId: event.agentId,
+      agent: event.agent as SubagentSummary | undefined,
+    });
+  });
+}
+
+/** Load a sub-agent's full conversation transcript (core Message[]) from disk. */
+export function loadSubagentTranscript(
+  agentId: string,
+  sessionId: string,
+): Promise<unknown[] | null> {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return Promise.resolve(null);
+  }
+  return window.coderixAPI.loadSubagentTranscript(agentId, sessionId) as Promise<
+    unknown[] | null
+  >;
+}

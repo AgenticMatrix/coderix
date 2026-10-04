@@ -32,8 +32,8 @@ import type {
 } from '@coderix/core';
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
-import type { QueryEngineEvent, AgentEngine } from '@coderix/core';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName } from '@coderix/core';
+import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript } from '@coderix/core';
 import { runClaudeCodeQuery } from './claude-code-engine.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
@@ -57,6 +57,8 @@ export interface IpcBridgeConfig {
   reloadQueryEngine?: (workDir?: string, model?: string) => Promise<void>;
   /** Build a QueryEngine bound to one session (invoked lazily on first submit). */
   createEngineForSession?: (session: Session) => Promise<QueryEngine>;
+  /** Shared EventBus the per-session engine emits sub-agent lifecycle events on. */
+  eventBus?: EventBus;
 }
 
 /** Shared state a fresh engine bootstrap needs (no per-session callModel here). */
@@ -133,6 +135,8 @@ export const IPC_CHANNELS = {
   STATE_TOKEN_USAGE: 'state:tokenUsage',
   STATE_COST_UPDATE: 'state:costUpdate',
   STATE_COMPACT: 'state:compact',
+  AGENT_UPDATE: 'agent:update',
+  AGENT_TRANSCRIPT: 'agent:transcript',
   FS_FILE_CHANGED: 'fs:fileChanged',
   WINDOW_FOCUS: 'window:focus',
   APP_UPDATE_AVAILABLE: 'app:updateAvailable',
@@ -145,6 +149,36 @@ export const IPC_CHANNELS = {
 
 function getMainWindow(windowManager: WindowManager): BrowserWindow | null {
   return windowManager.getMainWindow() ?? null;
+}
+
+/**
+ * Strip non-serializable / heavy fields from a SubAgentRecord before it crosses
+ * the IPC boundary. `abortController`, `_backgroundResolve`, `pendingMessages`,
+ * `transcript` and `liveToolCalls` are runtime-only or large; the renderer only
+ * needs the summary + result to render the side pane.
+ */
+function sanitizeSubAgent(agent: SubAgentRecord): Record<string, unknown> {
+  return {
+    id: agent.id,
+    name: agent.name,
+    agentType: agent.agentType,
+    status: agent.status,
+    prompt: agent.prompt,
+    description: agent.description,
+    createdAt: agent.createdAt,
+    finishedAt: agent.finishedAt,
+    turnCount: agent.turnCount,
+    messageCount: agent.messageCount,
+    toolCount: agent.toolCount,
+    result: agent.result,
+    error: agent.error,
+    outputPath: agent.outputPath,
+    toolUseId: agent.toolUseId,
+    // Live transcript (shared reference) — forwarded so the side pane can
+    // render the sub-agent conversation in real time. The final completion
+    // update drops it, but the renderer preserves the last snapshot.
+    transcript: agent.transcript,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2094,6 +2128,58 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // -----------------------------------------------------------------------
 
   // -----------------------------------------------------------------------
+  // Sub-agent transcript loading
+  // -----------------------------------------------------------------------
+
+  // Load a sub-agent's full conversation transcript from disk (JSONL) so the
+  // renderer's side pane can render the complete sub-agent turn timeline, not
+  // just the compressed result string.
+  ipcMain.handle(
+    IPC_CHANNELS.AGENT_TRANSCRIPT,
+    async (_event, payload: { agentId: string; sessionId: string }) => {
+      const agentId = payload?.agentId;
+      const parentSessionId = payload?.sessionId;
+      if (!agentId || !parentSessionId) return null;
+      try {
+        const transcript = await getAgentTranscript(agentId, sessionDir(parentSessionId));
+        return transcript;
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  // -----------------------------------------------------------------------
+  // Sub-agent lifecycle forwarding
+  // -----------------------------------------------------------------------
+
+  // Forward agent_register / agent_update / agent_remove from the shared
+  // EventBus to the renderer so it can render live sub-agent status in the
+  // side pane. Other tool-request kinds (background tasks) are not rendered.
+  const unsubAgentEvents = config.eventBus
+    ? config.eventBus.toolRequests.subscribe({
+        next(req: ToolRequestEvent) {
+          if (
+            req.type !== 'agent_register' &&
+            req.type !== 'agent_update' &&
+            req.type !== 'agent_remove'
+          ) {
+            return;
+          }
+          safeSend(getMainWindow(windowManager), IPC_CHANNELS.AGENT_UPDATE, {
+            type: req.type,
+            agentId: req.agentId,
+            agent:
+              req.type === 'agent_remove'
+                ? undefined
+                : sanitizeSubAgent(req.agent as unknown as SubAgentRecord),
+          });
+        },
+        error() {},
+      })
+    : null;
+
+  // -----------------------------------------------------------------------
   // Public API
   // -----------------------------------------------------------------------
 
@@ -2136,6 +2222,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     },
 
     destroy(): void {
+      unsubAgentEvents?.();
+      ipcMain.removeHandler(IPC_CHANNELS.AGENT_TRANSCRIPT);
       for (const controller of abortControllers.values()) {
         controller.abort();
       }

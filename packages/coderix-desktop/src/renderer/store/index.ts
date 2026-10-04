@@ -13,5 +13,8 @@ export type { StreamState } from './streamStore.js';
 export { useBrowserStore } from './browserStore.js';
 export type { BrowserTab } from './browserStore.js';
 
+export { useSubagentStore } from './subagentStore.js';
+export type { SubagentState } from './subagentStore.js';
+
 export type { ChatMessage, SessionSummary, AggregatedTokenUsage } from './types.js';
 export { createId } from './types.js';
