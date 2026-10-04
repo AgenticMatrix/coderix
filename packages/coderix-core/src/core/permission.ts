@@ -4,7 +4,9 @@
  * In AUTO mode everything is auto-approved.
  * In PLAN mode, only SAFE operations are approved; everything else is denied.
  * In ASK mode, ALL operations require user confirmation.
- * In LOW mode, SAFE auto-approved, MUTATION/DESTRUCTIVE prompt the user.
+ * In LOW mode (acceptEdits), SAFE operations and file-editing operations
+ * (edit tools + filesystem bash commands) are auto-approved; other
+ * MUTATION/DESTRUCTIVE operations prompt the user.
  *
  * Optional PermissionRuleEngine integration: when rules are configured,
  * they are evaluated BEFORE the mode-based check. Rules can override
@@ -22,6 +24,25 @@ import {
   type PermissionRuleResult,
   type PermissionBehavior,
 } from './permission-rules.js';
+import { splitCommandBases } from '../tools/bash/command-tokenizer.js';
+
+// ── acceptEdits (LOW mode) auto-approval sets ────────────────────────
+
+/** Edit tools auto-approved in LOW mode (acceptEdits semantics). */
+const ACCEPT_EDITS_TOOLS = new Set(['write', 'update', 'notebookedit']);
+
+/**
+ * Filesystem bash commands auto-approved in LOW mode.
+ * Mirrors Claude Code's ACCEPT_EDITS_ALLOWED_COMMANDS minus rm/mv,
+ * which coderix classifies as DESTRUCTIVE and keeps prompting for.
+ */
+const ACCEPT_EDITS_FILESYSTEM_COMMANDS = new Set([
+  'mkdir',
+  'touch',
+  'rmdir',
+  'cp',
+  'sed',
+]);
 
 // ── Permission check types ──────────────────────────────────────────
 
@@ -212,11 +233,29 @@ export class PermissionEngine {
       };
     }
 
-    // LOW mode: auto-approve safe, ask for mutation/destructive
+    // LOW mode (acceptEdits): auto-approve safe ops, edit tools, and
+    // filesystem bash commands; ask for other mutation/destructive ops.
     if (this.mode === PermissionMode.LOW) {
       if (permission.riskLevel === RiskLevel.SAFE) {
         return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'low' } };
       }
+
+      // Edit tools (Write/Update/NotebookEdit) are auto-approved.
+      if (ACCEPT_EDITS_TOOLS.has(permission.toolName.toLowerCase())) {
+        return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'low' } };
+      }
+
+      // Bash filesystem commands are auto-approved: any subcommand whose
+      // base command is a filesystem command, mirroring acceptEdits.
+      if (permission.toolName.toLowerCase() === 'bash') {
+        const command = permission.input.command as string | undefined;
+        if (command && splitCommandBases(command).some(
+          (base) => ACCEPT_EDITS_FILESYSTEM_COMMANDS.has(base.toLowerCase()),
+        )) {
+          return { allowed: true, behavior: 'approve', reason: { type: 'mode_default', mode: 'low' } };
+        }
+      }
+
       return {
         allowed: false,
         behavior: 'ask_user',
