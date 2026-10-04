@@ -72,7 +72,7 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
     // Cap code tokens so prefix + code never exceeds the band width.
     const fittedTokens = truncateTokens(codeTokens, diffWidth - textWidth(prefix));
     return (
-      <Box key={i} width={diffWidth} backgroundColor={bgColor}>
+      <Box key={i} backgroundColor={bgColor}>
         <Text color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
         {fittedTokens.map((t, j) => (
           <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
@@ -106,11 +106,11 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
               {hunks.map((hunk, hi) => (
                 <React.Fragment key={hi}>
                   {hunk.skippedBefore > 0 ? (
-                    <Box width={diffWidth}>
+                    <Box>
                       <Text dimColor>... {hunk.skippedBefore} unchanged lines</Text>
                     </Box>
                   ) : hi > 0 ? (
-                    <Box width={diffWidth}>
+                    <Box>
                       <Text dimColor>...</Text>
                     </Box>
                   ) : null}
