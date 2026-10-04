@@ -599,6 +599,32 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                 onChange={(e) => patchFields({ maxContext: parseInt(e.target.value) || 0 })}
               />
             </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+              {[
+                { label: '128K', value: 128 * 1024 },
+                { label: '256K', value: 256 * 1024 },
+                { label: '512K', value: 512 * 1024 },
+                { label: '1M', value: 1024 * 1024 },
+              ].map((c) => (
+                <span
+                  key={c.label}
+                  onClick={() => patchFields({ maxContext: c.value })}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    border: '1px solid var(--color-separator)',
+                    background: fields.maxContext === c.value ? 'var(--color-brand)' : 'var(--color-input-bg)',
+                    color: fields.maxContext === c.value ? '#fff' : 'var(--color-text-primary)',
+                    fontSize: 'var(--text-xs)',
+                    fontFamily: 'var(--font-mono)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  {c.label}
+                </span>
+              ))}
+            </div>
 
             <div style={{ marginTop: '12px', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
               {t('provider.pricing')}

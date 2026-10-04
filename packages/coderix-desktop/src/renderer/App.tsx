@@ -980,11 +980,11 @@ export function App(): React.ReactElement {
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an
   // explicit max_context carry 0 (see settingsStore), so treat a non-positive
-  // value as "unknown" and fall back to the CLI's 131072 default.
+  // value as "unknown" and fall back to the 512K default.
   const contextMax = useMemo(() => {
-    if (!settings) return 131072;
+    if (!settings) return 512 * 1024;
     const name = sessionModel ?? settings.defaultModel ?? '';
-    if (!name) return 131072;
+    if (!name) return 512 * 1024;
     const slash = name.indexOf('/');
     const providerPart = slash >= 0 ? name.slice(0, slash) : null;
     const modelPart = slash >= 0 ? name.slice(slash + 1) : name;
@@ -992,10 +992,10 @@ export function App(): React.ReactElement {
       if (providerPart && p.name.toLowerCase() !== providerPart.toLowerCase()) continue;
       for (const m of p.models) {
         if (m.name !== modelPart) continue;
-        return m.maxContext > 0 ? m.maxContext : 131072;
+        return m.maxContext > 0 ? m.maxContext : 512 * 1024;
       }
     }
-    return 131072;
+    return 512 * 1024;
   }, [settings, sessionModel]);
 
   // Workspace display name — the last path segment (folder name). Defaults to

@@ -117,6 +117,10 @@ export interface QueryEngineEvent {
 // QueryEngine
 // ---------------------------------------------------------------------------
 
+// Default context window (tokens) used when a model carries no explicit
+// max_context and no budget is otherwise derived from model_list.
+const DEFAULT_CONTEXT_BUDGET = 512 * 1024;
+
 export class QueryEngine {
   private config: QueryEngineConfig;
   private permissionEngine: PermissionEngine;
@@ -133,7 +137,7 @@ export class QueryEngine {
   constructor(config: QueryEngineConfig) {
     this.config = {
       maxTurns: 500,
-      contextBudget: 180_000,
+      contextBudget: DEFAULT_CONTEXT_BUDGET,
       compactThreshold: 0.85,
       model: 'deepseek-v4-pro',
       ...config,
@@ -141,7 +145,7 @@ export class QueryEngine {
 
     // Derive contextBudget from the model's actual context window
     // when no explicit budget was set.  Falls back to the hardcoded
-    // 180_000 default when model_list has no max_context info.
+    // DEFAULT_CONTEXT_BUDGET when model_list has no max_context info.
     if (
       config.contextBudget === undefined &&
       config.settings?.model_list &&
@@ -485,7 +489,7 @@ export class QueryEngine {
         inputPrice: 0,
         outputPrice: 0,
         cacheReadPrice: 0,
-        maxContext: this.config.contextBudget ?? 180_000,
+        maxContext: this.config.contextBudget ?? DEFAULT_CONTEXT_BUDGET,
         briefMode: this.config.briefMode ?? false,
         autoCompactEnabled: this.config.autoCompactEnabled ?? true,
         compactThreshold: this.config.compactThreshold ?? 0.85,
@@ -495,7 +499,7 @@ export class QueryEngine {
     // Trim session.messages to prevent unbounded growth.
     // The query loop compacts its local copy independently, so the session
     // only needs to retain enough messages to reconstruct context on resume.
-    const trimBudget = Math.floor((this.config.contextBudget ?? 180_000) / 2);
+    const trimBudget = Math.floor((this.config.contextBudget ?? DEFAULT_CONTEXT_BUDGET) / 2);
     this.config.sessionManager.trimMessages(trimBudget);
     // Resolve autoCompactEnabled: config key + env var override
     const autoCompactEnabled = (() => {
@@ -674,7 +678,7 @@ export class QueryEngine {
     this.runningToolCount = 1;
 
     // Trim session messages before compacting (same as submitMessage)
-    const trimBudget = this.config.contextBudget ?? 180_000;
+    const trimBudget = this.config.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
     this.config.sessionManager.trimMessages(trimBudget);
 
     const messages = [...session.messages];
