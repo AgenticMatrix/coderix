@@ -12,7 +12,7 @@
  * to Claude Code.
  */
 
-import { query as claudeQuery } from '@anthropic-ai/claude-agent-sdk';
+import { query as claudeQuery, getSubagentMessages } from '@anthropic-ai/claude-agent-sdk';
 import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent } from '@coderix/core';
 import { PermissionMode } from '@coderix/core';
@@ -421,6 +421,11 @@ export async function* runClaudeCodeQuery(
     permissionMode: sdkMode,
     allowDangerouslySkipPermissions: sdkMode === 'bypassPermissions',
     includePartialMessages: true,
+    // Forward the sub-agent's full conversation (text + thinking + tool calls)
+    // as messages with `parent_tool_use_id` set, so the host can render each
+    // sub-agent's nested trajectory. Default is false, which only emits the
+    // sub-agent's tool_use/tool_result blocks (no thinking, no final text).
+    forwardSubagentText: true,
     abortController,
     // Drop `user` (~/.claude/settings.json) when a model endpoint is bound so
     // its `env` block can't override the bound baseUrl/apiKey.
@@ -514,10 +519,10 @@ export async function* runClaudeCodeQuery(
 
       switch (msg.type) {
         case 'stream_event':
-          yield { type: 'message', data: { type: 'stream_event', event: msg.event } };
+          yield { type: 'message', data: { type: 'stream_event', event: msg.event, parentToolUseId: msg.parent_tool_use_id } };
           break;
         case 'assistant':
-          yield { type: 'message', data: { type: 'assistant', message: msg.message } };
+          yield { type: 'message', data: { type: 'assistant', message: msg.message, parentToolUseId: msg.parent_tool_use_id, subagentType: msg.subagent_type, taskDescription: msg.task_description } };
           // Remember the latest turn's per-call usage so the final `result` can
           // report the *current* context footprint. The SDK's `result.usage` is
           // the whole-session aggregate (it sums input/cache-read across every
@@ -527,7 +532,7 @@ export async function* runClaudeCodeQuery(
           }
           break;
         case 'user':
-          yield { type: 'message', data: { type: 'user', message: msg.message } };
+          yield { type: 'message', data: { type: 'user', message: msg.message, parentToolUseId: msg.parent_tool_use_id } };
           break;
         case 'result':
           claudeSessionByCoderixSession.set(sessionId, msg.session_id);
@@ -591,5 +596,31 @@ export async function* runClaudeCodeQuery(
     throw err;
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
+  }
+}
+
+/**
+ * Resolve the Claude Code session id a Coderix session last used. Sub-agent
+ * transcripts are stored under the Claude Code session, so loading them needs
+ * this mapping (the coderix-session id ≠ the claude session id).
+ */
+export function getClaudeSessionId(coderixSessionId: string): string | undefined {
+  return claudeSessionByCoderixSession.get(coderixSessionId);
+}
+
+/**
+ * Load a sub-agent's full conversation transcript for the claude-code engine.
+ * Returns the raw message array (role/content), or null when not found.
+ */
+export async function loadClaudeSubagentTranscript(
+  claudeSessionId: string,
+  agentId: string,
+): Promise<unknown[] | null> {
+  try {
+    const messages = await getSubagentMessages(claudeSessionId, agentId);
+    if (!messages || messages.length === 0) return null;
+    return messages.map((m) => m.message).filter(Boolean);
+  } catch {
+    return null;
   }
 }

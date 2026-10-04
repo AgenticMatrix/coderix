@@ -25,6 +25,9 @@ export interface AppLayoutProps {
   onToggleDetailPanel?: () => void;
   appDisplayPanel?: ReactNode;
   appDisplayVisible?: boolean;
+  subagentPanel?: ReactNode;
+  subagentVisible?: boolean;
+  subagentWidth?: number;
 }
 
 /** Fixed width of the embedded browser sidebar. */
@@ -91,6 +94,9 @@ export function AppLayout({
   onToggleDetailPanel,
   appDisplayPanel,
   appDisplayVisible = false,
+  subagentPanel,
+  subagentVisible = false,
+  subagentWidth = 440,
 }: AppLayoutProps): React.ReactElement {
   const t = useT();
   // Browser column width — lives here (not inside the panel) so it survives
@@ -102,6 +108,8 @@ export function AppLayout({
   // the resizable panel always agree. Otherwise the header's browser/sidebar
   // toggle buttons stay pinned to the default width while the panel drags.
   const [detailWidthState, setDetailWidthState] = useState(detailWidth || 380);
+  // Sub-agent column width — lives here so it survives the pane being closed.
+  const [subagentWidthState, setSubagentWidthState] = useState(subagentWidth || 440);
 
   // Which panel (if any) is expanded to fill the window — mirrors
   // agentstation-app's `maximizedPanel`. Only one column can be maximized at a
@@ -158,6 +166,9 @@ export function AppLayout({
   // browser column (both are native WebContentsViews that share one visible slot).
   const showBrowser = fsNone ? browserPanelVisible && !appDisplayVisible : fsBrowser;
   const showAppDisplay = fsNone && appDisplayVisible;
+  // Sub-agent column — a dedicated right-hand column (like the browser) that
+  // shows the opened sub-agent conversations; hides when a panel is maximized.
+  const showSubagent = fsNone && subagentVisible;
 
   return (
     <div className="h-screen flex bg-[var(--color-bg-primary)] overflow-hidden">
@@ -380,6 +391,20 @@ export function AppLayout({
               resizable
             >
               {appDisplayPanel}
+            </BrowserResizableColumn>
+          )}
+
+          {/* Sub-agent column — the opened sub-agent conversations, rendered as
+              a dedicated resizable right-hand column (not a floating overlay). */}
+          {showSubagent && subagentPanel && (
+            <BrowserResizableColumn
+              width={subagentWidthState}
+              onResize={setSubagentWidthState}
+              minWidth={320}
+              maxWidth={browserMaxWidth}
+              resizable
+            >
+              {subagentPanel}
             </BrowserResizableColumn>
           )}
         </div>{/* closes main row */}

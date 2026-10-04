@@ -394,10 +394,12 @@ export function ToolRenderer({
   const t = useT();
   const expanded = isExpanded || reveal;
 
-  // The `Agent` tool spawns a sub-agent — render it as a dedicated ZCode-style
-  // summary card (bot icon + colored agent type + description + lifecycle)
-  // rather than the generic tool card below.
-  if (toolName.toLowerCase() === 'agent') {
+  // The `Agent` / `Task` tools spawn a sub-agent — render them as a dedicated
+  // ZCode-style summary card (bot icon + colored agent type + description +
+  // lifecycle) rather than the generic tool card below. `agent` is the Coderix
+  // engine's tool; `task` is Claude Code CLI's subagent tool.
+  const toolLower = toolName.toLowerCase();
+  if (toolLower === 'agent' || toolLower === 'task') {
     return (
       <AgentToolCallCard
         toolInput={toolInput}

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, X, Clock, CheckCircle2, XCircle, Loader2, Square } from 'lucide-react';
 import { useSubagentStore } from '../../store/subagentStore.js';
 import type { SubagentSummary } from '../../ipc-client.js';
@@ -12,14 +11,13 @@ import { buildTrajectoryCalls } from './trajectory/trajectoryTypes';
 import type { TrajectoryCall } from './trajectory/trajectoryTypes';
 
 /**
- * SubagentPane — right-hand drawer showing the sub-agent conversation(s) with a
- * tab bar to switch between them. The active tab renders its full conversation
- * with the same trajectory cards as the main agent (user prompt → collapsible
- * "已工作" region → final answer); live transcript arrives via agent_* events,
- * with an on-disk fallback for cold sessions.
+ * SubagentPane — a dedicated right-hand column (rendered inside AppLayout's
+ * resizable column shell) showing the sub-agent conversation(s) with a tab bar
+ * to switch between them. The active tab renders its full conversation with the
+ * same trajectory cards as the main agent (user prompt → collapsible "已工作"
+ * region → final answer); live transcript arrives via agent_* events, with an
+ * on-disk fallback for cold sessions.
  */
-
-const PANE_WIDTH = 440;
 
 function statusMeta(status: SubagentSummary['status'] | undefined): {
   icon: React.ReactNode;
@@ -76,7 +74,18 @@ function transcriptToCalls(
   transcript: unknown[],
   agent?: SubagentSummary,
 ): TrajectoryCall[] {
-  const chatMsgs = coreMessagesToChatMessages(transcript);
+  const msgs: unknown[] = Array.isArray(transcript) ? transcript : [];
+  // The claude-code sub-agent transcript starts with the assistant turns (the
+  // sub-agent's prompt lives on the Task tool input, not the transcript), so
+  // prepend it as the "user message" to mirror the main agent's trajectory
+  // (user → 已工作 → answer). The coderix transcript already starts with the
+  // user prompt, so this only fires when the first message isn't user.
+  const first = msgs[0] as { role?: string } | undefined;
+  const withPrompt =
+    agent?.prompt && first?.role !== 'user'
+      ? [{ role: 'user', content: agent.prompt }, ...msgs]
+      : msgs;
+  const chatMsgs = coreMessagesToChatMessages(withPrompt);
   if (chatMsgs.length > 0 && agent) {
     if (typeof agent.createdAt === 'number') {
       chatMsgs[0] = { ...chatMsgs[0], timestamp: agent.createdAt };
@@ -153,21 +162,9 @@ export function SubagentPane(): React.ReactElement | null {
   const meta = statusMeta(agent?.status);
   const calls = liveCalls ?? diskCalls ?? [];
   const hasTranscript = calls.length > 0;
-  const isOpen = tabs.length > 0;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          key="subagent-pane"
-          initial={{ x: PANE_WIDTH, opacity: 0.4 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: PANE_WIDTH, opacity: 0 }}
-          transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
-          className="fixed top-10 right-0 bottom-8 z-[var(--z-modal)] flex"
-          style={{ width: PANE_WIDTH }}
-        >
-          <div className="flex-1 h-full flex flex-col bg-[var(--color-bg-secondary)] border-l border-[var(--color-separator)]">
+    <div className="h-full flex flex-col bg-[var(--color-bg-secondary)]">
             {/* Header */}
             <div className="flex items-center gap-2 px-4 h-11 flex-shrink-0 border-b border-[var(--color-separator)]">
               <Bot size={15} className="text-[var(--color-text-tertiary)] flex-shrink-0" />
@@ -300,10 +297,7 @@ export function SubagentPane(): React.ReactElement | null {
                 </div>
               )}
             </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </div>
   );
 }
 

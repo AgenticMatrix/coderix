@@ -34,7 +34,7 @@ import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
 import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript } from '@coderix/core';
-import { runClaudeCodeQuery } from './claude-code-engine.js';
+import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } from './claude-code-engine.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
@@ -532,6 +532,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const claudeBlockIndexByStreamIndex = new Map<number, number>();
       const claudeRawInputByStreamIndex = new Map<number, string>();
 
+      // Sub-agent trajectory accumulation (claude-code engine only): keyed by the
+      // parent Task/Agent tool_use id (`parent_tool_use_id`). Messages produced
+      // inside a sub-agent land here and are forwarded to the renderer as a
+      // growing transcript, so each sub-agent's conversation renders in the side
+      // pane like the main agent's.
+      const subagentTranscripts = new Map<string, Message[]>();
+      const subagentMeta = new Map<string, { agentType?: string; description?: string }>();
+
       const flushClaudeAssistant = (): void => {
         if (claudeAssistantBlocks.length > 0) {
           claudeTurnMessages.push({ role: 'assistant', content: claudeAssistantBlocks });
@@ -554,7 +562,52 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 type: string;
                 event?: StreamEvent;
                 message?: { content: unknown; stop_reason?: string; usage?: CompletionUsage; model?: string };
+                parentToolUseId?: string | null;
+                subagentType?: string;
+                taskDescription?: string;
               };
+              // Sub-agent message (claude-code engine): `parentToolUseId` marks
+              // messages produced inside a Task/Agent sub-agent. Group them per
+              // sub-agent and forward as agent_register/agent_update so the
+              // renderer's side pane renders each sub-agent's trajectory in real
+              // time — instead of mixing them into the main conversation.
+              if (activeEngine === 'claude-code' && msg.parentToolUseId) {
+                const agentId = msg.parentToolUseId;
+                let transcript = subagentTranscripts.get(agentId);
+                if (!transcript) {
+                  transcript = [];
+                  subagentTranscripts.set(agentId, transcript);
+                }
+                if (msg.type === 'assistant' && msg.message) {
+                  if (!subagentMeta.has(agentId)) {
+                    subagentMeta.set(agentId, {
+                      agentType: msg.subagentType,
+                      description: msg.taskDescription,
+                    });
+                  }
+                  transcript.push({ role: 'assistant', content: msg.message.content as ContentBlock[] });
+                } else if (msg.type === 'user' && msg.message) {
+                  transcript.push({ role: 'user', content: msg.message.content as ContentBlock[] });
+                } else {
+                  // stream_event for the sub-agent — the `assistant` message
+                  // carries the complete turn, so skip the raw deltas.
+                  continue;
+                }
+                const meta = subagentMeta.get(agentId);
+                safeSend(mainWindow, IPC_CHANNELS.AGENT_UPDATE, {
+                  type: transcript.length === 1 ? 'agent_register' : 'agent_update',
+                  agentId,
+                  agent: {
+                    id: agentId,
+                    agentType: meta?.agentType,
+                    description: meta?.description,
+                    status: 'running',
+                    createdAt: Date.now(),
+                    transcript,
+                  },
+                });
+                continue;
+              }
               if (msg.type === 'stream_event' && msg.event) {
                 if (activeEngine === 'claude-code') {
                   accumulateClaudeStreamEvent(
@@ -703,6 +756,25 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // submitMessage(); the Claude Code engine hands its final result
               // through here so we can keep the session store in sync.
               if (activeEngine === 'claude-code') {
+                // Mark all accumulated sub-agents done now that the turn ended,
+                // so their side-pane status flips from "正在工作…" to "已工作".
+                for (const [agentId, transcript] of subagentTranscripts) {
+                  const meta = subagentMeta.get(agentId);
+                  safeSend(mainWindow, IPC_CHANNELS.AGENT_UPDATE, {
+                    type: 'agent_update',
+                    agentId,
+                    agent: {
+                      id: agentId,
+                      agentType: meta?.agentType,
+                      description: meta?.description,
+                      status: 'done',
+                      finishedAt: Date.now(),
+                      transcript,
+                    },
+                  });
+                }
+                subagentTranscripts.clear();
+                subagentMeta.clear();
                 const data = event.data as {
                   sessionId?: string;
                   result?: string;
@@ -2140,12 +2212,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const agentId = payload?.agentId;
       const parentSessionId = payload?.sessionId;
       if (!agentId || !parentSessionId) return null;
+      // Coderix engine path — per-agent JSONL under the session dir.
       try {
         const transcript = await getAgentTranscript(agentId, sessionDir(parentSessionId));
-        return transcript;
+        if (transcript) return transcript;
       } catch {
-        return null;
+        /* fall through to claude-code */
       }
+      // Claude Code engine path — sub-agent transcript under the CLI's session.
+      const claudeSessionId = getClaudeSessionId(parentSessionId);
+      if (claudeSessionId) {
+        const transcript = await loadClaudeSubagentTranscript(claudeSessionId, agentId);
+        if (transcript) return transcript;
+      }
+      return null;
     },
   );
 
