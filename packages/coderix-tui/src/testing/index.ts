@@ -6,5 +6,5 @@
  * by name instead of reaching across package boundaries with a relative path
  * (which puts the file outside the importing project's `rootDir`).
  */
-export { emulate, countRows } from './term-emulator.js';
+export { emulate, countRows, cjkLocaleWidth } from './term-emulator.js';
 export type { Screen } from './term-emulator.js';
