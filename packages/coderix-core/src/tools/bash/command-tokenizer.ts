@@ -129,6 +129,77 @@ export function extractCommandTokens(entries: ParseEntry[]): string[] {
   return tokens;
 }
 
+// ── Subcommand splitting ─────────────────────────────────────────────
+
+/**
+ * Shell operators that terminate one subcommand and start the next.
+ * Used by splitCommandBases to break a compound command into subcommands.
+ * Redirections (>, >>, <) and grouping operators are intentionally excluded.
+ */
+const COMMAND_SEPARATORS = new Set([
+  '|',
+  '|&',
+  '||',
+  '&&',
+  '&',
+  ';',
+  ';;',
+  ';&',
+  ';;&',
+]);
+
+/**
+ * Split a shell command into its subcommands and return each subcommand's
+ * base command (first token).
+ *
+ * Uses shell-quote's parse output to split on command separators
+ * (&&, ||, |, |&, &, ;). Redirections and grouping parentheses do NOT
+ * split. Empty subcommands (e.g. from a trailing `&&`) are skipped.
+ *
+ * Example:
+ *   splitCommandBases('mkdir -p a && cp x y | cat')
+ *   → ['mkdir', 'cp', 'cat']
+ *
+ * Returns [] on parse failure.
+ */
+export function splitCommandBases(command: string): string[] {
+  const result = tokenizeCommand(command);
+  if (!result.success) {
+    return [];
+  }
+
+  const bases: string[] = [];
+  let currentBase: string | null = null;
+
+  const flush = () => {
+    if (currentBase !== null) {
+      bases.push(currentBase);
+      currentBase = null;
+    }
+  };
+
+  for (const entry of result.entries) {
+    if (typeof entry === 'string') {
+      if (currentBase === null) {
+        currentBase = entry;
+      }
+      continue;
+    }
+
+    if (typeof entry === 'object' && entry !== null && 'op' in entry) {
+      const op = (entry as { op: string }).op;
+      if (COMMAND_SEPARATORS.has(op)) {
+        flush();
+      }
+      // Redirections and grouping operators do not split a subcommand.
+      continue;
+    }
+  }
+
+  flush();
+  return bases;
+}
+
 // ── Command extraction helpers ──────────────────────────────────────
 
 /**

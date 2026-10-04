@@ -73,6 +73,66 @@ describe('PermissionEngine', () => {
     });
   });
 
+  describe('LOW mode (acceptEdits)', () => {
+    beforeEach(() => {
+      engine.setMode(PermissionMode.LOW);
+    });
+
+    it('should approve safe operations', async () => {
+      const result = await engine.check({
+        toolName: 'Read', input: {}, riskLevel: RiskLevel.SAFE,
+      });
+      expect(result.allowed).toBe(true);
+      expect(result.behavior).toBe('approve');
+    });
+
+    it('should auto-approve edit tools', async () => {
+      for (const toolName of ['Write', 'Update', 'NotebookEdit']) {
+        const result = await engine.check({
+          toolName, input: {}, riskLevel: RiskLevel.MUTATION,
+        });
+        expect(result.allowed).toBe(true);
+        expect(result.behavior).toBe('approve');
+      }
+    });
+
+    it('should auto-approve filesystem bash commands', async () => {
+      for (const command of ['mkdir -p foo', 'touch a.txt', 'cp a b', 'sed -i s/x/y/ f']) {
+        const result = await engine.check({
+          toolName: 'Bash', input: { command }, riskLevel: RiskLevel.MUTATION,
+        });
+        expect(result.allowed).toBe(true);
+        expect(result.behavior).toBe('approve');
+      }
+    });
+
+    it('should still ask for rm and mv', async () => {
+      for (const command of ['rm -rf foo', 'mv a b']) {
+        const result = await engine.check({
+          toolName: 'Bash', input: { command }, riskLevel: RiskLevel.DESTRUCTIVE,
+        });
+        expect(result.allowed).toBe(false);
+        expect(result.behavior).toBe('ask_user');
+      }
+    });
+
+    it('should approve compound commands via filesystem subcommand', async () => {
+      const result = await engine.check({
+        toolName: 'Bash', input: { command: 'mkdir a && curl http://example.com' }, riskLevel: RiskLevel.DESTRUCTIVE,
+      });
+      expect(result.allowed).toBe(true);
+      expect(result.behavior).toBe('approve');
+    });
+
+    it('should still ask for non-filesystem mutation commands', async () => {
+      const result = await engine.check({
+        toolName: 'Bash', input: { command: 'git push' }, riskLevel: RiskLevel.MUTATION,
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.behavior).toBe('ask_user');
+    });
+  });
+
   describe('mode management', () => {
     it('should track current mode', () => {
       engine.setMode(PermissionMode.AUTO);
