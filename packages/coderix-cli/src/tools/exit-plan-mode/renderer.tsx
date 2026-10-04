@@ -7,7 +7,8 @@ import { MarkdownRenderer } from '../../tui/components/MarkdownRenderer.js';
 import { useToolTimer } from '../shared/useToolTimer.js';
 import type { ToolUseRendererProps } from '../types.js';
 
-const SEP = '╌'.repeat(100);
+const SEP_INDENT = 3;
+const SEP_MAX = 100;
 
 function readPlanFromDisk(): string | null {
   const plansDir = join(homedir(), '.coderix', 'plans');
@@ -31,6 +32,9 @@ export function ExitPlanModeRenderer(
   const isExecuting = props.state === 'executing';
   const isError = props.state === 'error';
   const { elapsedSecs, blinkOn } = useToolTimer(isExecuting);
+
+  // Separator fits within the terminal (minus indent) and never exceeds SEP_MAX.
+  const SEP = '╌'.repeat(Math.max(10, Math.min(SEP_MAX, (props.termWidth ?? 80) - SEP_INDENT)));
 
   const planText = props.input.plan as string | undefined;
   const preview = planText

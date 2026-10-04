@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Text } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { useToolTimer } from '../shared/useToolTimer.js';
-import { detectLanguage, highlightDiffLine } from '../shared/diffHighlight.js';
+import { detectLanguage, highlightDiffLine, truncateTokens } from '../shared/diffHighlight.js';
+import { textWidth } from '@coderix/tui';
 import type { ToolUseRendererProps } from '../types.js';
 
 const COLLAPSE_THRESHOLD = 5;
@@ -53,7 +54,12 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicatorColor = isError ? 'ansi:red' : isDone ? 'ansi:green' : 'ansi:yellow';
 
   const lang = hasPath ? detectLanguage(fp) : null;
-  const diffWidth = Math.max(20, Math.floor((props.termWidth ?? 80) * 0.9) - 2);
+  // Fit the diff band to the real content region: the list is indented by the
+  // ScrollBox/committed `paddingX` (1) plus this renderer's `paddingLeft={2}`,
+  // and we leave one column of right-edge margin so nothing wraps.
+  const DIFF_INDENT = 3;
+  const DIFF_RIGHT_MARGIN = 1;
+  const diffWidth = Math.max(20, (props.termWidth ?? 80) - DIFF_INDENT - DIFF_RIGHT_MARGIN);
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -84,10 +90,13 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 // Context lines: dim base color to terminal 'ansi:white' (gray-white),
                 // but keep highlight colors (magenta, green, etc.) as-is.
                 const dimBase = (c: Color): Color => c === '#FFFFFF' ? 'ansi:white' : c;
+                // Cap code tokens so prefix + code never exceeds the band width,
+                // otherwise a long line wraps onto extra rows / past the edge.
+                const fittedTokens = truncateTokens(codeTokens, diffWidth - textWidth(prefix));
                 return (
                   <Box key={i} width={diffWidth} backgroundColor={bgColor}>
                     <Text backgroundColor={bgColor} color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
-                    {codeTokens.map((t, j) => (
+                    {fittedTokens.map((t, j) => (
                       <Text key={j} backgroundColor={bgColor} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
                     ))}
                   </Box>
