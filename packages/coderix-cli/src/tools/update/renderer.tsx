@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Text } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { useToolTimer } from '../shared/useToolTimer.js';
-import { detectLanguage, highlightDiffLine, groupDiffHunks } from '../shared/diffHighlight.js';
+import { detectLanguage, highlightDiffLine, groupDiffHunks, truncateTokens } from '../shared/diffHighlight.js';
+import { textWidth } from '@coderix/tui';
 import type { ToolUseRendererProps } from '../types.js';
 
 const HUNK_CONTEXT = 3;
@@ -49,7 +50,12 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
   const indicatorColor = isError ? 'ansi:red' : isDone ? 'ansi:green' : 'ansi:yellow';
 
   const lang = hasPath ? detectLanguage(fp) : null;
-  const diffWidth = Math.max(20, Math.floor((props.termWidth ?? 80) * 0.9) - 2);
+  // Fit the diff band to the real content region: the list is indented by the
+  // ScrollBox/committed `paddingX` (1) plus this renderer's `paddingLeft={2}`,
+  // and we leave one column of right-edge margin so nothing wraps.
+  const DIFF_INDENT = 3;
+  const DIFF_RIGHT_MARGIN = 1;
+  const diffWidth = Math.max(20, (props.termWidth ?? 80) - DIFF_INDENT - DIFF_RIGHT_MARGIN);
 
   // Group diff into hunks around changes, with ... between non-adjacent hunks
   const hunks = effectiveDiffLines && !props.contentExpanded
@@ -63,10 +69,12 @@ export function UpdateRenderer(props: ToolUseRendererProps): React.ReactNode {
     const bgColor = isAdd ? 'rgb(2,40,0)' : isRemove ? 'rgb(61,1,0)' : undefined;
     const hasBackground = isAdd || isRemove;
     const dimBase = (c: Color): Color => c === '#FFFFFF' ? 'ansi:white' : c;
+    // Cap code tokens so prefix + code never exceeds the band width.
+    const fittedTokens = truncateTokens(codeTokens, diffWidth - textWidth(prefix));
     return (
       <Box key={i} width={diffWidth} backgroundColor={bgColor}>
         <Text color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
-        {codeTokens.map((t, j) => (
+        {fittedTokens.map((t, j) => (
           <Text key={j} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
         ))}
       </Box>
