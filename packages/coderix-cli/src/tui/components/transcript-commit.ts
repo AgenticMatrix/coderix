@@ -103,6 +103,20 @@ export type TranscriptSplit = {
  * to protect and the answer must reach scrollback where the terminal can scroll
  * it. `streaming` defaults to `true` so a caller that omits it keeps the
  * conservative behaviour.
+ *
+ * WHY A TRAILING USER MESSAGE IS NEVER HELD BACK
+ * The `keepLive` guard protects the newest message because a tool result can
+ * still land in it, and a committed row cannot be redrawn. But that risk only
+ * ever applies to an ASSISTANT message carrying a `tool_use` block — `isBlockSettled`
+ * already keeps such a message unsettled, so `boundary` stops before it anyway.
+ * A user message is inert: plain text, or tool_result blocks that are complete
+ * the moment they arrive. Nothing mutates it in place, so holding it live buys
+ * nothing — and it costs everything, because the live region is a clipped,
+ * sticky-bottom ScrollBox. The instant the user sends a message into a turn
+ * whose assistant reply then grows taller than that window, the uncommitted user
+ * row is scrolled above the window (never written to the terminal) AND not yet
+ * in scrollback (only `<Static>` reaches it): invisible, unrecoverable. So a
+ * trailing user message must commit immediately, even mid-stream.
  */
 export function splitTranscript(
   messages: readonly Message[],
@@ -117,7 +131,9 @@ export function splitTranscript(
 
   // Hold back the newest message only while the turn can still change it, and
   // never reach past the first unsettled one (which `boundary` already caps).
-  const keepLive = streaming ? 1 : 0;
+  // A trailing user message is inert (see above) — never hold it live.
+  const lastIsUser = messages[messages.length - 1]?.role === 'user';
+  const keepLive = streaming && !lastIsUser ? 1 : 0;
   const commitCount = Math.max(0, Math.min(boundary, messages.length - keepLive));
 
   return {
@@ -158,6 +174,7 @@ export function shouldFlush({
   liveContentRows,
   liveRegionRows,
   alreadyCommitted,
+  eager = false,
 }: {
   /** Leading settled messages, from `splitTranscript`. */
   readonly committableCount: number;
@@ -167,6 +184,20 @@ export function shouldFlush({
   readonly liveRegionRows: number;
   /** Messages already written to scrollback. */
   readonly alreadyCommitted: number;
+  /**
+   * Bypass the capacity threshold and commit the whole committable prefix now.
+   *
+   * The 75%-of-live-region policy exists to avoid a VISIBLE flush per message
+   * when the frame is comfortable — the flicker is the cost it is weighing
+   * against the room a flush buys. That trade-off assumes every committable
+   * message is safe to leave sitting in the live region a little longer. One
+   * kind is not: a newly-arrived user message is inert and clipped by the
+   * sticky-bottom live window, so a frame spent uncommitted is a frame it is
+   * invisible (see `splitTranscript`'s trailing-user note). When the caller
+   * knows the committable prefix just gained such a message, it passes
+   * `eager` to skip the wait — the one flush is cheaper than a vanished row.
+   */
+  readonly eager?: boolean;
 }): number {
   // Nothing new to hand over.
   if (committableCount <= alreadyCommitted) return 0;
@@ -175,6 +206,10 @@ export function shouldFlush({
   // holding it back keeps it in the repainted frame — spending ~20 rows of the
   // live region on output that redraws identically every time.
   if (alreadyCommitted === 0) return committableCount;
+
+  // Eager: a new inert message (a user turn) just became committable; commit the
+  // whole prefix now rather than letting it sit clipped-but-uncommitted.
+  if (eager) return committableCount;
 
   const threshold = Math.max(
     1,
