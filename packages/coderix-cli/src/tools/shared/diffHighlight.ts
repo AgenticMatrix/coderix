@@ -7,6 +7,7 @@
  */
 
 import hljs from 'highlight.js';
+import { textWidth } from '@coderix/tui';
 import { parseHtmlTokens, type HighlightToken } from '../../tui/components/highlight.js';
 
 /** Detect highlight.js language from file extension. */
@@ -62,6 +63,59 @@ export function highlightDiffLine(
   }
 
   return { prefix, codeTokens, isAdd, isRemove };
+}
+
+/**
+ * Truncate a list of highlighted code tokens so their combined terminal width
+ * does not exceed `maxColumns`. When truncation occurs, an ellipsis token (`…`,
+ * one column) is appended, carrying the color of the last visible token.
+ *
+ * Measuring in columns (via `textWidth`) rather than `.length` keeps CJK and
+ * emoji from overshooting. Returns the original array when it already fits, so
+ * callers can apply it unconditionally.
+ */
+export function truncateTokens(
+  tokens: HighlightToken[],
+  maxColumns: number,
+): HighlightToken[] {
+  if (maxColumns <= 0) return [];
+
+  let total = 0;
+  for (const t of tokens) total += textWidth(t.text);
+  if (total <= maxColumns) return tokens;
+
+  // Reserve one column for the ellipsis that signals the cut.
+  const budget = maxColumns - 1;
+  const out: HighlightToken[] = [];
+  let used = 0;
+  let lastColor: HighlightToken['color'] = tokens[0]?.color ?? '#FFFFFF';
+
+  for (const token of tokens) {
+    const w = textWidth(token.text);
+    if (used + w <= budget) {
+      out.push(token);
+      used += w;
+      lastColor = token.color;
+      continue;
+    }
+    // Partial fit: accumulate characters up to the remaining budget.
+    let partial = '';
+    let partialUsed = 0;
+    for (const char of token.text) {
+      const cw = textWidth(char);
+      if (used + partialUsed + cw > budget) break;
+      partial += char;
+      partialUsed += cw;
+    }
+    if (partial) {
+      out.push({ ...token, text: partial });
+      lastColor = token.color;
+    }
+    break;
+  }
+
+  out.push({ text: '…', color: lastColor });
+  return out;
 }
 
 export interface DiffHunkGroup {

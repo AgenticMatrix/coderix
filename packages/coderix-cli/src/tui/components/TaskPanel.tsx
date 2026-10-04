@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Box, Text, SAFE_BORDER } from '@coderix/tui';
+import { Box, Text, SAFE_BORDER, useTerminalSize, textWidth, truncateToWidth } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { listTasks } from '@coderix/core';
 import type { Task } from '@coderix/core';
@@ -36,6 +36,7 @@ const STATUS_COLOR: Record<string, string> = {
  */
 export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const { columns } = useTerminalSize();
   const prevActiveCount = useRef(0);
   const hiddenIds = useRef<Set<string>>(new Set());
   const prevFingerprint = useRef('');
@@ -130,8 +131,19 @@ export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelP
     realActiveId = candidate.reduce((a, b) => a.updatedAt > b.updatedAt ? a : b).id;
   }
 
+  // Bound the bordered box to the terminal. Chrome around the content is the
+  // border (2) + this box's paddingX (2); the panel also sits inside the
+  // ScrollBox's paddingX (2). Leave one safety column so the right border never
+  // lands on the final column.
+  const CHROME = 2 /* border */ + 2 /* paddingX */;
+  const OUTER_CHROME = 2 /* scrollbox paddingX */ + 1 /* safety */;
+  const innerWidth = Math.max(20, columns - CHROME - OUTER_CHROME);
+
+  const fit = (text: string, reserved: number): string =>
+    truncateToWidth(text, Math.max(1, innerWidth - reserved));
+
   return (
-    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" paddingX={1} borderStyle={SAFE_BORDER} borderColor="ansi:blackBright">
+    <Box flexDirection="column" flexShrink={0} alignSelf="flex-start" maxWidth={innerWidth + CHROME} paddingX={1} borderStyle={SAFE_BORDER} borderColor="ansi:blackBright">
       <Box>
         <Text bold>Tasks </Text>
         <Text dimColor>
@@ -161,12 +173,19 @@ export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelP
           ? task.activeForm
           : task.subject;
 
+        // Keep the whole row within the panel: icon+space (2), "#id " and the
+        // owner/deps tags are fixed; the label absorbs the remaining budget.
+        const idSegment = `#${task.id} `;
+        const tagSegment = `${ownerTag}${deps}`;
+        const reserved = 2 + textWidth(idSegment) + textWidth(tagSegment);
+        const fittedLabel = fit(label, reserved);
+
         return (
           <Box key={task.id} flexShrink={0}>
             <Text color={color}>{icon} </Text>
-            <Text dimColor>#{task.id} </Text>
-            <Text dimColor={task.status === 'completed'}>{label}</Text>
-            <Text dimColor>{ownerTag}{deps}</Text>
+            <Text dimColor>{idSegment}</Text>
+            <Text dimColor={task.status === 'completed'}>{fittedLabel}</Text>
+            <Text dimColor>{tagSegment}</Text>
           </Box>
         );
       })}
