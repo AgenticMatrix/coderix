@@ -585,6 +585,9 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         }
       } catch (err) {
         flushDeltas(true);
+        // Ensure the compaction spinner can never stay stuck on if the turn
+        // throws mid-compaction (e.g. a hung/aborted summarization request).
+        routeDispatch({ type: 'SET_COMPACTING', isCompacting: false });
         routeDispatch({ type: 'SET_ERROR', error: (err as Error).message });
       }
     },
@@ -690,6 +693,17 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
       }
     } catch (err) {
       routeDispatch({ type: 'SET_ERROR', error: (err as Error).message });
+    } finally {
+      // Manual /compact never emits a `done` event, so nothing else would
+      // dispatch FINISH_TURN. The compact_boundary / compact_summary events
+      // dispatch ADD_USER_MESSAGE, which resets respondingDone to false —
+      // combined with the prevPhase fallback in App.tsx the phase would stick
+      // on the stale 'compacting' snapshot (spinner + 0% bar) forever.
+      // Mark the turn finished so the ActivityLine falls back to idle/Done.
+      // Also force-clear the compacting flag as a safety net for any
+      // exceptional exit path that skipped the 'completed' event.
+      routeDispatch({ type: 'SET_COMPACTING', isCompacting: false });
+      routeDispatch({ type: 'FINISH_TURN' });
     }
   }, [engine, routeDispatch]);
 
