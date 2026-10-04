@@ -32,6 +32,8 @@ import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/co
 import type { Session } from '../../../../packages/coderix-core/src/core/types.js';
 import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
+import { createEventBus } from '../../../../packages/coderix-core/src/state/observable.js';
+import type { EventBus } from '../../../../packages/coderix-core/src/state/observable.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
 import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
 import { loadDesktopConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
@@ -98,6 +100,11 @@ let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
 let protocolGateway: ReturnType<typeof startProtocolGateway> | null = null;
+
+// Shared EventBus — routes sub-agent lifecycle (and background-task) events from
+// every per-session QueryEngine to the IPC bridge, which forwards them to the
+// renderer for live sub-agent rendering.
+const sharedEventBus: EventBus = createEventBus();
 
 // ---------------------------------------------------------------------------
 // Bootstrap sequence — create window FIRST before any heavy init
@@ -179,6 +186,7 @@ async function bootstrap(): Promise<void> {
       model: activeModel,
       reloadQueryEngine: (workDir, model) => initQueryEngine(workDir, model),
       createEngineForSession,
+      eventBus: sharedEventBus,
     });
 
     // Step 3: Create the window — this must happen before heavy init
@@ -392,6 +400,7 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
     toolRegistry: buildSharedToolRegistry(),
     callModel,
     skills: session.skills ?? [],
+    eventBus: sharedEventBus,
   });
   await engine.init();
   engine.setPermissionMode(resolvePermissionMode(loadSettings()) as PermissionMode);

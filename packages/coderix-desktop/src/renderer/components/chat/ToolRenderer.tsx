@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { StreamBlock } from '../../types';
 import { useT, type TranslationKey } from '../../i18n/index.js';
+import { AgentToolCallCard } from './AgentToolCallCard';
 
 type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
@@ -383,6 +384,7 @@ export function ToolRenderer({
   toolName,
   toolInput = {},
   state = 'executing',
+  toolId,
   toolResult,
   toolMetadata,
   reveal = false,
@@ -391,6 +393,21 @@ export function ToolRenderer({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const t = useT();
   const expanded = isExpanded || reveal;
+
+  // The `Agent` tool spawns a sub-agent — render it as a dedicated ZCode-style
+  // summary card (bot icon + colored agent type + description + lifecycle)
+  // rather than the generic tool card below.
+  if (toolName.toLowerCase() === 'agent') {
+    return (
+      <AgentToolCallCard
+        toolInput={toolInput}
+        state={state}
+        toolId={toolId}
+        toolResult={toolResult}
+        toolMetadata={toolMetadata}
+      />
+    );
+  }
 
   const config = getToolConfig(toolName);
   const labelContent = config.content(toolInput, t);

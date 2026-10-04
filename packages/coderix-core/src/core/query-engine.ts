@@ -143,6 +143,15 @@ export class QueryEngine {
       ...config,
     };
 
+    // Route sub-agent lifecycle events (agent_register / agent_update /
+    // agent_remove) into the EventBus so frontends can render sub-agent status
+    // in real time. `setEmitter` is a no-op unless an EventBus was provided.
+    if (this.config.subAgentRegistry && this.config.eventBus) {
+      this.config.subAgentRegistry.setEmitter(
+        (req) => this.config.eventBus!.toolRequests.next(req),
+      );
+    }
+
     // Derive contextBudget from the model's actual context window
     // when no explicit budget was set.  Falls back to the hardcoded
     // DEFAULT_CONTEXT_BUDGET when model_list has no max_context info.

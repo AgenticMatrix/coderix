@@ -71,6 +71,8 @@ const CH = {
   STATE_TOKEN_USAGE: 'state:tokenUsage',
   STATE_COST_UPDATE: 'state:costUpdate',
   STATE_COMPACT: 'state:compact',
+  AGENT_UPDATE: 'agent:update',
+  AGENT_TRANSCRIPT: 'agent:transcript',
   FS_FILE_CHANGED: 'fs:fileChanged',
   WINDOW_FOCUS: 'window:focus',
   APP_UPDATE_AVAILABLE: 'app:updateAvailable',
@@ -260,6 +262,7 @@ function createEventListener(
             type: 'toolResult',
             toolUseId: (data?.toolUseId as string) ?? '',
             result: data?.result,
+            metadata: data?.metadata as Record<string, unknown> | undefined,
             sessionId: data?.sessionId as string | undefined,
           });
           break;
@@ -933,6 +936,35 @@ const coderixAPI = {
     };
     ipcRenderer.on(CH.STATE_QUESTION_REQ, handler);
     return () => ipcRenderer.removeListener(CH.STATE_QUESTION_REQ, handler);
+  },
+
+  /**
+   * Subscribe to sub-agent lifecycle events (agent_register / agent_update /
+   * agent_remove) emitted by the engine. Returns an unsubscribe function.
+   */
+  onAgentEvent(
+    callback: (event: {
+      type: 'agent_register' | 'agent_update' | 'agent_remove';
+      agentId: string;
+      agent?: Record<string, unknown>;
+    }) => void,
+  ): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => {
+      callback(data as {
+        type: 'agent_register' | 'agent_update' | 'agent_remove';
+        agentId: string;
+        agent?: Record<string, unknown>;
+      });
+    };
+    ipcRenderer.on(CH.AGENT_UPDATE, handler as (...args: unknown[]) => void);
+    return () => ipcRenderer.removeListener(CH.AGENT_UPDATE, handler as (...args: unknown[]) => void);
+  },
+
+  /**
+   * Load a sub-agent's full conversation transcript (core Message[]) from disk.
+   */
+  loadSubagentTranscript(agentId: string, sessionId: string): Promise<unknown> {
+    return ipcRenderer.invoke(CH.AGENT_TRANSCRIPT, { agentId, sessionId });
   },
 };
 

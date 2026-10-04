@@ -96,6 +96,8 @@ declare global {
       onPermissionRequest(callback: (req: unknown) => void): () => void;
       onStateChange(callback: (change: unknown) => void): () => void;
       onQuestionRequest(callback: (req: CoderixQuestionRequest) => void): () => void;
+      onAgentEvent(callback: (event: { type: 'agent_register' | 'agent_update' | 'agent_remove'; agentId: string; agent?: Record<string, unknown> }) => void): () => void;
+      loadSubagentTranscript(agentId: string, sessionId: string): Promise<unknown>;
     };
   }
 }

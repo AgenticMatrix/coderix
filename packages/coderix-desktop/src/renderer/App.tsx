@@ -24,6 +24,7 @@ import { LibraryView, SkillsView, PluginsView } from './components/library/Libra
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
+import { SubagentPane } from './components/chat/SubagentPane';
 import { buildTrajectoryCalls } from './components/chat/trajectory';
 import type { TrajectoryCall } from './components/chat/trajectory';
 import { Composer } from './components/composer/Composer';
@@ -43,6 +44,7 @@ import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
 import { useStreamEvents } from './hooks/useStreamEvents';
+import { useAgentEvents } from './hooks/useAgentEvents';
 import {
   submitQuery,
   interruptQuery,
@@ -203,6 +205,7 @@ export function App(): React.ReactElement {
   // Registers onStreamBlock, onStreamDone, onStreamError, onTokenUsage
   // via the preload contextBridge. Cleaned up on unmount.
   useStreamEvents();
+  useAgentEvents();
 
   // ── Load settings / current project on mount ──────────────────────────
   useEffect(() => {
@@ -1307,6 +1310,9 @@ export function App(): React.ReactElement {
         )}
       </AppLayout>
 
+
+      {/* Sub-agent side pane — opened from an Agent tool card's "open on the right" */}
+      <SubagentPane />
 
       {/* Global modal layer — permission dialogs, question prompts */}
       <GlobalModal />
