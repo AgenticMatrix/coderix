@@ -95,9 +95,10 @@ export function AgentToolCallCard({
   const t = useT();
   const open = useSubagentStore((s) => s.open);
 
+  const agentTypeRaw = toolInput.agent_type ?? toolInput.subagent_type;
   const agentType =
-    typeof toolInput.agent_type === 'string' && toolInput.agent_type.trim()
-      ? toolInput.agent_type.trim()
+    typeof agentTypeRaw === 'string' && agentTypeRaw.trim()
+      ? agentTypeRaw.trim()
       : undefined;
   const description = typeof toolInput.description === 'string' ? toolInput.description.trim() : '';
   const prompt = typeof toolInput.prompt === 'string' ? toolInput.prompt.trim() : '';

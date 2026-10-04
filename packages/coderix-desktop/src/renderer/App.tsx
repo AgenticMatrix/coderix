@@ -38,7 +38,7 @@ import TerminalPanel from './components/terminal/TerminalPanel';
 import SettingsView from './components/settings/SettingsView';
 import { BrowserPanel } from './components/browser';
 import { GlobalModal } from './components/modals';
-import { useUIStore, useChatStore, useSessionStore, useStreamStore, useBrowserStore } from './store';
+import { useUIStore, useChatStore, useSessionStore, useStreamStore, useBrowserStore, useSubagentStore } from './store';
 import { HOME_URL } from './store/browserStore.js';
 import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
@@ -117,6 +117,7 @@ export function App(): React.ReactElement {
   const toggleDetailPanel = useUIStore((s) => s.toggleDetailPanel);
   const toggleTerminal = useUIStore((s) => s.toggleTerminal);
   const toggleBrowserPanel = useUIStore((s) => s.toggleBrowserPanel);
+  const subagentVisible = useSubagentStore((s) => s.tabs.length > 0);
   const activeAppId = useUIStore((s) => s.activeAppId);
   const setActiveAppId = useUIStore((s) => s.setActiveAppId);
   const setTheme = useUIStore((s) => s.setTheme);
@@ -1053,6 +1054,8 @@ export function App(): React.ReactElement {
           ) : undefined
         }
         appDisplayVisible={activeApp !== null}
+        subagentPanel={<SubagentPane />}
+        subagentVisible={subagentVisible}
         statusBarProps={{
           engine: settings?.engine,
           agentStatus,
@@ -1310,9 +1313,6 @@ export function App(): React.ReactElement {
         )}
       </AppLayout>
 
-
-      {/* Sub-agent side pane — opened from an Agent tool card's "open on the right" */}
-      <SubagentPane />
 
       {/* Global modal layer — permission dialogs, question prompts */}
       <GlobalModal />
