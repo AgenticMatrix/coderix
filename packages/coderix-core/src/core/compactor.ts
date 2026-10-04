@@ -384,6 +384,30 @@ export function adjustIndexToPreservePairs(
 // ---------------------------------------------------------------------------
 
 /**
+ * Max wall-clock time for a single LLM summarization request before it is
+ * aborted. Without this, a hung model request keeps the compaction generator
+ * (and the "Compacting conversation…" spinner) alive forever.
+ */
+const COMPACT_SUMMARY_TIMEOUT_MS = 120_000;
+
+/**
+ * Combine the caller's abort signal with a timeout so a hung summarization
+ * request is aborted instead of blocking forever. Returns the combined signal
+ * plus a `clear()` to cancel the timer once the call settles.
+ */
+function withCompactTimeout(signal: AbortSignal): { signal: AbortSignal; clear: () => void } {
+  const timeoutController = new AbortController();
+  const timer = setTimeout(() => {
+    timeoutController.abort(new Error(`Compaction summarization timed out after ${COMPACT_SUMMARY_TIMEOUT_MS}ms`));
+  }, COMPACT_SUMMARY_TIMEOUT_MS);
+  // Node 20.3+/modern runtimes expose AbortSignal.any; fall back gracefully.
+  const combined = typeof AbortSignal.any === 'function'
+    ? AbortSignal.any([signal, timeoutController.signal])
+    : timeoutController.signal;
+  return { signal: combined, clear: () => clearTimeout(timer) };
+}
+
+/**
  * Progress event yielded during LLM summarization streaming.
  */
 export interface CompactStreamEvent {
@@ -398,6 +422,7 @@ async function* callSummaryModelStream(
   messages: Message[],
   signal: AbortSignal,
 ): AsyncGenerator<CompactStreamEvent, { text: string | null; error: Error | null }> {
+  const { signal: callSignal, clear: clearTimer } = withCompactTimeout(signal);
   try {
     const contextText = buildCompactContext(messages);
 
@@ -405,7 +430,7 @@ async function* callSummaryModelStream(
       system: systemPrompt,
       messages: [{ role: 'user' as const, content: contextText }],
       tools: [],
-      signal,
+      signal: callSignal,
     });
 
     let fullText = '';
@@ -443,6 +468,8 @@ async function* callSummaryModelStream(
     return { text: fullText || null, error: null };
   } catch (error) {
     return { text: null, error: error as Error };
+  } finally {
+    clearTimer();
   }
 }
 
@@ -561,6 +588,7 @@ async function callSummaryModel(
   signal: AbortSignal,
   onTextDelta?: (text: string) => void,
 ): Promise<{ text: string | null; error: Error | null }> {
+  const { signal: callSignal, clear: clearTimer } = withCompactTimeout(signal);
   try {
     const contextText = buildCompactContext(messages);
 
@@ -568,7 +596,7 @@ async function callSummaryModel(
       system: systemPrompt,
       messages: [{ role: 'user' as const, content: contextText }],
       tools: [],
-      signal,
+      signal: callSignal,
     });
 
     let fullText = '';
@@ -603,6 +631,8 @@ async function callSummaryModel(
     return { text: fullText || null, error: null };
   } catch (error) {
     return { text: null, error: error as Error };
+  } finally {
+    clearTimer();
   }
 }
 
