@@ -40,6 +40,11 @@ export interface CallModelConfig {
   thinkingMode?: 'adaptive' | 'enabled' | 'disabled';
   /** Fixed thinking budget (tokens) when `thinkingMode` is 'enabled'. Default 31999. */
   thinkingBudgetTokens?: number;
+  /** Idle timeout for the streaming request (ms). Aborts the request when no
+    * bytes arrive for this long, guarding against a hung endpoint that accepts
+    * the connection but never streams — the same failure mode the compaction
+    * summarizer defends against (see compactor.ts). Defaults to 120s; 0 disables. */
+  idleTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +207,15 @@ function mapStopReason(reason: string | null | undefined): StopReason {
 // ---------------------------------------------------------------------------
 
 /**
+ * How long the streaming request may stay silent before it is aborted as hung.
+ * An idle timeout (rather than a total timeout) lets long generation runs pass
+ * as long as bytes keep arriving, and only trips when the endpoint goes dark —
+ * e.g. it accepts the connection but never sends the first byte, or stalls
+ * mid-stream.
+ */
+const DEFAULT_IDLE_TIMEOUT_MS = 120_000;
+
+/**
  * Create a callModel function for an OpenAI-compatible endpoint.
  * Signature matches createCallModelFromClient (see query.ts's CallModelParams).
  */
@@ -234,6 +248,20 @@ export function createCallModelFromOpenAI(
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
+
+    // Idle timeout: abort the request if no bytes arrive for `idleTimeoutMs`.
+    // Re-armed before each read so a slow-but-alive stream never trips it.
+    const idleTimeoutMs = config.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let timedOut = false;
+    const armIdleTimer = (): void => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (idleTimeoutMs <= 0) return;
+      idleTimer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, idleTimeoutMs);
+    };
 
     // Streaming state
     let streamedText = '';
@@ -313,6 +341,7 @@ export function createCallModelFromOpenAI(
     }
 
     try {
+      armIdleTimer();
       const fetchInit: Record<string, unknown> = {
         method: 'POST',
         headers: {
@@ -345,6 +374,7 @@ export function createCallModelFromOpenAI(
 
       while (true) {
         if (signal?.aborted) break;
+        armIdleTimer();
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -377,9 +407,15 @@ export function createCallModelFromOpenAI(
       }
     } catch (err) {
       if (signal?.aborted) return;
+      if (timedOut) {
+        throw new Error(
+          `Model request timed out after ${idleTimeoutMs}ms with no data from ${url}`,
+        );
+      }
       throw err;
     } finally {
       signal?.removeEventListener('abort', onAbort);
+      if (idleTimer) clearTimeout(idleTimer);
     }
 
     // Close open text/thinking blocks before tool blocks
