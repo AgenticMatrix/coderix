@@ -94,7 +94,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 // otherwise a long line wraps onto extra rows / past the edge.
                 const fittedTokens = truncateTokens(codeTokens, diffWidth - textWidth(prefix));
                 return (
-                  <Box key={i} width={diffWidth} backgroundColor={bgColor}>
+                  <Box key={i} backgroundColor={bgColor}>
                     <Text backgroundColor={bgColor} color={hasBackground ? '#FFFFFF' : 'ansi:white'}>{prefix}</Text>
                     {fittedTokens.map((t, j) => (
                       <Text key={j} backgroundColor={bgColor} color={hasBackground ? t.color : dimBase(t.color)}>{t.text}</Text>
@@ -103,7 +103,7 @@ export function WriteRenderer(props: ToolUseRendererProps): React.ReactNode {
                 );
               })}
               {tooLong ? (
-                <Box width={diffWidth}>
+                <Box>
                   <Text dimColor>... {hiddenCount} more lines (Ctrl+O to detail)</Text>
                 </Box>
               ) : null}
