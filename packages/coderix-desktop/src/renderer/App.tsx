@@ -208,6 +208,15 @@ export function App(): React.ReactElement {
   useStreamEvents();
   useAgentEvents();
 
+  // ── Close the sub-agent side pane when the viewed session changes ─────────
+  // The pane's tabs are scoped to the conversation that spawned them, so
+  // switching sessions closes them. Sub-agent records are kept (not cleared) so
+  // switching back and re-clicking the card recovers the full transcript.
+  const closeSubagents = useSubagentStore((s) => s.close);
+  useEffect(() => {
+    closeSubagents();
+  }, [sessionId, closeSubagents]);
+
   // ── Load settings / current project on mount ──────────────────────────
   useEffect(() => {
     loadSettings().catch((err) => console.error('[App] Failed to load settings:', err));

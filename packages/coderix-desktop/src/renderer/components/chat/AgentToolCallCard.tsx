@@ -64,10 +64,14 @@ function parseAgentStats(
   };
 }
 
-/** Extract the sub-agent id from the result string ("Sub-agent sub-x completed…"). */
+/** Extract the sub-agent id from the result string ("Sub-agent sub-x completed…").
+ *  Only the Coderix engine's exact result prefixes (at the very start of the
+ *  string) are matched — an unanchored match would grab a spurious word from the
+ *  claude-code summary (e.g. "…sub-agent completed…") and break the tool_use-id
+ *  fallback below. */
 function parseAgentId(result?: string): string | undefined {
   if (!result) return undefined;
-  const m = result.match(/(?:Sub-agent|Fork agent|Background agent|agent)\s+([A-Za-z0-9_-]+)/i);
+  const m = result.match(/^(?:Sub-agent|Fork agent|Background agent)\s+([A-Za-z0-9_-]+)/i);
   return m?.[1];
 }
 
@@ -111,17 +115,15 @@ export function AgentToolCallCard({
   const isError = state === 'error';
 
   const handleOpen = () => {
-    // Resolve the agent id: structured metadata → result string → live event
-    // matched by toolUseId → the tool_use id itself as a last resort.
-    let id =
+    // Resolve the agent id. For claude-code the tool_use id IS the sub-agent id
+    // (parent_tool_use_id === toolId); for coderix the tool_result metadata
+    // carries the agent id. Only fall back to parsing the result string when
+    // neither is available — a loose result-string match would otherwise grab a
+    // spurious word and shadow the correct tool_use id.
+    const id =
       (typeof toolMetadata?.agentId === 'string' && toolMetadata.agentId) ||
+      toolId ||
       parseAgentId(toolResult);
-    if (!id && toolId) {
-      const match = Object.values(useSubagentStore.getState().agents).find(
-        (a) => a.toolUseId === toolId,
-      );
-      id = match?.id ?? toolId;
-    }
     if (!id) return;
 
     const status: SubagentSummary['status'] =
