@@ -19,7 +19,8 @@ export interface SubagentState {
   selectTab: (agentId: string) => void;
   /** Close one tab, activating a neighbor if it was active. */
   closeTab: (agentId: string) => void;
-  /** Close the whole pane (all tabs). */
+  /** Close the whole pane (all tabs), keeping the sub-agent records so a later
+   *  session switch back can still recover their transcripts. */
   close: () => void;
   /** Apply a lifecycle event from the main process. */
   applyEvent: (

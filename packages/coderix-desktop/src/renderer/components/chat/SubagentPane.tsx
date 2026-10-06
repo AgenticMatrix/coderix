@@ -56,17 +56,6 @@ function truncate(text: string, max = 16): string {
   return text.slice(0, max) + '…';
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
-        {label}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 /** Convert a raw transcript (core Message[]) into trajectory calls, stamping the
  *  first/last message with the agent's real start/end so the "已工作" header
  *  reflects wall-clock duration. */
@@ -258,42 +247,8 @@ export function SubagentPane(): React.ReactElement | null {
               )}
 
               {!loading && !hasTranscript && (
-                <div className="px-4 py-3 space-y-4">
-                  {agent?.description && (
-                    <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-                      {agent.description}
-                    </div>
-                  )}
-
-                  {agent?.prompt && (
-                    <Section label={t('tool.prompt')}>
-                      <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-primary)] font-mono whitespace-pre-wrap break-all leading-[18px] m-0 max-h-48 overflow-y-auto">
-                        {agent.prompt}
-                      </pre>
-                    </Section>
-                  )}
-
-                  {agent?.error && (
-                    <Section label={t('tool.error')}>
-                      <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-danger)] font-mono whitespace-pre-wrap break-all leading-[18px] m-0 max-h-48 overflow-y-auto">
-                        {agent.error}
-                      </pre>
-                    </Section>
-                  )}
-
-                  {agent?.result && (
-                    <Section label={t('tool.result')}>
-                      <pre className="p-2 rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words leading-[18px] m-0 max-h-96 overflow-y-auto">
-                        {agent.result}
-                      </pre>
-                    </Section>
-                  )}
-
-                  {!agent && (
-                    <div className="text-xs text-[var(--color-text-tertiary)]">
-                      {t('common.loading')}
-                    </div>
-                  )}
+                <div className="p-4 text-xs text-[var(--color-text-tertiary)]">
+                  {t('session.loading')}
                 </div>
               )}
             </div>

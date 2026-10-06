@@ -33,7 +33,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript } from '@coderix/core';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript } from '@coderix/core';
 import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } from './claude-code-engine.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
@@ -772,6 +772,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                       transcript,
                     },
                   });
+                  // Persist the transcript to the Coderix session store keyed by
+                  // the tool_use id (=== parent_tool_use_id) so a cold reload
+                  // (app restart) can recover it via getAgentTranscript — the
+                  // claude-code sub-agent id on disk differs from the tool_use id.
+                  try {
+                    await saveAgentTranscript(agentId, transcript, sessionDir(streamSessionId));
+                  } catch { /* best-effort persistence */ }
                 }
                 subagentTranscripts.clear();
                 subagentMeta.clear();
