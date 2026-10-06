@@ -384,6 +384,7 @@ export const zh = {
   'tool.status.completed': '已完成',
   'tool.status.deleted': '已删除',
   'tool.agent.label': '智能体',
+  'tool.agent.paneLabel': '子智能体',
   'tool.agent.background': '后台',
   'tool.agent.stats': '{turns} 轮 · {tools} 工具',
   'tool.agent.stopped': '已停止',

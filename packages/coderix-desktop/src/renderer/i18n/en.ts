@@ -388,6 +388,7 @@ export const en: Record<TranslationKey, string> = {
   'tool.status.completed': 'Completed',
   'tool.status.deleted': 'Deleted',
   'tool.agent.label': 'Subagent',
+  'tool.agent.paneLabel': 'Subagents',
   'tool.agent.background': 'Background',
   'tool.agent.stats': '{turns} turns · {tools} tools',
   'tool.agent.stopped': 'Stopped',
