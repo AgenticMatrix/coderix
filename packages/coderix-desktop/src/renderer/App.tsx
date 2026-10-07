@@ -1099,6 +1099,7 @@ export function App(): React.ReactElement {
             currentProject={projectPath}
             onOpenProject={handleOpenProject}
             onAddProject={handleProjectSelect}
+            onRemoveProject={handleWorkspaceRemove}
           />
         ) : projectManageOpen ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center">

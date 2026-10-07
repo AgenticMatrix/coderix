@@ -171,6 +171,8 @@ export interface LibraryViewProps {
   onOpenProject: (path: string) => void;
   /** Open the directory picker to add a new project. */
   onAddProject: () => void;
+  /** Right-click 「移除」: drop the project from the app's list (no file deletion). */
+  onRemoveProject?: (path: string) => void;
 }
 
 /**
@@ -183,8 +185,10 @@ export function LibraryView({
   currentProject,
   onOpenProject,
   onAddProject,
+  onRemoveProject,
 }: LibraryViewProps): React.ReactElement {
   const [tab, setTab] = useState<LibraryTab>('projects');
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const t = useT();
 
   return (
@@ -202,6 +206,7 @@ export function LibraryView({
         {tab === 'knowledge' && <EmptyState icon={<BookOpen size={20} />} text={t('library.knowledgeEmpty')} />}
 
         {tab === 'projects' && (
+          <>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
             {projects.map((p) => {
               const active = p === currentProject;
@@ -210,6 +215,10 @@ export function LibraryView({
                   key={p}
                   type="button"
                   onDoubleClick={() => onOpenProject(p)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (onRemoveProject) setMenu({ path: p, x: e.clientX, y: e.clientY });
+                  }}
                   title={p}
                   className={`flex flex-col text-left p-4 rounded-[var(--radius-lg)] border transition-colors cursor-pointer
                     ${active
@@ -252,6 +261,28 @@ export function LibraryView({
               <span className="text-xs">{t('library.addProject')}</span>
             </button>
           </div>
+          {menu && onRemoveProject && (
+            <>
+              <div
+                className="fixed inset-0 z-50"
+                onClick={() => setMenu(null)}
+                onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}
+              />
+              <div
+                className="fixed z-50 rounded-[var(--radius-md)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] shadow-lg py-1 w-40"
+                style={{ left: menu.x, top: menu.y }}
+              >
+                <button
+                  type="button"
+                  onClick={() => { onRemoveProject(menu.path); setMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]"
+                >
+                  {t('library.removeProject')}
+                </button>
+              </div>
+            </>
+          )}
+          </>
         )}
       </div>
     </div>

@@ -241,6 +241,7 @@ export const zh = {
   'library.knowledgeEmpty': '知识库功能开发中',
   'library.addProject': '添加项目',
   'library.currentProject': '当前项目',
+  'library.removeProject': '移除',
 
   // ── 应用 ──────────────────────────────────────────────
   'apps.back': '返回',
