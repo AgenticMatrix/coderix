@@ -16,11 +16,20 @@ import {
 // Paths
 // ---------------------------------------------------------------------------
 
-const TASKS_BASE_DIR = join(homedir(), '.coderix', 'tasks');
 const HIGH_WATER_MARK_FILE = '.highwatermark';
 
+/**
+ * Root directory for task lists. Defaults to `~/.coderix/tasks`; set
+ * `CODERIX_TASKS_DIR` to relocate it (tests use this to keep the developer's
+ * real task store untouched). Resolved lazily so the override can be applied
+ * before the first store call.
+ */
+function getTasksBaseDir(): string {
+  return process.env.CODERIX_TASKS_DIR || join(homedir(), '.coderix', 'tasks');
+}
+
 function getTaskListDir(taskListId: string): string {
-  return join(TASKS_BASE_DIR, sanitize(taskListId));
+  return join(getTasksBaseDir(), sanitize(taskListId));
 }
 
 function getTaskPath(taskListId: string, taskId: string): string {
@@ -613,16 +622,14 @@ export async function getAgentStatuses(
 export async function resetStore(taskListId?: string): Promise<void> {
   const listId = taskListId || getTaskListId();
   const dir = getTaskListDir(listId);
+  // Create the list dir first: on a clean machine (empty ~/.coderix) the lock
+  // file below would otherwise ENOENT inside proper-lockfile.
+  await ensureDir(listId);
   const lockPath = await ensureLockFile(getLockPath(listId));
 
   let release: (() => Promise<void>) | undefined;
   try {
     release = await lock(lockPath);
-
-    const currentHighest = await findHighestTaskId(listId);
-    if (currentHighest > 0) {
-      await writeHighWaterMark(listId, currentHighest);
-    }
 
     let files: string[];
     try {
@@ -638,6 +645,15 @@ export async function resetStore(taskListId?: string): Promise<void> {
           // File may already be deleted
         }
       }
+    }
+
+    // A reset returns the store to a pristine state, so drop the ID
+    // high-water mark too — the next task starts at #1. (Single-task
+    // deletion still advances the mark; only a full reset clears it.)
+    try {
+      await unlink(getHighWaterMarkPath(listId));
+    } catch {
+      // No high-water mark to clear
     }
   } finally {
     if (release) await release();

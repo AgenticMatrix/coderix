@@ -6,7 +6,23 @@
  * 3. Restored env + cleared mocks after each test.
  */
 
-import { afterEach, beforeEach, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+/**
+ * Task lists default to `~/.coderix/tasks`. Redirect every test file at a
+ * throwaway directory so a test run never reads or writes the developer's real
+ * task store — previously the task-store tests created tasks in the shared
+ * `default` list, which the CLI's Task panel then surfaced at startup.
+ */
+const testTasksDir = mkdtempSync(join(tmpdir(), 'coderix-tasks-'));
+process.env.CODERIX_TASKS_DIR = testTasksDir;
+
+afterAll(() => {
+  rmSync(testTasksDir, { recursive: true, force: true });
+});
 
 const CREDENTIAL_SUFFIXES = [
   '_API_KEY', '_TOKEN', '_SECRET', '_PASSWORD', '_CREDENTIALS',
