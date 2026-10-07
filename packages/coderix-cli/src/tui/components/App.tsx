@@ -360,8 +360,19 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   }, [store, dispatch]);
 
   const messagesRef = useRef(state.messages);
-  const currentSessionRef = useRef<string>('');
+  const currentSessionRef = useRef<string>(sessionManager.getActive()?.id ?? '');
   messagesRef.current = state.messages;
+
+  // Pin the task-list scope to whichever session is active. A fresh session
+  // never goes through the resume handler, and mid-run switches (slash
+  // /resume, the session picker) change the active session behind our back, so
+  // reconcile every render instead of relying on scattered assignments. Without
+  // this the ref stays '' and the Task panel/`/tasks` read the shared fallback
+  // list instead of this conversation's own.
+  const activeSessionId = sessionManager.getActive()?.id ?? '';
+  if (activeSessionId !== currentSessionRef.current) {
+    currentSessionRef.current = activeSessionId;
+  }
 
   // Ref so useAgentBridge can route dispatches to savedMainMessages
   // when the user is viewing a sub-agent, keeping the main agent's work
