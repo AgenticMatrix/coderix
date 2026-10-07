@@ -30,6 +30,8 @@ export interface SlashRunContext {
   exit: () => void;
   /** Current model name */
   model: string;
+  /** Active session id — scopes the task list to this conversation. */
+  sessionId?: string;
   /** Whether the agent is currently streaming */
   isStreaming: boolean;
   /** Current input text */

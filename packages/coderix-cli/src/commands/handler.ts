@@ -41,6 +41,7 @@ export interface SlashHandlerDeps {
   isStreaming: boolean;
   inputText: string;
   onExit: () => void;
+  sessionId?: string;
   listSessions?: () => SessionSummary[];
   resumeSession?: (id: string) => void;
 }
@@ -51,7 +52,7 @@ export interface SlashHandlerDeps {
  * Returns true if the input was handled as a slash command, false otherwise.
  */
 export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => boolean {
-  const { dispatch, send, compact, model, isStreaming, inputText, onExit, listSessions, resumeSession } = deps;
+  const { dispatch, send, compact, model, isStreaming, inputText, onExit, sessionId, listSessions, resumeSession } = deps;
 
   return (input: string): boolean => {
     const parsed = parseSlashCommand(input);
@@ -84,6 +85,7 @@ export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => b
       model,
       isStreaming,
       inputText,
+      sessionId,
       listSessions,
       resumeSession,
     };
