@@ -636,6 +636,7 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
       isStreaming: state.isStreaming,
       inputText: state.inputText,
       onExit: handleExit,
+      sessionId: currentSessionRef.current,
       listSessions: () =>
         sessionManager.list().map((s) => ({
           id: s.id,
@@ -1444,12 +1445,6 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           })()}
         </OffscreenFreeze>
 
-        <TaskPanel
-          dismissed={state.taskPanelDismissed}
-          onDismissReset={handleTaskDismissReset}
-          interrupted={state.interrupted}
-        />
-
         {/* ── Picker modals ─────────────── */}
         {state.agentPicker && (
           <Box flexDirection="column" flexShrink={0} paddingX={1} paddingY={1}>
@@ -1527,6 +1522,17 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
           what produced a second, stale frame whenever a panel appeared, since
           a measurement read during render is always a frame behind. */}
       <Box ref={footerRef} flexDirection="column" flexShrink={0}>
+        {/* The Task panel is fixed chrome, not transcript: it must stay fully
+            visible above the input. Rendering it inside the sticky ScrollBox
+            clipped its header and top rows whenever the live viewport was
+            shorter than the panel. The footer refuses to shrink, so nothing
+            here is ever clipped. */}
+        <TaskPanel
+          dismissed={state.taskPanelDismissed}
+          onDismissReset={handleTaskDismissReset}
+          interrupted={state.interrupted}
+          sessionId={currentSessionRef.current}
+        />
         <CommandHint inputText={state.inputText} selectedIndex={state.commandPickerIndex} />
         <Divider padding={2} />
         <InputBox

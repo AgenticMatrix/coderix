@@ -638,7 +638,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           }
 
           if (turnsSinceTaskReminder >= TASK_REMINDER_INTERVAL) {
-            const activeTasks = (await listTasks()).filter(
+            const activeTasks = (await listTasks(sessionId)).filter(
               t => t.status === 'pending' || t.status === 'in_progress',
             );
             if (activeTasks.length > 0 && !usedTaskTools) {

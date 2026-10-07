@@ -43,8 +43,15 @@ function sanitize(input: string): string {
 // Session ID
 // ---------------------------------------------------------------------------
 
+/**
+ * Task lists are addressed per-context: every store function takes an optional
+ * `taskListId` and the tool executors pass the engine's `sessionId`. The
+ * module-level id below exists only as a legacy fallback for ambient callers
+ * that have no session in hand — new code should pass the id explicitly.
+ */
 let currentTaskListId = 'default';
 
+/** @deprecated Prefer passing `taskListId`/`sessionId` to the store functions. */
 export function setTaskListId(id: string): void {
   currentTaskListId = id;
 }

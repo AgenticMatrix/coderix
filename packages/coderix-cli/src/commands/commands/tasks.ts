@@ -12,7 +12,7 @@ export const tasksCommand: SlashCommand = {
     if (trimmed === 'agent-status') {
       void (async () => {
         try {
-          const statuses = await getAgentStatuses();
+          const statuses = await getAgentStatuses(ctx.sessionId);
           if (statuses.length === 0) {
             ctx.sys('No agents have owned any tasks yet.');
             return;
@@ -37,7 +37,7 @@ export const tasksCommand: SlashCommand = {
       // Show specific task
       void (async () => {
         try {
-          const task = await getTask(trimmed);
+          const task = await getTask(trimmed, ctx.sessionId);
           if (!task) {
             ctx.sys(`Task #${trimmed} not found.`);
             return;
@@ -65,7 +65,7 @@ export const tasksCommand: SlashCommand = {
     // List all tasks
     void (async () => {
       try {
-        const tasks = await listTasks();
+        const tasks = await listTasks(ctx.sessionId);
         if (tasks.length === 0) {
           ctx.sys('No tasks in the task list.');
           return;

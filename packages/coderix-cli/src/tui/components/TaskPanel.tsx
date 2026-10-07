@@ -9,6 +9,8 @@ interface TaskPanelProps {
   onDismissReset?: () => void;
   /** When true, the current turn was interrupted — stop spinner animation. */
   interrupted?: boolean;
+  /** Active session id — scopes the polled task list to this conversation. */
+  sessionId?: string;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -34,7 +36,7 @@ const STATUS_COLOR: Record<string, string> = {
  * as long as any task in the batch remains active.  Once every task is done
  * the whole batch disappears and won't reappear when new tasks are created.
  */
-export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelProps) {
+export function TaskPanel({ dismissed, onDismissReset, interrupted, sessionId }: TaskPanelProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const { columns } = useTerminalSize();
   const prevActiveCount = useRef(0);
@@ -47,7 +49,7 @@ export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelP
 
     async function poll() {
       try {
-        const current = await listTasks();
+        const current = await listTasks(sessionId);
         if (!active) return;
 
         const fp = current.map(t => `${t.id}:${t.status}:${t.owner ?? ''}:${t.subject}:${t.activeForm ?? ''}:${t.blocks.join(',')}:${t.blockedBy.join(',')}`).join('|');
@@ -86,7 +88,7 @@ export function TaskPanel({ dismissed, onDismissReset, interrupted }: TaskPanelP
       active = false;
       clearInterval(interval);
     };
-  }, [dismissed, onDismissReset]);
+  }, [dismissed, onDismissReset, sessionId]);
 
   // Animated spinner for in_progress tasks
   const [spinnerIndex, setSpinnerIndex] = useState(0);
