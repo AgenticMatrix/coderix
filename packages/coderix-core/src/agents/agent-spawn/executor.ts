@@ -831,7 +831,7 @@ async function executeResume(
   agentId: string,
   prompt: string,
   agentSpawn: AgentSpawnContext,
-  options: { cwd?: string; sessionId?: string },
+  options: { cwd?: string; sessionId?: string; toolUseId?: string },
 ): Promise<ToolResult> {
   const resumeSessionId = agentSpawn.sessionManager.getActive()?.id;
   const resumeSessionDir = resumeSessionId ? getSessionDir(resumeSessionId) : undefined;
@@ -882,6 +882,7 @@ async function executeResume(
       status: 'stopped',
       prompt: meta.description ?? '',
       description: meta.displayDescription,
+      toolUseId: options.toolUseId,
       createdAt: meta.createdAt,
       turnCount: transcript.filter(m => m.role === 'assistant').length,
       messageCount: transcript.length,
@@ -962,9 +963,13 @@ async function executeResume(
   const subAbortController = new AbortController();
 
   // ── Update registry status ──────────────────────────────────────────
+  // Re-tag with this resume call's tool_use id so the renderer correlates the
+  // resumed turn with the new Agent tool call (the record's `id` stays stable
+  // for TaskGet / on-disk transcript lookups).
   agentSpawn.subAgentRegistry.update(agentId, {
     status: 'running',
     abortController: subAbortController,
+    toolUseId: options.toolUseId,
   });
 
   // ── Run agent loop ──────────────────────────────────────────────────
@@ -1062,6 +1067,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     return executeResume(agentIdInput, prompt, agentSpawn, {
       cwd: options.cwd,
       sessionId: options.sessionId,
+      toolUseId: options.toolUseId,
     });
   }
 

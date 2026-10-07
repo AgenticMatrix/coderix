@@ -6,7 +6,7 @@ import type { SubagentSummary } from '../../ipc-client.js';
 import type { StreamBlock } from '../../types.js';
 import { loadSubagentTranscript } from '../../ipc-client.js';
 import { useT, type TranslationKey } from '../../i18n/index.js';
-import { resolveSubagentColor } from './AgentToolCallCard';
+import { resolveSubagentColor, parseAgentId } from './AgentToolCallCard';
 import { coreMessagesToChatMessages } from './coreMessagesToChat';
 import { TrajectoryCallCard } from './trajectory/TrajectoryCallCard';
 import { buildTrajectoryCalls } from './trajectory/trajectoryTypes';
@@ -138,7 +138,10 @@ export function SubagentPane(): React.ReactElement | null {
     open(
       block.toolId,
       {
-        id: block.toolId,
+        // Engine id (on-disk transcript key) differs from the tool_use id for
+        // the coderix engine; recover it from the result string when present.
+        id: parseAgentId(block.toolResult) ?? block.toolId,
+        toolUseId: block.toolId,
         agentType: agentType ?? 'subagent',
         description: description || undefined,
         prompt: prompt || undefined,
@@ -179,7 +182,10 @@ export function SubagentPane(): React.ReactElement | null {
     }
     let cancelled = false;
     setLoading(true);
-    loadSubagentTranscript(activeAgentId, parentSessionId)
+    // Load by the engine's stable id (the record's `id`), not the canonical
+    // correlation key the tab is keyed by — the coderix engine stores its
+    // transcript under the internal `sub-…`/`fork-…` id.
+    loadSubagentTranscript(agent?.id ?? activeAgentId, parentSessionId)
       .then((transcript) => {
         if (cancelled) return;
         if (Array.isArray(transcript) && transcript.length > 0) {
@@ -195,7 +201,7 @@ export function SubagentPane(): React.ReactElement | null {
     return () => {
       cancelled = true;
     };
-  }, [activeAgentId, parentSessionId, liveCalls]);
+  }, [activeAgentId, agent?.id, parentSessionId, liveCalls]);
 
   const meta = statusMeta(agent?.status);
   const calls = liveCalls ?? diskCalls ?? [];
