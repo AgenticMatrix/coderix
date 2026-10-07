@@ -32,7 +32,7 @@ import { useTeamContextPoller } from '../hooks/useTeamContextPoller.js';;
 import { useTokenStats } from '../hooks/useTokenStats.js';;
 import { useProcessStats } from '../hooks/useProcessStats.js';
 import { createSlashHandler } from '../../commands/index.js';
-import { loadHistory } from '../../cli/history.js';
+import { loadHistory, saveHistory } from '../../cli/history.js';
 import { useAppState, useSetAppState } from '../../state/AppStateContext.js';;
 import type { Store, SessionManager } from '@coderix/core';
 import type { AppState } from '../../state/AppState.js';
@@ -148,13 +148,16 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   // Clean exit: prefer parent-provided unmount (Ink restores terminal),
   // fall back to raw process.exit.
   const handleExit = useCallback(() => {
+    // Flush history synchronously — the persistence bridge debounces writes by
+    // 2s, so exiting right after sending a message would otherwise drop it.
+    try { saveHistory(store.getState().history); } catch { /* best-effort */ }
     if (onExitProp) {
       onExitProp();
     } else {
       if (process.stdin.isTTY) process.stdin.setRawMode(false);
       process.exit(0);
     }
-  }, [onExitProp]);
+  }, [onExitProp, store]);
 
   // ── Terminal size & layout measurement ──────────────────────
   const { rows: termRows, columns: termCols } = useTerminalSize();
@@ -178,6 +181,10 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
   useEffect(() => { syncToStore({ isCompacting: state.isCompacting }); }, [state.isCompacting, syncToStore]);
   useEffect(() => { syncToStore({ mode: state.mode }); }, [state.mode, syncToStore]);
   useEffect(() => { syncToStore({ currentTurnId: state.currentTurnId }); }, [state.currentTurnId, syncToStore]);
+  // Mirror input history into AppState so persistence-bridge persists it to
+  // ~/.coderix/history.json. Without this, history lived only in the chat
+  // reducer's in-memory state and was never written to disk.
+  useEffect(() => { syncToStore({ history: state.history }); }, [state.history, syncToStore]);
 
   // ── Resume: load pre-loaded session messages on mount ──────────
   const hasLoadedInitialRef = useRef(false);
