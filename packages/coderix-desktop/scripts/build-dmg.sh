@@ -101,6 +101,10 @@ CLI_BUILD_DIR="$BUILD_DIR/cli"
 mkdir -p "$CLI_BUILD_DIR"
 CLI_ENTRY="$ROOT/packages/coderix-cli/src/cli/main.tsx"
 [ -f "$CLI_ENTRY" ] || die "未找到 CLI 入口：$CLI_ENTRY"
+# ink 会在 process.env.DEV === 'true' 时动态 import('./devtools.js')，后者静态依赖
+# 可选 peer 依赖 react-devtools-core（默认未安装）。Bun 会静态追踪该动态 import，
+# 导致「Could not resolve: react-devtools-core」而构建失败。生产环境不设 DEV，该分支
+# 永不触达；仓库根 tsconfig 的 paths 已将其重定向到 packages/coderix-cli/shims 下的空实现。
 ( cd "$ROOT" && "$BUN" build --compile --minify --target=bun-darwin-arm64 --outfile "$CLI_BUILD_DIR/coderix-arm64" "$CLI_ENTRY" )
 ( cd "$ROOT" && "$BUN" build --compile --minify --target=bun-darwin-x64   --outfile "$CLI_BUILD_DIR/coderix-x64"   "$CLI_ENTRY" )
 chmod +x "$CLI_BUILD_DIR/coderix-arm64" "$CLI_BUILD_DIR/coderix-x64"

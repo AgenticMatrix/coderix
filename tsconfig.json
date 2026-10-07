@@ -2,7 +2,17 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "."
+    "rootDir": ".",
+    // `ink` (reached through node_modules) statically imports the optional
+    // `react-devtools-core` peer dep from its dev-only devtools module. Bun's
+    // bundler resolves tsconfig by walking up from each importer, so the alias
+    // must live here (node_modules lives under the repo root) rather than in a
+    // package tsconfig. Maps it to a no-op stub so `bun build --compile` in
+    // scripts/build-dmg.sh succeeds; the stub is never reached in production.
+    "baseUrl": ".",
+    "paths": {
+      "react-devtools-core": ["./packages/coderix-cli/shims/react-devtools-core.ts"]
+    }
   },
   "include": [],
   "references": [
