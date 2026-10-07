@@ -68,8 +68,8 @@ function parseAgentStats(
  *  Only the Coderix engine's exact result prefixes (at the very start of the
  *  string) are matched — an unanchored match would grab a spurious word from the
  *  claude-code summary (e.g. "…sub-agent completed…") and break the tool_use-id
- *  fallback below. */
-function parseAgentId(result?: string): string | undefined {
+ *  fallback below. Prefer `toolMetadata.agentId` (structured) when available. */
+export function parseAgentId(result?: string): string | undefined {
   if (!result) return undefined;
   const m = result.match(/^(?:Sub-agent|Fork agent|Background agent)\s+([A-Za-z0-9_-]+)/i);
   return m?.[1];
@@ -116,15 +116,19 @@ export function AgentToolCallCard({
   const isDone = state === 'done';
   const isError = state === 'error';
 
-  // Resolve the agent id. For claude-code the tool_use id IS the sub-agent id
-  // (parent_tool_use_id === toolId); for coderix the tool_result metadata
-  // carries the agent id. Only fall back to parsing the result string when
-  // neither is available — a loose result-string match would otherwise grab a
-  // spurious word and shadow the correct tool_use id.
+  // Canonical correlation id: the spawning Agent/Task tool_use id. Sub-agent
+  // events are keyed by `toolUseId ?? engineId`, so the side pane is opened —
+  // and live transcript matched — by this card's own id. Only fall back to
+  // metadata/result parsing for records that predate the contract.
+  const metadataAgentId =
+    typeof toolMetadata?.agentId === 'string' ? toolMetadata.agentId : undefined;
+  const metadataToolUseId =
+    typeof toolMetadata?.toolUseId === 'string' ? toolMetadata.toolUseId : undefined;
   const agentId =
-    (typeof toolMetadata?.agentId === 'string' && toolMetadata.agentId) ||
-    toolId ||
-    parseAgentId(toolResult);
+    toolId || metadataToolUseId || metadataAgentId || parseAgentId(toolResult);
+  // The engine's stable id keys the on-disk transcript: for claude-code it is
+  // the tool_use id, for coderix it is the internal `sub-…`/`fork-…` id.
+  const engineAgentId = metadataAgentId ?? agentId;
   // True when this card's sub-agent is the one currently shown in the side pane.
   const isOpen = agentId !== undefined && activeAgentId === agentId;
 
@@ -142,7 +146,8 @@ export function AgentToolCallCard({
     open(
       agentId,
       {
-        id: agentId,
+        id: engineAgentId,
+        toolUseId: agentId,
         agentType: agentType ?? 'subagent',
         description: description || undefined,
         prompt: prompt || undefined,

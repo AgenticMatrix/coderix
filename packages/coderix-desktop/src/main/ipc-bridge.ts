@@ -35,6 +35,7 @@ import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillReg
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
 import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript } from '@coderix/core';
 import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } from './claude-code-engine.js';
+import { normalizeSubAgentEvent } from './subagent-events.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
 import { safeSend } from './safe-send.js';
@@ -594,18 +595,26 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   continue;
                 }
                 const meta = subagentMeta.get(agentId);
-                safeSend(mainWindow, IPC_CHANNELS.AGENT_UPDATE, {
-                  type: transcript.length === 1 ? 'agent_register' : 'agent_update',
-                  agentId,
-                  agent: {
-                    id: agentId,
-                    agentType: meta?.agentType,
-                    description: meta?.description,
-                    status: 'running',
-                    createdAt: Date.now(),
-                    transcript,
-                  },
-                });
+                // claude-code's sub-agent id already *is* the spawning
+                // tool_use id (`parent_tool_use_id`), so tag it as `toolUseId`
+                // and route through the normalizer like every other engine.
+                safeSend(
+                  mainWindow,
+                  IPC_CHANNELS.AGENT_UPDATE,
+                  normalizeSubAgentEvent({
+                    type: transcript.length === 1 ? 'agent_register' : 'agent_update',
+                    agentId,
+                    agent: {
+                      id: agentId,
+                      toolUseId: agentId,
+                      agentType: meta?.agentType,
+                      description: meta?.description,
+                      status: 'running',
+                      createdAt: Date.now(),
+                      transcript,
+                    },
+                  }),
+                );
                 continue;
               }
               if (msg.type === 'stream_event' && msg.event) {
@@ -760,18 +769,23 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 // so their side-pane status flips from "正在工作…" to "已工作".
                 for (const [agentId, transcript] of subagentTranscripts) {
                   const meta = subagentMeta.get(agentId);
-                  safeSend(mainWindow, IPC_CHANNELS.AGENT_UPDATE, {
-                    type: 'agent_update',
-                    agentId,
-                    agent: {
-                      id: agentId,
-                      agentType: meta?.agentType,
-                      description: meta?.description,
-                      status: 'done',
-                      finishedAt: Date.now(),
-                      transcript,
-                    },
-                  });
+                  safeSend(
+                    mainWindow,
+                    IPC_CHANNELS.AGENT_UPDATE,
+                    normalizeSubAgentEvent({
+                      type: 'agent_update',
+                      agentId,
+                      agent: {
+                        id: agentId,
+                        toolUseId: agentId,
+                        agentType: meta?.agentType,
+                        description: meta?.description,
+                        status: 'done',
+                        finishedAt: Date.now(),
+                        transcript,
+                      },
+                    }),
+                  );
                   // Persist the transcript to the Coderix session store keyed by
                   // the tool_use id (=== parent_tool_use_id) so a cold reload
                   // (app restart) can recover it via getAgentTranscript — the
@@ -2253,14 +2267,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           ) {
             return;
           }
-          safeSend(getMainWindow(windowManager), IPC_CHANNELS.AGENT_UPDATE, {
-            type: req.type,
-            agentId: req.agentId,
-            agent:
-              req.type === 'agent_remove'
-                ? undefined
-                : sanitizeSubAgent(req.agent as unknown as SubAgentRecord),
-          });
+          // Canonicalize: the renderer correlates sub-agents with the spawning
+          // Agent/Task tool_use id, so re-key the event by `toolUseId`.
+          safeSend(
+            getMainWindow(windowManager),
+            IPC_CHANNELS.AGENT_UPDATE,
+            normalizeSubAgentEvent({
+              type: req.type,
+              agentId: req.agentId,
+              agent:
+                req.type === 'agent_remove'
+                  ? undefined
+                  : sanitizeSubAgent(req.agent as unknown as SubAgentRecord),
+            }),
+          );
         },
         error() {},
       })

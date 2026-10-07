@@ -47,8 +47,11 @@ export const useSubagentStore = create<SubagentState>()((set) => ({
       const tabs = exists
         ? state.tabs
         : [...state.tabs, { agentId, parentSessionId: parentSessionId ?? null }];
+      // Seed only fills gaps: a live record fed by agent_* events is
+      // authoritative, so it must not be clobbered by the card's seed (which
+      // lacks the engine's stable `id` while the tool call is still running).
       const agents = seed
-        ? { ...state.agents, [agentId]: { ...(state.agents[agentId] ?? {}), ...seed } }
+        ? { ...state.agents, [agentId]: { ...seed, ...(state.agents[agentId] ?? {}) } }
         : state.agents;
       return { tabs, activeAgentId: agentId, agents };
     }),
