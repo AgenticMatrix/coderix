@@ -29,7 +29,7 @@ import { autoInstallClaudeCodeOnBoot } from './claude-code-runtime.js';
 // Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
 import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/core/query-engine.js';
-import type { Session } from '../../../../packages/coderix-core/src/core/types.js';
+import type { Session, ToolContext, ToolExecutionResult } from '../../../../packages/coderix-core/src/core/types.js';
 import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
 import { createEventBus } from '../../../../packages/coderix-core/src/state/observable.js';
@@ -38,43 +38,13 @@ import { createCallModel } from '../../../../packages/coderix-core/src/core/prov
 import { PermissionMode, loadSettings, resolvePermissionMode } from '../../../../packages/coderix-core/src/index.js';
 import { loadDesktopConfig, resolveModelByName } from '../../../../packages/coderix-core/src/config.js';
 
-// Tool schema + executor imports (avoid index.ts → renderers → React/ink)
-import { schema as bashSchema } from '../../../../packages/coderix-core/src/tools/bash/schema.js';
-import { execute as bashExec } from '../../../../packages/coderix-core/src/tools/bash/executor.js';
-import { schema as readSchema } from '../../../../packages/coderix-core/src/tools/read/schema.js';
-import { execute as readExec } from '../../../../packages/coderix-core/src/tools/read/executor.js';
-import { schema as writeSchema } from '../../../../packages/coderix-core/src/tools/write/schema.js';
-import { execute as writeExec } from '../../../../packages/coderix-core/src/tools/write/executor.js';
-import { schema as updateSchema } from '../../../../packages/coderix-core/src/tools/update/schema.js';
-import { execute as updateExec } from '../../../../packages/coderix-core/src/tools/update/executor.js';
-import { schema as globSchema } from '../../../../packages/coderix-core/src/tools/glob/schema.js';
-import { execute as globExec } from '../../../../packages/coderix-core/src/tools/glob/executor.js';
-import { schema as grepSchema } from '../../../../packages/coderix-core/src/tools/grep/schema.js';
-import { execute as grepExec } from '../../../../packages/coderix-core/src/tools/grep/executor.js';
-import { schema as webFetchSchema } from '../../../../packages/coderix-core/src/tools/web-fetch/schema.js';
-import { execute as webFetchExec } from '../../../../packages/coderix-core/src/tools/web-fetch/executor.js';
-import { schema as webSearchSchema } from '../../../../packages/coderix-core/src/tools/web-search/schema.js';
-import { execute as webSearchExec } from '../../../../packages/coderix-core/src/tools/web-search/executor.js';
-import { schema as notebookEditSchema } from '../../../../packages/coderix-core/src/tools/notebook-edit/schema.js';
-import { execute as notebookEditExec } from '../../../../packages/coderix-core/src/tools/notebook-edit/executor.js';
-import { schema as listenSchema } from '../../../../packages/coderix-core/src/tools/listen/schema.js';
-import { execute as listenExec } from '../../../../packages/coderix-core/src/tools/listen/executor.js';
-import { schema as askUserSchema } from '../../../../packages/coderix-core/src/tools/ask-user-question/schema.js';
-import { execute as askUserExec } from '../../../../packages/coderix-core/src/tools/ask-user-question/executor.js';
-import { schema as enterPlanSchema } from '../../../../packages/coderix-core/src/tools/enter-plan-mode/schema.js';
-import { execute as enterPlanExec } from '../../../../packages/coderix-core/src/tools/enter-plan-mode/executor.js';
-import { schema as exitPlanSchema } from '../../../../packages/coderix-core/src/tools/exit-plan-mode/schema.js';
-import { execute as exitPlanExec } from '../../../../packages/coderix-core/src/tools/exit-plan-mode/executor.js';
-import { schema as taskOutputSchema } from '../../../../packages/coderix-core/src/tools/task-output/schema.js';
-import { execute as taskOutputExec } from '../../../../packages/coderix-core/src/tools/task-output/executor.js';
-import { schema as taskStopSchema } from '../../../../packages/coderix-core/src/tools/task-stop/schema.js';
-import { execute as taskStopExec } from '../../../../packages/coderix-core/src/tools/task-stop/executor.js';
-import { schema as enterWorktreeSchema } from '../../../../packages/coderix-core/src/tools/enter-worktree/schema.js';
-import { execute as enterWorktreeExec } from '../../../../packages/coderix-core/src/tools/enter-worktree/executor.js';
-import { schema as exitWorktreeSchema } from '../../../../packages/coderix-core/src/tools/exit-worktree/schema.js';
-import { execute as exitWorktreeExec } from '../../../../packages/coderix-core/src/tools/exit-worktree/executor.js';
-import { schema as skillSchema } from '../../../../packages/coderix-core/src/tools/skill/schema.js';
-import { execute as skillExec } from '../../../../packages/coderix-core/src/tools/skill/executor.js';
+// Single source of truth for the agent tool set + sub-agent runtime, shared
+// with the CLI and the ACP agent so every frontend exposes the same tools and
+// any tool added to core's `plugins` shows up here automatically.
+import { createToolRegistry } from '../../../../packages/coderix-core/src/tools/registry.js';
+import { createAgentRuntime } from '../../../../packages/coderix-core/src/agents/runtime.js';
+import { McpManager } from '../../../../packages/coderix-core/src/mcp/manager.js';
+import type { ToolPlugin } from '../../../../packages/coderix-core/src/tools/types.js';
 
 // ---------------------------------------------------------------------------
 // Prevent multiple instances (single-instance lock)
@@ -279,66 +249,73 @@ function autoInstallCli(): void {
 // QueryEngine initialization
 // ---------------------------------------------------------------------------
 
-// Shared, read-only tool registry reused across every per-session engine. The
-// in-process coderix engine needs one engine instance per concurrently-running
-// session, but the tool set (bash/read/write/…) is identical, so it is built
-// once and shared. The executor wrapper reads `ctx.cwd` (each engine passes its
-// session's workspace) so tools run in the right directory per session.
-let sharedToolRegistry: ToolRegistry | null = null;
+// Tool registries are built by @coderix/core's createToolRegistry() — the single
+// source of truth shared with the CLI and the ACP agent — so the desktop exposes
+// the exact same tools (Agent, task/team tools, MCP) and gains any new core tool
+// automatically. Do NOT hand-roll a tool list here.
+//
+// The built-in set is identical everywhere; only MCP server tools vary by project
+// (~/.coderix/mcp.json + <cwd>/.coderix/mcp.json). The desktop is multi-workspace,
+// so the registry and its McpManager are cached per cwd.
 
-function buildSharedToolRegistry(): ToolRegistry {
-  if (sharedToolRegistry) return sharedToolRegistry;
+type RegistryExecutor = (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolExecutionResult>;
 
-  const toolRegistry = new ToolRegistry();
-  const toolList: Array<{ schema: any; executor: any }> = [
-    { schema: bashSchema, executor: bashExec },
-    { schema: readSchema, executor: readExec },
-    { schema: writeSchema, executor: writeExec },
-    { schema: updateSchema, executor: updateExec },
-    { schema: globSchema, executor: globExec },
-    { schema: grepSchema, executor: grepExec },
-    { schema: webFetchSchema, executor: webFetchExec },
-    { schema: webSearchSchema, executor: webSearchExec },
-    { schema: notebookEditSchema, executor: notebookEditExec },
-    { schema: listenSchema, executor: listenExec },
-    { schema: askUserSchema, executor: askUserExec },
-    { schema: enterPlanSchema, executor: enterPlanExec },
-    { schema: exitPlanSchema, executor: exitPlanExec },
-    { schema: taskOutputSchema, executor: taskOutputExec },
-    { schema: taskStopSchema, executor: taskStopExec },
-    { schema: enterWorktreeSchema, executor: enterWorktreeExec },
-    { schema: exitWorktreeSchema, executor: exitWorktreeExec },
-    { schema: skillSchema, executor: skillExec },
-  ];
-  for (const t of toolList) {
-    if (!t.schema || !t.executor) continue;
-    const { name, description, input_schema } = t.schema;
-    toolRegistry.register(
-      { name, description, input_schema },
-      async (input, ctx) => {
-        // Intercept `open <url>` / `xdg-open` / `start` commands so the model's
-        // "open this in the browser" opens the embedded browser instead of the
-        // OS default (Chrome). Mirrors the claude-code engine's PreToolUse hook,
-        // but lives in the executor wrapper so it also covers the in-process
-        // Coderix engine (the default engine).
-        if (name === 'bash') {
-          const url = extractOpenUrl(
-            (input as { command?: string } | undefined)?.command ?? '',
-            ctx.cwd ?? activeWorkDir,
-          );
-          if (url) {
-            safeSend(windowManager?.getMainWindow() ?? null, IPC_CHANNELS.BROWSER_OPEN_URL, { url });
-            return { content: `Opened in the embedded browser: ${url}`, isError: false };
-          }
-        }
-        const result = await t.executor(input, { cwd: ctx.cwd ?? activeWorkDir, allowMutation: true, sessionId: ctx.sessionId });
-        return { content: String(result.content ?? ''), isError: result.isError ?? false };
-      },
-    );
+const toolRegistryByCwd = new Map<string, ToolRegistry>();
+const mcpManagerByCwd = new Map<string, McpManager>();
+
+/** Desktop-specific executor hook: route `bash` `open <url>` to the embedded browser. */
+const desktopWrapExecutor = (plugin: ToolPlugin, base: RegistryExecutor): RegistryExecutor =>
+  async (input, ctx) => {
+    if (plugin.name === 'bash') {
+      const url = extractOpenUrl(
+        (input as { command?: string } | undefined)?.command ?? '',
+        ctx.cwd ?? activeWorkDir,
+      );
+      if (url) {
+        safeSend(windowManager?.getMainWindow() ?? null, IPC_CHANNELS.BROWSER_OPEN_URL, { url });
+        return { content: `Opened in the embedded browser: ${url}`, isError: false };
+      }
+    }
+    return base(input, ctx);
+  };
+
+/** MCP tool plugins for a workspace (manager cached + initialized on first use). */
+async function getMcpPlugins(cwd: string): Promise<ToolPlugin[]> {
+  let manager = mcpManagerByCwd.get(cwd);
+  if (!manager) {
+    manager = new McpManager(cwd);
+    await manager.initialize();
+    mcpManagerByCwd.set(cwd, manager);
+    const servers = manager.getConnectedServerNames();
+    if (servers.length > 0) {
+      console.log(`[Coderix] MCP connected for ${cwd}: ${servers.join(', ')}`);
+    }
   }
-  console.log(`[Coderix] Registered ${toolRegistry.names.length} tools: ${toolRegistry.names.join(', ')}`);
-  sharedToolRegistry = toolRegistry;
-  return toolRegistry;
+  return [...manager.getToolPlugins(), ...manager.getResourcePlugins()];
+}
+
+/** The workspace's tool registry (built-in plugins + that workspace's MCP tools). */
+async function getToolRegistry(cwd: string): Promise<ToolRegistry> {
+  const cached = toolRegistryByCwd.get(cwd);
+  if (cached) return cached;
+
+  const mcpPlugins = await getMcpPlugins(cwd).catch((err) => {
+    console.warn(`[Coderix] MCP init failed for ${cwd}:`, err instanceof Error ? err.message : err);
+    return [] as ToolPlugin[];
+  });
+
+  const registry = createToolRegistry({ extraPlugins: mcpPlugins, wrapExecutor: desktopWrapExecutor });
+  console.log(`[Coderix] Registered ${registry.names.length} tools for ${cwd}: ${registry.names.join(', ')}`);
+  toolRegistryByCwd.set(cwd, registry);
+  return registry;
+}
+
+/** Close every cached MCP manager on shutdown. */
+async function shutdownMcpManagers(): Promise<void> {
+  const managers = [...mcpManagerByCwd.values()];
+  mcpManagerByCwd.clear();
+  toolRegistryByCwd.clear();
+  await Promise.all(managers.map((m) => m.shutdown().catch(() => {})));
 }
 
 // Build a callModel bound to a specific model + endpoint, falling back to an
@@ -393,14 +370,21 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
   const perSessionManager = new SessionManager(false);
   perSessionManager.adopt(session);
 
+  const cwd = session.cwd ?? activeWorkDir;
+  const toolRegistry = await getToolRegistry(cwd);
+  const agentRuntime = await createAgentRuntime(cwd);
+
   const engine = new QueryEngine({
-    cwd: session.cwd ?? activeWorkDir,
+    cwd,
     model,
     sessionManager: perSessionManager,
-    toolRegistry: buildSharedToolRegistry(),
+    toolRegistry,
     callModel,
     skills: session.skills ?? [],
     eventBus: sharedEventBus,
+    subAgentRegistry: agentRuntime.subAgentRegistry,
+    systemPromptAssembler: agentRuntime.systemPromptAssembler,
+    agentRegistry: agentRuntime.agentRegistry,
   });
   await engine.init();
   engine.setPermissionMode(resolvePermissionMode(loadSettings()) as PermissionMode);
@@ -434,7 +418,7 @@ async function initQueryEngine(workDir?: string, modelOverride?: string): Promis
   const modelId = override ? `${override.provider}/${override.model}` : appConfig.modelId;
 
   activeModel = modelId;
-  console.log(`[Coderix] Config ${sharedToolRegistry ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${override?.baseUrl ?? appConfig.baseUrl}`);
+  console.log(`[Coderix] Config ${toolRegistryByCwd.size > 0 ? 'reloaded' : 'loaded'}: model=${model}, baseURL=${override?.baseUrl ?? appConfig.baseUrl}`);
 
   // Set the engine BEFORE (re)initializing the bootstrap so an engine switch
   // (e.g. coderix → claude-code) takes effect even if the per-session engine
@@ -443,9 +427,9 @@ async function initQueryEngine(workDir?: string, modelOverride?: string): Promis
   // cwd (a live stream is unaffected — its generator already holds its engine).
   ipcBridge.setEngine(appConfig.engine ?? 'coderix');
 
-  // Prime the shared tool registry (built once) so tool registration and its
-  // log line happen at startup rather than on the first message.
-  buildSharedToolRegistry();
+  // Prime the active workspace's tool registry (built-in tools + its MCP tools)
+  // so registration and its log line happen at startup, not on the first message.
+  await getToolRegistry(activeWorkDir);
 
   await ipcBridge.initEngine({
     cwd: workDir !== undefined ? activeWorkDir : undefined,
@@ -493,6 +477,8 @@ app.on('before-quit', () => {
   terminalManager?.destroyAll();
   trayManager?.destroy();
   protocolGateway?.close();
+  // Best-effort: disconnect MCP servers (don't block quit on slow servers).
+  void shutdownMcpManagers();
   console.log('[Coderix] Shutdown complete');
 });
 

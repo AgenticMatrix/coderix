@@ -84,47 +84,9 @@ function parseCliArgs(argv: string[]): CliArgs {
 }
 
 // ── Tool registry (shared) ──────────────────────────────────────────
-
-async function buildToolRegistry(mcpPlugins?: any[]): Promise<any> {
-  const { ToolRegistry } = await import('@coderix/core');
-  const { plugins } = await import('@coderix/core');
-  const { RiskLevel } = await import('@coderix/core');
-  const registry = new ToolRegistry();
-
-  // Collect all plugins: built-in + MCP
-  const allPlugins = [...plugins, ...(mcpPlugins ?? [])];
-
-  for (const plugin of allPlugins) {
-    if (plugin.isEnabled && !plugin.isEnabled()) continue;
-    const schema = plugin.schema as unknown as Record<string, unknown>;
-    const inputSchema = schema.input_schema as Record<string, unknown>;
-    const meta = schema._meta as { riskLevel?: string; isConcurrencySafe?: boolean } | undefined;
-    const riskLevel = meta?.riskLevel === 'safe' ? RiskLevel.SAFE : meta?.riskLevel === 'destructive' ? RiskLevel.DESTRUCTIVE : RiskLevel.MUTATION;
-    registry.register({ name: plugin.name, description: (schema.description as string) ?? plugin.name, input_schema: inputSchema, riskLevel, isConcurrencySafe: meta?.isConcurrencySafe ?? false },
-      async (input: Record<string, unknown>, ctx: any) => {
-        try {
-          const r = await plugin.executor(input, {
-            cwd: ctx.cwd ?? process.cwd(),
-            allowMutation: true,
-            maxOutput: 50_000,
-            bashTimeout: ctx.timeoutMs ?? 30_000,
-            agentSpawn: ctx.agentSpawn,
-            sessionId: ctx.sessionId,
-            getAppState: ctx.getAppState,
-            setAppState: ctx.setAppState,
-            setPermissionMode: ctx.setPermissionMode,
-            getPermissionMode: ctx.getPermissionMode,
-            planModeState: ctx.planModeState,
-            readFileTracker: ctx.readFileTracker,
-            toolUseId: ctx.toolUseId,
-          });
-          return { content: r.content, isError: r.isError, duration: r.duration, metadata: r.metadata };
-        }
-        catch (err) { return { content: `Tool error: ${(err as Error).message}`, isError: true }; }
-      });
-  }
-  return registry;
-}
+// The registry is built by @coderix/core's createToolRegistry() (the single
+// source of truth shared with the ACP agent and the desktop app) so any tool
+// added to core's `plugins` shows up here and on every other frontend.
 
 // ── MCP initialization ─────────────────────────────────────────────────
 
@@ -158,17 +120,13 @@ async function runPrintMode(queryText: string): Promise<void> {
   const callModel = createCallModel(config, config.model);
   const { SessionManager } = await import('@coderix/core');
   const sm = new SessionManager(); sm.create({ cwd: process.cwd(), model: config.model });
-  const { setTaskListId } = await import('@coderix/core');
-  setTaskListId(sm.getActive().id);
-  const { SubAgentRegistry } = await import('@coderix/core');
-  const { SystemPromptAssembler } = await import('@coderix/core');
   const { QueryEngine } = await import('@coderix/core');
   const { PermissionMode } = await import('@coderix/core');
-  const { buildAgentRegistry } = await import('@coderix/core');
-  const { registry: agentRegistry } = await buildAgentRegistry(process.cwd());
+  const { createToolRegistry, createAgentRuntime } = await import('@coderix/core');
   const settings = loadSettings();
   const mcpPlugins = await initMcpAndGetPlugins(process.cwd());
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPlugins), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: new SubAgentRegistry(), systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
+  const agentRuntime = await createAgentRuntime(process.cwd());
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: createToolRegistry({ extraPlugins: mcpPlugins }), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: agentRuntime.subAgentRegistry, systemPromptAssembler: agentRuntime.systemPromptAssembler, agentRegistry: agentRuntime.agentRegistry, settings, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init(); engine.setPermissionMode(PermissionMode.AUTO);
   let fullText = '';
   for await (const event of engine.submitMessage(queryText)) {
@@ -473,19 +431,13 @@ async function main(): Promise<void> {
   if (!hasPreloadedSession) {
     sm.create({ cwd: process.cwd(), model: config.model });
   }
-  const { setTaskListId } = await import('@coderix/core');
-  setTaskListId(sm.getActive().id);
-
   // ── Create unified AppState store ──────────────────────────────────
-  const { SubAgentRegistry } = await import('@coderix/core');
-  const { SystemPromptAssembler } = await import('@coderix/core');
   const { QueryEngine } = await import('@coderix/core');
-  const { buildAgentRegistry: buildAgentReg } = await import('@coderix/core');
   const { PermissionMode } = await import('@coderix/core');
-  const subAgentRegistry = new SubAgentRegistry();
-  const { setSubAgentRegistry } = await import('@coderix/core');
-  setSubAgentRegistry(subAgentRegistry);
-  const { registry: agentRegistry } = await buildAgentReg(process.cwd());
+  const { createToolRegistry, createAgentRuntime } = await import('@coderix/core');
+  const agentRuntime = await createAgentRuntime(process.cwd());
+  const subAgentRegistry = agentRuntime.subAgentRegistry;
+  const agentRegistry = agentRuntime.agentRegistry;
 
   // Restore sub-agents from disk for resumed sessions
   const activeSession = sm.getActive();
@@ -544,7 +496,7 @@ async function main(): Promise<void> {
   const { createEventBus } = await import('@coderix/core');
   const eventBus = createEventBus();
 
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: await buildToolRegistry(mcpPluginsTui), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: new SystemPromptAssembler(), agentRegistry, settings, eventBus, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: createToolRegistry({ extraPlugins: mcpPluginsTui }), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: agentRuntime.systemPromptAssembler, agentRegistry, settings, eventBus, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init();
   engine.setPermissionMode((settings.default_permission_mode as PermissionMode) || 'ask');
 

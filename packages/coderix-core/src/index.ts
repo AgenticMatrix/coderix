@@ -75,6 +75,8 @@ export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types
 
 // ── Agents ─────────────────────────────────────────────────────────
 export { buildAgentRegistry } from './agents/registry.js';
+export { createAgentRuntime } from './agents/runtime.js';
+export type { AgentRuntime } from './agents/runtime.js';
 export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';
 export {
   readAgentMetadata,
@@ -110,8 +112,9 @@ export type { SearchResult } from './tools/web-search/search-service.js';
 // ── Tools ──────────────────────────────────────────────────────────
 export {
   getAnthropicTools, getToolMeta, getToolRiskLevel,
-  executeTool, hasExecutor, plugins,
+  executeTool, hasExecutor, plugins, createToolRegistry,
 } from './tools/registry.js';
+export type { CreateToolRegistryOptions } from './tools/registry.js';
 export type {
   ToolPlugin, ToolMeta, ToolSchema, ToolExecutor,
   ToolResult, ExecutorOptions,
