@@ -332,6 +332,7 @@ export type ChatAction =
   | { type: 'HIDE_EXIT_HINT' }
   | { type: 'UPDATE_BLOCK_STATE'; toolId: string; state: ToolUseState }
   | { type: 'SET_TOOL_USE_RESULT'; toolId: string; duration?: number; result: ToolUseBlock['result'] }
+  | { type: 'UPDATE_TOOL_RESULT'; toolId: string; duration?: number; result: ToolUseBlock['result'] }
   | { type: 'TOGGLE_THINKING'; id: number }
   | { type: 'TOGGLE_TOOLS'; id: number }
   | { type: 'TOGGLE_ALL_EXPAND' }

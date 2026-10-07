@@ -147,6 +147,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         case 'APPEND_BLOCK_DELTA':
         case 'STOP_BLOCK':
         case 'SET_TOOL_USE_RESULT':
+        case 'UPDATE_TOOL_RESULT':
         case 'UPDATE_BLOCK_STATE':
         case 'APPEND_ASSISTANT_TEXT':
         case 'APPEND_ASSISTANT_THINKING':
@@ -430,11 +431,28 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
                   const applyCompleted = () => {
                     const toolName = toolNameMapRef.current.get(toolId);
                     const isBashBackground = toolName === 'bash' && cMetadata?.background === true;
+                    const isListen = toolName === 'Listen';
                     if (isBashBackground) {
                       routeDispatch({
                         type: 'UPDATE_BLOCK_STATE',
                         toolId,
                         state: 'done',
+                      });
+                    } else if (isListen) {
+                      // Listen's `tool_completed` fires once per auto-retry
+                      // attempt, not only when it is truly done. Attach the
+                      // partial result so the renderer can show the attempt
+                      // list, but keep the block `executing` — only the final
+                      // `tool_result` user message marks it `done`.
+                      routeDispatch({
+                        type: 'UPDATE_TOOL_RESULT',
+                        toolId,
+                        duration,
+                        result: {
+                          content,
+                          isError,
+                          metadata: cMetadata,
+                        },
                       });
                     } else {
                       routeDispatch({

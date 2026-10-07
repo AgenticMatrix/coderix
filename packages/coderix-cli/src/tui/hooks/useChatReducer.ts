@@ -446,6 +446,31 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         })),
       };
 
+    case 'UPDATE_TOOL_RESULT':
+      // Attach a partial result WITHOUT marking the tool done. Used by tools
+      // that report intermediate progress before they truly finish (Listen's
+      // auto-retry emits a snapshot per attempt); `done` stays reserved for the
+      // final `tool_result`.
+      return {
+        ...state,
+        messages: state.messages.map((m) => ({
+          ...m,
+          blocks: m.blocks.map((b) =>
+            b.type === 'tool_use' && b.toolId === action.toolId
+              ? {
+                  ...b,
+                  duration: action.duration,
+                  result: action.result ? {
+                    content: truncateResult(action.result.content),
+                    isError: action.result.isError,
+                    metadata: action.result.metadata,
+                  } : undefined,
+                }
+              : b,
+          ),
+        })),
+      };
+
     case 'STOP_BLOCK':
       return {
         ...state,
@@ -520,11 +545,21 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           const newMsgs = msgs.slice(0);
           newMsgs[i] = {
             ...m,
-            blocks: m.blocks.map((b) =>
-              b.type === 'tool_use' && b.toolId === action.toolId
-                ? { ...b, state: action.state }
-                : b,
-            ),
+            blocks: m.blocks.map((b) => {
+              if (b.type !== 'tool_use' || b.toolId !== action.toolId) return b;
+              // `done`/`error` are terminal. A tool that has genuinely finished
+              // must not be downgraded back to executing/pending by a late or
+              // duplicated `progress running` event — that downgrade is what
+              // strands a committed green copy in scrollback while a yellow copy
+              // renders below it.
+              if (
+                (b.state === 'done' || b.state === 'error') &&
+                (action.state === 'executing' || action.state === 'pending')
+              ) {
+                return b;
+              }
+              return { ...b, state: action.state };
+            }),
           };
           return { ...state, messages: newMsgs };
         }
