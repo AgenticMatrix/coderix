@@ -34,7 +34,13 @@ export type { Instance, RenderOptions } from 'ink';
 export function renderSync(node: ReactNode, options?: RenderOptions): Instance {
   return render(node, {
     maxFps: 60,
-    incrementalRendering: true,
+    // Full-frame repaint rather than ink's per-line diff writer. The diff
+    // writer rewinds by ink's own record of what it emitted; any layout shift
+    // it doesn't model — a message moving from the live region to <Static>, the
+    // virtual list's spacer growing when a tool result is attached — desyncs it
+    // and strands the previous frame ("same tool block drawn twice"). A full
+    // repaint can never strand: it erases and redraws from a known origin.
+    incrementalRendering: false,
     ...options,
   });
 }

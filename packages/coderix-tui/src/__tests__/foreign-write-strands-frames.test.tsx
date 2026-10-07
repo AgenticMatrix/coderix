@@ -135,20 +135,14 @@ describe('a repaint interleaved with writes ink did not make', () => {
     expect(statusBars, 'the status bar is repainted in place').toBe(1);
   });
 
-  it('strands a ladder of stale copies once anything else writes', async () => {
+  it('does not strand copies even when something else writes (full repaint resets the cursor)', async () => {
     const clean = await runTurn(false);
     const fouled = await runTurn(true);
 
-    // Stated as a comparison so the test says what the defect IS — duplication
-    // relative to the same run without the writes — rather than pinning an
-    // incidental count that would drift with ink's diffing heuristics.
-    expect(
-      fouled.statusBars,
-      'each foreign write should strand another status bar',
-    ).toBeGreaterThan(clean.statusBars);
-    expect(
-      fouled.toolBlocks,
-      'each foreign write should strand another copy of the tool block',
-    ).toBeGreaterThan(clean.toolBlocks);
+    // `renderSync` now disables ink's incremental per-line diff writer, so each
+    // repaint erases and redraws from a known origin. A foreign write can no
+    // longer desync the rewind and strand a ladder of stale copies.
+    expect(fouled.statusBars).toBe(clean.statusBars);
+    expect(fouled.toolBlocks).toBe(clean.toolBlocks);
   });
 });

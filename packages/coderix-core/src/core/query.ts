@@ -1424,7 +1424,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
 
         // Push an attempt snapshot to the TUI immediately so each row
         // appears as soon as that attempt finishes, not at the very end.
-        async function* yieldAttemptSnapshot(willRetry: boolean): AsyncGenerator<QueryMessage> {
+        // Emitted as `tool_completed` so the bridge attaches the partial
+        // result, but the block stays `executing` (the bridge treats Listen's
+        // `tool_completed` as intermediate); only the final `tool_result`
+        // marks it `done`.
+        async function* yieldAttemptSnapshot(): AsyncGenerator<QueryMessage> {
           const snapshot = buildIncrementalResult();
           yield {
             type: 'system',
@@ -1437,20 +1441,6 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               metadata: snapshot.metadata,
             },
           };
-          // If another retry is coming, flip state back to executing so
-          // the timer keeps running and the renderer stays in active mode.
-          if (willRetry) {
-            yield {
-              type: 'system',
-              subtype: 'progress',
-              data: {
-                toolName: 'Listen',
-                toolUseId: listenBlock.id,
-                status: 'running',
-                message: `Auto-retry ${attempts.length + 1}/${MAX_AUTO_LISTEN_RETRIES + 1}...`,
-              },
-            };
-          }
         }
 
         for (let attemptNum = 1; attemptNum <= MAX_AUTO_LISTEN_RETRIES + 1; attemptNum++) {
@@ -1494,8 +1484,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
               runningSummary,
             });
 
-            const willRetry = !retryWokeEarly && attemptNum <= MAX_AUTO_LISTEN_RETRIES;
-            yield* yieldAttemptSnapshot(willRetry);
+            yield* yieldAttemptSnapshot();
 
             if (retryWokeEarly) break;
 
@@ -1514,8 +1503,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             });
 
             // Yield first-attempt snapshot so the TUI shows it immediately
-            const willRetry = attemptNum <= MAX_AUTO_LISTEN_RETRIES;
-            yield* yieldAttemptSnapshot(willRetry);
+            yield* yieldAttemptSnapshot();
           }
         }
 

@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { appendFile, mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { ToolExecutor, ToolResult } from '../types.js';
 import type { ToolRequestEvent } from '../../state/observable.js';
 import { registerTask, updateTask, notifyTaskCompletion } from '../../tasks/task-tracker.js';
@@ -323,6 +326,82 @@ function runBackgroundCommand(command: string, opts: {
   });
 }
 
+// ── Diagnostic: is a backgrounded bash writing to the terminal? ──────────
+//
+// A backgrounded / auto-backgrounded bash keeps running after the executor
+// returns. Its stdio is piped, but the process (or a descendant — `bun` spawning
+// `tsc`, etc.) may still open the controlling terminal directly and write to it.
+// That foreign write corrupts ink's repaint and strands a committed tool block
+// (the "ladder" symptom). This probe logs every TTY fd open anywhere in the
+// process tree to a file, so we can tell whether that is what happened.
+//
+// It writes to a log file and NEVER to the terminal — writing to the terminal
+// here would itself be the exact defect we are trying to detect.
+
+const DIAG_DIR = join(homedir(), '.coderix', 'diagnostics');
+const DIAG_LOG = join(DIAG_DIR, 'bash-background-stdio.log');
+
+/** Run a short-lived probe and return its stdout, ignoring failures. */
+function runCaptured(cmd: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    let out = '';
+    try {
+      const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+      child.stdout?.on('data', (c: Buffer) => { out += c.toString(); });
+      child.on('error', () => resolve(out));
+      child.on('close', () => resolve(out));
+    } catch {
+      resolve(out);
+    }
+  });
+}
+
+async function diagnoseBackgroundStdio(pid: number, label: string): Promise<void> {
+  try {
+    await mkdir(DIAG_DIR, { recursive: true, mode: 0o700 });
+
+    // Walk the process tree (shell → bun → tsc → …) to catch descendants too.
+    const pids: number[] = [];
+    const seen = new Set<number>();
+    const queue: number[] = [pid];
+    while (queue.length > 0) {
+      const p = queue.pop()!;
+      if (seen.has(p)) continue;
+      seen.add(p);
+      pids.push(p);
+      const stdout = await runCaptured('pgrep', ['-P', String(p)]);
+      for (const tok of stdout.split(/\s+/)) {
+        const c = Number(tok);
+        if (c && !seen.has(c)) queue.push(c);
+      }
+    }
+
+    const ttyFds: string[] = [];
+    for (const p of pids) {
+      const stdout = await runCaptured('lsof', ['-p', String(p)]);
+      for (const line of stdout.split('\n')) {
+        if (/\/dev\/(ttys\d+|pts\/\d+|tty\b|console)/.test(line)) {
+          ttyFds.push(line.replace(/\s+/g, ' ').trim());
+        }
+      }
+    }
+
+    const summary = ttyFds.length > 0
+      ? ttyFds.join('\n')
+      : '(no TTY fd in the process tree — output stays on the pipes)';
+
+    await appendFile(
+      DIAG_LOG,
+      `[${new Date().toISOString()}] ${label}\n` +
+        `  pid=${pid} tree=${pids.join(',')}\n` +
+        summary.split('\n').map((l) => `  ${l}`).join('\n') + '\n\n',
+      { mode: 0o600 },
+    );
+  } catch {
+    // The probe must never throw, and must never write to the terminal.
+  }
+}
+
 export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> => {
   if (!opts.allowMutation) {
     return { content: 'Error: bash tool is not available (mutation tools disabled)', isError: true };
@@ -429,6 +508,9 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       registerTask(trackedTask);
       emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask);
 
+      // Diagnostic: does the backgrounded process tree hold a terminal fd?
+      void diagnoseBackgroundStdio(result.pid, `run_in_background bash (task_id=${taskId})`);
+
       // Listen for process exit to update tracker
       result.child.on('close', (code: number | null) => {
         const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
@@ -490,6 +572,9 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       };
       registerTask(trackedTask);
       emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask);
+
+      // Diagnostic: does the auto-backgrounded process tree hold a terminal fd?
+      void diagnoseBackgroundStdio(result.pid, `auto-backgrounded bash (task_id=${taskId})`);
 
       result.child.on('close', (code: number | null) => {
         const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
