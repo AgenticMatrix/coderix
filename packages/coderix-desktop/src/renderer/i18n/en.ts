@@ -245,6 +245,7 @@ export const en: Record<TranslationKey, string> = {
   'library.knowledgeEmpty': 'Knowledge base coming soon',
   'library.addProject': 'Add project',
   'library.currentProject': 'Current project',
+  'library.removeProject': 'Remove',
 
   // ── Apps ──────────────────────────────────────────────
   'apps.back': 'Back',
