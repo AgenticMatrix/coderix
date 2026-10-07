@@ -98,6 +98,8 @@ export function AgentToolCallCard({
 }: AgentToolCallCardProps): React.ReactElement {
   const t = useT();
   const open = useSubagentStore((s) => s.open);
+  const closeTab = useSubagentStore((s) => s.closeTab);
+  const activeAgentId = useSubagentStore((s) => s.activeAgentId);
 
   const agentTypeRaw = toolInput.agent_type ?? toolInput.subagent_type;
   const agentType =
@@ -114,24 +116,33 @@ export function AgentToolCallCard({
   const isDone = state === 'done';
   const isError = state === 'error';
 
+  // Resolve the agent id. For claude-code the tool_use id IS the sub-agent id
+  // (parent_tool_use_id === toolId); for coderix the tool_result metadata
+  // carries the agent id. Only fall back to parsing the result string when
+  // neither is available — a loose result-string match would otherwise grab a
+  // spurious word and shadow the correct tool_use id.
+  const agentId =
+    (typeof toolMetadata?.agentId === 'string' && toolMetadata.agentId) ||
+    toolId ||
+    parseAgentId(toolResult);
+  // True when this card's sub-agent is the one currently shown in the side pane.
+  const isOpen = agentId !== undefined && activeAgentId === agentId;
+
   const handleOpen = () => {
-    // Resolve the agent id. For claude-code the tool_use id IS the sub-agent id
-    // (parent_tool_use_id === toolId); for coderix the tool_result metadata
-    // carries the agent id. Only fall back to parsing the result string when
-    // neither is available — a loose result-string match would otherwise grab a
-    // spurious word and shadow the correct tool_use id.
-    const id =
-      (typeof toolMetadata?.agentId === 'string' && toolMetadata.agentId) ||
-      toolId ||
-      parseAgentId(toolResult);
-    if (!id) return;
+    if (!agentId) return;
+    // Toggle: clicking the card of the sub-agent already shown in the side pane
+    // closes its tab (the pane hides itself once it has no tabs left).
+    if (isOpen) {
+      closeTab(agentId);
+      return;
+    }
 
     const status: SubagentSummary['status'] =
       state === 'done' ? 'done' : state === 'error' ? 'error' : 'running';
     open(
-      id,
+      agentId,
       {
-        id,
+        id: agentId,
         agentType: agentType ?? 'subagent',
         description: description || undefined,
         prompt: prompt || undefined,
@@ -180,7 +191,7 @@ export function AgentToolCallCard({
       <motion.button
         type="button"
         onClick={handleOpen}
-        title={t('tool.agent.open')}
+        title={isOpen ? t('common.close') : t('tool.agent.open')}
         className="flex items-center gap-1.5 py-1 w-full text-left text-xs cursor-pointer transition-colors duration-100 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
       >
         <span className="text-[var(--color-text-tertiary)] flex-shrink-0">

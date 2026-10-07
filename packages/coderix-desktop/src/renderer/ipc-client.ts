@@ -185,7 +185,12 @@ export function onStreamBlock(callback: (block: StreamBlock) => void): () => voi
         const existing = sessionMap(event.sessionId ?? '').get(event.index);
         if (!existing) break;
 
-        existing.state = 'done';
+        // Only text/thinking blocks are complete at block stop. A `tool_use`
+        // block's input has finished streaming, but the tool has not executed
+        // yet — it is upgraded to 'done' once its `tool_result` arrives (see
+        // streamStore's tool-result attach). Marking it 'done' here would show
+        // a tool — e.g. a sub-agent — as complete before it produced a result.
+        existing.state = existing.type === 'tool_use' ? 'executing' : 'done';
         existing.endedAt = Date.now();
 
         // Parse accumulated input_json_delta into the real tool input object

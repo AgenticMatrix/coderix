@@ -256,7 +256,14 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
                       ...m,
                       blocks: m.blocks.map((b, bi) =>
                         bi === toolUseIdx
-                          ? { ...b, toolResult: block.content, toolMetadata: block.toolMetadata }
+                          ? {
+                              ...b,
+                              toolResult: block.content,
+                              toolMetadata: block.toolMetadata,
+                              // A tool_use stays 'executing' until its result
+                              // lands; the result is what completes it.
+                              state: block.state === 'error' ? 'error' : 'done',
+                            }
                           : b,
                       ),
                     }
@@ -333,6 +340,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         if (block.type === 'tool_result' && existing.type === 'tool_use') {
           existing.toolResult = block.content;
           existing.toolMetadata = block.toolMetadata;
+          // Complete the tool on its result — a tool_use is only 'executing'
+          // (never 'done') between the end of its input stream and this point.
+          existing.state = block.state === 'error' ? 'error' : 'done';
           updated[existingIdx] = existing;
           msg = { ...msg, blocks: updated };
         } else {
