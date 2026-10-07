@@ -62,7 +62,7 @@ export const coderixGuideAgent: BuiltInAgentDefinition = {
   tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch'],
   model: 'haiku',
   permissionMode: 'dontAsk',
-  maxTurns: 10,
+  maxTurns: 50,
   contextBudget: 80_000,
   getSystemPrompt: () => getGuideSystemPrompt(),
 };

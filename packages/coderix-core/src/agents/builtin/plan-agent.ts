@@ -9,7 +9,7 @@ export const planAgent: BuiltInAgentDefinition = {
   tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
   disallowedTools: ['write', 'update', 'NotebookEdit'],
   model: 'haiku',
-  maxTurns: 20,
+  maxTurns: 100,
   contextBudget: 120_000,
   getSystemPrompt: () => [
     'You are a planning sub-agent for Coderix. Analyze the problem and design a detailed implementation plan.',

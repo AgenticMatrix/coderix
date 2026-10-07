@@ -8,7 +8,7 @@ export const generalPurposeAgent: BuiltInAgentDefinition = {
     'General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use for tasks that require a broad tool set and autonomous judgment — unlike explore (read-only search) or plan (design-only). When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you.',
   tools: '*',
   disallowedTools: [],
-  maxTurns: 20,
+  maxTurns: 100,
   contextBudget: 120_000,
   getSystemPrompt: () => [
     'You are a general-purpose sub-agent spawned by Coderix to complete a specific task.',
