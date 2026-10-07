@@ -1,6 +1,9 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { ToolPlugin, ToolMeta, ToolExecutor, ToolResult, ExecutorOptions, ResolvedExecutorOptions } from './types.js';
+import { ToolRegistry } from '../core/tool-registry.js';
+import { RiskLevel } from '../core/types.js';
+import type { ToolContext, ToolExecutionResult, ToolDefinition } from '../core/types.js';
 
 // ── Plugin imports (add new tools here) ────────────────────────────────
 import bashPlugin from './bash/index.js';
@@ -65,6 +68,81 @@ export const plugins: ToolPlugin[] = [
   enterWorktreePlugin,
   exitWorktreePlugin,
 ];
+
+// ── Registry builder (single source of truth) ──────────────────────────
+
+/** Executor shape the ToolRegistry stores: the engine's full ToolContext in,
+ *  a normalized result out. */
+type RegistryExecutor = (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolExecutionResult>;
+
+export interface CreateToolRegistryOptions {
+  /** Extra plugins appended after the built-in set (e.g. MCP server tools). */
+  extraPlugins?: ToolPlugin[];
+  /**
+   * Host hook to wrap/override a plugin's executor. The desktop app uses it to
+   * intercept `bash` `open <url>` commands and route them to its embedded
+   * browser; every other plugin falls through to the default executor.
+   */
+  wrapExecutor?: (plugin: ToolPlugin, base: RegistryExecutor) => RegistryExecutor;
+}
+
+/**
+ * Build a ToolRegistry from the canonical `plugins` list (+ optional extras).
+ *
+ * This is the ONE place that decides the agent's tool set. CLI, ACP and the
+ * desktop app all call it, so a tool added to `plugins` shows up on every
+ * frontend automatically — never hand-roll a tool list elsewhere.
+ */
+export function createToolRegistry(opts: CreateToolRegistryOptions = {}): ToolRegistry {
+  const registry = new ToolRegistry();
+  const allPlugins = [...plugins, ...(opts.extraPlugins ?? [])];
+
+  for (const plugin of allPlugins) {
+    if (plugin.isEnabled && !plugin.isEnabled()) continue;
+
+    const meta = plugin.schema._meta;
+    const riskLevel =
+      meta?.riskLevel === 'safe' ? RiskLevel.SAFE
+        : meta?.riskLevel === 'destructive' ? RiskLevel.DESTRUCTIVE
+          : RiskLevel.MUTATION;
+
+    const definition: ToolDefinition = {
+      name: plugin.name,
+      description: plugin.schema.description ?? plugin.name,
+      input_schema: plugin.schema.input_schema ?? { type: 'object', properties: {} },
+      riskLevel,
+      isConcurrencySafe: meta?.isConcurrencySafe ?? false,
+    };
+
+    const base: RegistryExecutor = async (input, ctx) => {
+      const result = await plugin.executor(input, {
+        cwd: ctx.cwd ?? process.cwd(),
+        allowMutation: true,
+        maxOutput: 50_000,
+        bashTimeout: ctx.timeoutMs ?? 30_000,
+        agentSpawn: ctx.agentSpawn,
+        sessionId: ctx.sessionId,
+        setPermissionMode: ctx.setPermissionMode,
+        getPermissionMode: ctx.getPermissionMode,
+        planModeState: ctx.planModeState,
+        getCoreState: ctx.getCoreState,
+        emitToolRequest: ctx.emitToolRequest,
+        toolUseId: ctx.toolUseId,
+        readFileTracker: ctx.readFileTracker,
+      } as ResolvedExecutorOptions);
+      return {
+        content: result.content,
+        isError: result.isError,
+        duration: result.duration,
+        metadata: result.metadata,
+      };
+    };
+
+    registry.register(definition, opts.wrapExecutor ? opts.wrapExecutor(plugin, base) : base);
+  }
+
+  return registry;
+}
 
 // ── Backward-compatible aliases ───────────────────────────────────────
 

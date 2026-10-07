@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { ToolRegistry } from '../../packages/coderix-core/src/core/tool-registry.js';
+import { createToolRegistry, plugins } from '../../packages/coderix-core/src/tools/registry.js';
 import type { ToolDefinition, ToolContext, ToolExecutionResult } from '../../packages/coderix-core/src/core/types.js';
 
 function makeDef(name: string): ToolDefinition {
@@ -74,5 +75,36 @@ describe('ToolRegistry', () => {
     reg.register(makeDef('Read'), noop);
     reg.register(makeDef('Write'), noop);
     expect(reg.names.sort()).toEqual(['Read', 'Write']);
+  });
+});
+
+describe('createToolRegistry (single source of truth)', () => {
+  it('should register exactly the enabled core plugins', () => {
+    const expected = plugins
+      .filter((p) => !p.isEnabled || p.isEnabled())
+      .map((p) => p.name);
+    expect(createToolRegistry().names.sort()).toEqual(expected.sort());
+  });
+
+  it('should include the sub-agent Agent tool so every frontend can spawn sub-agents', () => {
+    expect(createToolRegistry().names).toContain('Agent');
+  });
+
+  it('should append extraPlugins (e.g. MCP tools)', () => {
+    const mcp = { name: 'mcp__demo__ping', schema: { name: 'mcp__demo__ping', description: 'ping', input_schema: { type: 'object', properties: {} }, _meta: { riskLevel: 'safe' as const } }, executor: async () => ({ content: 'pong', isError: false }) };
+    const names = createToolRegistry({ extraPlugins: [mcp as never] }).names;
+    expect(names).toContain('mcp__demo__ping');
+    expect(names).toContain('Agent');
+  });
+
+  it('should let a host wrap a plugin executor', async () => {
+    const registry = createToolRegistry({
+      wrapExecutor: (plugin, base) =>
+        plugin.name === 'bash'
+          ? async () => ({ content: 'intercepted', isError: false })
+          : base,
+    });
+    const result = await registry.execute('bash', { command: 'echo hi' }, CTX);
+    expect(result.content).toBe('intercepted');
   });
 });

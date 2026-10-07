@@ -31,51 +31,15 @@ import { loadConfig, loadSettings, getMaxToolConcurrency } from '@coderix/core';
 import { createCallModel } from '@coderix/core';
 import { QueryEngine } from '@coderix/core';
 import { SessionManager } from '@coderix/core';
-import { SystemPromptAssembler } from '@coderix/core';
-import { SubAgentRegistry } from '@coderix/core';
 import { PermissionMode, type DeferredPermission, type AgentError } from '@coderix/core';
-import { plugins } from '@coderix/core';
-import { ToolRegistry } from '@coderix/core';
-import { setSubAgentRegistry } from '@coderix/core';
-import { buildAgentRegistry } from '@coderix/core';
+import { createToolRegistry, createAgentRuntime } from '@coderix/core';
 import { isSlashCommand, parseSlashCommand } from '../commands/handler.js';
 import { findSlashCommand } from '../commands/registry.js';
 import type { AppConfig } from '../types.js';
 
-// ---------------------------------------------------------------------------
-// Tool registry builder (mirrors gateway/server.ts)
-// ---------------------------------------------------------------------------
-
-function buildAcpToolRegistry(): ToolRegistry {
-  const registry = new ToolRegistry();
-  for (const plugin of plugins) {
-    if (!plugin.isEnabled || plugin.isEnabled()) {
-      registry.register(
-        {
-          name: plugin.name,
-          description: plugin.schema.description ?? '',
-          input_schema: plugin.schema.input_schema ?? { type: 'object', properties: {} },
-        },
-        async (input, ctx) => {
-          const result = await plugin.executor(input, {
-            cwd: ctx.cwd ?? process.cwd(),
-            allowMutation: true,
-            maxOutput: 50_000,
-            signal: ctx.signal,
-            agentSpawn: (ctx as any).agentSpawn,
-            setPermissionMode: (ctx as any).setPermissionMode,
-            getPermissionMode: (ctx as any).getPermissionMode,
-            planModeState: (ctx as any).planModeState,
-            sessionId: (ctx as any).sessionId,
-            toolUseId: (ctx as any).toolUseId,
-          } as any);
-          return result as any;
-        },
-      );
-    }
-  }
-  return registry;
-}
+// The agent's tool set and sub-agent runtime are built by @coderix/core
+// (createToolRegistry / createAgentRuntime), the same single source of truth
+// the CLI and desktop app use, so all frontends stay in lockstep.
 
 // ---------------------------------------------------------------------------
 // Session store
@@ -91,14 +55,11 @@ const sessions = new Map<string, ActiveSession>();
 async function createEngine(cwd: string): Promise<{ engine: QueryEngine; sessionId: string; model: string }> {
   const config = loadConfig();
   const callModel = createCallModel(config, config.model);
-  const toolRegistry = buildAcpToolRegistry();
+  const toolRegistry = createToolRegistry();
   const sessionManager = new SessionManager();
   sessionManager.create({ cwd, model: config.model });
   const settings = loadSettings();
-  const subAgentRegistry = new SubAgentRegistry();
-  setSubAgentRegistry(subAgentRegistry);
-  const systemPromptAssembler = new SystemPromptAssembler();
-  const { registry: agentRegistry } = await buildAgentRegistry(cwd);
+  const agentRuntime = await createAgentRuntime(cwd);
 
   const engine = new QueryEngine({
     cwd,
@@ -107,9 +68,9 @@ async function createEngine(cwd: string): Promise<{ engine: QueryEngine; session
     callModel,
     model: config.model,
     maxToolConcurrency: getMaxToolConcurrency(settings),
-    subAgentRegistry,
-    systemPromptAssembler,
-    agentRegistry,
+    subAgentRegistry: agentRuntime.subAgentRegistry,
+    systemPromptAssembler: agentRuntime.systemPromptAssembler,
+    agentRegistry: agentRuntime.agentRegistry,
   });
 
   await engine.init();
