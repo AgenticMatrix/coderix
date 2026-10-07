@@ -146,7 +146,7 @@ export const verificationAgent: BuiltInAgentDefinition = {
   disallowedTools: ['write', 'update', 'NotebookEdit', 'Agent'],
   model: 'inherit',
   background: true,
-  maxTurns: 25,
+  maxTurns: 125,
   contextBudget: 150_000,
   color: 'red',
   getSystemPrompt: () => VERIFICATION_SYSTEM_PROMPT,

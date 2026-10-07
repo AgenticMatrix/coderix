@@ -86,7 +86,7 @@ export const statuslineSetupAgent: BuiltInAgentDefinition = {
     "Use this agent to configure the user's Coderix status line setting. Handles PS1 conversion from shell config files and updates .coderix/settings.json.",
   tools: ['read', 'update'],
   model: 'sonnet',
-  maxTurns: 8,
+  maxTurns: 40,
   contextBudget: 60_000,
   color: 'orange',
   getSystemPrompt: () => STATUSLINE_SYSTEM_PROMPT,

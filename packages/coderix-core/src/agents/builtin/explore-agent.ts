@@ -9,7 +9,7 @@ export const exploreAgent: BuiltInAgentDefinition = {
   tools: ['bash', 'read', 'glob', 'grep', 'WebFetch', 'WebSearch', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'],
   disallowedTools: ['write', 'update', 'NotebookEdit'],
   model: 'haiku',
-  maxTurns: 15,
+  maxTurns: 75,
   contextBudget: 80_000,
   getSystemPrompt: () => [
     'You are a file search specialist for Coderix. You excel at thoroughly navigating and exploring codebases.',
