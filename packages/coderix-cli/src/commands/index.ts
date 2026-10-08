@@ -14,7 +14,7 @@
  */
 
 export type { SlashCommand, SlashRunContext } from './types.js';
-export { SLASH_COMMANDS, findSlashCommand, listCommandNames } from './registry.js';
+export { SLASH_COMMANDS, findSlashCommand, listCommandNames, registerDynamicCommands, unregisterDynamicCommands } from './registry.js';
 export {
   createSlashHandler,
   parseSlashCommand,

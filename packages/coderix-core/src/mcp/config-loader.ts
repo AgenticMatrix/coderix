@@ -16,6 +16,7 @@ import {
   McpJsonConfigSchema,
   type ConfigScope,
 } from './types.js';
+import { installedConfigPath } from './bundle.js';
 
 // ── Config file paths ──────────────────────────────────────────────────
 
@@ -25,6 +26,11 @@ export function projectConfigPath(cwd: string): string {
 
 export function userConfigPath(): string {
   return join(homedir(), '.coderix', 'mcp.json');
+}
+
+/** Installed bundle catalog: `~/.coderix/mcp/config.json` (see bundle.ts). */
+export function bundleConfigPath(): string {
+  return installedConfigPath();
 }
 
 function configPathForScope(scope: ConfigScope, cwd?: string): string {
@@ -76,16 +82,23 @@ function attachScope(
  * Load all MCP server configs, merged across scopes.
  *
  * Priority (low → high):
- *   1. User config   (~/.coderix/mcp.json)
- *   2. Project config (.coderix/mcp.json)
+ *   1. Installed bundle  (~/.coderix/mcp/config.json)
+ *   2. User config       (~/.coderix/mcp.json)
+ *   3. Project config    (.coderix/mcp.json)
  *
- * Project configs override user configs with the same server name.
+ * Later sources override earlier ones by server name. The installed bundle
+ * also carries user-scope `disabledServers` (see `getUserDisabledSet`).
  */
 export function loadMcpConfigs(cwd: string): Record<string, ScopedServerConfig> {
+  const bundleConfig = loadJsonFile(bundleConfigPath());
   const userConfig = loadJsonFile(userConfigPath());
   const projectConfig = loadJsonFile(projectConfigPath(cwd));
 
   const merged: Record<string, ScopedServerConfig> = {};
+
+  if (bundleConfig) {
+    Object.assign(merged, attachScope(bundleConfig.mcpServers, 'user'));
+  }
 
   if (userConfig) {
     Object.assign(merged, attachScope(userConfig.mcpServers, 'user'));
@@ -195,10 +208,19 @@ function writeDisabledSet(filePath: string, set: Set<string>): void {
   writeJsonFile(filePath, existing);
 }
 
+/** User-scope disabled set = installed bundle ∪ ~/.coderix/mcp.json. */
+function getUserDisabledSet(): Set<string> {
+  const set = getDisabledSet(bundleConfigPath());
+  for (const name of getDisabledSet(userConfigPath())) set.add(name);
+  return set;
+}
+
 /** Check if a server is disabled in its config file. */
 export function isServerDisabled(name: string, scope: ConfigScope, cwd?: string): boolean {
-  const filePath = configPathForScope(scope, cwd);
-  return getDisabledSet(filePath).has(name);
+  if (scope === 'project') {
+    return getDisabledSet(projectConfigPath(cwd ?? process.cwd())).has(name);
+  }
+  return getUserDisabledSet().has(name);
 }
 
 /** Disable a server (add it to the disabledServers list in its config file). */
@@ -211,10 +233,19 @@ export function disableServer(name: string, scope: ConfigScope, cwd?: string): v
 
 /** Enable a server (remove it from the disabledServers list). */
 export function enableServer(name: string, scope: ConfigScope, cwd?: string): void {
-  const filePath = configPathForScope(scope, cwd);
-  const set = getDisabledSet(filePath);
-  set.delete(name);
-  writeDisabledSet(filePath, set);
+  if (scope === 'project') {
+    const filePath = projectConfigPath(cwd ?? process.cwd());
+    const set = getDisabledSet(filePath);
+    set.delete(name);
+    writeDisabledSet(filePath, set);
+    return;
+  }
+  // User scope: the name may be disabled in the installed bundle or the user
+  // file — clear it from both so the enable actually takes effect.
+  for (const filePath of [bundleConfigPath(), userConfigPath()]) {
+    const set = getDisabledSet(filePath);
+    if (set.delete(name)) writeDisabledSet(filePath, set);
+  }
 }
 
 /**
@@ -237,13 +268,12 @@ export function loadEnabledMcpConfigs(cwd: string): Record<string, ScopedServerC
  */
 export function listDisabledServerNames(cwd?: string): Array<{ name: string; scope: ConfigScope }> {
   const result: Array<{ name: string; scope: ConfigScope }> = [];
-  const userPath = userConfigPath();
   const projectPath = projectConfigPath(cwd ?? process.cwd());
 
   for (const name of getDisabledSet(projectPath)) {
     result.push({ name, scope: 'project' as ConfigScope });
   }
-  for (const name of getDisabledSet(userPath)) {
+  for (const name of getUserDisabledSet()) {
     // Project-scoped entries take precedence
     if (!result.some(e => e.name === name && e.scope === 'project')) {
       result.push({ name, scope: 'user' as ConfigScope });

@@ -29,6 +29,7 @@ interface CliArgs {
   chromeMcp: boolean;
   chromeMcpPort?: number;
   computerUseMcp: boolean;
+  demoMcp: boolean;
   sdk: boolean;
   resume?: string;       // undefined=not passed, ''=flag without value, string=session ID
   continueFlag: boolean; // -c / --continue
@@ -44,6 +45,7 @@ function parseCliArgs(argv: string[]): CliArgs {
     acp: false,
     chromeMcp: false,
     computerUseMcp: false,
+    demoMcp: false,
     sdk: false,
     continueFlag: false,
   };
@@ -64,6 +66,7 @@ function parseCliArgs(argv: string[]): CliArgs {
       case '--chrome-mcp': args.chromeMcp = true; break;
       case '--chrome-mcp-port': args.chromeMcpPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.chromeMcpPort)) i++; break;
       case '--computer-use-mcp': args.computerUseMcp = true; break;
+      case '--demo-mcp': args.demoMcp = true; break;
       case '--sdk': args.sdk = true; break;
       case '--resume': case '-r': {
         const nextArg = argv[i + 1];
@@ -104,6 +107,18 @@ async function initMcpAndGetPlugins(cwd: string): Promise<any[]> {
         process.stderr.write(`[MCP] Warning: ${failed.length} server(s) failed to connect: ${failed.join(', ')}\n`);
       }
     }
+    const needsAuth = manager.getNeedsAuthServerNames();
+    if (needsAuth.length > 0) {
+      process.stderr.write(`[MCP] ${needsAuth.length} server(s) need authorization: ${needsAuth.join(', ')} (run: coderix mcp auth <name>)\n`);
+    }
+
+    // Expose discovered prompt templates as slash commands.
+    const { registerMcpPromptCommands } = await import('../commands/mcp-prompts.js');
+    const promptCommands = registerMcpPromptCommands(manager);
+    if (promptCommands.length > 0) {
+      process.stderr.write(`[MCP] Registered ${promptCommands.length} prompt command(s)\n`);
+    }
+
     return [...plugins, ...resourcePlugins];
   } catch (err) {
     // MCP is optional — don't block startup on errors
@@ -306,7 +321,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --resume, -r [id]     Resume a session by ID, or open interactive picker\n  --continue, -c        Resume the most recent conversation\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n  --sdk                 SDK stream-json mode (stdin/stdout, for SDK clients)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
+  if (cliArgs.demoMcp) {
+    const { runDemoMcpServer } = await import('@coderix/core');
+    await runDemoMcpServer();
+    return;
+  }
+
+  if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --resume, -r [id]     Resume a session by ID, or open interactive picker\n  --continue, -c        Resume the most recent conversation\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n  --demo-mcp            Start the Demo MCP server (stdin/stdout, reference)\n  --sdk                 SDK stream-json mode (stdin/stdout, for SDK clients)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
 
   if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const { detectShell } = await import('@coderix/core'); let version = '0.1.0'; try { const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; version = pkg.version; } catch { /* compiled standalone (bun --compile): import.meta.url is a virtual $bunfs path, package.json isn't on disk */ version = '0.1.0'; } const shell = detectShell(); console.log(`coderix ${version}\nnode ${process.version}\n${process.platform} ${process.arch}\nshell ${shell.path} (${shell.type})`); process.exit(0); }
 
@@ -491,6 +512,10 @@ async function main(): Promise<void> {
   }
 
   const settings = loadSettings();
+  // Collect any missing MCP secrets before servers connect (they connect during
+  // init, which runs before the main TUI mounts).
+  const { promptForMissingSecrets } = await import('../tui/secret-bootstrap.js');
+  await promptForMissingSecrets(process.cwd());
   const mcpPluginsTui = await initMcpAndGetPlugins(process.cwd());
   // ── Create EventBus for core→UI communication ─────────────────────
   const { createEventBus } = await import('@coderix/core');

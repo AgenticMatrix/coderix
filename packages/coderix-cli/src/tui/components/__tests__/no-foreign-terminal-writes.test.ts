@@ -49,6 +49,7 @@ const WORKSPACE: Record<string, string> = {
 const SEPARATE_PROCESS_ENTRY_POINTS = [
   'coderix-core/src/mcp/builtin/chrome-mcp/mcp-server.ts',
   'coderix-core/src/mcp/builtin/computer-use-mcp/mcp-server.ts',
+  'coderix-core/src/mcp/builtin/demo-mcp/mcp-server.ts',
 ];
 
 const DIRECT_WRITE = /process\s*\.\s*(?:stdout|stderr)\s*\.\s*write/;

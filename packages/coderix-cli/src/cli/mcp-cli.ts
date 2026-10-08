@@ -57,11 +57,14 @@ export async function handleMcpCli(args: string[]): Promise<void> {
     case 'disable':
       await handleDisable(args.slice(1));
       break;
+    case 'auth':
+      await handleAuth(args.slice(1));
+      break;
     case 'serve':
       await handleServe();
       break;
     default:
-      console.log(`Usage: coderix mcp <add|remove|list|reconnect|enable|disable|serve> [options]`);
+      console.log(`Usage: coderix mcp <add|remove|list|reconnect|enable|disable|auth|serve> [options]`);
       console.log('');
       console.log('Commands:');
       console.log('  add        Add an MCP server');
@@ -70,6 +73,7 @@ export async function handleMcpCli(args: string[]): Promise<void> {
       console.log('  reconnect  Reconnect to an MCP server');
       console.log('  enable     Enable a disabled MCP server');
       console.log('  disable    Disable an MCP server');
+      console.log('  auth       Authorize an OAuth-protected remote server');
       console.log('  serve      Start Coderix as an MCP server (stdio)');
       console.log('');
       console.log('Examples:');
@@ -80,8 +84,8 @@ export async function handleMcpCli(args: string[]): Promise<void> {
       console.log('  coderix mcp reconnect my-tools');
       console.log('  coderix mcp disable my-tools');
       console.log('  coderix mcp enable my-tools');
-      console.log('  coderix mcp remove my-tools');
-      console.log('  coderix mcp list');
+      console.log('  coderix mcp auth my-api');
+      console.log('  coderix mcp auth my-api --code <code>');
       process.exit(0);
   }
 }
@@ -334,6 +338,72 @@ async function handleDisable(args: string[]): Promise<void> {
   disableServer(name, config.scope);
   console.log(`✓ "${name}" disabled`);
   process.exit(0);
+}
+
+// ── Auth (OAuth) ───────────────────────────────────────────────────────
+
+async function handleAuth(args: string[]): Promise<void> {
+  let code: string | undefined;
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--code' || arg === '-c') {
+      code = args[++i];
+    } else if (!arg.startsWith('-')) {
+      positional.push(arg);
+    }
+  }
+
+  const name = positional[0];
+  if (!name) {
+    console.error('Usage: coderix mcp auth <name> [--code <code>]');
+    process.exit(1);
+  }
+
+  const { getMcpConfig, connectToServer, completeOAuthAuthorization } = await import('@coderix/core');
+  const config = getMcpConfig(name);
+  if (!config) {
+    console.error(`Server "${name}" not found in config.`);
+    process.exit(1);
+  }
+  if (!('url' in config) || !config.oauth) {
+    console.error(`Server "${name}" has no OAuth configuration (only http/sse servers can use OAuth).`);
+    process.exit(1);
+  }
+
+  if (!code) {
+    console.log(`Starting OAuth authorization for "${name}"...`);
+    const conn = await connectToServer(name, config, process.cwd(), { openAuthBrowser: true });
+    if (conn.type === 'needs-auth') {
+      console.log('');
+      if (conn.authorizationUrl) {
+        console.log('Open this URL in a browser to authorize:');
+        console.log(`  ${conn.authorizationUrl}`);
+      } else {
+        console.log('Authorization required, but the server did not return a URL.');
+        console.log('Check the server URL and oauth settings.');
+      }
+      console.log('');
+      console.log(`Then complete with: coderix mcp auth ${name} --code <code>`);
+      process.exit(0);
+    }
+    if (conn.type === 'connected') {
+      console.log(`✓ "${name}" is already authorized and connected.`);
+      await conn.cleanup();
+      process.exit(0);
+    }
+    console.error(`✗ ${conn.type === 'failed' ? conn.error : conn.type}`);
+    process.exit(1);
+  }
+
+  const result = await completeOAuthAuthorization(name, config, process.cwd(), code);
+  if (result.ok) {
+    console.log(`✓ "${name}" authorized and connected.`);
+    process.exit(0);
+  }
+  console.error(`✗ ${result.error}`);
+  process.exit(1);
 }
 
 // ── Serve ──────────────────────────────────────────────────────────────

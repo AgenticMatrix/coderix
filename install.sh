@@ -461,6 +461,21 @@ if [ -d "${SCRIPT_DIR}/resources/skills" ]; then
   done
 fi
 
+# Copy bundled MCP servers to ~/.coderix/mcp/.
+# Never overwrite an existing install: that directory holds the user's edits
+# and secrets.json, so its presence means "already installed".
+MCP_DIR="${CODERIX_DIR}/mcp"
+if [ -d "${SCRIPT_DIR}/mcp" ]; then
+  echo ""
+  if [ -d "${MCP_DIR}" ]; then
+    echo -e "${YELLOW}MCP servers already installed — skipping (delete ${MCP_DIR} to reinstall)${NC}"
+  else
+    mkdir -p "${MCP_DIR}"
+    cp -R "${SCRIPT_DIR}/mcp/." "${MCP_DIR}/"
+    echo -e "${GREEN}Installed MCP servers to ${MCP_DIR}${NC}"
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # 8. Create default settings.json
 # ---------------------------------------------------------------------------
@@ -542,6 +557,7 @@ echo ""
 echo -e "${CYAN}Configuration:${NC}"
 echo "  ~/.coderix/               — Configuration directory"
 echo "  ~/.coderix/settings.json  — Provider & model settings"
+echo "  ~/.coderix/mcp/           — Installed MCP server bundle (config.json, secrets.json)"
 echo "  CODERIX.md           — Project-specific instructions"
 echo ""
 echo -e "${YELLOW}Documentation: https://github.com/AgenticMatrix/Coderix${NC}"

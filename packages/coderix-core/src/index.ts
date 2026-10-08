@@ -177,16 +177,28 @@ export type { HookManager } from './hooks/index.js';
 // ── MCP ────────────────────────────────────────────────────────────
 export { McpManager, discoverTools } from './mcp/index.js';
 export {
-  loadMcpConfigs, projectConfigPath, userConfigPath,
+  loadMcpConfigs, loadEnabledMcpConfigs, projectConfigPath, userConfigPath,
   addMcpConfig, removeMcpConfig, getMcpConfig,
   disableServer, enableServer, isServerDisabled,
 } from './mcp/config-loader.js';
 export { startMcpServer } from './mcp/mcp-server.js';
-export type { ServerConfig, ScopedServerConfig } from './mcp/types.js';
+export type {
+  ServerConfig, ScopedServerConfig, McpOAuthConfig,
+  McpPrompt, McpPromptArgument, NeedsAuthServer,
+} from './mcp/types.js';
 export { StdioServerConfigSchema, HttpServerConfigSchema } from './mcp/types.js';
-export { connectToServer } from './mcp/connection.js';
+export {
+  connectToServer, completeOAuthAuthorization, resolveServerEnv,
+  discoverPrompts, getPrompt,
+  buildMcpPromptName, parseMcpPromptName, renderMcpPromptMessages,
+  parsePromptArgs, describeMcpPrompt,
+  createOAuthProvider, clearOAuthCredentials, mcpAuthStorePath,
+  installedMcpDir, installedConfigPath, mcpSecretsPath,
+  getServerSecrets, getSecret, setSecret, clearServerSecrets, listServersWithSecrets,
+} from './mcp/index.js';
 export { runChromeMcpServer } from './mcp/builtin/chrome-mcp/index.js';
 export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js';
+export { runDemoMcpServer, createDemoMcpServer, DEMO_TOOLS } from './mcp/builtin/demo-mcp/index.js';
 
 // ── Config ─────────────────────────────────────────────────────────
 export { loadSettings, saveSettings, loadConfig, loadDesktopConfig, inferProvider, getMaxToolConcurrency, detectProtocol, resolvePermissionMode, resolveModelByName } from './config.js';

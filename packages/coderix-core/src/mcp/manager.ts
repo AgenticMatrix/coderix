@@ -17,7 +17,9 @@ import {
   listDisabledServerNames,
 } from './config-loader.js';
 import { connectToServer } from './connection.js';
-import { discoverTools, discoverResources } from './discovery.js';
+import type { ConnectHooks } from './connection.js';
+import { discoverTools, discoverResources, discoverPrompts, getPrompt } from './discovery.js';
+import type { GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   createListMcpResourcesPlugin,
   createReadMcpResourcePlugin,
@@ -29,6 +31,7 @@ import type {
   ScopedServerConfig,
   ConfigScope,
   ServerResource,
+  McpPrompt,
 } from './types.js';
 import type { McpSkill } from './mcp-skills.js';
 
@@ -43,6 +46,10 @@ const BACKOFF_MULTIPLIER = 2;
 
 export type ToolsChangedCallback = (serverName: string, plugins: ToolPlugin[]) => void;
 
+/** Fired when any primitive list changes (initial discovery, notification, reconnect). */
+export type ServerChangedKind = 'tools' | 'resources' | 'prompts';
+export type ServerChangedCallback = (serverName: string, kind: ServerChangedKind) => void;
+
 // ── McpManager ───────────────────────────────────────────────────────────
 
 export class McpManager {
@@ -50,11 +57,13 @@ export class McpManager {
   private connections = new Map<string, ServerConnection>();
   private toolPlugins = new Map<string, ToolPlugin[]>();
   private serverResources = new Map<string, ServerResource[]>();
+  private serverPrompts = new Map<string, McpPrompt[]>();
   private serverSkills = new Map<string, McpSkill[]>();
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private reconnectAttempts = new Map<string, number>();
   private initialized = false;
   private onChangeCallbacks: ToolsChangedCallback[] = [];
+  private onChangedCallbacks: ServerChangedCallback[] = [];
 
   constructor(cwd: string) {
     this.cwd = cwd;
@@ -67,11 +76,26 @@ export class McpManager {
     this.onChangeCallbacks.push(cb);
   }
 
+  /** Register a callback fired when any primitive list changes. */
+  onServerChanged(cb: ServerChangedCallback): void {
+    this.onChangedCallbacks.push(cb);
+  }
+
   private notifyToolsChanged(serverName: string): void {
     const plugins = this.toolPlugins.get(serverName) ?? [];
     for (const cb of this.onChangeCallbacks) {
       try {
         cb(serverName, plugins);
+      } catch {
+        // Don't let one bad callback break the chain
+      }
+    }
+  }
+
+  private notifyServerChanged(serverName: string, kind: ServerChangedKind): void {
+    for (const cb of this.onChangedCallbacks) {
+      try {
+        cb(serverName, kind);
       } catch {
         // Don't let one bad callback break the chain
       }
@@ -104,23 +128,82 @@ export class McpManager {
     // Set pending state
     this.connections.set(name, { name, type: 'pending', config });
 
-    const connection = await connectToServer(name, config, this.cwd);
+    const hooks: ConnectHooks = {
+      onToolsListChanged: () => void this.refreshTools(name),
+      onResourcesListChanged: () => void this.refreshResources(name),
+      onPromptsListChanged: () => void this.refreshPrompts(name),
+      onConnectionLost: (error) => this.handleConnectionLost(name, config, error),
+    };
+
+    const connection = await connectToServer(name, config, this.cwd, hooks);
     this.connections.set(name, connection);
 
     if (connection.type === 'connected') {
       this.reconnectAttempts.set(name, 0);
       const plugins = await discoverTools(connection);
       this.toolPlugins.set(name, plugins);
-      // Discover resources and skills
+      // Discover resources, prompts and skills
       const resources = await discoverResources(connection);
       if (resources.length > 0) this.serverResources.set(name, resources);
+      const prompts = await discoverPrompts(connection);
+      if (prompts.length > 0) this.serverPrompts.set(name, prompts);
       const skills = await discoverMcpSkills(connection);
       if (skills.length > 0) this.serverSkills.set(name, skills);
       this.notifyToolsChanged(name);
+      this.notifyServerChanged(name, 'tools');
     } else if (connection.type === 'failed') {
       // Schedule reconnect
       this.scheduleReconnect(name, config);
     }
+    // 'needs-auth' has no automatic retry — it needs the user to authorize.
+  }
+
+  // ── Hot reload (list_changed notifications) ────────────────────────
+
+  private async refreshTools(name: string): Promise<void> {
+    const conn = this.connections.get(name);
+    if (conn?.type !== 'connected') return;
+    const plugins = await discoverTools(conn);
+    this.toolPlugins.set(name, plugins);
+    this.notifyToolsChanged(name);
+    this.notifyServerChanged(name, 'tools');
+  }
+
+  private async refreshResources(name: string): Promise<void> {
+    const conn = this.connections.get(name);
+    if (conn?.type !== 'connected') return;
+    const resources = await discoverResources(conn);
+    this.serverResources.set(name, resources);
+    this.notifyServerChanged(name, 'resources');
+  }
+
+  private async refreshPrompts(name: string): Promise<void> {
+    const conn = this.connections.get(name);
+    if (conn?.type !== 'connected') return;
+    const prompts = await discoverPrompts(conn);
+    this.serverPrompts.set(name, prompts);
+    this.notifyServerChanged(name, 'prompts');
+  }
+
+  /** A connected server dropped: clear its state and reconnect with backoff. */
+  private handleConnectionLost(
+    name: string,
+    config: ScopedServerConfig,
+    error?: Error,
+  ): void {
+    if (this.connections.get(name)?.type === 'disabled') return;
+    this.connections.set(name, {
+      name,
+      type: 'failed',
+      config,
+      error: error?.message ?? 'Connection lost',
+    });
+    this.toolPlugins.delete(name);
+    this.serverResources.delete(name);
+    this.serverPrompts.delete(name);
+    this.serverSkills.delete(name);
+    this.notifyToolsChanged(name);
+    this.scheduleReconnect(name, config);
   }
 
   // ── Reconnection ────────────────────────────────────────────────────
@@ -234,6 +317,7 @@ export class McpManager {
       });
       this.toolPlugins.delete(name);
       this.serverResources.delete(name);
+      this.serverPrompts.delete(name);
       this.serverSkills.delete(name);
       this.notifyToolsChanged(name);
     }
@@ -358,6 +442,50 @@ export class McpManager {
     return this.serverSkills.get(name) ?? [];
   }
 
+  // ── Prompts ─────────────────────────────────────────────────────────
+
+  /** Get all prompt templates discovered across all servers. */
+  getAllPrompts(): McpPrompt[] {
+    const all: McpPrompt[] = [];
+    for (const prompts of this.serverPrompts.values()) {
+      all.push(...prompts);
+    }
+    return all;
+  }
+
+  /** Get prompts for a specific server. */
+  getServerPrompts(name: string): McpPrompt[] {
+    return this.serverPrompts.get(name) ?? [];
+  }
+
+  /** Fetch a rendered prompt (`prompts/get`) from a connected server. */
+  async getPrompt(
+    serverName: string,
+    promptName: string,
+    args: Record<string, string> = {},
+  ): Promise<GetPromptResult | null> {
+    const conn = this.connections.get(serverName);
+    if (conn?.type !== 'connected') return null;
+    return getPrompt(conn, promptName, args);
+  }
+
+  // ── Auth ────────────────────────────────────────────────────────────
+
+  /** Names of servers waiting for the user to complete OAuth authorization. */
+  getNeedsAuthServerNames(): string[] {
+    const names: string[] = [];
+    for (const [name, conn] of this.connections) {
+      if (conn.type === 'needs-auth') names.push(name);
+    }
+    return names;
+  }
+
+  /** The authorization URL a `needs-auth` server is waiting on, if known. */
+  getAuthorizationUrl(name: string): string | undefined {
+    const conn = this.connections.get(name);
+    return conn?.type === 'needs-auth' ? conn.authorizationUrl : undefined;
+  }
+
   /** Get ToolPlugin wrappers for MCP resource operations. */
   getResourcePlugins(): ToolPlugin[] {
     return [
@@ -385,6 +513,7 @@ export class McpManager {
     this.connections.delete(name);
     this.toolPlugins.delete(name);
     this.serverResources.delete(name);
+    this.serverPrompts.delete(name);
     this.serverSkills.delete(name);
     this.reconnectAttempts.delete(name);
   }
