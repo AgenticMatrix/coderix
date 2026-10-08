@@ -378,6 +378,8 @@ export interface SessionMeta {
   model?: string;
   /** Skills selected for this session (Claude Code skill names). Empty array = no skills enabled. */
   skills?: string[];
+  /** MCP server names enabled for this session. */
+  mcpServers?: string[];
   /** Cumulative token usage across all turns, persisted for resume. */
   tokenUsage?: TokenUsageSummary;
   /** Cumulative cost in USD, persisted for resume. */

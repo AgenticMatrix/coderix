@@ -203,3 +203,30 @@
   background: var(--color-bg-tertiary);
   color: var(--color-danger);
 }
+
+/* ── MCP picker status ─────────────────────────────────────────── */
+
+.mcp-status-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  margin-right: 2px;
+}
+
+.mcp-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.mcp-status-ok {
+  background: var(--color-success, #22c55e);
+}
+
+.mcp-status-off {
+  background: var(--color-text-tertiary, #6b7280);
+  opacity: 0.6;
+}

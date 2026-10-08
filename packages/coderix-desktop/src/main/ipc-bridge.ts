@@ -58,6 +58,8 @@ export interface IpcBridgeConfig {
   reloadQueryEngine?: (workDir?: string, model?: string) => Promise<void>;
   /** Build a QueryEngine bound to one session (invoked lazily on first submit). */
   createEngineForSession?: (session: Session) => Promise<QueryEngine>;
+  /** List configured MCP servers with live status (for the picker UI). */
+  listMcpServers?: (cwd: string) => Promise<import('../../../../packages/coderix-core/src/mcp/manager.js').McpServerStatus[]>;
   /** Shared EventBus the per-session engine emits sub-agent lifecycle events on. */
   eventBus?: EventBus;
 }
@@ -92,6 +94,8 @@ export const IPC_CHANNELS = {
   SESSION_DELETE: 'session:delete',
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
+  SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
+  MCP_LIST: 'mcp:list',
   SKILLS_LIST: 'skills:list',
   SKILLS_LIST_DIRS: 'skills:listDirs',
   SKILLS_ADD_DIR: 'skills:addDir',
@@ -204,6 +208,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // on session delete / engine reload.
   const engineBySession = new Map<string, QueryEngine>();
   const createEngineForSession = config.createEngineForSession ?? null;
+  const listMcpServers = config.listMcpServers ?? null;
 
   const getEngineForSession = async (session: Session): Promise<QueryEngine> => {
     const existing = engineBySession.get(session.id);
@@ -997,6 +1002,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       cwd: session.cwd,
       model: session.model,
       skills: session.skills ?? [],
+      mcpServers: session.mcpServers ?? [],
       tokenUsage: session.tokenUsage,
       totalCost: session.totalCost,
       contextTokens: session.contextTokens,
@@ -1084,6 +1090,30 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
     }
     return { status: 'ok', skills: next };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MCP_SERVERS, async (_event, payload: { sessionId?: string; mcpServers: string[] }) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const next = Array.isArray(payload?.mcpServers) ? payload.mcpServers.filter((s) => typeof s === 'string') : [];
+    const sessionId = payload?.sessionId;
+    if (sessionId) {
+      sessionManager.setMcpServers(sessionId, next);
+    } else {
+      try {
+        sessionManager.setActiveMcpServers(next);
+      } catch {
+        // No active session yet — the next created session starts with no MCP servers.
+      }
+    }
+    // Evict the cached engine so the next submit rebuilds with the new MCP toolset.
+    if (sessionId) engineBySession.delete(sessionId);
+    else engineBySession.clear();
+    return { status: 'ok', mcpServers: next };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MCP_LIST, async () => {
+    if (!listMcpServers) return [];
+    return listMcpServers(currentWorkDir);
   });
 
   // The skill list must match the active engine's actual loader: the coderix

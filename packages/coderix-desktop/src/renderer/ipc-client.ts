@@ -364,6 +364,32 @@ export async function setSessionSkills(skills: string[], sessionId?: string): Pr
   );
 }
 
+/** Bind the active session to a set of MCP server names (per-session MCP). */
+export async function setSessionMcpServers(mcpServers: string[], sessionId?: string): Promise<unknown> {
+  return invokeWithTimeout('session:setMcpServers', () =>
+    getAPI().session.setMcpServers(sessionId ?? '', mcpServers),
+  );
+}
+
+// ===========================================================================
+//  MCP
+// ===========================================================================
+
+/** A configured MCP server with its live connection status. */
+export interface McpServerStatus {
+  name: string;
+  scope: string;
+  status: string;
+  toolCount: number;
+}
+
+/** List configured MCP servers with live status (for the picker UI). */
+export async function listMcpServers(): Promise<McpServerStatus[]> {
+  return invokeWithTimeout<McpServerStatus[]>('mcp:list', () =>
+    getAPI().mcp.list(),
+  );
+}
+
 // ===========================================================================
 //  Skills
 // ===========================================================================

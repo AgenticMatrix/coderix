@@ -44,6 +44,7 @@ import { loadDesktopConfig, resolveModelByName } from '../../../../packages/code
 import { createToolRegistry } from '../../../../packages/coderix-core/src/tools/registry.js';
 import { createAgentRuntime } from '../../../../packages/coderix-core/src/agents/runtime.js';
 import { McpManager } from '../../../../packages/coderix-core/src/mcp/manager.js';
+import type { McpServerStatus } from '../../../../packages/coderix-core/src/mcp/manager.js';
 import type { ToolPlugin } from '../../../../packages/coderix-core/src/tools/types.js';
 
 // ---------------------------------------------------------------------------
@@ -156,6 +157,7 @@ async function bootstrap(): Promise<void> {
       model: activeModel,
       reloadQueryEngine: (workDir, model) => initQueryEngine(workDir, model),
       createEngineForSession,
+      listMcpServers,
       eventBus: sharedEventBus,
     });
 
@@ -279,8 +281,8 @@ const desktopWrapExecutor = (plugin: ToolPlugin, base: RegistryExecutor): Regist
     return base(input, ctx);
   };
 
-/** MCP tool plugins for a workspace (manager cached + initialized on first use). */
-async function getMcpPlugins(cwd: string): Promise<ToolPlugin[]> {
+/** The cached McpManager for a workspace (connected + discovered on first use). */
+async function getMcpManager(cwd: string): Promise<McpManager> {
   let manager = mcpManagerByCwd.get(cwd);
   if (!manager) {
     manager = new McpManager(cwd);
@@ -291,22 +293,36 @@ async function getMcpPlugins(cwd: string): Promise<ToolPlugin[]> {
       console.log(`[Coderix] MCP connected for ${cwd}: ${servers.join(', ')}`);
     }
   }
-  return [...manager.getToolPlugins(), ...manager.getResourcePlugins()];
+  return manager;
 }
 
-/** The workspace's tool registry (built-in plugins + that workspace's MCP tools). */
-async function getToolRegistry(cwd: string): Promise<ToolRegistry> {
-  const cached = toolRegistryByCwd.get(cwd);
+/** MCP tool plugins for a workspace, filtered to the session's enabled servers. */
+async function getMcpPlugins(cwd: string, mcpServers?: string[]): Promise<ToolPlugin[]> {
+  const manager = await getMcpManager(cwd);
+  const names = mcpServers ?? manager.getConnectedServerNames();
+  return [...manager.getToolsForServers(names), ...manager.getResourcePlugins()];
+}
+
+/** All configured MCP servers with live status, for the picker UI. */
+async function listMcpServers(cwd: string): Promise<McpServerStatus[]> {
+  const manager = await getMcpManager(cwd);
+  return manager.listAllServers();
+}
+
+/** The workspace's tool registry (built-in + session-filtered MCP tools). */
+async function getToolRegistry(cwd: string, mcpServers?: string[]): Promise<ToolRegistry> {
+  const key = `${cwd}|${[...(mcpServers ?? [])].sort().join(',')}`;
+  const cached = toolRegistryByCwd.get(key);
   if (cached) return cached;
 
-  const mcpPlugins = await getMcpPlugins(cwd).catch((err) => {
+  const mcpPlugins = await getMcpPlugins(cwd, mcpServers).catch((err) => {
     console.warn(`[Coderix] MCP init failed for ${cwd}:`, err instanceof Error ? err.message : err);
     return [] as ToolPlugin[];
   });
 
   const registry = createToolRegistry({ extraPlugins: mcpPlugins, wrapExecutor: desktopWrapExecutor });
-  console.log(`[Coderix] Registered ${registry.names.length} tools for ${cwd}: ${registry.names.join(', ')}`);
-  toolRegistryByCwd.set(cwd, registry);
+  console.log(`[Coderix] Registered ${registry.names.length} tools for ${key}: ${registry.names.join(', ')}`);
+  toolRegistryByCwd.set(key, registry);
   return registry;
 }
 
@@ -371,7 +387,7 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
   perSessionManager.adopt(session);
 
   const cwd = session.cwd ?? activeWorkDir;
-  const toolRegistry = await getToolRegistry(cwd);
+  const toolRegistry = await getToolRegistry(cwd, session.mcpServers ?? []);
   const agentRuntime = await createAgentRuntime(cwd);
 
   const engine = new QueryEngine({

@@ -31,6 +31,7 @@ import { Composer } from './components/composer/Composer';
 import { ModelCascadePicker } from './components/composer/ModelCascadePicker';
 import { SkillPicker } from './components/composer/SkillPicker';
 import { PluginPicker } from './components/composer/PluginPicker';
+import { McpPicker } from './components/composer/McpPicker';
 import { PermissionPrompt } from './components/composer/PermissionPrompt';
 import { QuestionPrompt } from './components/composer/QuestionPrompt';
 import { DetailPanel } from './components/panels/DetailPanel';
@@ -60,11 +61,13 @@ import {
   getHomeDir,
   listSkills,
   setSessionSkills,
+  listMcpServers,
+  setSessionMcpServers,
   listSkillDirs,
   addSkillDir,
   removeSkillDir,
 } from './ipc-client';
-import type { SkillInfo } from './ipc-client';
+import type { SkillInfo, McpServerStatus } from './ipc-client';
 import type { PermissionRequest, QuestionRequest } from './types';
 
 // ---------------------------------------------------------------------------
@@ -177,6 +180,9 @@ export function App(): React.ReactElement {
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
   const [customSkillDirs, setCustomSkillDirs] = useState<string[]>([]);
+  // MCP servers enabled for the active session + all configured servers.
+  const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>([]);
+  const [availableMcpServers, setAvailableMcpServers] = useState<McpServerStatus[]>([]);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
   // Bundled skills (~/.coderix/skills/) are enabled by default for the built-in
@@ -256,6 +262,9 @@ export function App(): React.ReactElement {
     listSkillDirs()
       .then((dirs) => setCustomSkillDirs(dirs))
       .catch((err) => console.error('[App] Failed to list skill dirs:', err));
+    listMcpServers()
+      .then((servers) => setAvailableMcpServers(servers))
+      .catch((err) => console.error('[App] Failed to list MCP servers:', err));
   }, [projectPath]);
 
   // Default a freshly-created session to the built-in skills (checked) so they
@@ -298,6 +307,15 @@ export function App(): React.ReactElement {
       setSessionSkills(next, sessionId ?? undefined).catch(() => {});
     },
     [setSessionSkills, sessionId],
+  );
+
+  // Shared MCP-server-selection mutation (composer MCP picker).
+  const handleMcpChange = useCallback(
+    (next: string[]) => {
+      setSelectedMcpServers(next);
+      setSessionMcpServers(next, sessionId ?? undefined).catch(() => {});
+    },
+    [setSessionMcpServers, sessionId],
   );
 
   // ── Permission request listener ─────────────────────────────────────────
@@ -535,6 +553,13 @@ export function App(): React.ReactElement {
           setSelectedSkills(
             Array.isArray(session?.skills)
               ? (session.skills as string[])
+              : [],
+          );
+
+          // Restore the session's own MCP server selection (per-session MCP).
+          setSelectedMcpServers(
+            Array.isArray(session?.mcpServers)
+              ? (session.mcpServers as string[])
               : [],
           );
 
@@ -1295,6 +1320,12 @@ export function App(): React.ReactElement {
               plugins={APPS}
               selectedSkills={selectedSkills}
               onToggle={handleTogglePlugin}
+            />
+
+            <McpPicker
+              servers={availableMcpServers}
+              selected={selectedMcpServers}
+              onChange={handleMcpChange}
             />
           </div>
 

@@ -501,6 +501,8 @@ export interface Session {
   provider: string;
   /** Skills selected for this session (Claude Code skill names, e.g. `["pdf"]`). Empty array = no skills enabled. */
   skills?: string[];
+  /** MCP server names enabled for this session. Empty/undefined = no MCP servers enabled. */
+  mcpServers?: string[];
   tokenUsage: TokenUsageSummary;
   metadata: SessionMetadata;
   /** Last known context footprint (most recent call's input + output + cache_read). */

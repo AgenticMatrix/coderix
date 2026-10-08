@@ -50,6 +50,10 @@ interface AppProps {
   showSessionPicker?: boolean;
   /** Called when the user exits (double Ctrl+C). Uses Ink unmount for clean teardown. */
   onExit?: () => void;
+  /** Get the MCP server names enabled for the active session. */
+  getSessionMcpServers?: () => string[];
+  /** Set the MCP server names enabled for the active session (rebuilds tools). */
+  setSessionMcpServers?: (names: string[]) => void;
 }
 
 /** Find the most recent thinking block across all messages. */
@@ -132,7 +136,7 @@ async function restoreSessionAgents(sessionManager: SessionManager): Promise<voi
   }
 }
 
-export function App({ config, engine, store, sessionManager, initialMessages, initialTokenUsage, showSessionPicker, onExit: onExitProp }: AppProps) {
+export function App({ config, engine, store, sessionManager, getSessionMcpServers, setSessionMcpServers, initialMessages, initialTokenUsage, showSessionPicker, onExit: onExitProp }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
@@ -648,6 +652,8 @@ export function App({ config, engine, store, sessionManager, initialMessages, in
       inputText: state.inputText,
       onExit: handleExit,
       sessionId: currentSessionRef.current,
+      getMcpServers: getSessionMcpServers,
+      setMcpServers: setSessionMcpServers,
       listSessions: () =>
         sessionManager.list().map((s) => ({
           id: s.id,

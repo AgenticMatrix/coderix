@@ -40,6 +40,10 @@ export interface SlashRunContext {
   listSessions?: () => SessionSummary[];
   /** Resume a session by ID. Returns true on success. Optional. */
   resumeSession?: (id: string) => void;
+  /** Get the MCP server names enabled for the active session. Optional. */
+  getMcpServers?: () => string[];
+  /** Set the MCP server names enabled for the active session. Optional. */
+  setMcpServers?: (names: string[]) => void;
 }
 
 export interface SlashCommand {
