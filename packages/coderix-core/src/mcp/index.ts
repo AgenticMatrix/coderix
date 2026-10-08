@@ -4,7 +4,7 @@
 
 // Manager (main entry point)
 export { McpManager, hasMcpConfig, loadEnabledMcpConfigs } from './manager.js';
-export type { ToolsChangedCallback, ServerChangedCallback, ServerChangedKind } from './manager.js';
+export type { ToolsChangedCallback, ServerChangedCallback, ServerChangedKind, McpServerStatus } from './manager.js';
 
 // Types
 export type {

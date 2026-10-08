@@ -176,6 +176,7 @@ export type { HookManager } from './hooks/index.js';
 
 // ── MCP ────────────────────────────────────────────────────────────
 export { McpManager, discoverTools } from './mcp/index.js';
+export type { McpServerStatus } from './mcp/index.js';
 export {
   loadMcpConfigs, loadEnabledMcpConfigs, projectConfigPath, userConfigPath,
   addMcpConfig, removeMcpConfig, getMcpConfig,

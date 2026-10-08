@@ -25,6 +25,8 @@ const CH = {
   SESSION_DELETE: 'session:delete',
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
+  SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
+  MCP_LIST: 'mcp:list',
   SKILLS_LIST: 'skills:list',
   SKILLS_LIST_DIRS: 'skills:listDirs',
   SKILLS_ADD_DIR: 'skills:addDir',
@@ -367,6 +369,11 @@ const coderixAPI = {
     setSkills(sessionId: string, skills: string[]): Promise<{ status: string; skills: string[] }> {
       return ipcRenderer.invoke(CH.SESSION_SET_SKILLS, { sessionId, skills });
     },
+
+    /** Bind a session to a set of MCP server names (per-session MCP enablement). */
+    setMcpServers(sessionId: string, mcpServers: string[]): Promise<{ status: string; mcpServers: string[] }> {
+      return ipcRenderer.invoke(CH.SESSION_SET_MCP_SERVERS, { sessionId, mcpServers });
+    },
   },
 
   // ── Skills ────────────────────────────────────────────────────────────
@@ -387,6 +394,15 @@ const coderixAPI = {
     /** Remove a custom skill dir by path. */
     removeDir(path: string): Promise<{ dirs: string[]; skills: unknown[] }> {
       return ipcRenderer.invoke(CH.SKILLS_REMOVE_DIR, { path });
+    },
+  },
+
+  // ── MCP ──────────────────────────────────────────────────────────────
+
+  mcp: {
+    /** List configured MCP servers with live status (for the picker UI). */
+    list(): Promise<Array<{ name: string; scope: string; status: string; toolCount: number }>> {
+      return ipcRenderer.invoke(CH.MCP_LIST);
     },
   },
 

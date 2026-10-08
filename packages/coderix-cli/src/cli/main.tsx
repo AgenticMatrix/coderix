@@ -93,11 +93,15 @@ function parseCliArgs(argv: string[]): CliArgs {
 
 // ── MCP initialization ─────────────────────────────────────────────────
 
+/** The workspace's MCP manager, kept so per-session toggles can rebuild tools. */
+let activeMcpManager: any = null;
+
 async function initMcpAndGetPlugins(cwd: string): Promise<any[]> {
   try {
     const { McpManager } = await import('@coderix/core');
     const manager = new McpManager(cwd);
     await manager.initialize();
+    activeMcpManager = manager;
     const plugins = manager.getToolPlugins();
     const resourcePlugins = manager.getResourcePlugins();
     if (plugins.length > 0) {
@@ -525,6 +529,21 @@ async function main(): Promise<void> {
   await engine.init();
   engine.setPermissionMode((settings.default_permission_mode as PermissionMode) || 'ask');
 
+  // ── Per-session MCP: toggle which servers' tools the engine exposes ──
+  const getSessionMcpServers = () => sm.getActive()?.mcpServers ?? [];
+  const setSessionMcpServers = (names: string[]) => {
+    const active = sm.getActive();
+    if (!active) return;
+    sm.setMcpServers(active.id, names);
+    if (activeMcpManager) {
+      const plugins = [
+        ...activeMcpManager.getToolsForServers(names),
+        ...activeMcpManager.getResourcePlugins(),
+      ];
+      engine.updateToolRegistry(createToolRegistry({ extraPlugins: plugins }));
+    }
+  };
+
   // ── Create unified AppState store ──────────────────────────────────
   const { createStore } = await import('@coderix/core');
   const { getDefaultAppState } = await import('../state/AppState.js');
@@ -555,7 +574,7 @@ async function main(): Promise<void> {
   const { AppStateProvider } = await import('../state/AppStateContext.js');
   const { waitUntilExit, unmount } = renderSync(
     <AppStateProvider store={appStore}>
-      <App config={config} engine={engine} store={appStore} sessionManager={sm} initialMessages={initialMessages} initialTokenUsage={initialTokenUsage} showSessionPicker={showSessionPicker} onExit={() => unmount()} />
+      <App config={config} engine={engine} store={appStore} sessionManager={sm} getSessionMcpServers={getSessionMcpServers} setSessionMcpServers={setSessionMcpServers} initialMessages={initialMessages} initialTokenUsage={initialTokenUsage} showSessionPicker={showSessionPicker} onExit={() => unmount()} />
     </AppStateProvider>,
     { exitOnCtrlC: false, patchConsole: true },
   );

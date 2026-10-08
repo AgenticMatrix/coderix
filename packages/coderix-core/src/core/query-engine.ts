@@ -279,6 +279,15 @@ export class QueryEngine {
   }
 
   /**
+   * Replace the tool registry (e.g. after per-session MCP servers change, the
+   * caller rebuilds a registry with the session's filtered MCP tools). The next
+   * turn picks it up via `this.config.toolRegistry`.
+   */
+  updateToolRegistry(registry: ToolRegistry): void {
+    this.config.toolRegistry = registry;
+  }
+
+  /**
    * Clear transient caches after compaction. Prevents stale state
    * from polluting new conversation turns.
    */

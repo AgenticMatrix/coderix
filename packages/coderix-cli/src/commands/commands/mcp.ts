@@ -13,12 +13,7 @@
  */
 
 import type { SlashCommand } from '../types.js';
-import {
-  loadMcpConfigs,
-  isServerDisabled,
-  disableServer as disableServerConfig,
-  enableServer as enableServerConfig,
-} from '@coderix/core';
+import { loadMcpConfigs } from '@coderix/core';
 import { connectToServer } from '@coderix/core';
 import { discoverTools } from '@coderix/core';
 import { discoverPrompts } from '@coderix/core';
@@ -250,11 +245,11 @@ async function showQuickStatus(ctx: {
   ctx.sys(summary.join('\n'));
 }
 
-// ── Enable server ──────────────────────────────────────────────────────
+// ── Enable server (per-session) ─────────────────────────────────────────
 
 async function handleEnable(
   name: string,
-  ctx: { sys: (msg: string) => void },
+  ctx: { sys: (msg: string) => void; getMcpServers?: () => string[]; setMcpServers?: (names: string[]) => void },
 ): Promise<void> {
   const configs = loadMcpConfigs(process.cwd());
   const config = configs[name];
@@ -264,20 +259,26 @@ async function handleEnable(
     return;
   }
 
-  if (!isServerDisabled(name, config.scope)) {
-    ctx.sys(`"${name}" is already enabled.`);
+  if (!ctx.setMcpServers) {
+    ctx.sys('Per-session MCP is not available in this mode.');
     return;
   }
 
-  enableServerConfig(name, config.scope);
-  ctx.sys(`✓ "${name}" enabled — will connect on next startup or use /mcp ${name} to test.`);
+  const current = ctx.getMcpServers?.() ?? [];
+  if (current.includes(name)) {
+    ctx.sys(`"${name}" is already enabled for this conversation.`);
+    return;
+  }
+
+  ctx.setMcpServers([...current, name]);
+  ctx.sys(`✓ "${name}" enabled for this conversation — its tools join the next turn.`);
 }
 
-// ── Disable server ─────────────────────────────────────────────────────
+// ── Disable server (per-session) ────────────────────────────────────────
 
 async function handleDisable(
   name: string,
-  ctx: { sys: (msg: string) => void },
+  ctx: { sys: (msg: string) => void; getMcpServers?: () => string[]; setMcpServers?: (names: string[]) => void },
 ): Promise<void> {
   const configs = loadMcpConfigs(process.cwd());
   const config = configs[name];
@@ -287,13 +288,19 @@ async function handleDisable(
     return;
   }
 
-  if (isServerDisabled(name, config.scope)) {
-    ctx.sys(`"${name}" is already disabled.`);
+  if (!ctx.setMcpServers) {
+    ctx.sys('Per-session MCP is not available in this mode.');
     return;
   }
 
-  disableServerConfig(name, config.scope);
-  ctx.sys(`✓ "${name}" disabled — it will be skipped on next startup.`);
+  const current = ctx.getMcpServers?.() ?? [];
+  if (!current.includes(name)) {
+    ctx.sys(`"${name}" is not enabled for this conversation.`);
+    return;
+  }
+
+  ctx.setMcpServers(current.filter((s) => s !== name));
+  ctx.sys(`✓ "${name}" disabled for this conversation — its tools leave the next turn.`);
 }
 
 // ── Prompts list ───────────────────────────────────────────────────────

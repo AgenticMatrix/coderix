@@ -44,6 +44,8 @@ export interface SlashHandlerDeps {
   sessionId?: string;
   listSessions?: () => SessionSummary[];
   resumeSession?: (id: string) => void;
+  getMcpServers?: () => string[];
+  setMcpServers?: (names: string[]) => void;
 }
 
 /**
@@ -52,7 +54,7 @@ export interface SlashHandlerDeps {
  * Returns true if the input was handled as a slash command, false otherwise.
  */
 export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => boolean {
-  const { dispatch, send, compact, model, isStreaming, inputText, onExit, sessionId, listSessions, resumeSession } = deps;
+  const { dispatch, send, compact, model, isStreaming, inputText, onExit, sessionId, listSessions, resumeSession, getMcpServers, setMcpServers } = deps;
 
   return (input: string): boolean => {
     const parsed = parseSlashCommand(input);
@@ -88,6 +90,8 @@ export function createSlashHandler(deps: SlashHandlerDeps): (input: string) => b
       sessionId,
       listSessions,
       resumeSession,
+      getMcpServers,
+      setMcpServers,
     };
 
     cmd.run(parsed.arg, ctx);

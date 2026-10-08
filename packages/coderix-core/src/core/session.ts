@@ -218,6 +218,24 @@ export class SessionManager {
   }
 
   /**
+   * Bind a session to a set of enabled MCP server names and persist them to
+   * meta.json so the session remembers which MCP tools to expose when resumed.
+   * An empty array explicitly means "no MCP servers enabled".
+   */
+  setMcpServers(sessionId: string, mcpServers: string[]): void {
+    const session = this.requireSession(sessionId);
+    session.mcpServers = mcpServers;
+    session.updatedAt = new Date();
+    const dir = getSessionDir(session.id);
+    writeSessionMeta(dir, { mcpServers }).catch(() => {});
+  }
+
+  /** Bind the active session to a set of MCP servers (delegator — see setMcpServers). */
+  setActiveMcpServers(mcpServers: string[]): void {
+    this.setMcpServers(this.getActive().id, mcpServers);
+  }
+
+  /**
    * Bind a session to a working directory and persist it to meta.json so the
    * session reopens in that workspace when resumed later. Used to lazily mint a
    * conversation's hash subdir on the first message rather than on creation.
@@ -1024,6 +1042,7 @@ export class SessionManager {
         model: meta?.model ?? 'unknown',
         provider: 'anthropic',
         skills: meta?.skills ?? [],
+        mcpServers: meta?.mcpServers ?? [],
         tokenUsage: meta?.tokenUsage ?? {
           inputTokens: persistedContextLength,
           outputTokens: 0,

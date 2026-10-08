@@ -11,7 +11,9 @@
 import type { ToolPlugin } from '../tools/types.js';
 import {
   loadEnabledMcpConfigs,
+  loadMcpConfigs,
   hasMcpConfig,
+  isServerDisabled,
   disableServer as disableServerConfig,
   enableServer as enableServerConfig,
   listDisabledServerNames,
@@ -49,6 +51,14 @@ export type ToolsChangedCallback = (serverName: string, plugins: ToolPlugin[]) =
 /** Fired when any primitive list changes (initial discovery, notification, reconnect). */
 export type ServerChangedKind = 'tools' | 'resources' | 'prompts';
 export type ServerChangedCallback = (serverName: string, kind: ServerChangedKind) => void;
+
+/** A configured MCP server with its live connection status, for picker UIs. */
+export interface McpServerStatus {
+  name: string;
+  scope: ConfigScope;
+  status: ServerConnection['type'] | 'unconnected';
+  toolCount: number;
+}
 
 // ── McpManager ───────────────────────────────────────────────────────────
 
@@ -372,6 +382,44 @@ export class McpManager {
 
   getServerTools(serverName: string): ToolPlugin[] {
     return this.toolPlugins.get(serverName) ?? [];
+  }
+
+  /** Tool plugins for the given subset of servers (per-session enablement). */
+  getToolsForServers(names: string[]): ToolPlugin[] {
+    if (names.length === 0) return [];
+    const wanted = new Set(names);
+    const all: ToolPlugin[] = [];
+    for (const [serverName, plugins] of this.toolPlugins) {
+      if (wanted.has(serverName)) all.push(...plugins);
+    }
+    return all;
+  }
+
+  /**
+   * All configured MCP servers (including disabled ones) with their live
+   * connection status and tool count, for the picker UI.
+   */
+  listAllServers(): McpServerStatus[] {
+    const all = loadMcpConfigs(this.cwd);
+    const result: McpServerStatus[] = [];
+    for (const [name, config] of Object.entries(all)) {
+      const conn = this.connections.get(name);
+      let status: McpServerStatus['status'];
+      if (conn) {
+        status = conn.type;
+      } else if (isServerDisabled(name, config.scope, this.cwd)) {
+        status = 'disabled';
+      } else {
+        status = 'unconnected';
+      }
+      result.push({
+        name,
+        scope: config.scope,
+        status,
+        toolCount: this.toolPlugins.get(name)?.length ?? 0,
+      });
+    }
+    return result;
   }
 
   // ── Connection status ──────────────────────────────────────────────
