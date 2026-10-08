@@ -194,6 +194,8 @@ export const en: Record<TranslationKey, string> = {
   'plugins.button': 'MCP',
   'plugins.selectedCount': 'MCP · {count}',
   'plugins.empty': 'No MCP servers available',
+  'plugins.tabApps': 'Plugins',
+  'plugins.tabMcp': 'MCP',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': 'Click a file to start editing',
@@ -245,7 +247,7 @@ export const en: Record<TranslationKey, string> = {
   'library.tabSkills': 'Skills',
   'library.tabKnowledge': 'Knowledge',
   'library.tabProjects': 'Projects',
-  'library.tabPlugins': 'MCP',
+  'library.tabPlugins': 'Plugins',
   'library.knowledgeEmpty': 'Knowledge base coming soon',
   'library.addProject': 'Add project',
   'library.currentProject': 'Current project',
