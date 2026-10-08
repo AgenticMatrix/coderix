@@ -247,7 +247,7 @@ export const en: Record<TranslationKey, string> = {
   'library.tabSkills': 'Skills',
   'library.tabKnowledge': 'Knowledge',
   'library.tabProjects': 'Projects',
-  'library.tabPlugins': 'Plugins',
+  'library.tabPlugins': 'MCP·Plugins',
   'library.knowledgeEmpty': 'Knowledge base coming soon',
   'library.addProject': 'Add project',
   'library.currentProject': 'Current project',
