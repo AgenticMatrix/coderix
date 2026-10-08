@@ -190,6 +190,8 @@ export const zh = {
   'plugins.button': '链接器',
   'plugins.selectedCount': '链接器 · {count}',
   'plugins.empty': '暂无可用链接器',
+  'plugins.tabApps': '插件',
+  'plugins.tabMcp': '链接器',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',
@@ -241,7 +243,7 @@ export const zh = {
   'library.tabSkills': '技能',
   'library.tabKnowledge': '知识库',
   'library.tabProjects': '项目',
-  'library.tabPlugins': '链接器',
+  'library.tabPlugins': '插件',
   'library.knowledgeEmpty': '知识库功能开发中',
   'library.addProject': '添加项目',
   'library.currentProject': '当前项目',

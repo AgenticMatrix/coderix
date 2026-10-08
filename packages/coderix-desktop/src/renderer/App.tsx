@@ -1097,7 +1097,12 @@ export function App(): React.ReactElement {
             onSkillsChange={handleSkillsChange}
           />
         ) : sidebarTab === 'plugins' ? (
-          <PluginsView onOpenApp={handleOpenApp} />
+          <PluginsView
+            onOpenApp={handleOpenApp}
+            mcpServers={availableMcpServers}
+            selectedMcp={selectedMcpServers}
+            onMcpChange={handleMcpChange}
+          />
         ) : sidebarTab === 'library' ? (
           <LibraryView
             projects={recentProjects}
