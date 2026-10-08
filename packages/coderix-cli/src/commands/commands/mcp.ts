@@ -7,6 +7,9 @@
  *   /mcp status               — quick connection status summary
  *   /mcp enable <name>        — enable a disabled server
  *   /mcp disable <name>       — disable a server
+ *   /mcp prompts [server]     — list prompt templates exposed by servers
+ *   /mcp prompt <server> <name> [key=value ...] — render & send a prompt
+ *   /mcp auth <name>          — how to complete OAuth for a remote server
  */
 
 import type { SlashCommand } from '../types.js';
@@ -18,12 +21,16 @@ import {
 } from '@coderix/core';
 import { connectToServer } from '@coderix/core';
 import { discoverTools } from '@coderix/core';
+import { discoverPrompts } from '@coderix/core';
+import { getPrompt } from '@coderix/core';
+import { renderMcpPromptMessages } from '@coderix/core';
+import { parsePromptArgs } from '@coderix/core';
 
 export const mcpCommand: SlashCommand = {
   name: 'mcp',
   aliases: [],
-  help: 'manage MCP servers (/mcp [status|enable|disable] [name])',
-  usage: '/mcp [server-name|status|enable|disable] [name]',
+  help: 'manage MCP servers (/mcp [status|enable|disable|prompts|prompt|auth] ...)',
+  usage: '/mcp [server-name|status|enable|disable|prompts|prompt|auth] [name]',
   run(arg, ctx) {
     const parts = arg.trim().split(/\s+/);
     const cmd = parts[0] ?? '';
@@ -41,6 +48,26 @@ export const mcpCommand: SlashCommand = {
 
     if (cmd === 'disable' && name) {
       void handleDisable(name, ctx);
+      return;
+    }
+
+    if (cmd === 'prompts') {
+      void listPrompts(name, ctx);
+      return;
+    }
+
+    if (cmd === 'prompt') {
+      const [server, prompt, ...rest] = parts.slice(1);
+      if (!server || !prompt) {
+        ctx.sys('Usage: /mcp prompt <server> <name> [key=value ...]');
+        return;
+      }
+      void invokePrompt(server, prompt, rest.join(' '), ctx);
+      return;
+    }
+
+    if (cmd === 'auth' && name) {
+      handleAuthHint(name, ctx);
       return;
     }
 
@@ -267,4 +294,131 @@ async function handleDisable(
 
   disableServerConfig(name, config.scope);
   ctx.sys(`✓ "${name}" disabled — it will be skipped on next startup.`);
+}
+
+// ── Prompts list ───────────────────────────────────────────────────────
+
+async function listPrompts(
+  serverFilter: string,
+  ctx: { sys: (msg: string) => void },
+): Promise<void> {
+  const configs = loadMcpConfigs(process.cwd());
+  let targets = Object.entries(configs);
+  if (serverFilter) {
+    targets = targets.filter(([name]) => name === serverFilter);
+    if (targets.length === 0) {
+      ctx.sys(`MCP server "${serverFilter}" not found.`);
+      return;
+    }
+  }
+
+  const lines: string[] = [];
+
+  for (const [name, config] of targets) {
+    try {
+      const conn = await connectToServer(name, config, process.cwd());
+      if (conn.type !== 'connected') {
+        lines.push(`  ✗ ${name} — ${conn.type === 'failed' ? conn.error : conn.type}`);
+        continue;
+      }
+      const prompts = await discoverPrompts(conn);
+      await conn.cleanup();
+
+      if (prompts.length === 0) continue;
+      lines.push(`${name}:`);
+      for (const p of prompts) {
+        const args = (p.arguments ?? [])
+          .map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`))
+          .join(' ');
+        const argsPart = args ? ` ${args}` : '';
+        const desc = p.description ? ` — ${p.description}` : '';
+        lines.push(`  mcp__${name}__${p.name}${argsPart}${desc}`);
+      }
+      lines.push('');
+    } catch (err) {
+      lines.push(`  ✗ ${name} — ${(err as Error).message.slice(0, 60)}`);
+    }
+  }
+
+  if (lines.length === 0) {
+    ctx.sys('No MCP prompts available.');
+  } else {
+    lines.push('Run one with: /mcp prompt <server> <name> [key=value ...]');
+    ctx.sys(lines.join('\n'));
+  }
+}
+
+// ── Prompt invoke ──────────────────────────────────────────────────────
+
+async function invokePrompt(
+  serverName: string,
+  promptName: string,
+  rawArgs: string,
+  ctx: { sys: (msg: string) => void; send: (text: string) => void },
+): Promise<void> {
+  const configs = loadMcpConfigs(process.cwd());
+  const config = configs[serverName];
+  if (!config) {
+    ctx.sys(`MCP server "${serverName}" not found.`);
+    return;
+  }
+
+  try {
+    const conn = await connectToServer(serverName, config, process.cwd());
+    if (conn.type !== 'connected') {
+      ctx.sys(`✗ "${serverName}" — ${conn.type === 'failed' ? conn.error : conn.type}`);
+      return;
+    }
+
+    const prompts = await discoverPrompts(conn);
+    const prompt = prompts.find((p) => p.name === promptName);
+    if (!prompt) {
+      await conn.cleanup();
+      ctx.sys(`Prompt "${promptName}" not found on "${serverName}".`);
+      return;
+    }
+
+    const positionalKeys = (prompt.arguments ?? []).map((a) => a.name);
+    const args = parsePromptArgs(rawArgs, positionalKeys);
+    const result = await getPrompt(conn, promptName, args);
+    await conn.cleanup();
+
+    if (!result) {
+      ctx.sys(`Failed to render prompt "${promptName}".`);
+      return;
+    }
+
+    const text = renderMcpPromptMessages(result.messages);
+    if (!text) {
+      ctx.sys(`Prompt "${promptName}" produced no content.`);
+      return;
+    }
+    ctx.send(text);
+  } catch (err) {
+    ctx.sys(`✗ "${serverName}" error: ${(err as Error).message}`);
+  }
+}
+
+// ── OAuth hint ─────────────────────────────────────────────────────────
+
+function handleAuthHint(
+  name: string,
+  ctx: { sys: (msg: string) => void },
+): void {
+  const configs = loadMcpConfigs(process.cwd());
+  const config = configs[name];
+  if (!config) {
+    ctx.sys(`MCP server "${name}" not found.`);
+    return;
+  }
+  if (!('url' in config) || !config.oauth) {
+    ctx.sys(`"${name}" has no OAuth configuration (only http/sse servers can use OAuth).`);
+    return;
+  }
+  ctx.sys(
+    `To authorize "${name}", run from a terminal:\n\n` +
+      `  coderix mcp auth ${name}\n\n` +
+      `Follow the printed URL, then finish with:\n` +
+      `  coderix mcp auth ${name} --code <code>`,
+  );
 }

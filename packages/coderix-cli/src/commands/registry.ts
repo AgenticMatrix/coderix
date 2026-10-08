@@ -40,3 +40,35 @@ export function findSlashCommand(name: string): SlashCommand | undefined {
 export function listCommandNames(): string[] {
   return [...new Set(SLASH_COMMANDS.map((c) => c.name))].sort();
 }
+
+/**
+ * Register commands discovered at runtime (e.g. MCP prompt templates).
+ * A command with an existing name is replaced in place; new ones are appended.
+ * Safe to call repeatedly — the lookup map and list are read live.
+ */
+export function registerDynamicCommands(commands: SlashCommand[]): void {
+  for (const cmd of commands) {
+    const idx = SLASH_COMMANDS.findIndex(
+      (c) => c.name.toLowerCase() === cmd.name.toLowerCase(),
+    );
+    if (idx >= 0) SLASH_COMMANDS[idx] = cmd;
+    else SLASH_COMMANDS.push(cmd);
+
+    for (const name of [cmd.name, ...(cmd.aliases ?? [])]) {
+      byName.set(name.toLowerCase(), cmd);
+    }
+  }
+}
+
+/** Remove runtime-registered commands whose name starts with `prefix`. */
+export function unregisterDynamicCommands(prefix: string): void {
+  const lower = prefix.toLowerCase();
+  for (let i = SLASH_COMMANDS.length - 1; i >= 0; i--) {
+    if (SLASH_COMMANDS[i]!.name.toLowerCase().startsWith(lower)) {
+      SLASH_COMMANDS.splice(i, 1);
+    }
+  }
+  for (const [name, cmd] of [...byName.entries()]) {
+    if (cmd.name.toLowerCase().startsWith(lower)) byName.delete(name);
+  }
+}

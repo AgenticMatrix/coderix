@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "mcp:demo": "node examples/mcp/demo-server.mjs",
     "dev:desk": "pnpm --filter @coderix/desktop dev"
   },
   "dependencies": {

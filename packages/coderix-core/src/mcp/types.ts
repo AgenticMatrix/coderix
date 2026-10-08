@@ -29,14 +29,39 @@ export const StdioServerConfigSchema = z.object({
   command: z.string().min(1, 'Command cannot be empty'),
   args: z.array(z.string()).default([]),
   env: z.record(z.string(), z.string()).optional(),
+  /**
+   * Names of environment variables this server needs as secrets (e.g.
+   * `["GITHUB_PERSONAL_ACCESS_TOKEN"]`). Values are never stored in config —
+   * they live in `~/.coderix/mcp/secrets.json` and are merged into `env` at
+   * connect time. Lets a shared, secret-free config declare what to prompt for.
+   */
+  secretEnv: z.array(z.string()).optional(),
 });
 export type StdioServerConfig = z.infer<typeof StdioServerConfigSchema>;
+
+/**
+ * OAuth configuration for remote (http/sse) servers.
+ * `authorization_code` runs the interactive PKCE flow; `client_credentials`
+ * is non-interactive (no browser round-trip).
+ */
+export const McpOAuthConfigSchema = z.object({
+  type: z.enum(['authorization_code', 'client_credentials']).default('authorization_code'),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  scope: z.string().optional(),
+  /** Loopback port for the OAuth redirect; defaults to 7777. */
+  callbackPort: z.number().int().positive().optional(),
+  /** Skip RFC 9728/8414 discovery and use this authorization server metadata URL. */
+  authorizationServerMetadataUrl: z.string().url().optional(),
+});
+export type McpOAuthConfig = z.infer<typeof McpOAuthConfigSchema>;
 
 /** Streamable HTTP transport (MCP spec 2025). */
 export const HttpServerConfigSchema = z.object({
   type: z.literal('http'),
   url: z.string().min(1, 'URL cannot be empty'),
   headers: z.record(z.string(), z.string()).optional(),
+  oauth: McpOAuthConfigSchema.optional(),
 });
 export type HttpServerConfig = z.infer<typeof HttpServerConfigSchema>;
 
@@ -45,6 +70,7 @@ export const SSEServerConfigSchema = z.object({
   type: z.literal('sse'),
   url: z.string().min(1, 'URL cannot be empty'),
   headers: z.record(z.string(), z.string()).optional(),
+  oauth: McpOAuthConfigSchema.optional(),
 });
 export type SSEServerConfig = z.infer<typeof SSEServerConfigSchema>;
 
@@ -77,6 +103,8 @@ export interface ConnectedServer {
   instructions?: string;
   config: ScopedServerConfig;
   cleanup: () => Promise<void>;
+  /** Which primitives the server will push `*_list_changed` notifications for. */
+  listChanged?: { tools?: boolean; resources?: boolean; prompts?: boolean };
 }
 
 export interface FailedServer {
@@ -84,6 +112,14 @@ export interface FailedServer {
   type: 'failed';
   config: ScopedServerConfig;
   error?: string;
+}
+
+export interface NeedsAuthServer {
+  name: string;
+  type: 'needs-auth';
+  config: ScopedServerConfig;
+  /** URL the user must open to complete the OAuth authorization. */
+  authorizationUrl?: string;
 }
 
 export interface PendingServer {
@@ -101,12 +137,31 @@ export interface DisabledServer {
 export type ServerConnection =
   | ConnectedServer
   | FailedServer
+  | NeedsAuthServer
   | PendingServer
   | DisabledServer;
 
 // ── Resource types ────────────────────────────────────────────────────
 
 export type ServerResource = Resource & { server: string };
+
+// ── Prompt types ──────────────────────────────────────────────────────
+
+export interface McpPromptArgument {
+  name: string;
+  description?: string;
+  required?: boolean;
+}
+
+/** A prompt template exposed by an MCP server (via `prompts/list`). */
+export interface McpPrompt {
+  serverName: string;
+  /** Prompt name as reported by the server (without `mcp__` prefix). */
+  name: string;
+  title?: string;
+  description?: string;
+  arguments?: McpPromptArgument[];
+}
 
 // ── Serialized MCP Tool (for CLI / debug) ──────────────────────────────
 

@@ -10,9 +10,13 @@ import {
   type ListResourcesResult,
   ReadResourceResultSchema,
   type ReadResourceResult,
+  ListPromptsResultSchema,
+  type ListPromptsResult,
+  GetPromptResultSchema,
+  type GetPromptResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolPlugin } from '../tools/types.js';
-import type { ConnectedServer, ServerResource } from './types.js';
+import type { ConnectedServer, ServerResource, McpPrompt } from './types.js';
 import { createMcpToolPlugin } from './mcp-tool.js';
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -106,6 +110,62 @@ export async function readResource(
       { method: 'resources/read', params: { uri } },
       ReadResourceResultSchema,
     )) as ReadResourceResult;
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+// ── Prompt Discovery ───────────────────────────────────────────────────
+
+/**
+ * Discover prompt templates exposed by an MCP server (`prompts/list`).
+ */
+export async function discoverPrompts(
+  server: ConnectedServer,
+): Promise<McpPrompt[]> {
+  if (!server.capabilities?.prompts) return [];
+
+  try {
+    const result = (await server.client.request(
+      { method: 'prompts/list' },
+      ListPromptsResultSchema,
+    )) as ListPromptsResult;
+
+    if (!result.prompts) return [];
+
+    return result.prompts.map((p) => ({
+      serverName: server.name,
+      name: p.name,
+      title: p.title,
+      description: p.description,
+      arguments: p.arguments?.map((a) => ({
+        name: a.name,
+        description: a.description,
+        required: a.required,
+      })),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Retrieve a prompt by name with arguments (`prompts/get`).
+ * Returns null on failure or if the server exposes no prompts.
+ */
+export async function getPrompt(
+  server: ConnectedServer,
+  name: string,
+  args: Record<string, string> = {},
+): Promise<GetPromptResult | null> {
+  if (!server.capabilities?.prompts) return null;
+
+  try {
+    const result = (await server.client.request(
+      { method: 'prompts/get', params: { name, arguments: args } },
+      GetPromptResultSchema,
+    )) as GetPromptResult;
     return result;
   } catch {
     return null;
