@@ -176,20 +176,20 @@ export const zh = {
   'skills.button': 'Skills',
   'skills.selectedCount': 'Skills · {count}',
   'skills.empty': '未发现可用的 skill（在 ~/.claude/skills/ 或项目 .claude/skills/ 放置 SKILL.md）',
-  'mcp.title': '选择 MCP 服务',
-  'mcp.button': 'MCP',
-  'mcp.selectedCount': 'MCP · {count}',
-  'mcp.empty': '未配置 MCP 服务（用 `coderix mcp add` 或在 .coderix/mcp.json 里添加）',
+  'mcp.title': '选择链接器',
+  'mcp.button': '链接器',
+  'mcp.selectedCount': '链接器 · {count}',
+  'mcp.empty': '未配置链接器（用 `coderix mcp add` 或在 .coderix/mcp.json 里添加）',
   'skills.customDirs': '自定义目录',
   'skills.addDir': '添加目录',
   'skills.removeDir': '移除',
   'skills.noCustomDirs': '暂无自定义目录',
 
-  // ── 插件选择器 ───────────────────────────────────────
-  'plugins.title': '选择插件',
-  'plugins.button': '插件',
-  'plugins.selectedCount': '插件 · {count}',
-  'plugins.empty': '暂无可用插件',
+  // ── 链接器选择器 ───────────────────────────────────────
+  'plugins.title': '选择链接器',
+  'plugins.button': '链接器',
+  'plugins.selectedCount': '链接器 · {count}',
+  'plugins.empty': '暂无可用链接器',
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',
@@ -241,7 +241,7 @@ export const zh = {
   'library.tabSkills': '技能',
   'library.tabKnowledge': '知识库',
   'library.tabProjects': '项目',
-  'library.tabPlugins': '插件',
+  'library.tabPlugins': '链接器',
   'library.knowledgeEmpty': '知识库功能开发中',
   'library.addProject': '添加项目',
   'library.currentProject': '当前项目',

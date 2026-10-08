@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Puzzle, ChevronDown, Check } from 'lucide-react';
+import { Plug, ChevronDown, Check } from 'lucide-react';
 import type { AppDefinition } from '../apps/registry';
 import { useT } from '../../i18n/index.js';
 // Reuses the SkillPicker popup styles (same checkbox-list look).
@@ -49,7 +49,7 @@ export function PluginPicker({ plugins, selectedSkills, onToggle }: PluginPicker
         onClick={() => setOpen((v) => !v)}
         title={t('plugins.title')}
       >
-        <Puzzle size={13} />
+        <Plug size={13} />
         <span className="skill-picker-label">
           {checkedCount > 0 ? t('plugins.selectedCount', { count: checkedCount }) : t('plugins.button')}
         </span>
