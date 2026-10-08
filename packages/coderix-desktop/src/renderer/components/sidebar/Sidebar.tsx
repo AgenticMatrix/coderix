@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Library, Sparkles, Puzzle } from 'lucide-react';
+import { Search, Plus, Library, Sparkles, Plug } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { useT } from '../../i18n/index.js';
@@ -59,7 +59,7 @@ export function Sidebar({
         </button>
 
         <button type="button" onClick={() => onNavigate('plugins')} className={navBtn(activeView === 'plugins')}>
-          <Puzzle size={15} />
+          <Plug size={15} />
           <span>{t('library.tabPlugins')}</span>
         </button>
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Server, ChevronDown, Check, Loader2, AlertCircle, Link2 } from 'lucide-react';
+import { Plug, ChevronDown, Check, Loader2, AlertCircle, Link2 } from 'lucide-react';
 import type { McpServerStatus } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
 // Reuses the SkillPicker popup styles (same checkbox-list look).
@@ -61,7 +61,7 @@ export function McpPicker({ servers, selected, onChange }: McpPickerProps): Reac
         onClick={() => setOpen((v) => !v)}
         title={t('mcp.title')}
       >
-        <Server size={13} />
+        <Plug size={13} />
         <span className="skill-picker-label">
           {selected.length > 0 ? t('mcp.selectedCount', { count: selected.length }) : t('mcp.button')}
         </span>
