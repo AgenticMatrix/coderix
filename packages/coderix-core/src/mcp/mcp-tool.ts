@@ -88,6 +88,8 @@ export function createMcpToolPlugin(options: McpToolOptions): ToolPlugin {
       _meta: {
         riskLevel,
         isConcurrencySafe: annotations?.readOnlyHint ?? false,
+        isMcp: true,
+        mcpInfo: { serverName, toolName },
       },
     },
 

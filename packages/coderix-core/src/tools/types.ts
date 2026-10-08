@@ -18,6 +18,14 @@ export interface ToolMeta {
   riskLevel: 'safe' | 'mutation' | 'destructive';
   /** When true, this tool can execute concurrently with other safe tools. */
   isConcurrencySafe?: boolean;
+  /**
+   * MCP provenance: true when this tool was discovered from an MCP server
+   * (rather than a built-in tool). `mcpInfo` carries the owning server and the
+   * tool's raw name, so callers can identify / filter / display MCP tools
+   * without parsing the `mcp__<server>__<tool>` name back apart.
+   */
+  isMcp?: boolean;
+  mcpInfo?: { serverName: string; toolName: string };
   /** Whether this tool can be safely cancelled mid-execution.
    *  'cancel' = safe to abort and re-submit.
    *  'block'  = must complete before new messages are processed.
