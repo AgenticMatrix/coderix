@@ -199,6 +199,8 @@ export const en: Record<TranslationKey, string> = {
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': 'Click a file to start editing',
+  'editor.preview': 'Preview',
+  'editor.code': 'Code',
   'explorer.loading': 'Loading files...',
   'explorer.noFiles': 'No files found',
   'detail.clickToDiff': 'Click a file to view its diff',

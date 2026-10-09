@@ -195,6 +195,8 @@ export const zh = {
 
   // ── 编辑器 / 详情面板 ─────────────────────────────────
   'editor.clickToEdit': '点击文件开始编辑',
+  'editor.preview': '预览',
+  'editor.code': '代码',
   'explorer.loading': '加载文件中...',
   'explorer.noFiles': '没有文件',
   'detail.clickToDiff': '点击文件查看 diff',
