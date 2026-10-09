@@ -375,18 +375,94 @@ export async function setSessionMcpServers(mcpServers: string[], sessionId?: str
 //  MCP
 // ===========================================================================
 
-/** A configured MCP server with its live connection status. */
+/** A field the config dialog should prompt for (from the catalog metadata). */
+export interface McpCatalogField {
+  key: string;
+  labelZh: string;
+  labelEn: string;
+  placeholder?: string;
+  argIndex?: number;
+  envKey?: string;
+  headerKey?: string;
+  headerPrefix?: string;
+  secret?: boolean;
+}
+
+/** Display metadata for a known MCP server. */
+export interface McpCatalogMeta {
+  icon: string;
+  nameZh: string;
+  nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  credential?: string;
+  fields?: McpCatalogField[];
+}
+
+/** A configured MCP server with its live connection status + display details. */
 export interface McpServerStatus {
   name: string;
   scope: string;
   status: string;
   toolCount: number;
+  transport?: 'stdio' | 'http' | 'sse';
+  endpoint?: string;
+  disabled?: boolean;
+  removed?: boolean;
+  secretEnv?: string[];
+  secretsSet?: boolean;
+  meta?: McpCatalogMeta;
+}
+
+/** Result of a live connection test (spawn + tools/list). */
+export interface McpTestResult {
+  ok: boolean;
+  tools?: Array<{ name: string; description?: string }>;
+  error?: string;
 }
 
 /** List configured MCP servers with live status (for the picker UI). */
 export async function listMcpServers(): Promise<McpServerStatus[]> {
   return invokeWithTimeout<McpServerStatus[]>('mcp:list', () =>
     getAPI().mcp.list(),
+  );
+}
+
+/** List the rich MCP catalog for the 链接器 page (icons, descriptions, secrets). */
+export async function listMcpCatalog(): Promise<McpServerStatus[]> {
+  return invokeWithTimeout<McpServerStatus[]>('mcp:catalog', () =>
+    getAPI().mcp.catalog(),
+  );
+}
+
+/** Spawn a server and list its real tools (does not change manager state). */
+export async function testMcpServer(name: string): Promise<McpTestResult> {
+  return invokeWithTimeout<McpTestResult>('mcp:test', () =>
+    getAPI().mcp.test(name),
+  );
+}
+
+/** Persistently enable/disable a server (affects all sessions). */
+export async function setMcpServerEnabled(name: string, enabled: boolean): Promise<unknown> {
+  return invokeWithTimeout('mcp:setEnabled', () =>
+    getAPI().mcp.setEnabled(name, enabled),
+  );
+}
+
+/** Store secret env values and/or path args for a server. */
+export async function configureMcpServer(
+  name: string,
+  opts: { secrets?: Record<string, string>; args?: Record<string, string>; reconnect?: boolean },
+): Promise<unknown> {
+  return invokeWithTimeout('mcp:configure', () =>
+    getAPI().mcp.configure(name, opts),
+  );
+}
+
+/** Remove a server (disconnect + hide + drop its stored secrets). */
+export async function removeMcpServer(name: string): Promise<unknown> {
+  return invokeWithTimeout('mcp:remove', () =>
+    getAPI().mcp.remove(name),
   );
 }
 

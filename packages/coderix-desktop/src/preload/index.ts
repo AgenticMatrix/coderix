@@ -27,6 +27,11 @@ const CH = {
   SESSION_SET_SKILLS: 'session:setSkills',
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
   MCP_LIST: 'mcp:list',
+  MCP_CATALOG: 'mcp:catalog',
+  MCP_TEST: 'mcp:test',
+  MCP_SET_ENABLED: 'mcp:setEnabled',
+  MCP_CONFIGURE: 'mcp:configure',
+  MCP_REMOVE: 'mcp:remove',
   SKILLS_LIST: 'skills:list',
   SKILLS_LIST_DIRS: 'skills:listDirs',
   SKILLS_ADD_DIR: 'skills:addDir',
@@ -403,6 +408,49 @@ const coderixAPI = {
     /** List configured MCP servers with live status (for the picker UI). */
     list(): Promise<Array<{ name: string; scope: string; status: string; toolCount: number }>> {
       return ipcRenderer.invoke(CH.MCP_LIST);
+    },
+    /** Rich catalog for the 链接器 page: transport, endpoint, secrets, metadata. */
+    catalog(): Promise<Array<{
+      name: string;
+      scope: string;
+      status: string;
+      toolCount: number;
+      transport?: string;
+      endpoint?: string;
+      disabled?: boolean;
+      removed?: boolean;
+      secretEnv?: string[];
+      secretsSet?: boolean;
+      meta?: {
+        icon: string;
+        nameZh: string;
+        nameEn: string;
+        descriptionZh: string;
+        descriptionEn: string;
+        credential?: string;
+        fields?: unknown[];
+      };
+    }>> {
+      return ipcRenderer.invoke(CH.MCP_CATALOG);
+    },
+    /** Spawn the server and list its real tools. */
+    test(name: string): Promise<{ ok: boolean; tools?: Array<{ name: string; description?: string }>; error?: string }> {
+      return ipcRenderer.invoke(CH.MCP_TEST, { name });
+    },
+    /** Persistently enable/disable a server. */
+    setEnabled(name: string, enabled: boolean): Promise<{ status: string; enabled?: boolean }> {
+      return ipcRenderer.invoke(CH.MCP_SET_ENABLED, { name, enabled });
+    },
+    /** Store secret env values and/or path args for a server. */
+    configure(
+      name: string,
+      opts: { secrets?: Record<string, string>; args?: Record<string, string>; reconnect?: boolean },
+    ): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.MCP_CONFIGURE, { name, ...opts });
+    },
+    /** Remove a server (disconnect + hide + drop secrets). */
+    remove(name: string): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.MCP_REMOVE, { name });
     },
   },
 

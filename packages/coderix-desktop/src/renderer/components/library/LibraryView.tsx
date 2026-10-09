@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, FolderOpen, Plus, BookOpen, Plug } from 'lucide-react';
+import { Check, Sparkles, FolderOpen, Plus, BookOpen } from 'lucide-react';
 import type { SkillInfo, McpServerStatus } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
 import { APPS, type AppDefinition } from '../apps/registry';
+import { LinkerTab } from './LinkerTab';
 
 type LibraryTab = 'projects' | 'knowledge';
 
@@ -116,28 +117,29 @@ SkillsView.displayName = 'SkillsView';
 export interface PluginsViewProps {
   /** Attach an app (plugin) to the current conversation. */
   onOpenApp: (app: AppDefinition) => void;
-  /** All configured MCP servers with live status (「链接器」 tab). */
+  /** All configured MCP servers with display details (「链接器」 tab). */
   mcpServers: McpServerStatus[];
   /** MCP server names enabled for the active session. */
   selectedMcp: string[];
   /** Toggle the active session's MCP server selection. */
   onMcpChange: (names: string[]) => void;
+  /** Re-read the catalog after a persistent mutation (enable/remove/configure). */
+  onRefreshMcp: () => void | Promise<void>;
 }
 
 /**
  * PluginsView — the full-page 「链接器」 surface reached from the sidebar. Two tabs:
  * 「应用插件」(apps) first, 「链接器」(MCP servers) second.
  */
-export function PluginsView({ onOpenApp, mcpServers, selectedMcp, onMcpChange }: PluginsViewProps): React.ReactElement {
+export function PluginsView({
+  onOpenApp,
+  mcpServers,
+  selectedMcp,
+  onMcpChange,
+  onRefreshMcp,
+}: PluginsViewProps): React.ReactElement {
   const t = useT();
   const [tab, setTab] = useState<'apps' | 'mcp'>('apps');
-
-  const toggleMcp = (name: string) => {
-    const next = selectedMcp.includes(name)
-      ? selectedMcp.filter((s) => s !== name)
-      : [...selectedMcp, name];
-    onMcpChange(next);
-  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[var(--color-bg-primary)]">
@@ -175,41 +177,12 @@ export function PluginsView({ onOpenApp, mcpServers, selectedMcp, onMcpChange }:
         )}
 
         {tab === 'mcp' && (
-          mcpServers.length === 0 ? (
-            <div className="py-10 text-center text-sm text-[var(--color-text-tertiary)]">{t('plugins.empty')}</div>
-          ) : (
-            <div className="flex flex-col gap-2 max-w-2xl">
-              {mcpServers.map((s) => {
-                const enabled = selectedMcp.includes(s.name);
-                return (
-                  <button
-                    key={s.name}
-                    type="button"
-                    onClick={() => toggleMcp(s.name)}
-                    className="flex items-center gap-3 p-3 rounded-[var(--radius-md)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left hover:border-[var(--color-brand)]/40 transition-colors cursor-pointer"
-                  >
-                    <span
-                      className={`flex items-center justify-center w-5 h-5 rounded border ${
-                        enabled
-                          ? 'bg-[var(--color-brand)] border-[var(--color-brand)] text-white'
-                          : 'border-[var(--color-separator)] text-transparent'
-                      }`}
-                    >
-                      <Check size={13} />
-                    </span>
-                    <Plug size={15} className="text-[var(--color-brand)]" />
-                    <span className="flex-1">
-                      <span className="block text-sm font-medium text-[var(--color-text-primary)]">{s.name}</span>
-                      <span className="block text-xs text-[var(--color-text-tertiary)]">
-                        {s.toolCount > 0 ? `${s.toolCount} tools` : s.status}
-                      </span>
-                    </span>
-                    <span className="text-xs text-[var(--color-text-tertiary)]">{s.status}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )
+          <LinkerTab
+            servers={mcpServers}
+            selected={selectedMcp}
+            onSelectionChange={onMcpChange}
+            onRefresh={onRefreshMcp}
+          />
         )}
       </div>
     </div>

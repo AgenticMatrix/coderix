@@ -34,6 +34,8 @@ import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
 import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript } from '@coderix/core';
+import type { McpManager } from '@coderix/core';
+import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '@coderix/core';
 import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } from './claude-code-engine.js';
 import { normalizeSubAgentEvent } from './subagent-events.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
@@ -60,6 +62,8 @@ export interface IpcBridgeConfig {
   createEngineForSession?: (session: Session) => Promise<QueryEngine>;
   /** List configured MCP servers with live status (for the picker UI). */
   listMcpServers?: (cwd: string) => Promise<import('../../../../packages/coderix-core/src/mcp/manager.js').McpServerStatus[]>;
+  /** The workspace's cached McpManager — used for test / enable / remove actions. */
+  getMcpManager?: (cwd: string) => Promise<McpManager>;
   /** Shared EventBus the per-session engine emits sub-agent lifecycle events on. */
   eventBus?: EventBus;
 }
@@ -96,6 +100,11 @@ export const IPC_CHANNELS = {
   SESSION_SET_SKILLS: 'session:setSkills',
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
   MCP_LIST: 'mcp:list',
+  MCP_CATALOG: 'mcp:catalog',
+  MCP_TEST: 'mcp:test',
+  MCP_SET_ENABLED: 'mcp:setEnabled',
+  MCP_CONFIGURE: 'mcp:configure',
+  MCP_REMOVE: 'mcp:remove',
   SKILLS_LIST: 'skills:list',
   SKILLS_LIST_DIRS: 'skills:listDirs',
   SKILLS_ADD_DIR: 'skills:addDir',
@@ -209,6 +218,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   const engineBySession = new Map<string, QueryEngine>();
   const createEngineForSession = config.createEngineForSession ?? null;
   const listMcpServers = config.listMcpServers ?? null;
+  const getMcpManager = config.getMcpManager ?? null;
 
   const getEngineForSession = async (session: Session): Promise<QueryEngine> => {
     const existing = engineBySession.get(session.id);
@@ -1114,6 +1124,100 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.MCP_LIST, async () => {
     if (!listMcpServers) return [];
     return listMcpServers(currentWorkDir);
+  });
+
+  // Same data as MCP_LIST but a distinct channel so the 链接器 page can refresh
+  // without the picker's lighter channel semantics diverging later.
+  ipcMain.handle(IPC_CHANNELS.MCP_CATALOG, async () => {
+    if (!listMcpServers) return [];
+    return listMcpServers(currentWorkDir);
+  });
+
+  // Spawn the server and list its real tools (no manager state touched).
+  ipcMain.handle(IPC_CHANNELS.MCP_TEST, async (_event, payload: { name?: string }) => {
+    const name = String(payload?.name ?? '');
+    if (!name) return { ok: false, error: 'Missing server name' };
+    const config = getMcpConfig(name, currentWorkDir);
+    if (!config) return { ok: false, error: `Unknown server: ${name}` };
+    return testMcpServer(name, config, currentWorkDir);
+  });
+
+  // Persistently enable/disable a server. Enabling also clears a prior removal.
+  ipcMain.handle(IPC_CHANNELS.MCP_SET_ENABLED, async (_event, payload: { name?: string; enabled?: boolean }) => {
+    const name = String(payload?.name ?? '');
+    if (!name || !getMcpManager) return { status: 'error' };
+    const manager = await getMcpManager(currentWorkDir);
+    if (payload?.enabled) {
+      const config = getMcpConfig(name, currentWorkDir);
+      if (config) restoreServer(name, config.scope, currentWorkDir);
+      await manager.enableServer(name);
+    } else {
+      await manager.disableServer(name);
+    }
+    // Rebuild session engines so the next turn picks up the new toolset.
+    engineBySession.clear();
+    return { status: 'ok', enabled: !!payload?.enabled };
+  });
+
+  // Store secret env values and/or path args for a server, then reconnect it.
+  // `secrets` maps env var name → value; `args` maps argIndex (as string) → value.
+  ipcMain.handle(
+    IPC_CHANNELS.MCP_CONFIGURE,
+    async (_event, payload: { name?: string; secrets?: Record<string, string>; args?: Record<string, string>; reconnect?: boolean }) => {
+      const name = String(payload?.name ?? '');
+      if (!name) return { status: 'error' };
+
+      for (const [key, value] of Object.entries(payload?.secrets ?? {})) {
+        if (typeof value === 'string' && value.length > 0) setSecret(name, key, value);
+      }
+
+      const args = payload?.args;
+      if (args && Object.keys(args).length > 0) {
+        const config = getMcpConfig(name, currentWorkDir);
+        if (config && 'command' in config) {
+          const nextArgs = [...(config.args ?? [])];
+          for (const [idx, value] of Object.entries(args)) {
+            const i = Number(idx);
+            if (Number.isInteger(i) && i >= 0 && typeof value === 'string' && value.length > 0) {
+              nextArgs[i] = value;
+            }
+          }
+          const { scope, ...serverConfig } = config;
+          addMcpConfig(name, { ...serverConfig, args: nextArgs }, scope, currentWorkDir);
+          restoreServer(name, scope, currentWorkDir);
+        }
+      }
+
+      if (getMcpManager && payload?.reconnect !== false) {
+        const manager = await getMcpManager(currentWorkDir);
+        if (manager.getConnection(name)) {
+          await manager.reconnectServer(name).catch(() => {});
+        }
+        engineBySession.clear();
+      }
+      return { status: 'ok' };
+    },
+  );
+
+  // Remove a server: disconnect + record a removal marker (works for servers
+  // that only exist in the installed bundle) + drop its stored secrets.
+  ipcMain.handle(IPC_CHANNELS.MCP_REMOVE, async (_event, payload: { name?: string }) => {
+    const name = String(payload?.name ?? '');
+    if (!name) return { status: 'error' };
+    const config = getMcpConfig(name, currentWorkDir);
+    const scope = config?.scope ?? 'user';
+    if (getMcpManager) {
+      const manager = await getMcpManager(currentWorkDir);
+      await manager.disableServer(name).catch(() => {});
+    }
+    removeServerPermanently(name, scope, currentWorkDir);
+    try {
+      clearServerSecrets(name);
+    } catch {
+      /* no secrets stored */
+    }
+    engineBySession.clear();
+    return { status: 'ok' };
   });
 
   // The skill list must match the active engine's actual loader: the coderix
