@@ -14,6 +14,7 @@ import {
   loadMcpConfigs,
   hasMcpConfig,
   isServerDisabled,
+  isServerRemoved,
   disableServer as disableServerConfig,
   enableServer as enableServerConfig,
   listDisabledServerNames,
@@ -32,10 +33,13 @@ import type {
   ConnectedServer,
   ScopedServerConfig,
   ConfigScope,
+  Transport,
   ServerResource,
   McpPrompt,
 } from './types.js';
 import type { McpSkill } from './mcp-skills.js';
+import { getCatalogMeta, type McpCatalogMeta } from './catalog.js';
+import { getServerSecrets } from './secrets.js';
 
 // ── Reconnect constants ────────────────────────────────────────────────
 
@@ -58,6 +62,20 @@ export interface McpServerStatus {
   scope: ConfigScope;
   status: ServerConnection['type'] | 'unconnected';
   toolCount: number;
+  /** Transport derived from config (defaults to `stdio`). */
+  transport?: Transport;
+  /** Human-readable launch endpoint: `command + args`, or the remote URL. */
+  endpoint?: string;
+  /** True when the server is disabled in config (persisted). */
+  disabled?: boolean;
+  /** True when the server was removed (hidden from the engine, restorable). */
+  removed?: boolean;
+  /** Env var names this server needs as secrets (stdio servers). */
+  secretEnv?: string[];
+  /** True when every required secret has a stored value. */
+  secretsSet?: boolean;
+  /** Display metadata (icon + bilingual name/description/credential/fields). */
+  meta?: McpCatalogMeta;
 }
 
 // ── McpManager ───────────────────────────────────────────────────────────
@@ -412,11 +430,33 @@ export class McpManager {
       } else {
         status = 'unconnected';
       }
+
+      let transport: Transport;
+      let endpoint: string;
+      let secretEnv: string[] = [];
+      if ('command' in config) {
+        transport = config.type ?? 'stdio';
+        endpoint = [config.command, ...(config.args ?? [])].join(' ');
+        secretEnv = Array.isArray(config.secretEnv) ? config.secretEnv : [];
+      } else {
+        transport = config.type;
+        endpoint = config.url ?? '';
+      }
+      const secrets = getServerSecrets(name);
+      const secretsSet = secretEnv.length === 0 || secretEnv.every((key) => Boolean(secrets[key]));
+
       result.push({
         name,
         scope: config.scope,
         status,
         toolCount: this.toolPlugins.get(name)?.length ?? 0,
+        transport,
+        endpoint,
+        disabled: status === 'disabled',
+        removed: isServerRemoved(name, config.scope, this.cwd),
+        secretEnv,
+        secretsSet,
+        meta: getCatalogMeta(name),
       });
     }
     return result;

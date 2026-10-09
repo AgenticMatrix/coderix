@@ -158,6 +158,7 @@ async function bootstrap(): Promise<void> {
       reloadQueryEngine: (workDir, model) => initQueryEngine(workDir, model),
       createEngineForSession,
       listMcpServers,
+      getMcpManager,
       eventBus: sharedEventBus,
     });
 

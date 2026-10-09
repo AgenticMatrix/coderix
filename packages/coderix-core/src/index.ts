@@ -181,7 +181,12 @@ export {
   loadMcpConfigs, loadEnabledMcpConfigs, projectConfigPath, userConfigPath,
   addMcpConfig, removeMcpConfig, getMcpConfig,
   disableServer, enableServer, isServerDisabled,
+  isServerRemoved, removeServerPermanently, restoreServer, listRemovedServerNames,
 } from './mcp/config-loader.js';
+export { getCatalogMeta, MCP_CATALOG_META } from './mcp/catalog.js';
+export type { McpCatalogMeta, McpCatalogField } from './mcp/catalog.js';
+export { testMcpServer } from './mcp/test.js';
+export type { McpTestResult, McpTestTool } from './mcp/test.js';
 export { startMcpServer } from './mcp/mcp-server.js';
 export type {
   ServerConfig, ScopedServerConfig, McpOAuthConfig,

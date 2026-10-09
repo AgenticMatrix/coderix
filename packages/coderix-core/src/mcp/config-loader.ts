@@ -135,6 +135,9 @@ export function addMcpConfig(
   servers[name] = config;
   existing.mcpServers = servers;
   writeJsonFile(filePath, existing);
+
+  // Re-adding a server cancels any prior removal marker.
+  restoreServer(name, scope, cwd);
 }
 
 /**
@@ -256,7 +259,7 @@ export function loadEnabledMcpConfigs(cwd: string): Record<string, ScopedServerC
   const all = loadMcpConfigs(cwd);
   const filtered: Record<string, ScopedServerConfig> = {};
   for (const [name, config] of Object.entries(all)) {
-    if (!isServerDisabled(name, config.scope, cwd)) {
+    if (!isServerDisabled(name, config.scope, cwd) && !isServerRemoved(name, config.scope, cwd)) {
       filtered[name] = config;
     }
   }
@@ -275,6 +278,98 @@ export function listDisabledServerNames(cwd?: string): Array<{ name: string; sco
   }
   for (const name of getUserDisabledSet()) {
     // Project-scoped entries take precedence
+    if (!result.some(e => e.name === name && e.scope === 'project')) {
+      result.push({ name, scope: 'user' as ConfigScope });
+    }
+  }
+  return result;
+}
+
+// ── Remove / Restore (Phase 3) ──────────────────────────────────────────
+//
+// Bundle-provided servers cannot be deleted from the (shared, reinstalled)
+// bundle file, so "移除" records the name in a `removedServers` list in the
+// user/project file. `loadMcpConfigs` filters those names out; re-adding (or
+// restoring) clears the marker.
+
+const REMOVED_KEY = 'removedServers';
+
+/** Get the set of removed server names from the given file. */
+function getRemovedSet(filePath: string): Set<string> {
+  const raw = readRawJsonFile(filePath);
+  if (!raw) return new Set();
+  const list = raw[REMOVED_KEY];
+  if (Array.isArray(list)) return new Set(list.filter((x): x is string => typeof x === 'string'));
+  return new Set();
+}
+
+/** Write the removed server set back to the file. */
+function writeRemovedSet(filePath: string, set: Set<string>): void {
+  const existing = readRawJsonFile(filePath) ?? {};
+  if (set.size === 0) {
+    delete existing[REMOVED_KEY];
+  } else {
+    existing[REMOVED_KEY] = [...set].sort();
+  }
+  if (Object.keys(existing).length === 0) {
+    if (existsSync(filePath)) unlinkSync(filePath);
+    return;
+  }
+  writeJsonFile(filePath, existing);
+}
+
+/** User-scope removed set = installed bundle ∪ ~/.coderix/mcp.json. */
+function getUserRemovedSet(): Set<string> {
+  const set = getRemovedSet(bundleConfigPath());
+  for (const name of getRemovedSet(userConfigPath())) set.add(name);
+  return set;
+}
+
+/** Check if a server has been removed in its scope. */
+export function isServerRemoved(name: string, scope: ConfigScope, cwd?: string): boolean {
+  if (scope === 'project') {
+    return getRemovedSet(projectConfigPath(cwd ?? process.cwd())).has(name);
+  }
+  return getUserRemovedSet().has(name);
+}
+
+/**
+ * Permanently remove a server: clears any disable marker and records it in the
+ * scope's `removedServers` list so `loadMcpConfigs` hides it (works for servers
+ * that only exist in the installed bundle).
+ */
+export function removeServerPermanently(name: string, scope: ConfigScope, cwd?: string): void {
+  const filePath = configPathForScope(scope, cwd);
+  const disabled = getDisabledSet(filePath);
+  if (disabled.delete(name)) writeDisabledSet(filePath, disabled);
+
+  const set = getRemovedSet(filePath);
+  set.add(name);
+  writeRemovedSet(filePath, set);
+}
+
+/** Restore a previously removed server (clear its `removedServers` marker). */
+export function restoreServer(name: string, scope: ConfigScope, cwd?: string): void {
+  if (scope === 'project') {
+    const filePath = projectConfigPath(cwd ?? process.cwd());
+    const set = getRemovedSet(filePath);
+    if (set.delete(name)) writeRemovedSet(filePath, set);
+    return;
+  }
+  // User scope: the marker may live in the bundle or the user file.
+  for (const filePath of [bundleConfigPath(), userConfigPath()]) {
+    const set = getRemovedSet(filePath);
+    if (set.delete(name)) writeRemovedSet(filePath, set);
+  }
+}
+
+/** List all removed server names across scopes. */
+export function listRemovedServerNames(cwd?: string): Array<{ name: string; scope: ConfigScope }> {
+  const result: Array<{ name: string; scope: ConfigScope }> = [];
+  for (const name of getRemovedSet(projectConfigPath(cwd ?? process.cwd()))) {
+    result.push({ name, scope: 'project' as ConfigScope });
+  }
+  for (const name of getUserRemovedSet()) {
     if (!result.some(e => e.name === name && e.scope === 'project')) {
       result.push({ name, scope: 'user' as ConfigScope });
     }

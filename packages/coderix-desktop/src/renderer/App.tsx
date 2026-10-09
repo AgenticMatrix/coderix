@@ -60,7 +60,7 @@ import {
   getHomeDir,
   listSkills,
   setSessionSkills,
-  listMcpServers,
+  listMcpCatalog,
   setSessionMcpServers,
   listSkillDirs,
   addSkillDir,
@@ -261,10 +261,17 @@ export function App(): React.ReactElement {
     listSkillDirs()
       .then((dirs) => setCustomSkillDirs(dirs))
       .catch((err) => console.error('[App] Failed to list skill dirs:', err));
-    listMcpServers()
+    listMcpCatalog()
       .then((servers) => setAvailableMcpServers(servers))
       .catch((err) => console.error('[App] Failed to list MCP servers:', err));
   }, [projectPath]);
+
+  // Re-read the MCP catalog after a persistent mutation in the 链接器 page
+  // (enable/disable, remove, configure). Session selection is unaffected.
+  const refreshMcp = useCallback(
+    () => listMcpCatalog().then((servers) => setAvailableMcpServers(servers)).catch(() => {}),
+    [],
+  );
 
   // Default a freshly-created session to the built-in skills (checked) so they
   // stay enabled unless the user unchecks them in the picker. Applied once per
@@ -1102,6 +1109,7 @@ export function App(): React.ReactElement {
             mcpServers={availableMcpServers}
             selectedMcp={selectedMcpServers}
             onMcpChange={handleMcpChange}
+            onRefreshMcp={refreshMcp}
           />
         ) : sidebarTab === 'library' ? (
           <LibraryView

@@ -89,6 +89,14 @@ export {
   DEFAULT_OAUTH_CALLBACK_PORT,
 } from './oauth.js';
 
+// Catalog metadata (display-only enrichment for the desktop 链接器)
+export { MCP_CATALOG_META, getCatalogMeta } from './catalog.js';
+export type { McpCatalogMeta, McpCatalogField } from './catalog.js';
+
+// Connection test (standalone connect + tools/list)
+export { testMcpServer } from './test.js';
+export type { McpTestResult, McpTestTool } from './test.js';
+
 // Discovery (tools + resources + prompts)
 export {
   discoverTools,
@@ -118,4 +126,8 @@ export {
   disableServer,
   enableServer,
   listDisabledServerNames,
+  isServerRemoved,
+  removeServerPermanently,
+  restoreServer,
+  listRemovedServerNames,
 } from './config-loader.js';
