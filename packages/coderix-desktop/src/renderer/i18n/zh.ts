@@ -192,6 +192,8 @@ export const zh = {
   'plugins.empty': '暂无可用链接器',
   'plugins.tabApps': '插件',
   'plugins.tabMcp': '链接器',
+  'plugins.create': '创建',
+  'plugins.attach': '附加',
 
   // ── 链接器卡片 ─────────────────────────────────────────
   'plugins.mcpSubtitle': '通过 MCP（模型上下文协议）接入外部工具、数据源与服务',

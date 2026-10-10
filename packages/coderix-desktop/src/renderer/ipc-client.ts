@@ -371,6 +371,35 @@ export async function setSessionMcpServers(mcpServers: string[], sessionId?: str
   );
 }
 
+/** Bind a session to a plugin agent identity (per-session agent). */
+export async function setSessionAgentType(
+  agentType: string,
+  sessionId?: string,
+  pluginId?: string,
+): Promise<unknown> {
+  return invokeWithTimeout('session:setAgentType', () =>
+    getAPI().session.setAgentType(sessionId ?? '', agentType, pluginId),
+  );
+}
+
+/** A file-based plugin manifest record surfaced by the main process. */
+export interface PluginManifestDto {
+  id: string;
+  name: string;
+  description: string;
+  icon: string | null;
+  skills: string[];
+  mcpServers: string[];
+  display: { kind: string } | null;
+  agentType: string | null;
+  root: string;
+}
+
+/** List file-based plugin manifests (plugin cards). */
+export async function listPlugins(): Promise<PluginManifestDto[]> {
+  return invokeWithTimeout<PluginManifestDto[]>('plugins:list', () => getAPI().plugins.list());
+}
+
 // ===========================================================================
 //  MCP
 // ===========================================================================

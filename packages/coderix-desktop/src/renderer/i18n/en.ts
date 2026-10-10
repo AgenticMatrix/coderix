@@ -196,6 +196,8 @@ export const en: Record<TranslationKey, string> = {
   'plugins.empty': 'No MCP servers available',
   'plugins.tabApps': 'Plugins',
   'plugins.tabMcp': 'MCP',
+  'plugins.create': 'Create',
+  'plugins.attach': 'Attach',
 
   // ── Linker cards ───────────────────────────────────────
   'plugins.mcpSubtitle': 'Connect external tools, data sources and services over MCP.',

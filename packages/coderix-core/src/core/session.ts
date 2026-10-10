@@ -88,6 +88,10 @@ export class SessionManager {
     provider?: string;
     parentSessionId?: string;
     baseCommit?: string;
+    agentType?: string;
+    pluginId?: string;
+    skills?: string[];
+    mcpServers?: string[];
   }): Session {
     const id = randomUUID();
     const now = new Date();
@@ -106,6 +110,10 @@ export class SessionManager {
       provider: options.provider ?? 'anthropic',
       parentSessionId: options.parentSessionId,
       baseCommit: options.baseCommit,
+      skills: options.skills,
+      mcpServers: options.mcpServers,
+      agentType: options.agentType,
+      pluginId: options.pluginId,
       tokenUsage: {
         inputTokens: 0,
         outputTokens: 0,
@@ -233,6 +241,19 @@ export class SessionManager {
   /** Bind the active session to a set of MCP servers (delegator — see setMcpServers). */
   setActiveMcpServers(mcpServers: string[]): void {
     this.setMcpServers(this.getActive().id, mcpServers);
+  }
+
+  /**
+   * Bind a session to a plugin agent identity and persist it to meta.json so the
+   * session reopens as the same sub-agent plugin when resumed later.
+   */
+  setAgentType(sessionId: string, agentType: string, pluginId?: string): void {
+    const session = this.requireSession(sessionId);
+    session.agentType = agentType;
+    if (pluginId !== undefined) session.pluginId = pluginId;
+    session.updatedAt = new Date();
+    const dir = getSessionDir(session.id);
+    writeSessionMeta(dir, { agentType, ...(pluginId !== undefined ? { pluginId } : {}) }).catch(() => {});
   }
 
   /**
@@ -1043,6 +1064,8 @@ export class SessionManager {
         provider: 'anthropic',
         skills: meta?.skills ?? [],
         mcpServers: meta?.mcpServers ?? [],
+        agentType: meta?.agentType,
+        pluginId: meta?.pluginId,
         tokenUsage: meta?.tokenUsage ?? {
           inputTokens: persistedContextLength,
           outputTokens: 0,

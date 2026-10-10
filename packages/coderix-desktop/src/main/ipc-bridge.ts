@@ -33,7 +33,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript } from '@coderix/core';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests } from '@coderix/core';
 import type { McpManager } from '@coderix/core';
 import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '@coderix/core';
 import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } from './claude-code-engine.js';
@@ -99,6 +99,8 @@ export const IPC_CHANNELS = {
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
+  SESSION_SET_AGENT_TYPE: 'session:setAgentType',
+  PLUGINS_LIST: 'plugins:list',
   MCP_LIST: 'mcp:list',
   MCP_CATALOG: 'mcp:catalog',
   MCP_TEST: 'mcp:test',
@@ -928,7 +930,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Session ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('session:create', async (_event, opts?: { title?: string }) => {
+  ipcMain.handle('session:create', async (_event, opts?: {
+    title?: string;
+    agentType?: string;
+    pluginId?: string;
+    skills?: string[];
+    mcpServers?: string[];
+  }) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
     // Park a brand-new conversation on the default-workspace base until the
     // first message mints its hash subdir — unless a specific project is open,
@@ -940,8 +948,26 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       title: opts?.title ?? '新对话',
       cwd: parked,
       model: currentModel,
+      agentType: opts?.agentType,
+      pluginId: opts?.pluginId,
+      skills: opts?.skills,
+      mcpServers: opts?.mcpServers,
     });
-    return { id: session.id, title: session.title, turnCount: session.turnCount, cwd: session.cwd };
+    // Persist the identity immediately (empty plugin sessions must not lose it
+    // on restart — create() defers disk writes until the first message).
+    if (opts?.agentType) sessionManager.setAgentType(session.id, opts.agentType, opts.pluginId);
+    if (opts?.skills) sessionManager.setSkills(session.id, opts.skills);
+    if (opts?.mcpServers) sessionManager.setMcpServers(session.id, opts.mcpServers);
+    return {
+      id: session.id,
+      title: session.title,
+      turnCount: session.turnCount,
+      cwd: session.cwd,
+      agentType: session.agentType,
+      pluginId: session.pluginId,
+      skills: session.skills ?? [],
+      mcpServers: session.mcpServers ?? [],
+    };
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
@@ -1013,6 +1039,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       model: session.model,
       skills: session.skills ?? [],
       mcpServers: session.mcpServers ?? [],
+      agentType: session.agentType,
+      pluginId: session.pluginId,
       tokenUsage: session.tokenUsage,
       totalCost: session.totalCost,
       contextTokens: session.contextTokens,
@@ -1119,6 +1147,38 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (sessionId) engineBySession.delete(sessionId);
     else engineBySession.clear();
     return { status: 'ok', mcpServers: next };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_AGENT_TYPE, async (_event, payload: { sessionId?: string; agentType: string; pluginId?: string }) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const agentType = payload?.agentType;
+    const sessionId = payload?.sessionId;
+    if (!agentType || typeof agentType !== 'string') {
+      throw new Error('Invalid agentType');
+    }
+    if (sessionId) {
+      sessionManager.setAgentType(sessionId, agentType, payload?.pluginId);
+      // Evict the cached engine so the next submit rebuilds with the new identity.
+      engineBySession.delete(sessionId);
+    } else {
+      try {
+        sessionManager.setAgentType(sessionManager.getActive().id, agentType, payload?.pluginId);
+        engineBySession.clear();
+      } catch {
+        // No active session yet — identity applied on the next created session.
+      }
+    }
+    return { status: 'ok', agentType, pluginId: payload?.pluginId };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PLUGINS_LIST, async () => {
+    // File-based plugin manifests (global + project) → renderer plugin cards.
+    try {
+      return await loadPluginManifests(currentWorkDir, { includeGlobal: true });
+    } catch (err) {
+      console.warn('[Coderix] plugins:list failed:', err instanceof Error ? err.message : err);
+      return [];
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.MCP_LIST, async () => {

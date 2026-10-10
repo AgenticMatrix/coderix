@@ -20,6 +20,7 @@ import { createCadViewerManager } from './cad-viewer-manager.js';
 import type { CadViewerManager } from './cad-viewer-manager.js';
 import { installCadSkills } from './cad-skills.js';
 import { applyCadEnv } from './cad-paths.js';
+import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
@@ -97,6 +98,11 @@ async function bootstrap(): Promise<void> {
     // Export the CAD toolchain paths (CAD_PYTHON etc.) so the engine's bash
     // tool and the skill scripts it runs resolve the right Python interpreter.
     applyCadEnv();
+
+    // Seed the cad-harness plugin manifest + register the cad-control MCP server
+    // so plugin conversations can control the CAD component via MCP. Idempotent.
+    installCadPluginManifest();
+    installCadControlMcp();
 
     const initialConfig = loadDesktopConfig();
     // Restore the last-used workspace across restarts. `loadConfig().cwd` is
@@ -378,18 +384,36 @@ function makeCallModelSafe(
 // isActive/messageQueue/abortController are all per-instance.
 async function createEngineForSession(session: Session): Promise<QueryEngine> {
   const appConfig = loadDesktopConfig();
-  const sessionModel =
-    session.model && session.model !== 'unknown' ? session.model : activeModel;
+
+  const cwd = session.cwd ?? activeWorkDir;
+  const agentRuntime = await createAgentRuntime(cwd);
+
+  // Resolve a plugin/agent identity bound to this session (e.g. a plugin session
+  // created from a file-based plugin manifest). When absent, the engine runs as
+  // the default Coderix persona. A stale agentType (plugin uninstalled) degrades
+  // to the default agent with a warning instead of failing the conversation.
+  const agentDef = session.agentType
+    ? agentRuntime.agentRegistry.get(session.agentType)
+    : undefined;
+  if (session.agentType && !agentDef) {
+    console.warn(
+      `[Coderix] agentType "${session.agentType}" not in registry — running default agent`,
+    );
+  }
+
+  const sessionModel = agentDef?.model
+    ?? (session.model && session.model !== 'unknown' ? session.model : activeModel);
   const override = resolveModelByName(sessionModel);
   const model = override?.model ?? sessionModel;
   const callModel = makeCallModelSafe(appConfig, override, model);
 
+  // Union of the session's selected skills and the agent's declared skills.
+  const skills = Array.from(new Set([...(session.skills ?? []), ...(agentDef?.skills ?? [])]));
+
   const perSessionManager = new SessionManager(false);
   perSessionManager.adopt(session);
 
-  const cwd = session.cwd ?? activeWorkDir;
   const toolRegistry = await getToolRegistry(cwd, session.mcpServers ?? []);
-  const agentRuntime = await createAgentRuntime(cwd);
 
   const engine = new QueryEngine({
     cwd,
@@ -397,15 +421,38 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
     sessionManager: perSessionManager,
     toolRegistry,
     callModel,
-    skills: session.skills ?? [],
+    skills,
     eventBus: sharedEventBus,
     subAgentRegistry: agentRuntime.subAgentRegistry,
     systemPromptAssembler: agentRuntime.systemPromptAssembler,
     agentRegistry: agentRuntime.agentRegistry,
+    // The plugin's system prompt is appended as a high-priority custom section
+    // (assembler priority 80) — after skills/agent-registry, before append.
+    customSystemPrompt: agentDef?.getSystemPrompt(),
   });
   await engine.init();
-  engine.setPermissionMode(resolvePermissionMode(loadSettings()) as PermissionMode);
+
+  const permissionMode = mapAgentPermissionMode(agentDef?.permissionMode)
+    ?? (resolvePermissionMode(loadSettings()) as PermissionMode);
+  engine.setPermissionMode(permissionMode);
   return engine;
+}
+
+/** Map an agent's free-form `permissionMode` string to a PermissionMode, or null. */
+function mapAgentPermissionMode(mode: string | undefined): PermissionMode | null {
+  switch (mode) {
+    case 'auto':
+      return PermissionMode.AUTO;
+    case 'ask':
+      return PermissionMode.ASK;
+    case 'plan':
+      return PermissionMode.PLAN;
+    case 'low':
+    case 'acceptEdits':
+      return PermissionMode.LOW;
+    default:
+      return null;
+  }
 }
 
 async function initQueryEngine(workDir?: string, modelOverride?: string): Promise<void> {

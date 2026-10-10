@@ -36,8 +36,8 @@ export async function buildAgentRegistry(cwd: string): Promise<{
   registry.register(coderixGuideAgent);
   registry.register(statuslineSetupAgent);
 
-  // Layer 2: plugin agents
-  const pluginResult = await loadPluginAgents(cwd);
+  // Layer 2: plugin agents (global ~/.coderix/plugins + project .coderix/plugins)
+  const pluginResult = await loadPluginAgents(cwd, { includeGlobal: true });
   for (const agent of pluginResult.agents) {
     registry.register(agent);
   }

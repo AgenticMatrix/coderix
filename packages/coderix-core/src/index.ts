@@ -75,6 +75,8 @@ export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types
 
 // ── Agents ─────────────────────────────────────────────────────────
 export { buildAgentRegistry } from './agents/registry.js';
+export { loadPluginManifests } from './agents/plugin-manifest.js';
+export type { PluginManifest, PluginManifestRecord } from './agents/plugin-manifest.js';
 export { createAgentRuntime } from './agents/runtime.js';
 export type { AgentRuntime } from './agents/runtime.js';
 export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';
@@ -205,6 +207,16 @@ export {
 export { runChromeMcpServer } from './mcp/builtin/chrome-mcp/index.js';
 export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js';
 export { runDemoMcpServer, createDemoMcpServer, DEMO_TOOLS } from './mcp/builtin/demo-mcp/index.js';
+export {
+  runCadControlMcpServer,
+  createCadControlMcpServer,
+  CAD_CONTROL_TOOLS,
+  resolveCadHarnessRoot,
+  resolveCadSkillDir,
+  resolveCadPython,
+  CAD_VIEWER_BASE,
+  buildViewerUrl,
+} from './mcp/builtin/cad-control-mcp/index.js';
 
 // ── Config ─────────────────────────────────────────────────────────
 export { loadSettings, saveSettings, loadConfig, loadDesktopConfig, inferProvider, getMaxToolConcurrency, detectProtocol, resolvePermissionMode, resolveModelByName } from './config.js';
