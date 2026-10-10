@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Check, Sparkles, FolderOpen, Plus, BookOpen } from 'lucide-react';
-import type { SkillInfo, McpServerStatus } from '../../ipc-client.js';
+import React, { useEffect, useState } from 'react';
+import { Check, Sparkles, FolderOpen, Plus, BookOpen, Play } from 'lucide-react';
+import type { SkillInfo, McpServerStatus, PluginManifestDto } from '../../ipc-client.js';
+import { listPlugins } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
-import { APPS, type AppDefinition } from '../apps/registry';
+import { APPS, type AppDefinition, type AppDisplayKind } from '../apps/registry';
+import { resolveAppIcon } from '../apps/icons';
 import { LinkerTab } from './LinkerTab';
 
 type LibraryTab = 'projects' | 'knowledge';
@@ -117,6 +119,8 @@ SkillsView.displayName = 'SkillsView';
 export interface PluginsViewProps {
   /** Attach an app (plugin) to the current conversation. */
   onOpenApp: (app: AppDefinition) => void;
+  /** Create a NEW conversation bound to this app (agent identity + skills + MCP). */
+  onCreateApp: (app: AppDefinition) => void;
   /** All configured MCP servers with display details (「链接器」 tab). */
   mcpServers: McpServerStatus[];
   /** MCP server names enabled for the active session. */
@@ -127,12 +131,27 @@ export interface PluginsViewProps {
   onRefreshMcp: () => void | Promise<void>;
 }
 
+/** Map a manifest record from the main process into a renderer AppDefinition. */
+function manifestToApp(m: PluginManifestDto): AppDefinition {
+  return {
+    id: m.id,
+    name: m.name,
+    description: m.description,
+    icon: m.icon ?? 'boxes',
+    skills: m.skills,
+    mcpServers: m.mcpServers,
+    agentType: m.agentType ?? undefined,
+    display: { kind: (m.display?.kind ?? 'cad-viewer') as AppDisplayKind },
+  };
+}
+
 /**
  * PluginsView — the full-page 「链接器」 surface reached from the sidebar. Two tabs:
  * 「应用插件」(apps) first, 「链接器」(MCP servers) second.
  */
 export function PluginsView({
   onOpenApp,
+  onCreateApp,
   mcpServers,
   selectedMcp,
   onMcpChange,
@@ -140,6 +159,22 @@ export function PluginsView({
 }: PluginsViewProps): React.ReactElement {
   const t = useT();
   const [tab, setTab] = useState<'apps' | 'mcp'>('apps');
+  const [apps, setApps] = useState<AppDefinition[]>(APPS);
+
+  // Load file-based plugin manifests; fall back to the hardcoded APPS when none
+  // are installed yet (dev before the bootstrap seeds the cad-harness manifest).
+  useEffect(() => {
+    let cancelled = false;
+    listPlugins()
+      .then((manifests) => {
+        if (cancelled) return;
+        if (manifests.length > 0) setApps(manifests.map(manifestToApp));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[var(--color-bg-primary)]">
@@ -153,15 +188,13 @@ export function PluginsView({
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
         {tab === 'apps' && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
-            {APPS.map((app) => {
-              const Icon = app.icon;
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+            {apps.map((app) => {
+              const Icon = resolveAppIcon(app.icon);
               return (
-                <button
+                <div
                   key={app.id}
-                  type="button"
-                  onClick={() => onOpenApp(app)}
-                  className="flex flex-col items-start gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left hover:border-[var(--color-brand)]/40 hover:bg-[var(--color-bg-tertiary)] transition-colors cursor-pointer"
+                  className="flex flex-col items-start gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left transition-colors"
                 >
                   <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
                     <Icon size={20} />
@@ -170,7 +203,24 @@ export function PluginsView({
                     <span className="block text-sm font-medium text-[var(--color-text-primary)]">{app.name}</span>
                     <span className="block text-xs text-[var(--color-text-tertiary)]">{app.description}</span>
                   </span>
-                </button>
+                  <span className="flex items-center gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => onCreateApp(app)}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--color-brand)] text-white text-xs font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <Play size={13} />
+                      {t('plugins.create')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenApp(app)}
+                      className="flex-1 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--color-separator)] text-xs font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                    >
+                      {t('plugins.attach')}
+                    </button>
+                  </span>
+                </div>
               );
             })}
           </div>

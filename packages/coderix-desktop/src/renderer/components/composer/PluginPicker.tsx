@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plug, ChevronDown, Check } from 'lucide-react';
 import type { AppDefinition } from '../apps/registry';
+import { resolveAppIcon } from '../apps/icons';
 import { useT } from '../../i18n/index.js';
 // Reuses the SkillPicker popup styles (same checkbox-list look).
 import './SkillPicker.css';
@@ -65,7 +66,7 @@ export function PluginPicker({ plugins, selectedSkills, onToggle }: PluginPicker
             ) : (
               plugins.map((p) => {
                 const checked = isChecked(p);
-                const Icon = p.icon;
+                const Icon = resolveAppIcon(p.icon);
                 return (
                   <button
                     key={p.id}

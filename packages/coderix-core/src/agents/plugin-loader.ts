@@ -3,35 +3,25 @@
  * plugins.
  *
  * Plugin directory structure:
- *   .coder/plugins/
+ *   .coderix/plugins/            (project)  and  ~/.coderix/plugins/ (global)
  *     plugin-name/
- *       plugin.json        — manifest with { name, version, agentsPaths? }
- *       agents/             — agent definition files (*.md / *.json)
+ *       plugin.json        — manifest (see plugin-manifest.ts); may carry a
+ *                            top-level `agent` identity (system prompt / model /
+ *                            tools) for manifest-only plugins
+ *       agents/            — agent definition files (*.md / *.json)
  *
  * Agent names from plugins are namespace-prefixed:
  *   pluginName:agentName
+ *
+ * A manifest-only plugin (one with `agent` but no agents/ files) synthesizes a
+ * single top-level agent with `agentType` = `${name}:${name}` by default.
  */
 
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, basename, extname } from 'path';
-import type { PluginAgentDefinition } from '../core/types.js';
+import type { CustomAgentDefinition, PluginAgentDefinition } from '../core/types.js';
 import { parseAgentFromMarkdown, parseAgentFromJson } from './loader.js';
-
-// ---------------------------------------------------------------------------
-// Manifest
-// ---------------------------------------------------------------------------
-
-interface PluginManifest {
-  name: string;
-  version?: string;
-  description?: string;
-  /** Additional paths to scan for agent definitions. */
-  agentsPaths?: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+import { scanPluginDirs, pluginAgentType, type PluginManifest } from './plugin-manifest.js';
 
 export interface PluginLoadResult {
   agents: PluginAgentDefinition[];
@@ -39,67 +29,33 @@ export interface PluginLoadResult {
 }
 
 /**
- * Load agent definitions from all installed plugins under `.coder/plugins/`.
+ * Load agent definitions from all installed plugins under `.coderix/plugins/`
+ * (and, when `includeGlobal` is set, `~/.coderix/plugins/`).
  */
 export async function loadPluginAgents(
   cwd: string,
+  opts?: { includeGlobal?: boolean },
 ): Promise<PluginLoadResult> {
-  const pluginsDir = join(cwd, '.coderix', 'plugins');
   const agents: PluginAgentDefinition[] = [];
   const errors: Array<{ plugin: string; error: string }> = [];
 
-  let pluginDirs: string[];
-  try {
-    pluginDirs = await readdir(pluginsDir);
-  } catch {
-    // No plugins directory — that's fine
-    return { agents, errors };
-  }
+  const entries = await scanPluginDirs(cwd, opts);
 
-  for (const dirName of pluginDirs) {
-    const pluginPath = join(pluginsDir, dirName);
-    try {
-      const st = await stat(pluginPath);
-      if (!st.isDirectory()) continue;
-    } catch {
-      continue;
+  for (const { pluginPath, pluginName, manifest } of entries) {
+    // ── 1. Manifest-only agent identity (plugin.json `agent` block) ──────
+    if (manifest?.agent) {
+      agents.push(synthesizeManifestAgent(pluginPath, pluginName, manifest));
     }
 
-    // Try to read the manifest
-    const manifestPath = join(pluginPath, 'plugin.json');
-    let manifest: PluginManifest | null = null;
-    try {
-      const raw = await readFile(manifestPath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
-        manifest = {
-          name: parsed.name,
-          version: parsed.version,
-          description: parsed.description,
-          agentsPaths: Array.isArray(parsed.agentsPaths)
-            ? parsed.agentsPaths.filter((p: unknown) => typeof p === 'string')
-            : undefined,
-        };
-      }
-    } catch {
-      // No manifest — use directory name as plugin name
-    }
-
-    const pluginName = manifest?.name ?? dirName;
-
-    // Collect agent paths to scan
+    // ── 2. Agent definition files (agents/ + agentsPaths) ────────────────
     const scanPaths: string[] = [];
-
-    // Default agents directory
     const defaultAgentsDir = join(pluginPath, 'agents');
     try {
       await stat(defaultAgentsDir);
       scanPaths.push(defaultAgentsDir);
     } catch {
-      // No agents dir — skip
+      // no agents dir — skip
     }
-
-    // Additional paths from manifest
     if (manifest?.agentsPaths) {
       for (const p of manifest.agentsPaths) {
         const resolved = p.startsWith('/') ? p : join(pluginPath, p);
@@ -107,22 +63,19 @@ export async function loadPluginAgents(
           await stat(resolved);
           scanPaths.push(resolved);
         } catch {
-          // Skip inaccessible paths
+          // skip inaccessible path
         }
       }
     }
 
-    if (scanPaths.length === 0) continue;
-
-    // Scan all agent paths
     for (const scanPath of scanPaths) {
       try {
-        const entries = await readdir(scanPath);
-        for (const entry of entries) {
-          const ext = extname(entry).toLowerCase();
+        const files = await readdir(scanPath);
+        for (const file of files) {
+          const ext = extname(file).toLowerCase();
           if (!['.md', '.json'].includes(ext)) continue;
 
-          const filePath = join(scanPath, entry);
+          const filePath = join(scanPath, file);
           let content: string;
           try {
             content = await readFile(filePath, 'utf-8');
@@ -136,62 +89,12 @@ export async function loadPluginAgents(
 
             if (ext === '.md') {
               const parsed = parseAgentFromMarkdown(filePath, content, 'userSettings');
-              if (parsed) {
-                // Rebrand as plugin agent with namespace prefix
-                const namespacedType = `${pluginName}:${parsed.agentType}`;
-                agent = {
-                  agentType: namespacedType,
-                  whenToUse: parsed.whenToUse,
-                  tools: parsed.tools,
-                  disallowedTools: parsed.disallowedTools,
-                  skills: parsed.skills,
-                  model: parsed.model,
-                  permissionMode: parsed.permissionMode,
-                  maxTurns: parsed.maxTurns,
-                  contextBudget: parsed.contextBudget,
-                  background: parsed.background,
-                  isolation: parsed.isolation,
-                  color: parsed.color,
-                  memory: parsed.memory,
-                  initialPrompt: parsed.initialPrompt,
-                  source: 'plugin' as const,
-                  plugin: pluginName,
-                  getSystemPrompt: () => {
-                    const base = parsed.getSystemPrompt();
-                    return base.replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath);
-                  },
-                };
-              }
+              if (parsed) agent = rebrandAgent(parsed, pluginName, pluginPath);
             } else {
-              // JSON
-              const parsedJson = JSON.parse(content);
-              const name = basename(entry, ext);
-              const parsed = parseAgentFromJson(name, parsedJson, 'userSettings', filePath);
-              if (parsed) {
-                const namespacedType = `${pluginName}:${parsed.agentType}`;
-                agent = {
-                  agentType: namespacedType,
-                  whenToUse: parsed.whenToUse,
-                  tools: parsed.tools,
-                  disallowedTools: parsed.disallowedTools,
-                  skills: parsed.skills,
-                  model: parsed.model,
-                  permissionMode: parsed.permissionMode,
-                  maxTurns: parsed.maxTurns,
-                  contextBudget: parsed.contextBudget,
-                  background: parsed.background,
-                  isolation: parsed.isolation,
-                  color: parsed.color,
-                  memory: parsed.memory,
-                  initialPrompt: parsed.initialPrompt,
-                  source: 'plugin' as const,
-                  plugin: pluginName,
-                  getSystemPrompt: () => {
-                    const base = parsed.getSystemPrompt();
-                    return base.replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath);
-                  },
-                };
-              }
+              const parsedJson = JSON.parse(content) as unknown;
+              const name = basename(file, ext);
+              const parsed = parseAgentFromJson(name, parsedJson as Record<string, unknown>, 'userSettings', filePath);
+              if (parsed) agent = rebrandAgent(parsed, pluginName, pluginPath);
             }
 
             if (agent) {
@@ -210,4 +113,58 @@ export async function loadPluginAgents(
   }
 
   return { agents, errors };
+}
+
+/**
+ * Synthesize a PluginAgentDefinition from a manifest-only plugin's `agent` block.
+ */
+function synthesizeManifestAgent(
+  pluginPath: string,
+  pluginName: string,
+  manifest: PluginManifest,
+): PluginAgentDefinition {
+  const a = manifest.agent!;
+  return {
+    agentType: pluginAgentType(manifest),
+    whenToUse: a.whenToUse ?? manifest.description ?? '',
+    ...(a.tools ? { tools: a.tools } : {}),
+    ...(a.disallowedTools ? { disallowedTools: a.disallowedTools } : {}),
+    ...(manifest.skills ? { skills: manifest.skills } : {}),
+    ...(a.model ? { model: a.model } : {}),
+    ...(a.permissionMode ? { permissionMode: a.permissionMode } : {}),
+    source: 'plugin' as const,
+    plugin: pluginName,
+    getSystemPrompt: () => (a.systemPrompt ?? '').replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath),
+  };
+}
+
+/**
+ * Rebrand a file-based agent into a plugin agent: namespace the agentType and
+ * substitute `${CODERIX_PLUGIN_ROOT}` in its system prompt.
+ */
+function rebrandAgent(
+  parsed: CustomAgentDefinition,
+  pluginName: string,
+  pluginPath: string,
+): PluginAgentDefinition {
+  const namespacedType = `${pluginName}:${parsed.agentType}`;
+  return {
+    agentType: namespacedType,
+    whenToUse: parsed.whenToUse,
+    ...(parsed.tools ? { tools: parsed.tools } : {}),
+    ...(parsed.disallowedTools ? { disallowedTools: parsed.disallowedTools } : {}),
+    ...(parsed.skills ? { skills: parsed.skills } : {}),
+    ...(parsed.model ? { model: parsed.model } : {}),
+    ...(parsed.permissionMode ? { permissionMode: parsed.permissionMode } : {}),
+    ...(parsed.maxTurns !== undefined ? { maxTurns: parsed.maxTurns } : {}),
+    ...(parsed.contextBudget !== undefined ? { contextBudget: parsed.contextBudget } : {}),
+    ...(parsed.background ? { background: parsed.background } : {}),
+    ...(parsed.isolation ? { isolation: parsed.isolation } : {}),
+    ...(parsed.color ? { color: parsed.color } : {}),
+    ...(parsed.memory ? { memory: parsed.memory } : {}),
+    ...(parsed.initialPrompt ? { initialPrompt: parsed.initialPrompt } : {}),
+    source: 'plugin' as const,
+    plugin: pluginName,
+    getSystemPrompt: () => parsed.getSystemPrompt().replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath),
+  };
 }

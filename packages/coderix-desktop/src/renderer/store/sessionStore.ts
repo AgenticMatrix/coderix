@@ -13,7 +13,13 @@ export interface SessionState {
   loadSessions: () => Promise<void>;
   refreshSession: (id: string) => Promise<void>;
   bumpSession: (id: string) => void;
-  createSession: () => Promise<string | undefined>;
+  createSession: (opts?: {
+    title?: string;
+    agentType?: string;
+    pluginId?: string;
+    skills?: string[];
+    mcpServers?: string[];
+  }) => Promise<string | undefined>;
   forkSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
@@ -121,14 +127,20 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     });
   },
 
-  createSession: async () => {
+  createSession: async (opts) => {
     set({ isLoading: true, error: null });
     try {
       // Use real IPC session creation via preload
       if (!window.coderixAPI) {
         throw new Error('coderixAPI not available');
       }
-      const result = await window.coderixAPI.session.create({ title: t('session.newSession') });
+      const result = await window.coderixAPI.session.create({
+        title: opts?.title ?? t('session.newSession'),
+        agentType: opts?.agentType,
+        pluginId: opts?.pluginId,
+        skills: opts?.skills,
+        mcpServers: opts?.mcpServers,
+      });
       const newSession: SessionSummary = {
         id: result.id,
         title: result.title,
@@ -136,6 +148,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         model: '',
         updatedAt: Date.now(),
         createdAt: Date.now(),
+        ...(result.agentType ? { agentType: result.agentType } : {}),
+        ...(result.pluginId ? { pluginId: result.pluginId } : {}),
       };
       set((state) => ({
         sessions: [newSession, ...state.sessions],

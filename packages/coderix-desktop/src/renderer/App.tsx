@@ -62,6 +62,7 @@ import {
   setSessionSkills,
   listMcpCatalog,
   setSessionMcpServers,
+  setSessionAgentType,
   listSkillDirs,
   addSkillDir,
   removeSkillDir,
@@ -850,7 +851,8 @@ export function App(): React.ReactElement {
     await handleNewSession();
   }, [handleNewSession]);
 
-  // Attach an app to the current conversation: enable its skills and surface its
+  // Attach an app to the current conversation: enable its skills + MCP servers,
+  // adopt its agent identity (when the session has none yet), and surface its
   // display page on the right, while the conversation continues on the left.
   const handleOpenApp = useCallback(
     (app: AppDefinition) => {
@@ -858,12 +860,49 @@ export function App(): React.ReactElement {
       const nextSkills = Array.from(new Set([...selectedSkills, ...app.skills]));
       setSelectedSkills(nextSkills);
       setSessionSkills(nextSkills, sessionId ?? undefined).catch(() => {});
+      const nextMcp = Array.from(new Set([...selectedMcpServers, ...app.mcpServers]));
+      setSelectedMcpServers(nextMcp);
+      setSessionMcpServers(nextMcp, sessionId ?? undefined).catch(() => {});
+      // Adopt the plugin agent identity for the current conversation (no-op if the
+      // plugin has none). Evicts the engine so the next submit re-stitches context.
+      if (app.agentType) {
+        setSessionAgentType(app.agentType, sessionId ?? undefined, app.id).catch(() => {});
+      }
       // Left = the conversation, right = the app display.
       setSidebarTab('sessions');
       setProjectManageOpen(false);
       useUIStore.getState().setSidebarOpen(true);
     },
-    [setActiveAppId, selectedSkills, setSessionSkills, sessionId],
+    [setActiveAppId, selectedSkills, setSessionSkills, selectedMcpServers, setSessionMcpServers, setSessionAgentType, sessionId],
+  );
+
+  // Create a NEW conversation bound to a plugin: a fresh session carrying the
+  // plugin's agent identity + skills + MCP servers, with its display page on the
+  // right. This is the plugin card's primary "创建" action.
+  const handleCreatePluginSession = useCallback(
+    async (app: AppDefinition) => {
+      setSessionModelState(null);
+      setSelectedSkills(app.skills);
+      setSelectedMcpServers(app.mcpServers);
+      const cwd = await createSession({
+        title: app.name,
+        agentType: app.agentType,
+        pluginId: app.id,
+        skills: app.skills,
+        mcpServers: app.mcpServers,
+      });
+      if (cwd) setProjectPath(cwd);
+      const sid = useSessionStore.getState().currentSessionId;
+      if (sid) {
+        useStreamStore.getState().setViewedSession(sid);
+        setSessionId(sid);
+      }
+      setActiveAppId(app.id);
+      setSidebarTab('sessions');
+      setProjectManageOpen(false);
+      useUIStore.getState().setSidebarOpen(true);
+    },
+    [createSession, setSessionId],
   );
 
   // Double-click a project in the library: open its file/git management view
@@ -1106,6 +1145,7 @@ export function App(): React.ReactElement {
         ) : sidebarTab === 'plugins' ? (
           <PluginsView
             onOpenApp={handleOpenApp}
+            onCreateApp={handleCreatePluginSession}
             mcpServers={availableMcpServers}
             selectedMcp={selectedMcpServers}
             onMcpChange={handleMcpChange}

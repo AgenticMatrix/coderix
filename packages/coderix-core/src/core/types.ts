@@ -503,6 +503,10 @@ export interface Session {
   skills?: string[];
   /** MCP server names enabled for this session. Empty/undefined = no MCP servers enabled. */
   mcpServers?: string[];
+  /** Agent registry key this session is bound to (e.g. "cad-harness:cad-harness"). */
+  agentType?: string;
+  /** Plugin name this session was created from (for renderer display binding). */
+  pluginId?: string;
   tokenUsage: TokenUsageSummary;
   metadata: SessionMetadata;
   /** Last known context footprint (most recent call's input + output + cache_read). */

@@ -26,6 +26,8 @@ const CH = {
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
+  SESSION_SET_AGENT_TYPE: 'session:setAgentType',
+  PLUGINS_LIST: 'plugins:list',
   MCP_LIST: 'mcp:list',
   MCP_CATALOG: 'mcp:catalog',
   MCP_TEST: 'mcp:test',
@@ -336,7 +338,22 @@ const coderixAPI = {
 
   session: {
     /** Create a new session. */
-    create(opts?: { title?: string }): Promise<{ id: string; title: string; turnCount: number; cwd: string }> {
+    create(opts?: {
+      title?: string;
+      agentType?: string;
+      pluginId?: string;
+      skills?: string[];
+      mcpServers?: string[];
+    }): Promise<{
+      id: string;
+      title: string;
+      turnCount: number;
+      cwd: string;
+      agentType?: string;
+      pluginId?: string;
+      skills: string[];
+      mcpServers: string[];
+    }> {
       return ipcRenderer.invoke('session:create', opts ?? {});
     },
 
@@ -378,6 +395,34 @@ const coderixAPI = {
     /** Bind a session to a set of MCP server names (per-session MCP enablement). */
     setMcpServers(sessionId: string, mcpServers: string[]): Promise<{ status: string; mcpServers: string[] }> {
       return ipcRenderer.invoke(CH.SESSION_SET_MCP_SERVERS, { sessionId, mcpServers });
+    },
+
+    /** Bind a session to a plugin agent identity (per-session agent). */
+    setAgentType(
+      sessionId: string,
+      agentType: string,
+      pluginId?: string,
+    ): Promise<{ status: string; agentType: string; pluginId?: string }> {
+      return ipcRenderer.invoke(CH.SESSION_SET_AGENT_TYPE, { sessionId, agentType, pluginId });
+    },
+  },
+
+  // ── Plugins ──────────────────────────────────────────────────────────
+
+  plugins: {
+    /** List file-based plugin manifests (plugin cards). */
+    list(): Promise<Array<{
+      id: string;
+      name: string;
+      description: string;
+      icon: string | null;
+      skills: string[];
+      mcpServers: string[];
+      display: { kind: string } | null;
+      agentType: string | null;
+      root: string;
+    }>> {
+      return ipcRenderer.invoke(CH.PLUGINS_LIST);
     },
   },
 

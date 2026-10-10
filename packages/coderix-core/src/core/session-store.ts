@@ -380,6 +380,10 @@ export interface SessionMeta {
   skills?: string[];
   /** MCP server names enabled for this session. */
   mcpServers?: string[];
+  /** Agent registry key this session is bound to. */
+  agentType?: string;
+  /** Plugin name this session was created from. */
+  pluginId?: string;
   /** Cumulative token usage across all turns, persisted for resume. */
   tokenUsage?: TokenUsageSummary;
   /** Cumulative cost in USD, persisted for resume. */

@@ -107,6 +107,13 @@ export const MCP_CATALOG_META: Record<string, McpCatalogMeta> = {
     descriptionEn: 'Real-time web search and content extraction tuned for AI agents.',
     credential: 'TAVILY_API_KEY',
   },
+  'cad-control': {
+    icon: '🧊',
+    nameZh: 'CAD 控制',
+    nameEn: 'CAD Control',
+    descriptionZh: '驱动 cad_harness 生成/导出/检查/快照 CAD 模型，并操控 3D viewer。',
+    descriptionEn: 'Drive cad_harness to render/export/inspect/snapshot CAD models and control the 3D viewer.',
+  },
 };
 
 /** Metadata for a server, falling back to a generic entry for custom servers. */

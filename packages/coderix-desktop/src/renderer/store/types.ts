@@ -21,6 +21,10 @@ export interface SessionSummary {
   model: string;
   updatedAt: number;
   createdAt: number;
+  /** Agent registry key this session is bound to (plugin sessions). */
+  agentType?: string;
+  /** Plugin name this session was created from. */
+  pluginId?: string;
 }
 
 /** Aggregated token usage for the current session */
