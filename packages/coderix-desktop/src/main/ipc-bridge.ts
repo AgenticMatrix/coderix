@@ -325,6 +325,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
     }
 
+    // A plugin session (bound to an agent identity) must run on the in-process
+    // Coderix engine — it is the only path that stitches the plugin's system
+    // prompt, skills, and MCP tools. The claude-code engine has no notion of a
+    // plugin agent, so it would silently drop the identity (see cad-harness).
+    const engine: AgentEngine =
+      activeEngine === 'claude-code' && !sessionManager.getActive()?.agentType
+        ? 'claude-code'
+        : 'coderix';
+    if (engine === 'coderix' && !createEngineForSession) {
+      throw new Error('QueryEngine factory not initialized');
+    }
+
     // Finalize the active session's workspace on the first message. A
     // brand-new conversation is parked on the default-workspace base (or a hash
     // subdir) and only here mints its own fresh hash subdir — "new
@@ -359,7 +371,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // Update session title to first question (if still default).
     // This only applies to the in-process Coderix engine — Claude Code
     // sessions persist their own title in the claude-code branch below.
-    if (activeEngine === 'coderix') {
+    if (engine === 'coderix') {
       try {
         const active = sessionManager.getActive();
         if (active && (active.title === '新对话' || active.title.startsWith('Session '))) {
@@ -390,13 +402,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // apply its per-session skill selection. The claude-code engine receives the
     // same list via `runClaudeCodeQuery`.
     let coderixEngine: QueryEngine | null = null;
-    if (activeEngine === 'coderix') {
+    if (engine === 'coderix') {
       coderixEngine = await getEngineForSession(activeSession);
       coderixEngine.setSkills(skills ?? []);
     }
 
     const engineStream: AsyncGenerator<QueryEngineEvent> =
-      activeEngine === 'claude-code'
+      engine === 'claude-code'
         ? runClaudeCodeQuery({
             prompt: userInput,
             sessionId: sessionManager.getActive()?.id ?? '',
@@ -493,7 +505,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // submitMessage(); the Claude Code SDK engine does not, so record it here
     // to keep the Coderix session store in sync (otherwise the session is
     // never written to disk and `session:load` fails with "Session not found").
-    if (activeEngine === 'claude-code') {
+    if (engine === 'claude-code') {
       try {
         // Capture whether this is the conversation's first message BEFORE
         // addMessage() mutates the in-memory message list.
@@ -589,7 +601,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // sub-agent and forward as agent_register/agent_update so the
               // renderer's side pane renders each sub-agent's trajectory in real
               // time — instead of mixing them into the main conversation.
-              if (activeEngine === 'claude-code' && msg.parentToolUseId) {
+              if (engine === 'claude-code' && msg.parentToolUseId) {
                 const agentId = msg.parentToolUseId;
                 let transcript = subagentTranscripts.get(agentId);
                 if (!transcript) {
@@ -635,7 +647,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 continue;
               }
               if (msg.type === 'stream_event' && msg.event) {
-                if (activeEngine === 'claude-code') {
+                if (engine === 'claude-code') {
                   accumulateClaudeStreamEvent(
                     msg.event,
                     claudeAssistantBlocks,
@@ -676,7 +688,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   // produced these tool results, then record the results as a
                   // separate user message — the same interleaving the Coderix
                   // engine persists (assistant → user(tool results) → …).
-                  if (activeEngine === 'claude-code') {
+                  if (engine === 'claude-code') {
                     flushClaudeAssistant();
                     const toolResultBlocks: ContentBlock[] = [];
                     for (const block of content) {
@@ -781,7 +793,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // Query complete. The Coderix engine persists messages inside
               // submitMessage(); the Claude Code engine hands its final result
               // through here so we can keep the session store in sync.
-              if (activeEngine === 'claude-code') {
+              if (engine === 'claude-code') {
                 // Mark all accumulated sub-agents done now that the turn ended,
                 // so their side-pane status flips from "正在工作…" to "已工作".
                 for (const [agentId, transcript] of subagentTranscripts) {
