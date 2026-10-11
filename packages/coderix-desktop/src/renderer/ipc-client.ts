@@ -11,7 +11,7 @@
  *           contextBridge API               Adaptation layer         submitQuery(), etc.
  */
 
-import type { StreamBlock, PermissionRequest, TokenUsage, SessionInfo } from './types.js';
+import type { StreamBlock, PermissionRequest, TokenUsage, SessionInfo, CadStep } from './types.js';
 
 export interface QuestionRequest {
   toolUseId: string;
@@ -398,6 +398,11 @@ export interface PluginManifestDto {
 /** List file-based plugin manifests (plugin cards). */
 export async function listPlugins(): Promise<PluginManifestDto[]> {
   return invokeWithTimeout<PluginManifestDto[]>('plugins:list', () => getAPI().plugins.list());
+}
+
+/** Structured, versioned CAD steps for the app display panel. */
+export async function listCadSteps(dirPath: string): Promise<CadStep[]> {
+  return invokeWithTimeout<CadStep[]>('cad:listSteps', () => getAPI().cad.listSteps(dirPath));
 }
 
 // ===========================================================================

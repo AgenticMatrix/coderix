@@ -284,6 +284,17 @@ export const zh = {
   'apps.viewerFailed': '3D 查看器启动失败',
   'apps.artifacts': '产物',
   'apps.noArtifacts': '暂无 CAD 产物，在左侧对话中生成后会出现在这里',
+  'apps.assembly': '装配体',
+  'apps.part': '零件',
+  'apps.latest': '最新',
+  'apps.version': 'v{n}',
+  'apps.versionLabel': '版本',
+  'apps.selectAssembly': '选择装配体…',
+  'apps.selectPart': '选择零件…',
+  'apps.selectVersion': '选择版本…',
+  'apps.none': '暂无',
+  'apps.status.generating': '生成中',
+  'apps.status.generated': '已生成',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

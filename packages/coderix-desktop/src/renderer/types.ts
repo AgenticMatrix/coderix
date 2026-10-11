@@ -90,3 +90,19 @@ export interface SessionInfo {
   agentType?: string;
   pluginId?: string;
 }
+
+/** A versioned CAD step surfaced by `cad:listSteps` (mirrors cad_harness's Step). */
+export interface CadStep {
+  id: string;
+  name: string;
+  baseName: string;
+  version: number;
+  isLatest: boolean;
+  kind: 'assembly' | 'part' | 'frame';
+  status: 'generating' | 'generated';
+  viewerFile?: string;
+  sourcePath?: string;
+  stepPath?: string;
+  glbPath?: string;
+  snapshotPath?: string;
+}
