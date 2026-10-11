@@ -58,6 +58,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         model: string;
         updatedAt: number;
         createdAt: number;
+        agentType?: string;
+        pluginId?: string;
       }>).map((s) => ({
         id: s.id,
         title: s.title,
@@ -65,6 +67,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         model: s.model,
         updatedAt: s.updatedAt,
         createdAt: s.createdAt,
+        ...(s.agentType ? { agentType: s.agentType } : {}),
+        ...(s.pluginId ? { pluginId: s.pluginId } : {}),
       }));
       set({ sessions: normalized, isLoading: false });
     } catch (err) {
@@ -85,6 +89,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         model: s.model,
         updatedAt: s.updatedAt,
         createdAt: s.createdAt,
+        ...(s.agentType ? { agentType: s.agentType } : {}),
+        ...(s.pluginId ? { pluginId: s.pluginId } : {}),
       };
       // Patch only the matching entry — do not toggle isLoading or touch others.
       set((state) => {

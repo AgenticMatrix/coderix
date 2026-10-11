@@ -147,6 +147,11 @@ export function App(): React.ReactElement {
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
   const loadSessions = useSessionStore((s) => s.loadSessions);
   const createSession = useSessionStore((s) => s.createSession);
+  // The current session's plugin identity — gates the "reopen app display"
+  // button to plugin conversations (e.g. cad-harness).
+  const currentPluginId = useSessionStore((s) =>
+    s.sessions.find((x) => x.id === s.currentSessionId)?.pluginId,
+  );
 
   // ── Stream State (token usage for StatusBar) ────────────────────────────
   const streamCurrentMessage = useStreamStore((s) => s.currentMessage);
@@ -1114,6 +1119,9 @@ export function App(): React.ReactElement {
           ) : undefined
         }
         appDisplayVisible={activeApp !== null}
+        onOpenAppDisplay={
+          currentPluginId ? () => setActiveAppId(currentPluginId) : undefined
+        }
         subagentPanel={<SubagentPane />}
         subagentVisible={subagentVisible}
         statusBarProps={{

@@ -87,4 +87,6 @@ export interface SessionInfo {
   model: string;
   updatedAt: number;
   createdAt: number;
+  agentType?: string;
+  pluginId?: string;
 }

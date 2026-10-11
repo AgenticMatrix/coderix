@@ -91,8 +91,8 @@ async function bootstrap(): Promise<void> {
     // Idempotent: existing settings.json / user-customized skills are preserved.
     bootstrapConfig();
 
-    // Make cad_harness's vendored `cad` + `cad-viewer` skills available to the
-    // engine (symlink into ~/.coderix/skills/). Idempotent; no-op if absent.
+    // Make cad_harness's vendored CAD skills available to the engine (symlink the
+    // whole skills root into ~/.coderix/skills/). Idempotent; no-op if absent.
     installCadSkills();
 
     // Export the CAD toolchain paths (CAD_PYTHON etc.) so the engine's bash

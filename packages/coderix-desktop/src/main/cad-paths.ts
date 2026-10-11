@@ -17,6 +17,11 @@ export function resolveCadHarnessRoot(): string {
   return path.join(os.homedir(), 'Documents', 'apps', 'cad_project', 'cad_harness');
 }
 
+/** cad_harness's vendored skills root — every skill is a subdir of it. */
+export function resolveCadSkillsRoot(): string {
+  return path.join(resolveCadHarnessRoot(), 'claude_dir', 'skills');
+}
+
 /** cad_harness's vendored `cad` skill (SKILL.md + scripts). */
 export function resolveCadSkillDir(): string {
   return path.join(resolveCadHarnessRoot(), 'claude_dir', 'skills', 'cad');
