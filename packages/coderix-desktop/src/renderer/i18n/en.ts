@@ -256,6 +256,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.toggleSidebar': 'Toggle Sidebar',
   'nav.toggleFilePanel': 'Project Files',
   'nav.maximize': 'Maximize',
+  'nav.openAppDisplay': 'Open CAD viewer',
   'nav.restore': 'Restore',
 
   // ── Project management ────────────────────────────────

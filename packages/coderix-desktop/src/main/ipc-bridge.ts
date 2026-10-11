@@ -966,10 +966,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       mcpServers: opts?.mcpServers,
     });
     // Persist the identity immediately (empty plugin sessions must not lose it
-    // on restart — create() defers disk writes until the first message).
-    if (opts?.agentType) sessionManager.setAgentType(session.id, opts.agentType, opts.pluginId);
-    if (opts?.skills) sessionManager.setSkills(session.id, opts.skills);
-    if (opts?.mcpServers) sessionManager.setMcpServers(session.id, opts.mcpServers);
+    // on restart — create() defers disk writes until the first message). Written
+    // as a SINGLE meta.json write: the per-field setters each fire-and-forget
+    // writeSessionMeta, and three concurrent read-modify-write cycles race and
+    // clobber each other, so only the last field would survive.
+    const identityMeta: { agentType?: string; pluginId?: string; skills?: string[]; mcpServers?: string[] } = {};
+    if (opts?.agentType) identityMeta.agentType = opts.agentType;
+    if (opts?.pluginId) identityMeta.pluginId = opts.pluginId;
+    if (opts?.skills) identityMeta.skills = opts.skills;
+    if (opts?.mcpServers) identityMeta.mcpServers = opts.mcpServers;
+    if (Object.keys(identityMeta).length > 0) {
+      writeSessionMeta(sessionDir(session.id), identityMeta).catch(() => {});
+    }
     return {
       id: session.id,
       title: session.title,

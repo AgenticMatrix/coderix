@@ -252,6 +252,7 @@ export const zh = {
   'nav.toggleSidebar': '切换侧栏',
   'nav.toggleFilePanel': '项目文件',
   'nav.maximize': '全屏展示',
+  'nav.openAppDisplay': '打开 CAD 查看器',
   'nav.restore': '退出全屏',
 
   // ── 项目开发 ──────────────────────────────────────────

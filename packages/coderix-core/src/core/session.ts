@@ -838,6 +838,8 @@ export class SessionManager {
       displayTitle,
       firstUserText: firstUserText ?? undefined,
       workDir: meta?.workDir,
+      agentType: meta?.agentType,
+      pluginId: meta?.pluginId,
     };
   }
 

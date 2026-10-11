@@ -5,9 +5,10 @@
  *
  * The server subprocess command is the bundled `coderix` binary (production) or a
  * `coderix` on PATH (dev after `installCli`). When neither exists the plugin still
- * works — its `cad`/`cad-viewer` skills are the fallback — but the MCP tools won't
+ * works — its vendored CAD skills are the fallback — but the MCP tools won't
  * resolve. Idempotent against content: an existing `cad-control` config is left
- * as-is; the plugin manifest is re-seeded only when its system prompt changed.
+ * as-is; the plugin manifest is re-seeded only when its system prompt or skills
+ * list changed.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -15,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { addMcpConfig, getMcpConfig } from '../../../../packages/coderix-core/src/mcp/config-loader.js';
 import { resolveCadHarnessRoot, resolveCadPython } from './cad-paths.js';
+import { listCadSkillNames } from './cad-skills.js';
 import { resolveSourceBin } from './cli-installer.js';
 
 const CAD_CONTROL_SERVER = 'cad-control';
@@ -104,13 +106,13 @@ interface ManifestAgentBlock {
   systemPrompt: string;
 }
 
-function buildManifest(systemPrompt: string): Record<string, unknown> {
+function buildManifest(systemPrompt: string, skills: string[]): Record<string, unknown> {
   return {
     name: 'cad-harness',
     version: '1.0.0',
     description: '对话式 CAD 生成',
     icon: 'boxes',
-    skills: ['cad', 'cad-viewer'],
+    skills,
     mcpServers: ['cad-control'],
     display: { kind: 'cad-viewer' },
     agent: {
@@ -129,9 +131,13 @@ function buildManifest(systemPrompt: string): Record<string, unknown> {
  * conversation created from the cad-harness plugin "create" action carries the
  * same orchestration context as cad_harness's own conversations — and only those
  * (a plain conversation has no agent identity, so this prompt is never injected).
+ * The `skills` list mirrors cad_harness's whole vendored skills root so a created
+ * conversation can invoke every skill CLAUDE_cad.md orchestrates (cad-plan,
+ * cad-component-generation, step-parts, urdf, …), not just cad/cad-viewer.
  *
- * Idempotent against the *content*: re-seeds when the workflow prompt (or fallback)
- * differs from what's already on disk, otherwise leaves the manifest untouched.
+ * Idempotent against the *content*: re-seeds when the workflow prompt (or
+ * fallback) or the skills list differs from what's already on disk, otherwise
+ * leaves the manifest untouched.
  */
 export function installCadPluginManifest(): void {
   const pluginDir = path.join(os.homedir(), '.coderix', 'plugins', 'cad-harness');
@@ -145,23 +151,34 @@ export function installCadPluginManifest(): void {
     console.warn('[CadMcp] CLAUDE_cad.md not found — using fallback summary prompt');
   }
 
-  // Compare against the on-disk prompt so we re-seed only when it changed.
+  const skills = listCadSkillNames();
+  const manifest = buildManifest(systemPrompt, skills);
+
+  // Compare against what's on disk so we re-seed only when the prompt or the
+  // skills list changed.
   let existingPrompt: string | undefined;
+  let existingSkills: string[] = [];
   try {
     const existing = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
       agent?: { systemPrompt?: string };
+      skills?: unknown;
     };
     existingPrompt = existing.agent?.systemPrompt;
+    if (Array.isArray(existing.skills)) {
+      existingSkills = existing.skills.filter((s): s is string => typeof s === 'string');
+    }
   } catch {
     // No manifest yet — seed fresh below.
   }
-  if (existingPrompt === systemPrompt) return;
+  const skillsSame =
+    existingSkills.length === skills.length && skills.every((s) => existingSkills.includes(s));
+  if (existingPrompt === systemPrompt && skillsSame) return;
 
   try {
     mkdirSync(pluginDir, { recursive: true });
-    writeFileSync(manifestPath, JSON.stringify(buildManifest(systemPrompt), null, 2) + '\n', 'utf-8');
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
     console.log(
-      `[CadMcp] ${existingPrompt === undefined ? 'seeded' : 'updated'} plugin manifest at ${manifestPath}`,
+      `[CadMcp] ${existingPrompt === undefined ? 'seeded' : 'updated'} plugin manifest at ${manifestPath} (${skills.length} skills)`,
     );
   } catch (err) {
     console.warn('[CadMcp] failed to seed plugin manifest:', err instanceof Error ? err.message : err);

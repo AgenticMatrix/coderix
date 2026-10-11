@@ -482,6 +482,10 @@ export interface SessionSummary {
   firstUserText?: string;
   /** Working directory of the session (from meta.json). */
   workDir?: string;
+  /** Agent registry key this session is bound to (plugin sessions). */
+  agentType?: string;
+  /** Plugin name this session was created from. */
+  pluginId?: string;
 }
 
 export interface Session {
