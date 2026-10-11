@@ -1,24 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { X, FileBox, Loader2, RefreshCw } from 'lucide-react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { X, Loader2, RefreshCw } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
 import type { AppDefinition } from './registry';
+import { listCadSteps } from '../../ipc-client.js';
+import type { CadStep } from '../../types.js';
 
 /**
  * AppDisplayPanel — the right-hand "app display page" for an attached app.
  *
  * For the `cad-viewer` kind: spawns the self-contained 3D viewer (port 3245),
- * embeds it as a native WebContentsView over a measured container, and lists
- * the CAD artifacts in the conversation workspace below it — clicking one
- * navigates the viewer to that file. The conversation (left) drives generation;
- * this panel only displays the result.
+ * embeds it as a native WebContentsView over a measured container, and lists the
+ * CAD artifacts below it using cad_harness's native form — two rows (装配体 /
+ * 零件), each a name `<select>` + a 版本 `<select>` of that name's versions.
  */
 
 const TAB_ID = 'app-display';
-
-interface CadFile {
-  name: string;
-  relativePath: string;
-}
 
 type ViewerStatus = 'stopped' | 'starting' | 'running' | 'error';
 
@@ -28,15 +24,52 @@ function cadViewerAPI(): Window['coderixAPI']['cadViewer'] | undefined {
 function browserAPI(): Window['coderixAPI']['browser'] | undefined {
   return window.coderixAPI?.browser;
 }
-function fsAPI(): Window['coderixAPI']['fs'] | undefined {
-  return window.coderixAPI?.fs;
-}
 
 function buildViewerUrl(baseUrl: string, workspaceDir: string, fileRel: string): string {
   const abs = workspaceDir.replace(/\\/g, '/');
   const pathPart = abs.startsWith('/') ? abs : `/${abs}`;
   const base = `${baseUrl}${pathPart}`;
   return fileRel ? `${base}?file=${encodeURIComponent(fileRel)}` : base;
+}
+
+const FRAME_RE = /^frame_\d+$/i;
+function isFrameStep(step: CadStep): boolean {
+  return step.kind === 'frame' || FRAME_RE.test(step.baseName ?? step.name);
+}
+function baseNameOf(step: CadStep): string {
+  return step.baseName ?? step.name;
+}
+function versionOf(step: CadStep): number {
+  return step.version ?? 1;
+}
+
+interface StepGroup {
+  baseName: string;
+  versions: CadStep[];
+}
+
+/** Keep versions of the same part adjacent: baseName asc, latest first, versions asc. */
+function sortSteps(steps: CadStep[]): CadStep[] {
+  return [...steps].sort((a, b) => {
+    const an = baseNameOf(a);
+    const bn = baseNameOf(b);
+    if (an !== bn) return an.localeCompare(bn);
+    if (!!a.isLatest !== !!b.isLatest) return a.isLatest ? -1 : 1;
+    return versionOf(a) - versionOf(b);
+  });
+}
+
+function groupSteps(steps: CadStep[]): StepGroup[] {
+  const map = new Map<string, CadStep[]>();
+  for (const step of steps) {
+    const key = baseNameOf(step);
+    const list = map.get(key);
+    if (list) list.push(step);
+    else map.set(key, [step]);
+  }
+  return [...map.entries()]
+    .map(([baseName, versions]) => ({ baseName, versions }))
+    .sort((a, b) => a.baseName.localeCompare(b.baseName));
 }
 
 export function AppDisplayPanel({
@@ -53,8 +86,8 @@ export function AppDisplayPanel({
   const [status, setStatus] = useState<ViewerStatus>('stopped');
   const [baseUrl, setBaseUrl] = useState('');
   const [error, setError] = useState('');
-  const [files, setFiles] = useState<CadFile[]>([]);
-  const [selected, setSelected] = useState('');
+  const [steps, setSteps] = useState<CadStep[]>([]);
+  const [selectedStepId, setSelectedStepId] = useState<string>('');
   const [created, setCreated] = useState(false);
 
   // ── Spawn the cad-viewer + subscribe to its lifecycle ──────────────────
@@ -81,16 +114,14 @@ export function AppDisplayPanel({
     };
   }, []);
 
-  // ── Poll the workspace for CAD artifacts (scan-on-demand, like cad_harness) ──
+  // ── Poll the workspace for structured CAD steps (grouped + versioned) ───
   useEffect(() => {
     if (!workspaceDir) return;
     let cancelled = false;
     const refresh = async (): Promise<void> => {
-      const fs = fsAPI();
-      if (!fs) return;
       try {
-        const res = await fs.listCadFiles(workspaceDir);
-        if (!cancelled) setFiles(res.files ?? []);
+        const res = await listCadSteps(workspaceDir);
+        if (!cancelled) setSteps(res ?? []);
       } catch {
         // ignore transient listing errors
       }
@@ -103,9 +134,28 @@ export function AppDisplayPanel({
     };
   }, [workspaceDir]);
 
+  // ── Auto-select the default step on first load (latest assembly, else first part) ──
+  useEffect(() => {
+    if (selectedStepId || steps.length === 0) return;
+    const nonFrames = steps.filter((s) => !isFrameStep(s));
+    const assemblies = nonFrames.filter((s) => s.kind !== 'part');
+    const pick = (list: CadStep[]): CadStep | undefined => {
+      // latest live entry, else highest numbered version.
+      const live = list.find((s) => s.isLatest);
+      return live ?? list.reduce((a, b) => (versionOf(a) >= versionOf(b) ? a : b), list[0]);
+    };
+    const target = assemblies.length > 0 ? pick(assemblies) : pick(nonFrames.filter((s) => s.kind === 'part'));
+    if (target) setSelectedStepId(target.id);
+  }, [steps, selectedStepId]);
+
+  const ordered = useMemo(() => sortSteps(steps).filter((s) => !isFrameStep(s)), [steps]);
+  const assemblyGroups = useMemo(() => groupSteps(ordered.filter((s) => s.kind !== 'part')), [ordered]);
+  const partGroups = useMemo(() => groupSteps(ordered.filter((s) => s.kind === 'part')), [ordered]);
+
+  const selectedStep = steps.find((s) => s.id === selectedStepId);
   const url =
-    status === 'running' && baseUrl && workspaceDir
-      ? buildViewerUrl(baseUrl, workspaceDir, selected)
+    status === 'running' && baseUrl && workspaceDir && selectedStep?.viewerFile
+      ? buildViewerUrl(baseUrl, workspaceDir, selectedStep.viewerFile)
       : '';
 
   // ── Create + show the native view, glued to the container ──────────────
@@ -161,8 +211,66 @@ export function AppDisplayPanel({
     browserAPI()?.navigate(TAB_ID, url).catch(() => {});
   }, [created, url]);
 
-  const handleSelect = (file: CadFile): void => {
-    setSelected(file.relativePath);
+  const statusLabel = (s: CadStep['status']): string =>
+    s === 'generated' ? t('apps.status.generated') : t('apps.status.generating');
+  const versionLabel = (step: CadStep): string =>
+    step.isLatest
+      ? `${t('apps.latest')} · ${statusLabel(step.status)}`
+      : `${t('apps.version', { n: step.version })} · ${statusLabel(step.status)}`;
+
+  const renderGroupSelect = (label: string, groups: StepGroup[], selectPlaceholder: string): React.ReactElement => {
+    let selectedBase = '';
+    for (const group of groups) {
+      if (group.versions.some((v) => v.id === selectedStepId)) {
+        selectedBase = group.baseName;
+        break;
+      }
+    }
+    const selectedGroup = groups.find((g) => g.baseName === selectedBase);
+
+    const selectBase = (base: string): void => {
+      const group = groups.find((g) => g.baseName === base);
+      if (!group || group.versions.length === 0) return;
+      const live = group.versions.find((v) => v.isLatest);
+      setSelectedStepId((live ?? group.versions[group.versions.length - 1]).id);
+    };
+
+    return (
+      <div className="flex items-center gap-2">
+        <span className="w-11 shrink-0 text-[11px] font-medium text-[var(--color-text-tertiary)]">{label}</span>
+        <select
+          value={selectedBase}
+          onChange={(e) => selectBase(e.target.value)}
+          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-separator)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"
+        >
+          <option value="">{groups.length === 0 ? t('apps.none') : selectPlaceholder}</option>
+          {groups.map((group) => (
+            <option key={group.baseName} value={group.baseName}>
+              {group.baseName}
+            </option>
+          ))}
+        </select>
+        <span className="shrink-0 text-[11px] font-medium text-[var(--color-text-tertiary)]">{t('apps.versionLabel')}</span>
+        <select
+          value={selectedStepId}
+          onChange={(e) => {
+            if (e.target.value) setSelectedStepId(e.target.value);
+          }}
+          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-separator)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none disabled:opacity-50"
+          disabled={!selectedGroup}
+        >
+          {selectedGroup ? (
+            selectedGroup.versions.map((v) => (
+              <option key={v.id} value={v.id}>
+                {versionLabel(v)}
+              </option>
+            ))
+          ) : (
+            <option value="">{t('apps.selectVersion')}</option>
+          )}
+        </select>
+      </div>
+    );
   };
 
   return (
@@ -202,32 +310,10 @@ export function AppDisplayPanel({
         )}
       </div>
 
-      {/* Artifact list */}
-      <div className="shrink-0 border-t border-[var(--color-separator)] flex flex-col max-h-[180px]">
-        <div className="px-3 py-1.5 text-[11px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wide">
-          {t('apps.artifacts')}
-        </div>
-        <div className="overflow-y-auto px-1 pb-1">
-          {files.length === 0 ? (
-            <div className="px-2 py-3 text-xs text-[var(--color-text-tertiary)]">{t('apps.noArtifacts')}</div>
-          ) : (
-            files.map((file) => (
-              <button
-                key={file.relativePath}
-                type="button"
-                onClick={() => handleSelect(file)}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-left text-xs transition-colors ${
-                  file.relativePath === selected
-                    ? 'bg-[var(--color-brand-muted)] text-[var(--color-brand)]'
-                    : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)]'
-                }`}
-              >
-                <FileBox size={13} className="shrink-0" />
-                <span className="truncate" title={file.relativePath}>{file.name}</span>
-              </button>
-            ))
-          )}
-        </div>
+      {/* Artifact selector — cad_harness's native form: 装配体 / 零件 rows, each name + 版本 selects */}
+      <div className="shrink-0 border-t border-[var(--color-separator)] flex flex-col gap-1.5 px-3 py-2 bg-[var(--color-bg-primary)]">
+        {renderGroupSelect(t('apps.assembly'), assemblyGroups, t('apps.selectAssembly'))}
+        {renderGroupSelect(t('apps.part'), partGroups, t('apps.selectPart'))}
       </div>
     </div>
   );

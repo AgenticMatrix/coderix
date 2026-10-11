@@ -101,6 +101,9 @@ declare global {
         status(): Promise<{ status: string; port: number; baseUrl: string; error?: string }>;
         onStatusChanged(callback: (info: { status: string; error?: string }) => void): () => void;
       };
+      cad: {
+        listSteps(dirPath: string): Promise<Array<{ id: string; name: string; baseName: string; version: number; isLatest: boolean; kind: 'assembly' | 'part' | 'frame'; status: 'generating' | 'generated'; viewerFile?: string; sourcePath?: string; stepPath?: string; glbPath?: string; snapshotPath?: string }>>;
+      };
       onStreamEvent(callback: (event: unknown) => void): () => void;
       onPermissionRequest(callback: (req: unknown) => void): () => void;
       onStateChange(callback: (change: unknown) => void): () => void;

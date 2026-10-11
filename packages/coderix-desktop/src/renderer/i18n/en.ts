@@ -288,6 +288,17 @@ export const en: Record<TranslationKey, string> = {
   'apps.viewerFailed': 'Failed to start 3D viewer',
   'apps.artifacts': 'Artifacts',
   'apps.noArtifacts': 'No CAD artifacts yet — generate one in the conversation',
+  'apps.assembly': 'Assembly',
+  'apps.part': 'Part',
+  'apps.latest': 'Latest',
+  'apps.version': 'v{n}',
+  'apps.versionLabel': 'Version',
+  'apps.selectAssembly': 'Select assembly…',
+  'apps.selectPart': 'Select part…',
+  'apps.selectVersion': 'Select version…',
+  'apps.none': 'None',
+  'apps.status.generating': 'Generating',
+  'apps.status.generated': 'Generated',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',

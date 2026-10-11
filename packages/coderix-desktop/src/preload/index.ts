@@ -134,6 +134,7 @@ const CH = {
   CAD_VIEWER_STOP: 'cadViewer:stop',
   CAD_VIEWER_STATUS: 'cadViewer:status',
   CAD_VIEWER_STATUS_CHANGED: 'cadViewer:statusChanged',
+  CAD_LIST_STEPS: 'cad:listSteps',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -568,6 +569,28 @@ const coderixAPI = {
     /** Recursively search the project for matching file/dir names or content. */
     search(query: string): Promise<{ matches: Array<{ path: string; name: string; type: 'file' | 'directory'; matched: 'name' | 'content'; line?: string }> }> {
       return ipcRenderer.invoke(CH.FS_SEARCH, query);
+    },
+  },
+
+  // ── CAD ───────────────────────────────────────────────────────────────
+
+  cad: {
+    /** Structured, versioned CAD steps (grouped by baseName, classified assembly/part/frame). */
+    listSteps(dirPath: string): Promise<Array<{
+      id: string;
+      name: string;
+      baseName: string;
+      version: number;
+      isLatest: boolean;
+      kind: 'assembly' | 'part' | 'frame';
+      status: 'generating' | 'generated';
+      viewerFile?: string;
+      sourcePath?: string;
+      stepPath?: string;
+      glbPath?: string;
+      snapshotPath?: string;
+    }>> {
+      return ipcRenderer.invoke(CH.CAD_LIST_STEPS, dirPath);
     },
   },
 

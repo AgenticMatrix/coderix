@@ -40,6 +40,7 @@ import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } 
 import { normalizeSubAgentEvent } from './subagent-events.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
+import { scanSteps } from './cad-step-scanner.js';
 import { safeSend } from './safe-send.js';
 
 import type { WindowManager } from './window-manager.js';
@@ -120,6 +121,7 @@ export const IPC_CHANNELS = {
   FS_WRITE_FILE: 'fs:writeFile',
   FS_LIST_DIR: 'fs:listDir',
   FS_LIST_CAD_FILES: 'fs:listCadFiles',
+  CAD_LIST_STEPS: 'cad:listSteps',
   FS_WATCH: 'fs:watch',
   FS_SEARCH: 'fs:search',
   TERMINAL_CREATE: 'terminal:create',
@@ -1493,6 +1495,19 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const files = await walk(root);
     files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
     return { path: dirPath, files };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CAD_LIST_STEPS, async (_event, dirPath: string) => {
+    // Structured, versioned CAD steps (grouped by baseName, classified
+    // assembly/part/frame) for the app display panel — mirrors cad_harness's
+    // native parts list instead of the flat `fs:listCadFiles` scan.
+    const root = resolveProjectPath(dirPath, currentWorkDir);
+    try {
+      return scanSteps(root);
+    } catch (err) {
+      console.warn('[Coderix] cad:listSteps failed:', err instanceof Error ? err.message : err);
+      return [];
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.FS_SEARCH, async (_event, query: string) => {
