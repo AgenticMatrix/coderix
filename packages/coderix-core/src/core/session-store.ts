@@ -408,10 +408,40 @@ export function readSessionMeta(sessionDir: string): SessionMeta | null {
 }
 
 /**
+ * Per-directory write queues — serialize `writeSessionMeta` calls targeting the
+ * same session so their read-modify-write cycles can't interleave. Concurrent
+ * fire-and-forget writes (setCwd + addMessage first-write + title + contextLength
+ * + contextTokens + …) would otherwise each read a stale meta.json and clobber
+ * one another, corrupting the file and dropping fields (e.g. the plugin identity).
+ */
+const metaWriteQueues = new Map<string, Promise<void>>();
+
+/**
  * Write session metadata to meta.json, merging with existing data.
  * Creates the session directory if it doesn't exist.
+ *
+ * Writes to the same session directory are serialized (queued) so each caller
+ * merges over the previous caller's result instead of racing on the file.
  */
-export async function writeSessionMeta(
+export function writeSessionMeta(
+  sessionDir: string,
+  meta: SessionMeta,
+): Promise<void> {
+  const prev = metaWriteQueues.get(sessionDir) ?? Promise.resolve();
+  const next = prev
+    .catch(() => {}) // keep the chain alive after a prior write failure
+    .then(() => writeSessionMetaUnsafe(sessionDir, meta));
+  metaWriteQueues.set(sessionDir, next);
+  next
+    .finally(() => {
+      // Prune the queue entry once it settles and no newer write is queued.
+      if (metaWriteQueues.get(sessionDir) === next) metaWriteQueues.delete(sessionDir);
+    })
+    .catch(() => {});
+  return next;
+}
+
+async function writeSessionMetaUnsafe(
   sessionDir: string,
   meta: SessionMeta,
 ): Promise<void> {
