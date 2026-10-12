@@ -11,8 +11,6 @@ export interface StatusBarProps {
   /** Tokens used */
   inputTokens?: number;
   outputTokens?: number;
-  /** Cache-read tokens (accumulated, part of the context footprint) */
-  cacheReadTokens?: number;
   /** Current context footprint in tokens (last turn's input + output + cache-read) */
   contextTokens?: number;
   /** Maximum context window size in tokens */
@@ -83,7 +81,6 @@ export function StatusBar({
   engine,
   inputTokens,
   outputTokens,
-  cacheReadTokens,
   contextTokens: contextFootprint,
   contextMax,
   cost,
@@ -105,12 +102,12 @@ export function StatusBar({
 
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
 
-  // Context footprint mirrors the CLI: output + input + cache-read tokens for
-  // the *current* turn. Prefer the engine-supplied footprint; fall back to the
-  // accumulated counters for callers that don't pass it.
-  const contextTokens =
-    contextFootprint ??
-    (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheReadTokens ?? 0);
+  // Context footprint mirrors the CLI: input + output + cache-read tokens for
+  // the *current* turn. This is the only correct "context" number. The
+  // accumulated input/output/cache-read counters are session totals (for the
+  // ↑/↓ arrows and cost) and must NOT be summed into the context gauge — the
+  // accumulated cache-read alone reaches tens of millions of tokens.
+  const contextTokens = contextFootprint ?? 0;
   const contextRatio = contextMax && contextMax > 0 ? contextTokens / contextMax : 0;
   const contextPercent = Math.min(100, Math.round(contextRatio * 100));
   const contextColor = contextRatio > 0.9

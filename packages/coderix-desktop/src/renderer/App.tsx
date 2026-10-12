@@ -1129,7 +1129,6 @@ export function App(): React.ReactElement {
           agentStatus,
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
-          cacheReadTokens: tokenUsage.cacheReadTokens || undefined,
           contextTokens: tokenUsage.contextTokens || undefined,
           contextMax,
           cost: tokenUsage.totalCost || undefined,
