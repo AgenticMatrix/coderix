@@ -84,6 +84,18 @@ function safeBaseName(name: string): string {
   return slug || 'step';
 }
 
+/**
+ * Coalesce rapid-fire edits into one version: a fingerprint that differs from
+ * the newest archive is only minted once it has stayed stable for this long.
+ */
+const VERSION_DEBOUNCE_MS = 5 * 60 * 1000;
+
+/** Mint a version after this many cumulative fingerprint changes, even if it never stabilizes. */
+const VERSION_CHANGE_LIMIT = 10;
+
+/** Per-artifact pending fingerprint → first-seen timestamp + change count (in-memory; resets on restart). */
+const pendingFingerprints = new Map<string, { fp: string; since: number; changes: number }>();
+
 /** Recursively walk a directory, returning absolute file paths (skipping dot + skip dirs). */
 function walkFiles(dir: string): string[] {
   const out: string[] = [];
@@ -170,32 +182,26 @@ function fingerprintArchived(baseDir: string, baseName: string, version: number)
   return undefined;
 }
 
-/** Copy the current artifact files into a version archive (flattened to basename). */
-function archiveVersion(workspaceDir: string, archiveDirRel: string, files: FileSet): FileSet {
+/** Archive only the artifact's primary source (flattened to basename) into a version dir. */
+function archiveVersion(workspaceDir: string, archiveDirRel: string, files: FileSet): string | undefined {
+  // Keep only the source (`.step.py`, falling back to an imported `.step`/`.glb`).
+  // The compiled `.step`/`.glb` and snapshots are large and regenerable from the
+  // source, so copying them into every version would blow up the workspace.
+  const rel = files.source ?? files.step ?? files.glb;
+  if (!rel) return undefined;
   const archiveAbs = path.join(workspaceDir, archiveDirRel);
   try {
     mkdirSync(archiveAbs, { recursive: true });
   } catch {
     // ignore — copy will fail gracefully below
   }
-
-  const archived: FileSet = {};
-  const copy = (rel: string | undefined): string | undefined => {
-    if (!rel) return undefined;
-    try {
-      const dstRel = path.basename(rel);
-      copyFileSync(path.join(workspaceDir, rel), path.join(archiveAbs, dstRel));
-      return path.posix.join(archiveDirRel, dstRel);
-    } catch {
-      return undefined;
-    }
-  };
-
-  archived.source = copy(files.source);
-  archived.step = copy(files.step);
-  archived.glb = copy(files.glb);
-  archived.snapshot = copy(files.snapshot);
-  return archived;
+  try {
+    const dstRel = path.basename(rel);
+    copyFileSync(path.join(workspaceDir, rel), path.join(archiveAbs, dstRel));
+    return path.posix.join(archiveDirRel, dstRel);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -246,24 +252,52 @@ export function scanSteps(workspaceDir: string): CadStep[] {
       }
     })();
 
-    // Version detection: a new source hash (or the first time we see the part)
-    // mints a new version; otherwise the live files are the newest version.
+    // Version detection: a new source hash mints a new version, but only after
+    // the fingerprint has stayed stable for VERSION_DEBOUNCE_MS — so rapid-fire
+    // edits during a generation collapse into one version instead of one per
+    // keystroke-sized change.
     const baseDir = path.join(workspaceDir, ARCHIVE_DIR, safeBaseName(name));
     const existing = listVersions(baseDir);
+    const now = Date.now();
+    const pendingKey = `${workspaceDir}::${name}`;
     let version: number;
     let isNew: boolean;
     if (existing.length === 0) {
+      // First time we see the part — mint version 1 immediately.
       version = 1;
       isNew = true;
     } else {
       const newest = existing[existing.length - 1]!;
       const archivedFp = fingerprintArchived(baseDir, name, newest);
       if (liveFp !== undefined && archivedFp === liveFp) {
+        // Unchanged since the newest archive.
         version = newest;
         isNew = false;
+        pendingFingerprints.delete(pendingKey);
+      } else if (liveFp === undefined) {
+        // Source unreadable — report the newest version, don't count or mint.
+        version = newest;
+        isNew = false;
+        pendingFingerprints.delete(pendingKey);
       } else {
-        version = newest + 1;
-        isNew = true;
+        // Fingerprint differs from the newest archive. Mint when it has been
+        // stable for VERSION_DEBOUNCE_MS, or when the source has changed
+        // VERSION_CHANGE_LIMIT times cumulatively — so continuous editing still
+        // produces a version.
+        const rec = pendingFingerprints.get(pendingKey);
+        const isNewChange = rec === undefined || rec.fp !== liveFp;
+        const changes = isNewChange ? (rec?.changes ?? 0) + 1 : rec.changes;
+        const since = isNewChange ? now : rec.since;
+        const settled = !isNewChange && now - since >= VERSION_DEBOUNCE_MS;
+        pendingFingerprints.set(pendingKey, { fp: liveFp, since, changes });
+        if (settled || changes >= VERSION_CHANGE_LIMIT) {
+          version = newest + 1;
+          isNew = true;
+          pendingFingerprints.delete(pendingKey);
+        } else {
+          version = newest;
+          isNew = false;
+        }
       }
     }
 
@@ -295,13 +329,11 @@ export function scanSteps(workspaceDir: string): CadStep[] {
     });
 
     // Archived versions (including any freshly-minted one) are selectable too.
-    // Archives are flattened to basename, so each version's files live at
-    // `history/<base>/<v>/<basename>`.
+    // Only the primary source is archived (flattened to basename), so each
+    // version's file lives at `history/<base>/<v>/<basename>`.
     const allVersions = isNew ? [...existing, version] : existing;
-    const srcBase = files.source ? path.basename(files.source) : undefined;
-    const stepBase = files.step ? path.basename(files.step) : undefined;
-    const glbBase = files.glb ? path.basename(files.glb) : undefined;
-    const snapBase = files.snapshot ? path.basename(files.snapshot) : undefined;
+    const primary = files.source ?? files.step ?? files.glb;
+    const primaryBase = primary ? path.basename(primary) : undefined;
     for (const v of allVersions) {
       const dir = `${ARCHIVE_DIR}/${safeBaseName(name)}/${v}`;
       steps.push({
@@ -310,11 +342,9 @@ export function scanSteps(workspaceDir: string): CadStep[] {
         name: v === 1 ? name : `${name}-${v}`,
         version: v,
         isLatest: false,
-        viewerFile: srcBase ? `${dir}/${srcBase}` : stepBase ? `${dir}/${stepBase}` : glbBase ? `${dir}/${glbBase}` : undefined,
-        sourcePath: srcBase ? `${dir}/${srcBase}` : undefined,
-        stepPath: stepBase ? `${dir}/${stepBase}` : undefined,
-        glbPath: glbBase ? `${dir}/${glbBase}` : undefined,
-        snapshotPath: snapBase ? `${dir}/${snapBase}` : undefined,
+        viewerFile: primaryBase ? `${dir}/${primaryBase}` : undefined,
+        sourcePath: files.source && primary === files.source ? `${dir}/${primaryBase}` : undefined,
+        // step/glb/snapshot are not archived — only the source is kept.
       });
     }
   }
