@@ -249,6 +249,17 @@ export function stripCompactWrapper(content: string): string {
   return after || content;
 }
 
+/**
+ * True when a user message is the compactor's synthetic continuation message
+ * ("This session is being continued from a previous conversation…"). These
+ * carry no topic signal and must not be used to derive a session title or
+ * preview — otherwise a compacted session's list entry shows the summary
+ * instead of its real subject.
+ */
+export function isCompactSummaryText(text: string): boolean {
+  return text.trimStart().startsWith('This session is being continued');
+}
+
 function extractUserText(content: unknown): string {
   if (typeof content === 'string') return stripCompactWrapper(content);
   if (Array.isArray(content)) {
@@ -315,7 +326,7 @@ export function readTailMetadata(filePath: string): {
         // Check user entries from end too (fast path for recent sessions)
         if (!foundUser && entry.type === 'user' && entry.message) {
           const text = extractUserText(entry.message.content);
-          if (text) {
+          if (text && !isCompactSummaryText(text)) {
             result.lastUserPreview = text.length > 60 ? text.slice(0, 60) + '...' : text;
             foundUser = true;
           }
@@ -332,7 +343,7 @@ export function readTailMetadata(filePath: string): {
           const entry = JSON.parse(line);
           if (entry.type === 'user' && entry.message) {
             const text = extractUserText(entry.message.content);
-            if (text) {
+            if (text && !isCompactSummaryText(text)) {
               result.lastUserPreview = text.length > 60 ? text.slice(0, 60) + '...' : text;
               break;
             }
@@ -349,7 +360,7 @@ export function readTailMetadata(filePath: string): {
         const entry = JSON.parse(line);
         if (entry.type === 'user' && entry.message) {
           const text = extractUserText(entry.message.content);
-          if (text) {
+          if (text && !isCompactSummaryText(text)) {
             result.firstUserText = text;
             break;
           }

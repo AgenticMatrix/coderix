@@ -43,6 +43,7 @@ import {
   generateSessionTitle,
   isAutoTitle,
   stripCompactWrapper,
+  isCompactSummaryText,
 } from './session-store.js';
 
 // ---------------------------------------------------------------------------
@@ -1004,7 +1005,11 @@ export class SessionManager {
       const messages = entriesToMessages(allEntries);
 
       // First user message text — used to derive a title when none is stored.
-      const firstUserMessage = messages.find((m) => m.role === 'user');
+      // Skip the compactor's synthetic continuation message so a compacted
+      // session's title doesn't collapse to "This session is being continued…".
+      const firstUserMessage = messages.find(
+        (m) => m.role === 'user' && !isCompactSummaryText(extractMessageText(m)),
+      );
       const firstUserText = firstUserMessage
         ? extractMessageText(firstUserMessage)
         : '';
