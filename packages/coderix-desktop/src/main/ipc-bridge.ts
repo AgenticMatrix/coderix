@@ -1501,7 +1501,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // Structured, versioned CAD steps (grouped by baseName, classified
     // assembly/part/frame) for the app display panel — mirrors cad_harness's
     // native parts list instead of the flat `fs:listCadFiles` scan.
-    const root = resolveProjectPath(dirPath, currentWorkDir);
+    // The workspace here is the conversation's own cwd (the renderer's
+    // `projectPath`), which may differ from the main-process `currentWorkDir`
+    // (that is a per-turn notion); use the absolute path directly instead of the
+    // currentWorkDir-relative `resolveProjectPath` guard, which would reject it.
+    const root = resolve(dirPath);
     try {
       return scanSteps(root);
     } catch (err) {
