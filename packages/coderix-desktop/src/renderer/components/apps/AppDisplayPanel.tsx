@@ -83,10 +83,12 @@ export function AppDisplayPanel({
 }): React.ReactElement {
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastUrlRef = useRef('');
   const [status, setStatus] = useState<ViewerStatus>('stopped');
   const [baseUrl, setBaseUrl] = useState('');
   const [error, setError] = useState('');
   const [steps, setSteps] = useState<CadStep[]>([]);
+  const [stepsReady, setStepsReady] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string>('');
   const [created, setCreated] = useState(false);
 
@@ -118,12 +120,20 @@ export function AppDisplayPanel({
   useEffect(() => {
     if (!workspaceDir) return;
     let cancelled = false;
+    // Reset per-workspace state so switching conversations re-runs auto-select.
+    setSteps([]);
+    setStepsReady(false);
+    setSelectedStepId('');
     const refresh = async (): Promise<void> => {
       try {
         const res = await listCadSteps(workspaceDir);
-        if (!cancelled) setSteps(res ?? []);
+        if (!cancelled) {
+          setSteps(res ?? []);
+          setStepsReady(true);
+        }
       } catch {
-        // ignore transient listing errors
+        // Listing failed — surface an empty list rather than blocking the viewer.
+        if (!cancelled) setStepsReady(true);
       }
     };
     void refresh();
@@ -161,6 +171,11 @@ export function AppDisplayPanel({
   // ── Create + show the native view, glued to the container ──────────────
   useEffect(() => {
     if (!url) return;
+    // Wait for the first step scan, and for the auto-selected assembly, so the
+    // viewer opens directly on the rendered model instead of the "Select a file"
+    // browser. An empty (step-free) workspace falls through to the file browser.
+    if (!stepsReady) return;
+    if (steps.length > 0 && !selectedStep) return;
     const a = browserAPI();
     const container = containerRef.current;
     if (!a || !container) return;
@@ -170,6 +185,7 @@ export function AppDisplayPanel({
     (async () => {
       try {
         await a.create(TAB_ID, urlAtCreate);
+        lastUrlRef.current = urlAtCreate;
       } catch (err) {
         console.warn('[AppDisplay] create failed:', err);
       }
@@ -203,11 +219,12 @@ export function AppDisplayPanel({
       window.removeEventListener('resize', updateBounds);
       a.hide(TAB_ID).catch(() => {});
     };
-  }, [status, baseUrl, workspaceDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, baseUrl, workspaceDir, stepsReady, selectedStep, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Navigate the already-created view when the selected file changes ───
   useEffect(() => {
-    if (!created || !url) return;
+    if (!created || !url || url === lastUrlRef.current) return;
+    lastUrlRef.current = url;
     browserAPI()?.navigate(TAB_ID, url).catch(() => {});
   }, [created, url]);
 
