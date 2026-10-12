@@ -141,7 +141,7 @@ export function AppDisplayPanel({
       }
     };
     void refresh();
-    const timer = setInterval(() => void refresh(), 30000);
+    const timer = setInterval(() => void refresh(), 10000);
     return () => {
       cancelled = true;
       clearInterval(timer);
