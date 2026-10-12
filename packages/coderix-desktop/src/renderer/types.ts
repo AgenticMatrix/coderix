@@ -101,6 +101,7 @@ export interface CadStep {
   kind: 'assembly' | 'part' | 'frame';
   status: 'generating' | 'generated';
   viewerFile?: string;
+  renderHash?: string;
   sourcePath?: string;
   stepPath?: string;
   glbPath?: string;

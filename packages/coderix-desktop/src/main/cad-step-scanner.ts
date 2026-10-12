@@ -50,6 +50,8 @@ export interface CadStep {
   status: CadStepStatus;
   /** Workspace-relative file the viewer should navigate to. */
   viewerFile?: string;
+  /** SHA-1 of the live source (`.step.py`, falling back to `.step`/`.glb`) — a change signals the viewer to re-render. */
+  renderHash?: string;
   sourcePath?: string;
   stepPath?: string;
   glbPath?: string;
@@ -275,13 +277,17 @@ export function scanSteps(workspaceDir: string): CadStep[] {
       status,
     };
 
-    // The live (latest) step points at the workspace files.
+    // The live (latest) step points at the workspace files. `renderHash` reuses
+    // the source fingerprint (already computed above for versioning): the
+    // renderer reloads the viewer when it changes, so the 3D view tracks edits
+    // without spurious refreshes on every poll.
     steps.push({
       ...base,
       id: `${name}-latest`,
       name: version === 1 ? name : `${name}-${version}`,
       isLatest: true,
       viewerFile: files.source ?? files.step ?? files.glb,
+      renderHash: liveFp,
       sourcePath: files.source,
       stepPath: files.step,
       glbPath: files.glb,

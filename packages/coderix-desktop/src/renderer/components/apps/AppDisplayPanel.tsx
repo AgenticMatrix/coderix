@@ -25,11 +25,15 @@ function browserAPI(): Window['coderixAPI']['browser'] | undefined {
   return window.coderixAPI?.browser;
 }
 
-function buildViewerUrl(baseUrl: string, workspaceDir: string, fileRel: string): string {
+function buildViewerUrl(baseUrl: string, workspaceDir: string, fileRel: string, renderHash?: string): string {
   const abs = workspaceDir.replace(/\\/g, '/');
   const pathPart = abs.startsWith('/') ? abs : `/${abs}`;
   const base = `${baseUrl}${pathPart}`;
-  return fileRel ? `${base}?file=${encodeURIComponent(fileRel)}` : base;
+  if (!fileRel) return base;
+  // `render` is a cache-busting param (ignored by the viewer): it changes when
+  // the rendered artifact's content changes, which re-triggers a navigate/reload.
+  const q = `file=${encodeURIComponent(fileRel)}${renderHash ? `&render=${encodeURIComponent(renderHash)}` : ''}`;
+  return `${base}?${q}`;
 }
 
 const FRAME_RE = /^frame_\d+$/i;
@@ -165,7 +169,7 @@ export function AppDisplayPanel({
   const selectedStep = steps.find((s) => s.id === selectedStepId);
   const url =
     status === 'running' && baseUrl && workspaceDir
-      ? buildViewerUrl(baseUrl, workspaceDir, selectedStep?.viewerFile ?? '')
+      ? buildViewerUrl(baseUrl, workspaceDir, selectedStep?.viewerFile ?? '', selectedStep?.renderHash)
       : '';
 
   // ── Create + show the native view, glued to the container ──────────────
@@ -175,7 +179,7 @@ export function AppDisplayPanel({
     // viewer opens directly on the rendered model instead of the "Select a file"
     // browser. An empty (step-free) workspace falls through to the file browser.
     if (!stepsReady) return;
-    if (steps.length > 0 && !selectedStep) return;
+    if (steps.length > 0 && !selectedStepId) return;
     const a = browserAPI();
     const container = containerRef.current;
     if (!a || !container) return;
@@ -219,7 +223,7 @@ export function AppDisplayPanel({
       window.removeEventListener('resize', updateBounds);
       a.hide(TAB_ID).catch(() => {});
     };
-  }, [status, baseUrl, workspaceDir, stepsReady, selectedStep, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, baseUrl, workspaceDir, stepsReady, selectedStepId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Navigate the already-created view when the selected file changes ───
   useEffect(() => {
