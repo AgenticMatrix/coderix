@@ -88,6 +88,7 @@ export function AppDisplayPanel({
   const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUrlRef = useRef('');
+  const prevHashesRef = useRef<Map<string, string>>(new Map());
   const [status, setStatus] = useState<ViewerStatus>('stopped');
   const [baseUrl, setBaseUrl] = useState('');
   const [error, setError] = useState('');
@@ -128,6 +129,7 @@ export function AppDisplayPanel({
     setSteps([]);
     setStepsReady(false);
     setSelectedStepId('');
+    prevHashesRef.current = new Map();
     const refresh = async (): Promise<void> => {
       try {
         const res = await listCadSteps(workspaceDir);
@@ -160,6 +162,31 @@ export function AppDisplayPanel({
     };
     const target = assemblies.length > 0 ? pick(assemblies) : pick(nonFrames.filter((s) => s.kind === 'part'));
     if (target) setSelectedStepId(target.id);
+  }, [steps, selectedStepId]);
+
+  // ── Auto-follow part edits: when a part in `parts/` changes between polls and
+  // the viewer is currently on a part (not the assembly), switch to the most
+  // recently updated part so the 3D view tracks the agent's activity. ──────
+  useEffect(() => {
+    const prev = prevHashesRef.current;
+    const next = new Map<string, string>();
+    const changed: CadStep[] = [];
+
+    for (const s of steps) {
+      if (s.renderHash) next.set(s.id, s.renderHash);
+    }
+    for (const s of steps) {
+      if (s.kind !== 'part' || !s.isLatest || !s.renderHash) continue;
+      if (prev.get(s.id) !== s.renderHash) changed.push(s);
+    }
+    prevHashesRef.current = next;
+
+    if (changed.length === 0) return;
+    const newest = changed.reduce((a, b) => ((a.sourceMtime ?? 0) >= (b.sourceMtime ?? 0) ? a : b));
+    const current = steps.find((s) => s.id === selectedStepId);
+    if (current && current.kind !== 'assembly') {
+      setSelectedStepId(newest.id);
+    }
   }, [steps, selectedStepId]);
 
   const ordered = useMemo(() => sortSteps(steps).filter((s) => !isFrameStep(s)), [steps]);
