@@ -3,67 +3,65 @@
  * cad-harness plugin manifest, so the "cad-harness" plugin's conversations can
  * resolve `cad-control` tools (the agent controls the CAD component via MCP).
  *
- * The server subprocess command is the bundled `coderix` binary (production) or a
- * `coderix` on PATH (dev after `installCli`). When neither exists the plugin still
- * works — its vendored CAD skills are the fallback — but the MCP tools won't
- * resolve. Idempotent against content: an existing `cad-control` config is left
- * as-is; the plugin manifest is re-seeded only when its system prompt or skills
- * list changed.
+ * The `cad-control` server now lives in the cad_harness repo
+ * (`<repo>/services/cad-control/server.py`, a Python FastMCP server) — cad_harness
+ * owns its full CAD MCP surface; coderix only registers it as an external stdio
+ * server. It is launched with the resolved CAD interpreter (`CAD_PYTHON`, which
+ * has build123d/cadgen + `mcp` installed). Idempotent against content: an existing
+ * `cad-control` config is left as-is; the plugin manifest is re-seeded only when
+ * its system prompt or skills list changed.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { addMcpConfig, getMcpConfig } from '../../../../packages/coderix-core/src/mcp/config-loader.js';
+import { addMcpConfig, getMcpConfig, removeMcpConfig } from '../../../../packages/coderix-core/src/mcp/config-loader.js';
 import { resolveCadHarnessRoot, resolveCadPython } from './cad-paths.js';
 import { listCadSkillNames } from './cad-skills.js';
-import { resolveSourceBin } from './cli-installer.js';
 
 const CAD_CONTROL_SERVER = 'cad-control';
 
-/** The bundled `coderix` binary, or a `coderix` on PATH, or null. */
-function resolveCoderixCommand(): string | null {
-  const bundled = resolveSourceBin();
-  if (bundled) return bundled;
-  const pathDirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean);
-  for (const dir of pathDirs) {
-    const candidate = path.join(dir, 'coderix');
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-
 /**
- * Register the `cad-control` stdio MCP server in the user-scoped config
- * (`~/.coderix/mcp.json`) with the resolved CAD paths as env — the MCP SDK's
- * stdio subprocess only inherits a whitelist of env vars, so CAD_HARNESS_PATH /
- * CAD_PYTHON must be written into the config rather than left to ambient env.
+ * Register the external cad_harness `cad-control` MCP server in the user-scoped
+ * config (`~/.coderix/mcp.json`). The MCP SDK's stdio subprocess only inherits a
+ * whitelist of env vars, so CAD_HARNESS_PATH / CAD_PYTHON / CAD_SKILL_DIR are
+ * written into the config rather than left to ambient env.
  */
 export function installCadControlMcp(): void {
   const existing = getMcpConfig(CAD_CONTROL_SERVER);
   if (existing) {
-    console.log(`[CadMcp] ${CAD_CONTROL_SERVER} already configured — leaving as-is`);
+    // Migrate from the old in-repo TS server (`coderix --cad-control-mcp`) to the
+    // external Python server; leave a user-customised config otherwise.
+    const existingArgs = 'args' in existing ? (existing as { args?: unknown }).args : undefined;
+    const isOldTsServer =
+      Array.isArray(existingArgs) && existingArgs.includes('--cad-control-mcp');
+    if (!isOldTsServer) {
+      console.log(`[CadMcp] ${CAD_CONTROL_SERVER} already configured — leaving as-is`);
+      return;
+    }
+    removeMcpConfig(CAD_CONTROL_SERVER, 'user');
+  }
+
+  const harnessRoot = resolveCadHarnessRoot();
+  const python = resolveCadPython() || 'python3';
+  const serverPath = path.join(harnessRoot, 'services', 'cad-control', 'server.py');
+  if (!existsSync(serverPath)) {
+    console.warn(`[CadMcp] ${serverPath} not found — skipping cad-control MCP registration`);
     return;
   }
 
-  const command = resolveCoderixCommand();
-  if (!command) {
-    console.warn(
-      '[CadMcp] coderix binary not found (dev mode) — skipping cad-control MCP registration; cad/cad-viewer skills remain the fallback',
-    );
-    return;
-  }
-
-  const env: Record<string, string> = { CAD_HARNESS_PATH: resolveCadHarnessRoot() };
-  const python = resolveCadPython();
-  if (python) env.CAD_PYTHON = python;
+  const env: Record<string, string> = {
+    CAD_HARNESS_PATH: harnessRoot,
+    CAD_PYTHON: python,
+    CAD_SKILL_DIR: path.join(harnessRoot, 'claude_dir', 'skills', 'cad'),
+  };
 
   addMcpConfig(
     CAD_CONTROL_SERVER,
-    { type: 'stdio', command, args: ['--cad-control-mcp'], env },
+    { type: 'stdio', command: python, args: [serverPath], env },
     'user',
   );
-  console.log(`[CadMcp] registered ${CAD_CONTROL_SERVER} -> ${command} --cad-control-mcp`);
+  console.log(`[CadMcp] registered ${CAD_CONTROL_SERVER} -> ${python} ${serverPath}`);
 }
 
 // ---------------------------------------------------------------------------
