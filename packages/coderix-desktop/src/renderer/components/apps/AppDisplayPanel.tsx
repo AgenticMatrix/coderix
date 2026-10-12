@@ -154,8 +154,8 @@ export function AppDisplayPanel({
 
   const selectedStep = steps.find((s) => s.id === selectedStepId);
   const url =
-    status === 'running' && baseUrl && workspaceDir && selectedStep?.viewerFile
-      ? buildViewerUrl(baseUrl, workspaceDir, selectedStep.viewerFile)
+    status === 'running' && baseUrl && workspaceDir
+      ? buildViewerUrl(baseUrl, workspaceDir, selectedStep?.viewerFile ?? '')
       : '';
 
   // ── Create + show the native view, glued to the container ──────────────
