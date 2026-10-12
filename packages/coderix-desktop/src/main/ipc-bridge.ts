@@ -878,9 +878,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 // last turn's per-call usage as the *current* context footprint.
                 if (data.usage) {
                   const last = data.lastUsage;
+                  // Context footprint is the *last turn's* per-call usage only —
+                  // never the accumulated session totals (accumulated cache-read
+                  // reaches tens of millions of tokens and is not "context").
                   const contextTokens = last
                     ? (last.input_tokens ?? 0) + (last.output_tokens ?? 0) + (last.cache_read_input_tokens ?? 0)
-                    : inputTokens + outputTokens + cacheReadTokens;
+                    : 0;
                   safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
                     inputTokens,
                     outputTokens,
