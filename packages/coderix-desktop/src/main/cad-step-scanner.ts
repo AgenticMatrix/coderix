@@ -52,6 +52,8 @@ export interface CadStep {
   viewerFile?: string;
   /** SHA-1 of the live source (`.step.py`, falling back to `.step`/`.glb`) — a change signals the viewer to re-render. */
   renderHash?: string;
+  /** mtime (ms) of the live source, for "most recently updated" ordering. */
+  sourceMtime?: number;
   sourcePath?: string;
   stepPath?: string;
   glbPath?: string;
@@ -143,6 +145,17 @@ function fingerprintFile(absPath: string): string {
 /** The primary source-of-truth file for a group, falling back `.step` → `.glb`. */
 function primaryFile(files: FileSet): string | undefined {
   return files.source ?? files.step ?? files.glb;
+}
+
+/** mtime (ms) of the primary source file, for "most recently updated" ordering. */
+function primaryMtime(workspaceDir: string, files: FileSet): number | undefined {
+  const rel = primaryFile(files);
+  if (!rel) return undefined;
+  try {
+    return statSync(path.join(workspaceDir, rel)).mtimeMs;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Enumerate archived version numbers (1-based) under `history/<base>/`. */
@@ -322,6 +335,7 @@ export function scanSteps(workspaceDir: string): CadStep[] {
       isLatest: true,
       viewerFile: files.source ?? files.step ?? files.glb,
       renderHash: liveFp,
+      sourceMtime: primaryMtime(workspaceDir, files),
       sourcePath: files.source,
       stepPath: files.step,
       glbPath: files.glb,

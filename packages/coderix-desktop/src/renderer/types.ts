@@ -102,6 +102,7 @@ export interface CadStep {
   status: 'generating' | 'generated';
   viewerFile?: string;
   renderHash?: string;
+  sourceMtime?: number;
   sourcePath?: string;
   stepPath?: string;
   glbPath?: string;
