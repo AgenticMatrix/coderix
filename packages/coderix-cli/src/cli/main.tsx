@@ -30,7 +30,6 @@ interface CliArgs {
   chromeMcpPort?: number;
   computerUseMcp: boolean;
   demoMcp: boolean;
-  cadControlMcp: boolean;
   sdk: boolean;
   resume?: string;       // undefined=not passed, ''=flag without value, string=session ID
   continueFlag: boolean; // -c / --continue
@@ -47,7 +46,6 @@ function parseCliArgs(argv: string[]): CliArgs {
     chromeMcp: false,
     computerUseMcp: false,
     demoMcp: false,
-    cadControlMcp: false,
     sdk: false,
     continueFlag: false,
   };
@@ -69,7 +67,6 @@ function parseCliArgs(argv: string[]): CliArgs {
       case '--chrome-mcp-port': args.chromeMcpPort = parseInt(argv[i + 1]!, 10); if (!isNaN(args.chromeMcpPort)) i++; break;
       case '--computer-use-mcp': args.computerUseMcp = true; break;
       case '--demo-mcp': args.demoMcp = true; break;
-      case '--cad-control-mcp': args.cadControlMcp = true; break;
       case '--sdk': args.sdk = true; break;
       case '--resume': case '-r': {
         const nextArg = argv[i + 1];
@@ -334,14 +331,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cliArgs.cadControlMcp) {
-    const { runCadControlMcpServer } = await import('@coderix/core');
-    await runCadControlMcpServer();
-    return;
-  }
-
   if (cliArgs.help) { console.log(`Usage: coderix [options] [query]\n\nOptions:\n  --help, -h            Show help\n  --version, -V         Print version\n  --model, -m [name]    Select model\n  --setup               Setup wizard\n  --print, -p <query>   One-shot query\n  --resume, -r [id]     Resume a session by ID, or open interactive picker\n  --continue, -c        Resume the most recent conversation\n  --gateway, -g         JSON-RPC gateway mode (stdin/stdout)\n  --desktop, -d         WebSocket gateway mode (for desktop app)\n  --desktop-port <port> WebSocket port for desktop mode (default 9754)\n  --chrome-mcp          Start Chrome MCP server (stdin/stdout)\n  --chrome-mcp-port <n> CDP port for Chrome (default 9222)\n  --computer-use-mcp    Start Computer Use MCP server (macOS)\n  --demo-mcp            Start the Demo MCP server (stdin/stdout, reference)
-  --cad-control-mcp     Start the CAD Control MCP server (stdin/stdout)\n  --sdk                 SDK stream-json mode (stdin/stdout, for SDK clients)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
+--sdk                 SDK stream-json mode (stdin/stdout, for SDK clients)\n\nSubcommands:\n  mcp                   Manage MCP servers\n`); process.exit(0); }
 
   if (cliArgs.version) { const { readFileSync } = await import('node:fs'); const { join, dirname } = await import('node:path'); const { fileURLToPath } = await import('node:url'); const { detectShell } = await import('@coderix/core'); let version = '0.1.0'; try { const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json'), 'utf-8')) as { version: string }; version = pkg.version; } catch { /* compiled standalone (bun --compile): import.meta.url is a virtual $bunfs path, package.json isn't on disk */ version = '0.1.0'; } const shell = detectShell(); console.log(`coderix ${version}\nnode ${process.version}\n${process.platform} ${process.arch}\nshell ${shell.path} (${shell.type})`); process.exit(0); }
 

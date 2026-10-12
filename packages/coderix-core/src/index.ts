@@ -207,16 +207,6 @@ export {
 export { runChromeMcpServer } from './mcp/builtin/chrome-mcp/index.js';
 export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js';
 export { runDemoMcpServer, createDemoMcpServer, DEMO_TOOLS } from './mcp/builtin/demo-mcp/index.js';
-export {
-  runCadControlMcpServer,
-  createCadControlMcpServer,
-  CAD_CONTROL_TOOLS,
-  resolveCadHarnessRoot,
-  resolveCadSkillDir,
-  resolveCadPython,
-  CAD_VIEWER_BASE,
-  buildViewerUrl,
-} from './mcp/builtin/cad-control-mcp/index.js';
 
 // ── Config ─────────────────────────────────────────────────────────
 export { loadSettings, saveSettings, loadConfig, loadDesktopConfig, inferProvider, getMaxToolConcurrency, detectProtocol, resolvePermissionMode, resolveModelByName } from './config.js';
