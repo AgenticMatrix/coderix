@@ -47,6 +47,15 @@ function versionOf(step: CadStep): number {
   return step.version ?? 1;
 }
 
+/**
+ * Auto-follow only switches the viewer to a part whose source hash has stayed
+ * stable this long (two 10s poll cycles). Without it, the viewer chases every
+ * mid-generation write — landing on a part whose render package is not built
+ * yet and showing a spurious "Building geometry" that duplicates the agent's
+ * own `gen` run.
+ */
+const FOLLOW_DEBOUNCE_MS = 20_000;
+
 interface StepGroup {
   baseName: string;
   versions: CadStep[];
@@ -89,6 +98,7 @@ export function AppDisplayPanel({
   const containerRef = useRef<HTMLDivElement>(null);
   const lastUrlRef = useRef('');
   const prevHashesRef = useRef<Map<string, string>>(new Map());
+  const pendingFollowRef = useRef<Map<string, number>>(new Map());
   const [status, setStatus] = useState<ViewerStatus>('stopped');
   const [baseUrl, setBaseUrl] = useState('');
   const [error, setError] = useState('');
@@ -130,6 +140,7 @@ export function AppDisplayPanel({
     setStepsReady(false);
     setSelectedStepId('');
     prevHashesRef.current = new Map();
+    pendingFollowRef.current = new Map();
     const refresh = async (): Promise<void> => {
       try {
         const res = await listCadSteps(workspaceDir);
@@ -166,25 +177,38 @@ export function AppDisplayPanel({
 
   // ── Auto-follow part edits: when a part in `parts/` changes between polls and
   // the viewer is currently on a part (not the assembly), switch to the most
-  // recently updated part so the 3D view tracks the agent's activity. ──────
+  // recently updated part so the 3D view tracks the agent's activity. A part is
+  // only followed after its source hash has stayed stable for FOLLOW_DEBOUNCE_MS —
+  // otherwise the viewer chases every mid-generation write and lands on a part
+  // whose render package is not built yet, showing a redundant "Building geometry". ──
   useEffect(() => {
     const prev = prevHashesRef.current;
+    const pending = pendingFollowRef.current;
+    const now = Date.now();
     const next = new Map<string, string>();
-    const changed: CadStep[] = [];
+    const settled: CadStep[] = [];
 
     for (const s of steps) {
       if (s.renderHash) next.set(s.id, s.renderHash);
     }
     for (const s of steps) {
       if (s.kind !== 'part' || !s.isLatest || !s.renderHash) continue;
-      if (prev.get(s.id) !== s.renderHash) changed.push(s);
+      const prevHash = prev.get(s.id);
+      if (prevHash !== s.renderHash) {
+        // Hash changed since the last poll — (re)start the stability clock.
+        pending.set(s.id, now);
+      } else if (pending.has(s.id)) {
+        const since = pending.get(s.id)!;
+        if (now - since >= FOLLOW_DEBOUNCE_MS) settled.push(s);
+      }
     }
     prevHashesRef.current = next;
 
-    if (changed.length === 0) return;
-    const newest = changed.reduce((a, b) => ((a.sourceMtime ?? 0) >= (b.sourceMtime ?? 0) ? a : b));
+    if (settled.length === 0) return;
+    const newest = settled.reduce((a, b) => ((a.sourceMtime ?? 0) >= (b.sourceMtime ?? 0) ? a : b));
     const current = steps.find((s) => s.id === selectedStepId);
     if (current && current.kind !== 'assembly') {
+      pending.clear();
       setSelectedStepId(newest.id);
     }
   }, [steps, selectedStepId]);
