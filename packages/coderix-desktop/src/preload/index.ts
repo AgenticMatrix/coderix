@@ -135,6 +135,16 @@ const CH = {
   CAD_VIEWER_STATUS: 'cadViewer:status',
   CAD_VIEWER_STATUS_CHANGED: 'cadViewer:statusChanged',
   CAD_LIST_STEPS: 'cad:listSteps',
+
+  // Blender preview (live render of the running Blender scene for apps)
+  BLENDER_STATUS: 'blender:status',
+  BLENDER_PREVIEW: 'blender:preview',
+  BLENDER_LAUNCH: 'blender:launch',
+
+  // Blender viewer (interactive .glb viewer for apps)
+  BLENDER_VIEWER_LIST_MODELS: 'blenderViewer:listModels',
+  BLENDER_VIEWER_VIEWER_URL: 'blenderViewer:viewerUrl',
+  BLENDER_VIEWER_STATUS: 'blenderViewer:status',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -942,6 +952,35 @@ const coderixAPI = {
       };
       ipcRenderer.on(CH.CAD_VIEWER_STATUS_CHANGED, handler);
       return () => ipcRenderer.removeListener(CH.CAD_VIEWER_STATUS_CHANGED, handler);
+    },
+  },
+
+  // ── Blender preview (live render of the running Blender scene) ──────────
+
+  blender: {
+    status(): Promise<{ connected: boolean }> {
+      return ipcRenderer.invoke(CH.BLENDER_STATUS);
+    },
+    preview(): Promise<{ connected: boolean; png?: string }> {
+      return ipcRenderer.invoke(CH.BLENDER_PREVIEW);
+    },
+    /** Auto-launch Blender if it isn't running (no-op when already up). */
+    launch(): Promise<{ connected: boolean; launched?: boolean }> {
+      return ipcRenderer.invoke(CH.BLENDER_LAUNCH);
+    },
+  },
+
+  // ── Blender viewer (interactive .glb viewer) ──────────────────────────
+
+  blenderViewer: {
+    status(): Promise<{ running: boolean; baseUrl: string }> {
+      return ipcRenderer.invoke(CH.BLENDER_VIEWER_STATUS);
+    },
+    listModels(dirPath: string): Promise<Array<{ name: string; path: string; mtime: number }>> {
+      return ipcRenderer.invoke(CH.BLENDER_VIEWER_LIST_MODELS, dirPath);
+    },
+    viewerUrl(fileAbs: string): Promise<{ url: string }> {
+      return ipcRenderer.invoke(CH.BLENDER_VIEWER_VIEWER_URL, fileAbs);
     },
   },
 

@@ -301,6 +301,12 @@ export const en: Record<TranslationKey, string> = {
   'apps.none': 'None',
   'apps.status.generating': 'Generating',
   'apps.status.generated': 'Generated',
+  'apps.blender.disconnected': 'Blender not connected',
+  'apps.blender.connecting': 'Connecting to Blender…',
+  'apps.blender.hint': 'Blender auto-launch attempted; if still disconnected, install and enable the MCP addon in Blender (one-time manual setup).',
+  'apps.blender.model': 'Model',
+  'apps.blender.noModel': 'No .glb model yet — export one from Blender in the conversation',
+  'apps.blender.liveRender': 'Live render',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',

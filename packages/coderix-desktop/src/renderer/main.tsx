@@ -104,6 +104,16 @@ declare global {
       cad: {
         listSteps(dirPath: string): Promise<Array<{ id: string; name: string; baseName: string; version: number; isLatest: boolean; kind: 'assembly' | 'part' | 'frame'; status: 'generating' | 'generated'; viewerFile?: string; sourcePath?: string; stepPath?: string; glbPath?: string; snapshotPath?: string }>>;
       };
+      blender: {
+        status(): Promise<{ connected: boolean }>;
+        preview(): Promise<{ connected: boolean; png?: string }>;
+        launch(): Promise<{ connected: boolean; launched?: boolean }>;
+      };
+      blenderViewer: {
+        status(): Promise<{ running: boolean; baseUrl: string }>;
+        listModels(dirPath: string): Promise<Array<{ name: string; path: string; mtime: number }>>;
+        viewerUrl(fileAbs: string): Promise<{ url: string }>;
+      };
       onStreamEvent(callback: (event: unknown) => void): () => void;
       onPermissionRequest(callback: (req: unknown) => void): () => void;
       onStateChange(callback: (change: unknown) => void): () => void;

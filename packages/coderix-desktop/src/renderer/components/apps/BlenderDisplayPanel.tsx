@@ -1,0 +1,242 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Box } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
+import type { AppDefinition } from './registry';
+
+/**
+ * BlenderDisplayPanel — the right-hand "app display page" for the blender-harness
+ * app. Two views of the model:
+ *   - an interactive three.js `.glb` viewer (embedded as a native WebContentsView,
+ *     the Blender analogue of cad_harness's `.step`/`.glb` viewer), and
+ *   - a small live PNG render thumbnail polled from the Blender MCP addon.
+ * Blender itself is auto-launched on open and runs as a separate native window;
+ * its GUI can't be embedded in Electron — this panel is the in-panel substitute.
+ */
+
+const TAB_ID = 'blender-viewer';
+
+/** Poll interval for the live render thumbnail + workspace .glb scan (ms). */
+const POLL_INTERVAL_MS = 10_000;
+
+interface BlenderModel {
+  name: string;
+  path: string;
+  mtime: number;
+}
+
+function blenderAPI(): Window['coderixAPI']['blender'] | undefined {
+  return window.coderixAPI?.blender;
+}
+function blenderViewerAPI(): Window['coderixAPI']['blenderViewer'] | undefined {
+  return window.coderixAPI?.blenderViewer;
+}
+function browserAPI(): Window['coderixAPI']['browser'] | undefined {
+  return window.coderixAPI?.browser;
+}
+
+export function BlenderDisplayPanel({
+  app,
+  workspaceDir,
+  onClose,
+}: {
+  app: AppDefinition;
+  workspaceDir: string;
+  onClose: () => void;
+}): React.ReactElement {
+  const t = useT();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastUrlRef = useRef('');
+  const [models, setModels] = useState<BlenderModel[]>([]);
+  const [selectedPath, setSelectedPath] = useState('');
+  const [viewerUrl, setViewerUrl] = useState('');
+  const [png, setPng] = useState('');
+  const [connected, setConnected] = useState(false);
+
+  // ── Auto-launch Blender + poll the live render thumbnail ──────────────
+  useEffect(() => {
+    const b = blenderAPI();
+    if (!b) return;
+    let cancelled = false;
+    void b.launch().catch(() => {});
+    const refresh = async (): Promise<void> => {
+      try {
+        const res = await b.preview();
+        if (cancelled) return;
+        setConnected(res.connected);
+        if (res.png) setPng(res.png);
+      } catch {
+        if (!cancelled) setConnected(false);
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  // ── Scan the workspace for exported .glb files (poll so new exports appear) ──
+  useEffect(() => {
+    if (!workspaceDir) return;
+    const bv = blenderViewerAPI();
+    if (!bv) return;
+    let cancelled = false;
+    const refresh = async (): Promise<void> => {
+      try {
+        const list = await bv.listModels(workspaceDir);
+        if (!cancelled) setModels(list ?? []);
+      } catch {
+        // Scan failed — leave the existing list.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [workspaceDir]);
+
+  // ── Auto-select the newest model ──────────────────────────────────────
+  useEffect(() => {
+    if (selectedPath || models.length === 0) return;
+    setSelectedPath(models[0].path);
+  }, [models, selectedPath]);
+
+  // ── Resolve the selected model to a viewer URL ────────────────────────
+  useEffect(() => {
+    if (!selectedPath) {
+      setViewerUrl('');
+      return;
+    }
+    const bv = blenderViewerAPI();
+    if (!bv) return;
+    let cancelled = false;
+    bv
+      .viewerUrl(selectedPath)
+      .then((r) => {
+        if (!cancelled) setViewerUrl(r.url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPath]);
+
+  // ── Create + show the native view, glued to the container ─────────────
+  useEffect(() => {
+    if (!viewerUrl) return;
+    const a = browserAPI();
+    const container = containerRef.current;
+    if (!a || !container) return;
+    let cancelled = false;
+
+    const urlAtCreate = viewerUrl;
+    (async () => {
+      try {
+        await a.create(TAB_ID, urlAtCreate);
+      } catch (err) {
+        console.warn('[BlenderDisplay] create failed:', err);
+      }
+      if (cancelled) return;
+      const r = container.getBoundingClientRect();
+      await a.show(TAB_ID, {
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      });
+    })();
+
+    const updateBounds = (): void => {
+      const r = container.getBoundingClientRect();
+      a.setBounds(TAB_ID, {
+        x: Math.round(r.x),
+        y: Math.round(r.y),
+        width: Math.round(r.width),
+        height: Math.round(r.height),
+      });
+    };
+    const ro = new ResizeObserver(updateBounds);
+    ro.observe(container);
+    window.addEventListener('resize', updateBounds);
+
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+      window.removeEventListener('resize', updateBounds);
+      a.hide(TAB_ID).catch(() => {});
+    };
+  }, [viewerUrl]);
+
+  // ── Navigate the already-created view when the selected model changes ──
+  useEffect(() => {
+    if (!viewerUrl || viewerUrl === lastUrlRef.current) return;
+    lastUrlRef.current = viewerUrl;
+    browserAPI()?.navigate(TAB_ID, viewerUrl).catch(() => {});
+  }, [viewerUrl]);
+
+  return (
+    <div className="h-full flex flex-col bg-[var(--color-bg-secondary)]">
+      {/* Header */}
+      <div className="flex items-center gap-2 h-10 px-3 shrink-0 border-b border-[var(--color-separator)] bg-[var(--color-bg-primary)]">
+        <span className="flex-1 text-sm font-medium text-[var(--color-text-primary)] truncate">{app.name}</span>
+        <span
+          className={`w-2 h-2 rounded-full ${connected ? 'bg-[var(--color-success,#22c55e)]' : 'bg-[var(--color-text-tertiary)]'}`}
+          title={connected ? 'Blender connected' : t('apps.blender.disconnected')}
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+          title={t('apps.back')}
+          aria-label={t('apps.back')}
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {/* Viewer area (native WebContentsView) */}
+      <div className="flex-1 relative overflow-hidden bg-[var(--color-bg-secondary)] min-h-0">
+        <div ref={containerRef} className="absolute inset-0" />
+        {!viewerUrl && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <Box size={26} className="text-[var(--color-text-tertiary)]" />
+            <div className="text-sm text-[var(--color-text-secondary)] max-w-sm">{t('apps.blender.noModel')}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom bar — model selector + live render thumbnail */}
+      <div className="shrink-0 border-t border-[var(--color-separator)] flex items-center gap-2 px-3 py-2 bg-[var(--color-bg-primary)]">
+        <span className="shrink-0 text-[11px] font-medium text-[var(--color-text-tertiary)]">{t('apps.blender.model')}</span>
+        <select
+          value={selectedPath}
+          onChange={(e) => setSelectedPath(e.target.value)}
+          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-separator)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"
+        >
+          {models.length === 0 ? (
+            <option value="">{t('apps.blender.noModel')}</option>
+          ) : (
+            models.map((m) => (
+              <option key={m.path} value={m.path}>
+                {m.name}
+              </option>
+            ))
+          )}
+        </select>
+        {png && (
+          <img
+            src={`data:image/png;base64,${png}`}
+            alt="live render"
+            title={t('apps.blender.liveRender')}
+            className="h-10 w-14 shrink-0 object-contain rounded-[var(--radius-sm)] border border-[var(--color-separator)] bg-black"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+BlenderDisplayPanel.displayName = 'BlenderDisplayPanel';
