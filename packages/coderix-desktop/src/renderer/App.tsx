@@ -1114,7 +1114,6 @@ export function App(): React.ReactElement {
             activeApp.display.kind === 'blender-viewer' ? (
               <BlenderDisplayPanel
                 app={activeApp}
-                workspaceDir={projectPath}
                 onClose={() => setActiveAppId(null)}
               />
             ) : (

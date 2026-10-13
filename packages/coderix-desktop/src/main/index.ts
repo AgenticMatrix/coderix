@@ -24,10 +24,6 @@ import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
 import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
-import { createBlenderViewerManager } from './blender-viewer.js';
-import type { BlenderViewerManager } from './blender-viewer.js';
-import { createBlenderStreamManager } from './blender-stream.js';
-import type { BlenderStreamManager } from './blender-stream.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
@@ -76,8 +72,6 @@ let trayManager: TrayManager | null = null;
 let browserViewManager: BrowserViewManager | null = null;
 let cadViewerManager: CadViewerManager | null = null;
 let blenderPreviewManager: BlenderPreviewManager | null = null;
-let blenderViewerManager: BlenderViewerManager | null = null;
-let blenderStreamManager: BlenderStreamManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
@@ -149,14 +143,6 @@ async function bootstrap(): Promise<void> {
     // Step 1d: Create the blender-preview manager (registers blender:status /
     // blender:preview IPC handlers for the "blender-viewer" display panel).
     blenderPreviewManager = createBlenderPreviewManager(windowManager);
-
-    // Step 1e: Create the blender-viewer manager (serves the interactive .glb
-    // viewer for the "blender-viewer" display panel) before load.
-    blenderViewerManager = createBlenderViewerManager();
-
-    // Step 1f: Create the blender-stream manager (MJPEG live viewport feed for
-    // the "blender-viewer" display panel) before load.
-    blenderStreamManager = createBlenderStreamManager();
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
@@ -579,8 +565,6 @@ app.on('before-quit', () => {
   browserViewManager?.destroy();
   cadViewerManager?.destroy();
   blenderPreviewManager?.destroy();
-  blenderViewerManager?.destroy();
-  blenderStreamManager?.destroy();
   fileWatcher?.destroy();
   terminalManager?.destroyAll();
   trayManager?.destroy();
