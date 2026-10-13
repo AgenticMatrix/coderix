@@ -140,14 +140,6 @@ const CH = {
   BLENDER_STATUS: 'blender:status',
   BLENDER_PREVIEW: 'blender:preview',
   BLENDER_LAUNCH: 'blender:launch',
-
-  // Blender viewer (interactive .glb viewer for apps)
-  BLENDER_VIEWER_LIST_MODELS: 'blenderViewer:listModels',
-  BLENDER_VIEWER_VIEWER_URL: 'blenderViewer:viewerUrl',
-  BLENDER_VIEWER_STATUS: 'blenderViewer:status',
-
-  // Blender stream (live MJPEG viewport feed for apps)
-  BLENDER_STREAM_URL: 'blenderStream:url',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -970,28 +962,6 @@ const coderixAPI = {
     /** Auto-launch Blender if it isn't running (no-op when already up). */
     launch(): Promise<{ connected: boolean; launched?: boolean }> {
       return ipcRenderer.invoke(CH.BLENDER_LAUNCH);
-    },
-  },
-
-  // ── Blender viewer (interactive .glb viewer) ──────────────────────────
-
-  blenderViewer: {
-    status(): Promise<{ running: boolean; baseUrl: string }> {
-      return ipcRenderer.invoke(CH.BLENDER_VIEWER_STATUS);
-    },
-    listModels(dirPath: string): Promise<Array<{ name: string; path: string; mtime: number }>> {
-      return ipcRenderer.invoke(CH.BLENDER_VIEWER_LIST_MODELS, dirPath);
-    },
-    viewerUrl(fileAbs: string): Promise<{ url: string }> {
-      return ipcRenderer.invoke(CH.BLENDER_VIEWER_VIEWER_URL, fileAbs);
-    },
-  },
-
-  // ── Blender stream (live MJPEG viewport feed) ─────────────────────────
-
-  blenderStream: {
-    url(): Promise<{ url: string }> {
-      return ipcRenderer.invoke(CH.BLENDER_STREAM_URL);
     },
   },
 
