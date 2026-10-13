@@ -136,6 +136,20 @@ async function bootstrap(): Promise<void> {
     const sessionManager = new SessionManager();
     sessionManagerRef = sessionManager;
 
+    // Remove incomplete sessions left behind by prior runs — most notably
+    // "phantom" sessions that a full compaction reduced to nothing but a
+    // compact_boundary + "This session is being continued…" summary (no
+    // assistant reply). These clutter the sidebar with entries that open to a
+    // single summary message and no real conversation.
+    try {
+      const removed = sessionManager.cleanupIncompleteSessions();
+      if (removed > 0) {
+        console.log(`[session] Cleaned up ${removed} incomplete session(s)`);
+      }
+    } catch {
+      // Best-effort — a failed cleanup must not block startup.
+    }
+
     // Restore the workspace from the most recently used session so a restart
     // reopens the project that session was working in (each session remembers
     // its own workspace), instead of the app's launch directory. Only a
