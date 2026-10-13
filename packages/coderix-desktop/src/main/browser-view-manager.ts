@@ -51,8 +51,29 @@ export function createBrowserViewManager(windowManager: WindowManager): BrowserV
   const views = new Map<string, WebContentsView>();
   let activeTabId: string | null = null;
 
+  // Navigating an embedded WebContentsView on macOS while the window is in the
+  // background focuses the view (`WebContentsView::Focus()` → `makeKeyAndOrderFront:`),
+  // pulling the whole app to the front over whatever the user is doing. Defer
+  // those navigations until the window regains focus so background CAD/browser
+  // updates (e.g. the viewer auto-following a newly rendered part) stay silent.
+  const pendingNav = new Map<string, string>();
+  const focusFlushWired = new WeakSet<BrowserWindow>();
+
   function mainWindow(): BrowserWindow | null {
     return windowManager.getMainWindow() ?? null;
+  }
+
+  function attachFocusFlush(win: BrowserWindow): void {
+    if (focusFlushWired.has(win)) return;
+    focusFlushWired.add(win);
+    win.on('focus', () => {
+      if (pendingNav.size === 0) return;
+      for (const [tabId, url] of pendingNav) {
+        const view = views.get(tabId);
+        if (view) view.webContents.loadURL(url).catch(() => {});
+      }
+      pendingNav.clear();
+    });
   }
 
   function getView(tabId: string): WebContentsView {
@@ -141,6 +162,14 @@ export function createBrowserViewManager(windowManager: WindowManager): BrowserV
   });
 
   ipcMain.handle(BROWSER_CHANNELS.NAVIGATE, (_e, { tabId, url }: { tabId: string; url: string }) => {
+    const win = mainWindow();
+    if (win && !win.isFocused()) {
+      // Don't navigate a background window — loading the embedded view would
+      // focus it and pull the app to the front. Defer until the window regains focus.
+      pendingNav.set(tabId, url);
+      attachFocusFlush(win);
+      return;
+    }
     getView(tabId).webContents.loadURL(url).catch(() => {});
   });
 
