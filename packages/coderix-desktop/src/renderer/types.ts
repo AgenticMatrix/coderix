@@ -89,6 +89,8 @@ export interface SessionInfo {
   createdAt: number;
   agentType?: string;
   pluginId?: string;
+  /** Working directory of the session (for workspace grouping). */
+  workDir?: string;
 }
 
 /** A versioned CAD step surfaced by `cad:listSteps` (mirrors cad_harness's Step). */

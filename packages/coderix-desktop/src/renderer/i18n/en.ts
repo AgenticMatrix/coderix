@@ -151,8 +151,6 @@ export const en: Record<TranslationKey, string> = {
 
   // ── 会话列表 ──────────────────────────────────────────
   'session.loading': 'Loading...',
-  'session.clearAll': 'Clear all ({n})',
-  'session.confirmClear': 'Delete all sessions?',
   'session.notFound': 'No sessions found',
   'session.empty': 'Click + to start a new session',
   'session.delete': 'Delete session',
@@ -160,6 +158,10 @@ export const en: Record<TranslationKey, string> = {
   'session.newSession': 'New chat',
   'session.search': 'Search sessions...',
   'session.new': 'New session',
+  'session.viewOptions': 'View options',
+  'session.groupByFlat': 'Single list',
+  'session.groupByWorkspace': 'By workspace',
+  'session.ungrouped': 'Ungrouped',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '{n} answers needed',
