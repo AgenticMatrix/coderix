@@ -94,8 +94,9 @@ export function Sidebar({
       </div>
 
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <motion.div
+          className="h-full"
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.15 }}
