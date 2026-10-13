@@ -297,6 +297,12 @@ export const zh = {
   'apps.none': '暂无',
   'apps.status.generating': '生成中',
   'apps.status.generated': '已生成',
+  'apps.blender.disconnected': 'Blender 未连接',
+  'apps.blender.connecting': '正在连接 Blender…',
+  'apps.blender.hint': '已尝试自动启动 Blender；若仍未连接，请确认在 Blender 中已安装并启用 MCP addon（首次需手动安装一次）。',
+  'apps.blender.model': '模型',
+  'apps.blender.noModel': '暂无 .glb 模型，在左侧对话中让 Blender 导出 .glb 后会出现在这里',
+  'apps.blender.liveRender': '实时渲染',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

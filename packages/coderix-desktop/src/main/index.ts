@@ -21,6 +21,11 @@ import type { CadViewerManager } from './cad-viewer-manager.js';
 import { installCadSkills } from './cad-skills.js';
 import { applyCadEnv } from './cad-paths.js';
 import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
+import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
+import { createBlenderPreviewManager } from './blender-preview.js';
+import type { BlenderPreviewManager } from './blender-preview.js';
+import { createBlenderViewerManager } from './blender-viewer.js';
+import type { BlenderViewerManager } from './blender-viewer.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
@@ -68,6 +73,8 @@ let terminalManager: TerminalManager | null = null;
 let trayManager: TrayManager | null = null;
 let browserViewManager: BrowserViewManager | null = null;
 let cadViewerManager: CadViewerManager | null = null;
+let blenderPreviewManager: BlenderPreviewManager | null = null;
+let blenderViewerManager: BlenderViewerManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
@@ -104,6 +111,11 @@ async function bootstrap(): Promise<void> {
     installCadPluginManifest();
     installCadControlMcp();
 
+    // Seed the blender-harness plugin manifest + register the official blender
+    // MCP server so plugin conversations can drive a running Blender. Idempotent.
+    installBlenderPluginManifest();
+    installBlenderMcp();
+
     const initialConfig = loadDesktopConfig();
     // Restore the last-used workspace across restarts. `loadConfig().cwd` is
     // `process.cwd()` (the app's launch dir, e.g. `packages/coderix-desktop`),
@@ -130,6 +142,14 @@ async function bootstrap(): Promise<void> {
     // Step 1c: Create cad-viewer manager (spawns the 3D viewer on demand for the
     // "apps" display panel) so its IPC handlers are registered before load.
     cadViewerManager = createCadViewerManager(windowManager);
+
+    // Step 1d: Create the blender-preview manager (registers blender:status /
+    // blender:preview IPC handlers for the "blender-viewer" display panel).
+    blenderPreviewManager = createBlenderPreviewManager();
+
+    // Step 1e: Create the blender-viewer manager (serves the interactive .glb
+    // viewer for the "blender-viewer" display panel) before load.
+    blenderViewerManager = createBlenderViewerManager();
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
@@ -551,6 +571,8 @@ app.on('before-quit', () => {
   ipcBridge?.destroy();
   browserViewManager?.destroy();
   cadViewerManager?.destroy();
+  blenderPreviewManager?.destroy();
+  blenderViewerManager?.destroy();
   fileWatcher?.destroy();
   terminalManager?.destroyAll();
   trayManager?.destroy();
