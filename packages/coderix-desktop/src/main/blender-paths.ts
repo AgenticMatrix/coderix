@@ -71,3 +71,8 @@ export function resolveBlenderBin(): string {
 export function resolveBlenderPreviewPath(): string {
   return path.join(os.homedir(), '.coderix', 'blender', 'preview.png');
 }
+
+/** Fixed JPEG path for the live viewport stream (MJPEG) frames. */
+export function resolveBlenderStreamPath(): string {
+  return path.join(os.homedir(), '.coderix', 'blender', 'stream.jpg');
+}
