@@ -148,7 +148,7 @@ async function bootstrap(): Promise<void> {
 
     // Step 1d: Create the blender-preview manager (registers blender:status /
     // blender:preview IPC handlers for the "blender-viewer" display panel).
-    blenderPreviewManager = createBlenderPreviewManager();
+    blenderPreviewManager = createBlenderPreviewManager(windowManager);
 
     // Step 1e: Create the blender-viewer manager (serves the interactive .glb
     // viewer for the "blender-viewer" display panel) before load.
