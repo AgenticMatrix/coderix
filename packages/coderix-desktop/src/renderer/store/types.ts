@@ -25,6 +25,8 @@ export interface SessionSummary {
   agentType?: string;
   /** Plugin name this session was created from. */
   pluginId?: string;
+  /** Working directory of the session (for workspace grouping). */
+  workDir?: string;
 }
 
 /** Aggregated token usage for the current session */

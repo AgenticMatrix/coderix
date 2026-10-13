@@ -147,8 +147,6 @@ export const zh = {
 
   // ── 会话列表 ──────────────────────────────────────────
   'session.loading': '加载中...',
-  'session.clearAll': '清除全部 ({n})',
-  'session.confirmClear': '确定要删除所有会话？',
   'session.notFound': '未找到会话',
   'session.empty': '点击 + 开始新会话',
   'session.delete': '删除会话',
@@ -156,6 +154,10 @@ export const zh = {
   'session.newSession': '新对话',
   'session.search': '搜索会话...',
   'session.new': '新建会话',
+  'session.viewOptions': '视图选项',
+  'session.groupByFlat': '单列表',
+  'session.groupByWorkspace': '按工作区',
+  'session.ungrouped': '未分组',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '需要你补充 {n} 个回答',
