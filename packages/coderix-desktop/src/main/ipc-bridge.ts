@@ -10,13 +10,13 @@
  */
 
 import { ipcMain, BrowserWindow, app, dialog, shell } from 'electron';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { execSync, spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve, normalize, relative, isAbsolute, dirname } from 'node:path';
-import { homedir, platform } from 'node:os';
+import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
 import type { Stats } from 'node:fs';
 
@@ -339,18 +339,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       throw new Error('QueryEngine factory not initialized');
     }
 
-    // Finalize the active session's workspace on the first message. A
-    // brand-new conversation is parked on the default-workspace base (or a hash
-    // subdir) and only here mints its own fresh hash subdir — "new
-    // conversation" alone never touches disk. Resuming an existing session
-    // keeps its persisted workspace; a conversation bound to a user-selected
-    // project stays there.
-    const pending = sessionManager.tryGetActive();
-    if (pending && pending.messages.length === 0 && isDefaultWorkspaceContext(pending.cwd)) {
-      const ws = createConversationWorkspace(randomUUID());
-      currentWorkDir = ws;
-      sessionManager.setCwd(pending.id, ws);
-    }
+    // The session's workspace is final at creation (the default-workspace base,
+    // or the user-selected project) — no per-conversation subdir is minted here.
 
     // The session id this stream belongs to — captured as a local so every push
     // event from this query is tagged correctly even as other sessions stream
@@ -1610,7 +1600,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return { paths: readRecentProjects() };
   });
 
-  // ── Default workspace (per-conversation hash subdirs) ──────────────────
+  // ── Default workspace ───────────────────────────────────────────────────
 
   ipcMain.handle('defaultWorkspace:get', async () => {
     return { path: getDefaultWorkspaceDir() };
@@ -2785,14 +2775,12 @@ function previewMatchLine(content: string, idx: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Default workspace — base dir + per-conversation hash subdirs
+// Default workspace — base directory
 // ---------------------------------------------------------------------------
 
 /** Platform default base directory for new conversations. */
 function platformDefaultWorkspaceDir(): string {
-  return platform() === 'win32'
-    ? join('D:\\agentstation', 'app')
-    : join(homedir(), 'Documents', 'agentstation', 'apps');
+  return join(homedir(), 'Documents', 'coderix');
 }
 
 /** The persisted (or platform-default) base directory, created if missing. */
@@ -2814,23 +2802,12 @@ export function setDefaultWorkspaceDir(path: string): string {
   return dir;
 }
 
-/** Create a per-conversation hash-named subdir under the default base dir. */
-function createConversationWorkspace(seed: string): string {
-  const base = getDefaultWorkspaceDir();
-  const hash = createHash('sha256').update(seed).digest('hex').slice(0, 12);
-  const dir = join(base, hash);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
 /**
- * True when `cwd` is the default workspace base dir, or a conversation hash
- * subdir directly under it — i.e. the user has not chosen an explicit project.
+ * True when `cwd` is the default workspace base dir — i.e. the user has not
+ * chosen an explicit project directory.
  */
 export function isDefaultWorkspaceContext(cwd: string): boolean {
-  const base = resolve(getDefaultWorkspaceDir());
-  const c = resolve(cwd);
-  return c === base || dirname(c) === base;
+  return resolve(cwd) === resolve(getDefaultWorkspaceDir());
 }
 
 // Recent project (workspace) history — persisted to ~/.coderix/recent_projects.json
@@ -2882,10 +2859,9 @@ function forgetProject(path: string): string[] {
  * `recent_projects.json` is the persistence source, but it accumulates noise —
  * the app's own launch directory (`process.cwd()`, e.g. `packages/coderix-desktop`
  * in dev), a stale legacy base from an older app (`~/.agentstation/apps`), the
- * filesystem root, etc. Restore only directories that actually live inside the
- * default workspace (the base or a conversation hash subdir); external projects
- * are reopened explicitly through the library, and anything unrecognized falls
- * back to the default-workspace base.
+ * filesystem root, etc. Restore only the default-workspace base dir; external
+ * projects are reopened explicitly through the library, and anything
+ * unrecognized falls back to the default-workspace base.
  */
 export function getLastWorkspace(): string | undefined {
   const launchDir = resolve(process.cwd());
