@@ -13,7 +13,7 @@
  * half resolution) to avoid hogging Blender's render thread pool on every poll.
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, screen } from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
@@ -24,6 +24,7 @@ import {
   resolveBlenderPort,
   resolveBlenderPreviewPath,
 } from './blender-paths.js';
+import type { WindowManager } from './window-manager.js';
 
 export const BLENDER_PREVIEW_CHANNELS = {
   STATUS: 'blender:status',
@@ -156,7 +157,7 @@ export interface BlenderPreviewManager {
   destroy(): void;
 }
 
-export function createBlenderPreviewManager(): BlenderPreviewManager {
+export function createBlenderPreviewManager(windowManager: WindowManager): BlenderPreviewManager {
   const host = resolveBlenderHost();
   const port = resolveBlenderPort();
   const previewPath = resolveBlenderPreviewPath();
@@ -219,12 +220,42 @@ export function createBlenderPreviewManager(): BlenderPreviewManager {
     return false;
   }
 
+  /**
+   * Tile the two windows side-by-side and return the `--window-geometry` args for
+   * Blender: coderix is resized to the LEFT half of the usable area, Blender is
+   * launched flush on the RIGHT half (edges exactly adjacent, both full height).
+   * Blender takes the LOWER-LEFT corner (`sx, sy`), so we flip Electron's
+   * top-left `y` against the display's bottom edge. Returns [] when unknown.
+   */
+  function windowGeometryArgs(): string[] {
+    const win = windowManager.getMainWindow();
+    if (!win || win.isDestroyed()) return [];
+    const bounds = win.getBounds();
+    const display = screen.getDisplayMatching(bounds);
+    const wa = display.workArea;
+
+    const half = Math.floor(wa.width / 2);
+    try {
+      win.setBounds({ x: wa.x, y: wa.y, width: half, height: wa.height });
+    } catch {
+      // Resizing coderix is best-effort — still launch Blender on the right half.
+    }
+
+    const left = wa.x + half;
+    const top = wa.y;
+    const width = wa.x + wa.width - left;
+    const height = wa.height;
+    const bottom = Math.round(display.bounds.y + display.bounds.height - (top + height));
+    return ['--window-geometry', String(left), String(bottom), String(width), String(height)];
+  }
+
   function spawnBlender(): void {
     const bin = resolveBlenderBin();
+    const args = [...windowGeometryArgs(), '--online-mode'];
     try {
-      const child = spawn(bin, ['--online-mode'], { detached: true, stdio: 'ignore' });
+      const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
       child.unref();
-      console.log(`[BlenderPreview] launched Blender: ${bin} --online-mode`);
+      console.log(`[BlenderPreview] launched Blender: ${bin} ${args.join(' ')}`);
     } catch (err) {
       console.warn('[BlenderPreview] failed to launch Blender:', err instanceof Error ? err.message : err);
     }
