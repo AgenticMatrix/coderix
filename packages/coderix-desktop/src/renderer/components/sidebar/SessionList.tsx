@@ -126,7 +126,7 @@ export function SessionList({
     }`;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* View options — 单列表 / 按工作区 */}
       <div className="px-3 py-1.5 border-b border-[var(--color-separator)] flex-shrink-0">
         <div
@@ -145,7 +145,7 @@ export function SessionList({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="flex-1 min-h-0 overflow-y-auto py-1">
         {filtered.length === 0 ? (
           <div className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
             {searchQuery ? t('session.notFound') : t('session.empty')}
