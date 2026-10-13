@@ -58,7 +58,7 @@ interface BlenderResponse {
  * Send a snippet of Python to the Blender addon and resolve the parsed response.
  * Protocol: null-byte-delimited JSON — `{"type":"execute","code":…,"strict_json":true}\0`.
  */
-function sendCode(
+export function sendCode(
   host: string,
   port: number,
   code: string,

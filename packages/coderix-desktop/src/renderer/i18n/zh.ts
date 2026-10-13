@@ -303,6 +303,8 @@ export const zh = {
   'apps.blender.model': '模型',
   'apps.blender.noModel': '暂无 .glb 模型，在左侧对话中让 Blender 导出 .glb 后会出现在这里',
   'apps.blender.liveRender': '实时渲染',
+  'apps.blender.stream': '实时视口',
+  'apps.blender.model3d': '3D 模型',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

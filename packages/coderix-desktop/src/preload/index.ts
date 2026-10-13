@@ -145,6 +145,9 @@ const CH = {
   BLENDER_VIEWER_LIST_MODELS: 'blenderViewer:listModels',
   BLENDER_VIEWER_VIEWER_URL: 'blenderViewer:viewerUrl',
   BLENDER_VIEWER_STATUS: 'blenderViewer:status',
+
+  // Blender stream (live MJPEG viewport feed for apps)
+  BLENDER_STREAM_URL: 'blenderStream:url',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -981,6 +984,14 @@ const coderixAPI = {
     },
     viewerUrl(fileAbs: string): Promise<{ url: string }> {
       return ipcRenderer.invoke(CH.BLENDER_VIEWER_VIEWER_URL, fileAbs);
+    },
+  },
+
+  // ── Blender stream (live MJPEG viewport feed) ─────────────────────────
+
+  blenderStream: {
+    url(): Promise<{ url: string }> {
+      return ipcRenderer.invoke(CH.BLENDER_STREAM_URL);
     },
   },
 
