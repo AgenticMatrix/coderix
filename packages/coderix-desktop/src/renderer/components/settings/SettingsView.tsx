@@ -471,7 +471,7 @@ export default function SettingsView({ onClose }: { onClose?: () => void }): Rea
                   <input
                     value={workspaceValue}
                     onChange={(e) => setWorkspaceValue(e.target.value)}
-                    placeholder="~/Documents/agentstation/apps"
+                    placeholder="~/Documents/coderix"
                     spellCheck={false}
                     style={{
                       flex: 1,

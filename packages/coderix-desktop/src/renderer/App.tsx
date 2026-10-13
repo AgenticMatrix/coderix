@@ -742,8 +742,8 @@ export function App(): React.ReactElement {
     setSessionModelState(null);
     setSelectedSkills([]);
     const cwd = await createSession();
-    // A new conversation always lands in a fresh hash subdir under the default
-    // workspace — reflect it in the workspace label immediately.
+    // A new conversation lands in the current workspace (default base or the
+    // open project) — reflect it in the workspace label immediately.
     if (cwd) setProjectPath(cwd);
     const newSid = useSessionStore.getState().currentSessionId;
     if (newSid) {
@@ -984,8 +984,7 @@ export function App(): React.ReactElement {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
           await submitQuery(value, currentSid, selectedSkills);
-          // The main process mints the conversation's hash subdir on the first
-          // message — refresh the workspace label so it reflects the new dir.
+          // Refresh the workspace label so it reflects the conversation's dir.
           getProjectDirectory()
             .then((r) => setProjectPath(r.path))
             .catch(() => {});
