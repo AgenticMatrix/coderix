@@ -63,14 +63,45 @@ Coderix is a [pnpm](https://pnpm.io) monorepo:
 
 ### Install
 
+The `./install.sh` installer supports several scopes. Run it from the repo root:
+
 ```bash
 git clone https://github.com/AgenticMatrix/coderix.git
 cd coderix
 
 ./install.sh --local      # CLI only
 ./install.sh --desktop    # Desktop app only
-./install.sh --all        # Both
+./install.sh --all        # Both CLI + Desktop
 ```
+
+| Command | What it does |
+|---|---|
+| `./install.sh --local` | Installs deps, builds the CLI, links `coderix` onto `PATH` |
+| `./install.sh --desktop` | Installs desktop deps + the Claude Code runtime (does **not** rebuild the Electron bundle) |
+| `./install.sh --all` | Both of the above |
+| `./install.sh --reinstall --desktop` | Clean rebuild: wipes `dist`/`out` + `node_modules`, then rebuilds the desktop bundle |
+| `./install.sh --reinstall --all` | Clean rebuild of both CLI + desktop |
+
+**When to use `--reinstall`:** the desktop app runs the pre-bundled
+`packages/coderix-desktop/dist/main/index.cjs`. A plain `--desktop` only installs
+dependencies, so a source change (e.g. a fix in `coderix-core`) won't take effect
+until the Electron bundle is rebuilt. After `git pull` — or after editing any
+`packages/coderix-*` source — rebuild with:
+
+```bash
+./install.sh --reinstall --desktop
+# or, lighter (no dependency wipe):
+pnpm --filter @coderix/desktop build
+```
+
+#### One-shot remote install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AgenticMatrix/coderix/main/install.sh | bash
+```
+
+This installs `coderix` from the npm registry (the default path). For development,
+clone the repo and use the `--local` / `--desktop` flags above.
 
 ### Development
 
