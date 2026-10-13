@@ -158,18 +158,18 @@ export function SessionList({
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.key)}
-                  className="w-full flex items-center gap-1.5 px-3 pt-2 pb-1 text-left hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                  className="w-full flex items-center gap-1.5 px-3 pt-2 pb-1 text-left bg-[var(--color-brand-muted)] transition-colors"
                 >
                   <ChevronRight
                     size={11}
-                    className={`flex-shrink-0 text-[var(--color-text-tertiary)] transition-transform ${
+                    className={`flex-shrink-0 text-[var(--color-brand)] transition-transform ${
                       isCollapsed ? '' : 'rotate-90'
                     }`}
                   />
-                  <span className="flex-1 min-w-0 truncate text-[10px] font-bold text-[var(--color-text-secondary)]">
+                  <span className="flex-1 min-w-0 truncate text-[10px] font-bold text-[var(--color-brand)]">
                     {group.key ? folderName(group.key) : t('session.ungrouped')}
                   </span>
-                  <span className="flex-shrink-0 text-[10px] text-[var(--color-text-tertiary)]">
+                  <span className="flex-shrink-0 text-[10px] text-[var(--color-brand)]">
                     {group.sessions.length}
                   </span>
                 </button>
