@@ -63,6 +63,8 @@ Coderix 是一个 [pnpm](https://pnpm.io) monorepo：
 
 ### 安装
 
+安装脚本 `./install.sh` 支持多种装法。在仓库根目录执行：
+
 ```bash
 git clone https://github.com/AgenticMatrix/coderix.git
 cd coderix
@@ -71,6 +73,34 @@ cd coderix
 ./install.sh --desktop    # 仅桌面版
 ./install.sh --all        # 两者都装
 ```
+
+| 命令 | 作用 |
+|---|---|
+| `./install.sh --local` | 装依赖、构建 CLI、把 `coderix` 链接到 `PATH` |
+| `./install.sh --desktop` | 装桌面依赖 + Claude Code 运行时（**不会**重建 Electron bundle） |
+| `./install.sh --all` | 上面两者 |
+| `./install.sh --reinstall --desktop` | 干净重建：清掉 `dist`/`out` 和 `node_modules`，再重建桌面 bundle |
+| `./install.sh --reinstall --all` | CLI + 桌面全部干净重建 |
+
+**什么时候用 `--reinstall`：** 桌面应用运行的是预先打包好的
+`packages/coderix-desktop/dist/main/index.cjs`。普通的 `--desktop` 只装依赖，所以
+源码改动（比如 `coderix-core` 里的修复）不会生效，除非重建 Electron bundle。
+`git pull` 之后——或改了任意 `packages/coderix-*` 源码之后——用：
+
+```bash
+./install.sh --reinstall --desktop
+# 或更轻量（不重装依赖）：
+pnpm --filter @coderix/desktop build
+```
+
+#### 远程一行安装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AgenticMatrix/coderix/main/install.sh | bash
+```
+
+这会从 npm registry 安装 `coderix`（默认路径）。开发安装请 clone 仓库并使用上面的
+`--local` / `--desktop` 参数。
 
 ### 开发模式
 
