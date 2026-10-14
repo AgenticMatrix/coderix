@@ -15,7 +15,7 @@
 
 import { ipcMain, screen } from 'electron';
 import type { BrowserWindow } from 'electron';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -295,9 +295,9 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
       '        win = objc.objc_msgSend(wins, objc.sel_registerName(b"objectAtIndex:"), 0)',
       '    if win:',
       `        rect = NSRect(${x}, ${y}, ${w}, ${h})`,
-      '        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NSRect), ctypes.c_int]',
+      '        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, NSRect, ctypes.c_int]',
       '        objc.objc_msgSend.restype = None',
-      '        objc.objc_msgSend(win, objc.sel_registerName(b"setFrame:display:"), ctypes.byref(rect), 1)',
+      '        objc.objc_msgSend(win, objc.sel_registerName(b"setFrame:display:"), rect, 1)',
       '        result = {"status": "ok"}',
       '    else:',
       '        result = {"status": "error", "message": "no window"}',
@@ -342,14 +342,28 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
     win.on('resize', scheduleSync);
   }
 
+  /** Bring Blender to the front. `activate` is a plain Apple event (no Accessibility). */
+  function activateBlender(): void {
+    execFile('osascript', ['-e', 'tell application "Blender" to activate'], () => {
+      // best-effort — ignore failures (e.g. Blender not launched yet)
+    });
+  }
+
   async function launch(): Promise<BlenderLaunchInfo> {
     ensureWindowBinding();
-    if (await pingBlender(host, port)) return { connected: true };
+    if (isBlenderRunning()) {
+      // Already running — bring it to front and (re)tile to the right, so the
+      // button always "shows Blender on the right" like a freshly-opened window.
+      activateBlender();
+      syncTiling();
+      return { connected: true, launched: false };
+    }
     const now = Date.now();
     if (now - lastLaunchAttempt < 10_000) return { connected: false };
-    if (isBlenderRunning()) return { connected: false };
     lastLaunchAttempt = now;
     spawnBlender();
+    // Bring it to the front once it has finished starting.
+    setTimeout(activateBlender, 1_500);
     return { connected: false, launched: true };
   }
 
