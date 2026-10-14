@@ -222,32 +222,38 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
   }
 
   /**
-   * Tile the two windows side-by-side and return the `--window-geometry` args for
-   * Blender: coderix is resized to the LEFT half of the usable area, Blender is
-   * launched flush on the RIGHT half (edges exactly adjacent, both full height).
-   * Blender takes the LOWER-LEFT corner (`sx, sy`), so we flip Electron's
-   * top-left `y` against the display's bottom edge. Returns [] when unknown.
+   * Resize coderix to the left portion of the usable area (reserving at least 1/3
+   * of the width for Blender on the right), and return Blender's target geometry
+   * as `(x, y, w, h)` where `(x, y)` is the BOTTOM-LEFT corner in AppKit points.
+   * Returns null when the coderix window isn't available.
    */
-  function windowGeometryArgs(): string[] {
+  function tileForBlender(): { x: number; y: number; w: number; h: number } | null {
     const win = windowManager.getMainWindow();
-    if (!win || win.isDestroyed()) return [];
-    const bounds = win.getBounds();
-    const display = screen.getDisplayMatching(bounds);
+    if (!win || win.isDestroyed()) return null;
+    const display = screen.getDisplayMatching(win.getBounds());
     const wa = display.workArea;
 
-    const half = Math.floor(wa.width / 2);
+    // Blender gets at least 1/3 of the usable width; coderix keeps the rest.
+    const blenderWidth = Math.max(Math.floor(wa.width / 3), 480);
+    const coderixWidth = Math.max(wa.width - blenderWidth, 640);
     try {
-      win.setBounds({ x: wa.x, y: wa.y, width: half, height: wa.height });
+      win.setBounds({ x: wa.x, y: wa.y, width: coderixWidth, height: wa.height });
     } catch {
-      // Resizing coderix is best-effort — still launch Blender on the right half.
+      // Resizing coderix is best-effort — still tile Blender on the right.
     }
 
-    const left = wa.x + half;
+    const left = wa.x + coderixWidth;
     const top = wa.y;
-    const width = wa.x + wa.width - left;
     const height = wa.height;
     const bottom = Math.round(display.bounds.y + display.bounds.height - (top + height));
-    return ['--window-geometry', String(left), String(bottom), String(width), String(height)];
+    return { x: left, y: bottom, w: blenderWidth, h: height };
+  }
+
+  /** `--window-geometry` args for launching Blender tiled on the right. */
+  function windowGeometryArgs(): string[] {
+    const g = tileForBlender();
+    if (!g) return [];
+    return ['--window-geometry', String(g.x), String(g.y), String(g.w), String(g.h)];
   }
 
   function spawnBlender(): void {
@@ -356,10 +362,11 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
   async function launch(): Promise<BlenderLaunchInfo> {
     ensureWindowBinding();
     if (isBlenderRunning()) {
-      // Already running — bring it to front and (re)tile to the right, so the
-      // button always "shows Blender on the right" like a freshly-opened window.
+      // Already running — bring it to front and (re)tile: resize coderix to give
+      // Blender at least 1/3, then reposition Blender flush on the right.
       activateBlender();
-      syncTiling();
+      const g = tileForBlender();
+      if (g) repositionBlender(g.x, g.y, g.w, g.h);
       return { connected: true, launched: false };
     }
     const now = Date.now();
