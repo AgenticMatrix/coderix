@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FolderGit2, Globe, Maximize2, Minimize2, Boxes } from 'lucide-react';
+import { FolderGit2, Globe, Maximize2, Minimize2 } from 'lucide-react';
+import { BLENDER_ICON } from '../apps/icons';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
 import { EditorTabs } from '../editor/EditorTabs';
@@ -25,9 +26,8 @@ export interface AppLayoutProps {
   onToggleDetailPanel?: () => void;
   appDisplayPanel?: ReactNode;
   appDisplayVisible?: boolean;
-  /** Re-open the app display panel (shown only when the current conversation
-   *  has an attached app and the panel is collapsed). */
-  onOpenAppDisplay?: () => void;
+  /** Open Blender (native app, tiled to the right of the coderix window). */
+  onOpenBlender?: () => void;
   subagentPanel?: ReactNode;
   subagentVisible?: boolean;
   subagentWidth?: number;
@@ -97,7 +97,7 @@ export function AppLayout({
   onToggleDetailPanel,
   appDisplayPanel,
   appDisplayVisible = false,
-  onOpenAppDisplay,
+  onOpenBlender,
   subagentPanel,
   subagentVisible = false,
   subagentWidth = 440,
@@ -275,19 +275,17 @@ export function AppLayout({
               </button>
             )}
 
-            {/* App display toggle — shown only when the current conversation has an
-                attached app and its panel is collapsed, so it acts as a "reopen"
-                affordance (e.g. the cad-harness viewer). */}
-            {onOpenAppDisplay && !appDisplayVisible && (
+            {/* Open Blender — launch Blender natively, tiled to the right of coderix. */}
+            {onOpenBlender && (
               <button
                 className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
                            text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
                            hover:bg-[var(--color-bg-tertiary)] transition-colors"
-                onClick={onOpenAppDisplay}
-                title={t('nav.openAppDisplay')}
-                aria-label={t('nav.openAppDisplay')}
+                onClick={onOpenBlender}
+                title={t('nav.openBlender')}
+                aria-label={t('nav.openBlender')}
               >
-                <Boxes size={15} />
+                <img src={BLENDER_ICON} alt="" width={15} height={15} className="object-contain" />
               </button>
             )}
           </div>

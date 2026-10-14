@@ -258,7 +258,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.toggleSidebar': 'Toggle Sidebar',
   'nav.toggleFilePanel': 'Project Files',
   'nav.maximize': 'Maximize',
-  'nav.openAppDisplay': 'Open CAD viewer',
+  'nav.openBlender': 'Open Blender',
   'nav.restore': 'Restore',
 
   // ── Project management ────────────────────────────────
@@ -301,10 +301,6 @@ export const en: Record<TranslationKey, string> = {
   'apps.none': 'None',
   'apps.status.generating': 'Generating',
   'apps.status.generated': 'Generated',
-  'apps.blender.disconnected': 'Blender not connected',
-  'apps.blender.connected': 'Blender connected',
-  'apps.blender.tiled': 'Blender auto-launched and tiled to the right of coderix.',
-  'apps.blender.relaunch': 'Launch Blender',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',

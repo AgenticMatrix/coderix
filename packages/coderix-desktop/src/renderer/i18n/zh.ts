@@ -254,7 +254,7 @@ export const zh = {
   'nav.toggleSidebar': '切换侧栏',
   'nav.toggleFilePanel': '项目文件',
   'nav.maximize': '全屏展示',
-  'nav.openAppDisplay': '打开 CAD 查看器',
+  'nav.openBlender': '打开 Blender',
   'nav.restore': '退出全屏',
 
   // ── 项目开发 ──────────────────────────────────────────
@@ -297,10 +297,6 @@ export const zh = {
   'apps.none': '暂无',
   'apps.status.generating': '生成中',
   'apps.status.generated': '已生成',
-  'apps.blender.disconnected': 'Blender 未连接',
-  'apps.blender.connected': 'Blender 已连接',
-  'apps.blender.tiled': 'Blender 已自动启动并拼接到 coderix 右侧显示。',
-  'apps.blender.relaunch': '启动 Blender',
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',

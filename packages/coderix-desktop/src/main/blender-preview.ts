@@ -200,11 +200,11 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
   }
 
   // ── Auto-launch Blender ──────────────────────────────────────────────
-  // When the blender-viewer panel opens (the "add blender_harness" moment), the
-  // renderer calls `launch()` so Blender starts automatically — the user no
-  // longer has to open it by hand. Guarded so we never spawn duplicates: skip
-  // when the addon is already reachable, when a Blender process is running, or
-  // within 10s of a previous attempt (covers Blender's startup latency).
+  // When the renderer's "Open Blender" nav button is clicked, it calls `launch()`
+  // so Blender starts automatically (tiled to the right) — the user no longer has
+  // to open it by hand. Guarded so we never spawn duplicates: skip when the addon
+  // is already reachable, when a Blender process is running, or within 10s of a
+  // previous attempt (covers Blender's startup latency).
 
   let lastLaunchAttempt = 0;
 

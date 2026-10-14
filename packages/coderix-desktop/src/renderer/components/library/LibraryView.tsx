@@ -5,6 +5,7 @@ import { listPlugins } from '../../ipc-client.js';
 import { useT } from '../../i18n/index.js';
 import { APPS, type AppDefinition, type AppDisplayKind } from '../apps/registry';
 import { resolveAppIcon } from '../apps/icons';
+import { AppIcon } from '../apps/AppIcon';
 import { LinkerTab } from './LinkerTab';
 
 type LibraryTab = 'projects' | 'knowledge';
@@ -190,14 +191,13 @@ export function PluginsView({
         {tab === 'apps' && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
             {apps.map((app) => {
-              const Icon = resolveAppIcon(app.icon);
               return (
                 <div
                   key={app.id}
                   className="flex flex-col items-start gap-3 p-4 rounded-[var(--radius-lg)] border border-[var(--color-separator)] bg-[var(--color-bg-secondary)] text-left transition-colors"
                 >
                   <span className="flex items-center justify-center w-10 h-10 rounded-[var(--radius-md)] bg-[var(--color-brand-muted)] text-[var(--color-brand)]">
-                    <Icon size={20} />
+                    <AppIcon icon={resolveAppIcon(app.icon)} size={20} />
                   </span>
                   <span className="space-y-1">
                     <span className="block text-sm font-medium text-[var(--color-text-primary)]">{app.name}</span>

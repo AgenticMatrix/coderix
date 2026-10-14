@@ -16,7 +16,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { resolveAppIcon } from './icons';
 
-export type AppDisplayKind = 'cad-viewer' | 'blender-viewer';
+export type AppDisplayKind = 'cad-viewer';
 
 export interface AppDefinition {
   id: string;
@@ -47,16 +47,6 @@ export const APPS: AppDefinition[] = [
     mcpServers: ['cad-control'],
     agentType: 'cad-harness',
     display: { kind: 'cad-viewer' },
-  },
-  {
-    id: 'blender-harness',
-    name: 'Blender Harness',
-    description: '对话式 Blender 建模',
-    icon: 'blender',
-    skills: [],
-    mcpServers: ['blender'],
-    agentType: 'blender-harness',
-    display: { kind: 'blender-viewer' },
   },
 ];
 
