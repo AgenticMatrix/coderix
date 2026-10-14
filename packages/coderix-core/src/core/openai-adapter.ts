@@ -229,7 +229,15 @@ export function createCallModelFromOpenAI(
     const { system, messages, tools, signal } = params;
 
     const baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
-    const url = `${baseUrl}/chat/completions`;
+    // OpenAI Chat Completions lives under `/v1/chat/completions`. A base_url may
+    // be a bare `host:port` relay (e.g. a "New API" gateway like `http://…:3888`)
+    // that omits the `/v1` prefix; append it when absent so the request lands on
+    // the API rather than the relay's dashboard page (which returns 200 HTML and
+    // an empty completion). Mirrors the protocol-gateway's `buildUpstreamUrl`.
+    const openaiBase = baseUrl.replace(/\/anthropic\/?$/i, '');
+    const url = /\/v\d+$/.test(openaiBase)
+      ? `${openaiBase}/chat/completions`
+      : `${openaiBase}/v1/chat/completions`;
     const openaiMessages = toOpenAIMessages(system, messages);
     const openaiTools = tools.length > 0 ? toOpenAITools(tools) : [];
 

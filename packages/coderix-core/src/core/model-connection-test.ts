@@ -100,7 +100,11 @@ function probeUrl(baseUrl: string, protocol: Protocol): string {
   const base = baseUrl.trim().replace(/\/+$/, '');
   if (protocol === 'anthropic') return `${base}/v1/messages`;
   const openaiBase = base.replace(/\/anthropic\/?$/i, '').replace(/\/+$/, '');
-  return `${openaiBase}/chat/completions`;
+  // A bare `host:port` relay omits `/v1`; append it so the probe hits the API
+  // rather than a 200 HTML dashboard page (mirrors the openai-adapter fix).
+  return /\/v\d+$/.test(openaiBase)
+    ? `${openaiBase}/chat/completions`
+    : `${openaiBase}/v1/chat/completions`;
 }
 
 /** Probe each protocol's completion endpoint (1-token request) and return the
