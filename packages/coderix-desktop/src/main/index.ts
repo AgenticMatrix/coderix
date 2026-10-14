@@ -21,7 +21,7 @@ import type { CadViewerManager } from './cad-viewer-manager.js';
 import { installCadSkills } from './cad-skills.js';
 import { applyCadEnv } from './cad-paths.js';
 import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
-import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
+import { installBlenderMcp } from './blender-mcp.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
 import { safeSend } from './safe-send.js';
@@ -108,9 +108,8 @@ async function bootstrap(): Promise<void> {
     installCadPluginManifest();
     installCadControlMcp();
 
-    // Seed the blender-harness plugin manifest + register the official blender
-    // MCP server so plugin conversations can drive a running Blender. Idempotent.
-    installBlenderPluginManifest();
+    // Register the official blender MCP server so conversations can drive a
+    // running Blender (opened natively via the "Open Blender" nav button).
     installBlenderMcp();
 
     const initialConfig = loadDesktopConfig();
@@ -141,7 +140,8 @@ async function bootstrap(): Promise<void> {
     cadViewerManager = createCadViewerManager(windowManager);
 
     // Step 1d: Create the blender-preview manager (registers blender:status /
-    // blender:preview IPC handlers for the "blender-viewer" display panel).
+    // blender:preview / blender:launch IPC handlers, plus the launch/tiling and
+    // follow-window logic for the "Open Blender" nav button).
     blenderPreviewManager = createBlenderPreviewManager(windowManager);
 
     // Step 2: Create SessionManager early so session IPC handlers work

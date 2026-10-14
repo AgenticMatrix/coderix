@@ -22,7 +22,6 @@ import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
 import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
-import { BlenderDisplayPanel } from './components/apps/BlenderDisplayPanel';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
 import { SubagentPane } from './components/chat/SubagentPane';
@@ -149,11 +148,6 @@ export function App(): React.ReactElement {
   const loadSessions = useSessionStore((s) => s.loadSessions);
   const createSession = useSessionStore((s) => s.createSession);
   // The current session's plugin identity — gates the "reopen app display"
-  // button to plugin conversations (e.g. cad-harness).
-  const currentPluginId = useSessionStore((s) =>
-    s.sessions.find((x) => x.id === s.currentSessionId)?.pluginId,
-  );
-
   // ── Stream State (token usage for StatusBar) ────────────────────────────
   const streamCurrentMessage = useStreamStore((s) => s.currentMessage);
   const tokenUsage = useStreamStore((s) => s.tokenUsage);
@@ -1111,24 +1105,17 @@ export function App(): React.ReactElement {
         onToggleDetailPanel={toggleDetailPanel}
         appDisplayPanel={
           activeApp ? (
-            activeApp.display.kind === 'blender-viewer' ? (
-              <BlenderDisplayPanel
-                app={activeApp}
-                onClose={() => setActiveAppId(null)}
-              />
-            ) : (
-              <AppDisplayPanel
-                app={activeApp}
-                workspaceDir={projectPath}
-                onClose={() => setActiveAppId(null)}
-              />
-            )
+            <AppDisplayPanel
+              app={activeApp}
+              workspaceDir={projectPath}
+              onClose={() => setActiveAppId(null)}
+            />
           ) : undefined
         }
         appDisplayVisible={activeApp !== null}
-        onOpenAppDisplay={
-          currentPluginId ? () => setActiveAppId(currentPluginId) : undefined
-        }
+        onOpenBlender={() => {
+          void window.coderixAPI?.blender?.launch();
+        }}
         subagentPanel={<SubagentPane />}
         subagentVisible={subagentVisible}
         statusBarProps={{
