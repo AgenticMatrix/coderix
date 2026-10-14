@@ -21,7 +21,7 @@ import type { CadViewerManager } from './cad-viewer-manager.js';
 import { installCadSkills } from './cad-skills.js';
 import { applyCadEnv } from './cad-paths.js';
 import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
-import { installBlenderMcp } from './blender-mcp.js';
+import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
 import { safeSend } from './safe-send.js';
@@ -108,8 +108,9 @@ async function bootstrap(): Promise<void> {
     installCadPluginManifest();
     installCadControlMcp();
 
-    // Register the official blender MCP server so conversations can drive a
-    // running Blender (opened natively via the "Open Blender" nav button).
+    // Seed the blender-harness plugin manifest + register the official blender
+    // MCP server so plugin conversations can drive a running Blender. Idempotent.
+    installBlenderPluginManifest();
     installBlenderMcp();
 
     const initialConfig = loadDesktopConfig();

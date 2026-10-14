@@ -17,11 +17,12 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Folder, ChevronDown, MessageSquarePlus, Check, X } from 'lucide-react';
+import { FolderOpen, Folder, ChevronDown, MessageSquarePlus, Check, X, Boxes } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
 import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
+import { BLENDER_ICON } from './components/apps/icons';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
 import { SubagentPane } from './components/chat/SubagentPane';
@@ -145,6 +146,9 @@ export function App(): React.ReactElement {
 
   // ── Session State ───────────────────────────────────────────────────────
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
+  const currentPluginId = useSessionStore((s) =>
+    s.sessions.find((x) => x.id === s.currentSessionId)?.pluginId,
+  );
   const loadSessions = useSessionStore((s) => s.loadSessions);
   const createSession = useSessionStore((s) => s.createSession);
   // The current session's plugin identity — gates the "reopen app display"
@@ -856,7 +860,11 @@ export function App(): React.ReactElement {
   // display page on the right, while the conversation continues on the left.
   const handleOpenApp = useCallback(
     (app: AppDefinition) => {
-      setActiveAppId(app.id);
+      if (app.display.kind !== 'blender-viewer') {
+        setActiveAppId(app.id);
+      } else {
+        void window.coderixAPI?.blender?.launch();
+      }
       const nextSkills = Array.from(new Set([...selectedSkills, ...app.skills]));
       setSelectedSkills(nextSkills);
       setSessionSkills(nextSkills, sessionId ?? undefined).catch(() => {});
@@ -897,7 +905,11 @@ export function App(): React.ReactElement {
         useStreamStore.getState().setViewedSession(sid);
         setSessionId(sid);
       }
-      setActiveAppId(app.id);
+      if (app.display.kind !== 'blender-viewer') {
+        setActiveAppId(app.id);
+      } else {
+        void window.coderixAPI?.blender?.launch();
+      }
       setSidebarTab('sessions');
       setProjectManageOpen(false);
       useUIStore.getState().setSidebarOpen(true);
@@ -1083,6 +1095,25 @@ export function App(): React.ReactElement {
   // The currently-attached app (null when no app is open).
   const activeApp = useMemo(() => APPS.find((a) => a.id === activeAppId) ?? null, [activeAppId]);
 
+  // Top-right app toggle — shows the attached plugin's open affordance: CAD
+  // reopens its 3D viewer, Blender launches natively tiled to the right.
+  const appDisplayButton =
+    currentPluginId === 'blender-harness'
+      ? {
+          icon: <img src={BLENDER_ICON} width={15} height={15} alt="" className="object-contain" />,
+          title: t('nav.openBlender'),
+          onClick: () => {
+            void window.coderixAPI?.blender?.launch();
+          },
+        }
+      : currentPluginId === 'cad-harness' && activeApp === null
+        ? {
+            icon: <Boxes size={15} />,
+            title: t('nav.openAppDisplay'),
+            onClick: () => setActiveAppId('cad-harness'),
+          }
+        : undefined;
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <>
@@ -1113,9 +1144,7 @@ export function App(): React.ReactElement {
           ) : undefined
         }
         appDisplayVisible={activeApp !== null}
-        onOpenBlender={() => {
-          void window.coderixAPI?.blender?.launch();
-        }}
+        appDisplayButton={appDisplayButton}
         subagentPanel={<SubagentPane />}
         subagentVisible={subagentVisible}
         statusBarProps={{

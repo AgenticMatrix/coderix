@@ -1,7 +1,6 @@
 import React, { useRef, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FolderGit2, Globe, Maximize2, Minimize2 } from 'lucide-react';
-import { BLENDER_ICON } from '../apps/icons';
 import { StatusBar, type StatusBarProps } from '../shared/StatusBar';
 import { Notifications } from '../shared/Notifications';
 import { EditorTabs } from '../editor/EditorTabs';
@@ -26,8 +25,9 @@ export interface AppLayoutProps {
   onToggleDetailPanel?: () => void;
   appDisplayPanel?: ReactNode;
   appDisplayVisible?: boolean;
-  /** Open Blender (native app, tiled to the right of the coderix window). */
-  onOpenBlender?: () => void;
+  /** Top-right app toggle — icon/title/action vary by the attached plugin
+   *  (CAD viewer reopen, or "open Blender" for the blender plugin). */
+  appDisplayButton?: { icon: ReactNode; title: string; onClick: () => void };
   subagentPanel?: ReactNode;
   subagentVisible?: boolean;
   subagentWidth?: number;
@@ -97,7 +97,7 @@ export function AppLayout({
   onToggleDetailPanel,
   appDisplayPanel,
   appDisplayVisible = false,
-  onOpenBlender,
+  appDisplayButton,
   subagentPanel,
   subagentVisible = false,
   subagentWidth = 440,
@@ -275,17 +275,18 @@ export function AppLayout({
               </button>
             )}
 
-            {/* Open Blender — launch Blender natively, tiled to the right of coderix. */}
-            {onOpenBlender && (
+            {/* App toggle — shows the attached plugin's open affordance (CAD viewer
+                reopen, or "open Blender" for the blender plugin). */}
+            {appDisplayButton && (
               <button
                 className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)]
                            text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]
                            hover:bg-[var(--color-bg-tertiary)] transition-colors"
-                onClick={onOpenBlender}
-                title={t('nav.openBlender')}
-                aria-label={t('nav.openBlender')}
+                onClick={appDisplayButton.onClick}
+                title={appDisplayButton.title}
+                aria-label={appDisplayButton.title}
               >
-                <img src={BLENDER_ICON} alt="" width={15} height={15} className="object-contain" />
+                {appDisplayButton.icon}
               </button>
             )}
           </div>

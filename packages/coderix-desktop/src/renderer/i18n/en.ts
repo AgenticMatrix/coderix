@@ -259,6 +259,7 @@ export const en: Record<TranslationKey, string> = {
   'nav.toggleFilePanel': 'Project Files',
   'nav.maximize': 'Maximize',
   'nav.openBlender': 'Open Blender',
+  'nav.openAppDisplay': 'Open CAD viewer',
   'nav.restore': 'Restore',
 
   // ── Project management ────────────────────────────────

@@ -255,6 +255,7 @@ export const zh = {
   'nav.toggleFilePanel': '项目文件',
   'nav.maximize': '全屏展示',
   'nav.openBlender': '打开 Blender',
+  'nav.openAppDisplay': '打开 CAD 查看器',
   'nav.restore': '退出全屏',
 
   // ── 项目开发 ──────────────────────────────────────────
