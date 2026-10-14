@@ -14,6 +14,7 @@
  */
 
 import { ipcMain, screen } from 'electron';
+import type { BrowserWindow } from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
@@ -261,7 +262,88 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
     }
   }
 
+  // ── Keep Blender adjacent on coderix move/resize ─────────────────────
+  // When the user drags/resizes the coderix window, reposition Blender's window
+  // to stay flush on coderix's right. Done from *inside* Blender (a `ctypes`
+  // call to the macOS Objective-C runtime repositions its own window), so no
+  // Accessibility permission is needed — unlike AppleScript. arm64-only.
+
+  let boundWindow: BrowserWindow | null = null;
+  let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Reposition Blender's own window via ctypes/ObjC. `(x, y)` is the BOTTOM-LEFT
+   *  corner in AppKit points (matches NSWindow.setFrame:display:). */
+  function repositionBlender(x: number, y: number, w: number, h: number): void {
+    const code = [
+      'import ctypes, ctypes.util',
+      'try:',
+      '    objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))',
+      '    objc.objc_getClass.restype = ctypes.c_void_p',
+      '    objc.objc_getClass.argtypes = [ctypes.c_char_p]',
+      '    objc.sel_registerName.restype = ctypes.c_void_p',
+      '    objc.sel_registerName.argtypes = [ctypes.c_char_p]',
+      '    class NSRect(ctypes.Structure):',
+      '        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double), ("w", ctypes.c_double), ("h", ctypes.c_double)]',
+      '    NSApp = objc.objc_getClass(b"NSApplication")',
+      '    objc.objc_msgSend.restype = ctypes.c_void_p',
+      '    objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]',
+      '    app = objc.objc_msgSend(NSApp, objc.sel_registerName(b"sharedApplication"))',
+      '    win = objc.objc_msgSend(app, objc.sel_registerName(b"mainWindow"))',
+      '    if not win:',
+      '        wins = objc.objc_msgSend(app, objc.sel_registerName(b"windows"))',
+      '        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint64]',
+      '        win = objc.objc_msgSend(wins, objc.sel_registerName(b"objectAtIndex:"), 0)',
+      '    if win:',
+      `        rect = NSRect(${x}, ${y}, ${w}, ${h})`,
+      '        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NSRect), ctypes.c_int]',
+      '        objc.objc_msgSend.restype = None',
+      '        objc.objc_msgSend(win, objc.sel_registerName(b"setFrame:display:"), ctypes.byref(rect), 1)',
+      '        result = {"status": "ok"}',
+      '    else:',
+      '        result = {"status": "error", "message": "no window"}',
+      'except Exception as e:',
+      '    result = {"status": "error", "message": str(e)}',
+    ].join('\n');
+    void sendCode(host, port, code, true, 5_000).catch(() => {
+      // Blender addon unreachable — ignore (window simply stays put).
+    });
+  }
+
+  function syncTiling(): void {
+    if (!isBlenderRunning()) return;
+    const win = windowManager.getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    const bounds = win.getBounds();
+    const display = screen.getDisplayMatching(bounds);
+    const wa = display.workArea;
+    const left = Math.round(bounds.x + bounds.width);
+    const top = Math.round(bounds.y);
+    const width = Math.round(Math.max(wa.x + wa.width - left, 640));
+    const height = Math.round(Math.max(bounds.height, 480));
+    // AppKit window origin is bottom-left, so flip Electron's top-left `top`.
+    const bottom = Math.round(display.bounds.y + display.bounds.height - (top + height));
+    repositionBlender(left, bottom, width, height);
+  }
+
+  function scheduleSync(): void {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      syncTimer = null;
+      syncTiling();
+    }, 200);
+  }
+
+  function ensureWindowBinding(): void {
+    if (boundWindow) return;
+    const win = windowManager.getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    boundWindow = win;
+    win.on('move', scheduleSync);
+    win.on('resize', scheduleSync);
+  }
+
   async function launch(): Promise<BlenderLaunchInfo> {
+    ensureWindowBinding();
     if (await pingBlender(host, port)) return { connected: true };
     const now = Date.now();
     if (now - lastLaunchAttempt < 10_000) return { connected: false };
@@ -280,6 +362,13 @@ export function createBlenderPreviewManager(windowManager: WindowManager): Blend
     preview,
     launch,
     destroy(): void {
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = null;
+      if (boundWindow && !boundWindow.isDestroyed()) {
+        boundWindow.removeListener('move', scheduleSync);
+        boundWindow.removeListener('resize', scheduleSync);
+      }
+      boundWindow = null;
       ipcMain.removeHandler(BLENDER_PREVIEW_CHANNELS.STATUS);
       ipcMain.removeHandler(BLENDER_PREVIEW_CHANNELS.PREVIEW);
       ipcMain.removeHandler(BLENDER_PREVIEW_CHANNELS.LAUNCH);
