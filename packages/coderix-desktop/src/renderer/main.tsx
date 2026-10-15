@@ -109,6 +109,11 @@ declare global {
         preview(): Promise<{ connected: boolean; png?: string }>;
         launch(): Promise<{ connected: boolean; launched?: boolean }>;
       };
+      freecad: {
+        status(): Promise<{ connected: boolean }>;
+        preview(): Promise<{ connected: boolean; png?: string }>;
+        launch(): Promise<{ connected: boolean; launched?: boolean }>;
+      };
       onStreamEvent(callback: (event: unknown) => void): () => void;
       onPermissionRequest(callback: (req: unknown) => void): () => void;
       onStateChange(callback: (change: unknown) => void): () => void;
