@@ -22,7 +22,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
 import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
-import { BLENDER_ICON } from './components/apps/icons';
+import { BLENDER_ICON, FREECAD_ICON } from './components/apps/icons';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
 import { SubagentPane } from './components/chat/SubagentPane';
@@ -1112,7 +1112,7 @@ export function App(): React.ReactElement {
         }
       : currentPluginId === 'freecad-harness'
         ? {
-            icon: <Boxes size={15} />,
+            icon: <img src={FREECAD_ICON} width={15} height={15} alt="" className="object-contain" />,
             title: t('nav.openFreecad'),
             onClick: () => {
               void window.coderixAPI?.freecad?.launch();
