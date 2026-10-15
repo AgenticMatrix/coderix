@@ -1,13 +1,20 @@
 /**
  * FreeCAD preview manager — drives the FreeCAD addon's XML-RPC endpoint directly
  * to fetch a live screenshot of the active view, and exposes that preview (plus
- * connection status) to the renderer over IPC. Also auto-launches FreeCAD tiled
- * to the right of coderix.
+ * connection status) to the renderer over IPC. Also auto-launches FreeCAD and
+ * keeps its window pinned flush to the right of coderix, resizing it live as
+ * coderix moves/resizes (mirrors blender-preview.ts).
  *
  * Mirrors blender-preview.ts, but the transport is XML-RPC (port 9875) instead of
  * Blender's null-byte-delimited JSON socket (port 9876), and the screenshot comes
  * straight back as base64 PNG (no render-to-file step). The XML-RPC codec is ported
  * from freecad-harness's `server/freecad-rpc.mjs`.
+ *
+ * Window follow repositions FreeCAD's own window from *inside* FreeCAD — the
+ * addon's `execute_code` RPC runs a Qt snippet on the GUI thread
+ * (`Gui.getMainWindow().setGeometry(...)`), so no Accessibility permission is
+ * needed. (Blender uses a ctypes/ObjC equivalent; FreeCAD exposes its main
+ * window directly via Qt, which is simpler and more reliable.)
  *
  * FreeCAD returns null from `get_active_screenshot` until a document is open, so
  * the preview is empty before the first model is created (unlike Blender, which
@@ -15,6 +22,7 @@
  */
 
 import { ipcMain, screen } from 'electron';
+import type { BrowserWindow } from 'electron';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import {
@@ -139,6 +147,33 @@ async function getScreenshot(url: string, viewName = 'Isometric'): Promise<strin
   return r.type === 'base64' || r.type === 'string' ? (r.data as string) : null;
 }
 
+/**
+ * Run a snippet of Python inside FreeCAD on its GUI thread (the addon's
+ * `execute_code` RPC), and throw when it reports failure. Used for window
+ * repositioning; the snippet itself swallows its own errors, so this only
+ * fails when the addon is unreachable or the call faults.
+ */
+async function executeCode(url: string, code: string, timeoutMs = 5_000): Promise<void> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/xml' },
+    body: buildMethodCall('execute_code', [code]),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) throw new Error(`XML-RPC HTTP ${res.status}`);
+  const text = await res.text();
+
+  const fault = text.match(/<fault>[\s\S]*?<value>[\s\S]*?<string>([\s\S]*?)<\/string>/);
+  if (fault) throw new Error(`XML-RPC fault: ${decodeEntities(fault[1])}`);
+
+  // `execute_code` returns a struct with a `success` boolean member.
+  const success = text.match(/<name>success<\/name>[\s\S]*?<value><boolean>([01])<\/boolean>/);
+  if (success && success[1] === '0') {
+    const msg = text.match(/<name>message<\/name>[\s\S]*?<value><string>([\s\S]*?)<\/string>/);
+    throw new Error(msg ? decodeEntities(msg[1]) : 'execute_code failed');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Manager
 // ---------------------------------------------------------------------------
@@ -169,8 +204,8 @@ export function createFreecadPreviewManager(windowManager: WindowManager): Freec
   // ── Auto-launch FreeCAD ──────────────────────────────────────────────
   // When the renderer's "Open FreeCAD" nav button is clicked, it calls `launch()`
   // so FreeCAD starts automatically (with the MCP addon's auto-start RPC server).
-  // Guarded so we never spawn duplicates: skip when the addon is already reachable,
-  // when a FreeCAD process is running, or within 10s of a previous attempt.
+  // Guarded so we never spawn duplicates: skip when a FreeCAD process is running,
+  // or within 10s of a previous attempt.
 
   let lastLaunchAttempt = 0;
 
@@ -188,23 +223,29 @@ export function createFreecadPreviewManager(windowManager: WindowManager): Freec
   }
 
   /**
-   * Resize coderix to the left portion of the usable area, reserving at least 1/3
-   * of the width for FreeCAD on the right. (FreeCAD has no `--window-geometry`
-   * flag, so unlike Blender we only reserve space and let the user place the
-   * window; the follow-on repositioning is left as a future nicety.)
+   * Resize coderix to the left portion of the usable area (reserving at least 1/3
+   * of the width for FreeCAD on the right), and return FreeCAD's target geometry
+   * as `(x, y, w, h)` where `(x, y)` is the TOP-LEFT corner in logical points.
+   * Returns null when the coderix window isn't available.
    */
-  function tileForFreecad(): void {
+  function tileForFreecad(): { x: number; y: number; w: number; h: number } | null {
     const win = windowManager.getMainWindow();
-    if (!win || win.isDestroyed()) return;
+    if (!win || win.isDestroyed()) return null;
     const display = screen.getDisplayMatching(win.getBounds());
     const wa = display.workArea;
+
+    // FreeCAD gets at least 1/3 of the usable width; coderix keeps the rest.
     const freecadWidth = Math.max(Math.floor(wa.width / 3), 480);
     const coderixWidth = Math.max(wa.width - freecadWidth, 640);
     try {
       win.setBounds({ x: wa.x, y: wa.y, width: coderixWidth, height: wa.height });
     } catch {
-      // Resizing coderix is best-effort.
+      // Resizing coderix is best-effort — still tile FreeCAD on the right.
     }
+
+    const left = wa.x + coderixWidth;
+    const top = wa.y;
+    return { x: left, y: top, w: freecadWidth, h: wa.height };
   }
 
   function spawnFreecad(): void {
@@ -223,8 +264,67 @@ export function createFreecadPreviewManager(windowManager: WindowManager): Freec
     }
   }
 
+  // ── Keep FreeCAD adjacent on coderix move/resize ─────────────────────
+  // When the user drags/resizes the coderix window, reposition FreeCAD's window
+  // to stay flush on coderix's right. Done from *inside* FreeCAD (a Qt
+  // `Gui.getMainWindow().setGeometry` call on its own window), so no
+  // Accessibility permission is needed.
+
+  let boundWindow: BrowserWindow | null = null;
+  let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Reposition FreeCAD's own window via Qt. `(x, y)` is the TOP-LEFT corner in
+   *  logical points (matches QWidget.setGeometry). */
+  function repositionFreecad(x: number, y: number, w: number, h: number): void {
+    const code = [
+      'import FreeCADGui',
+      'mw = FreeCADGui.getMainWindow()',
+      'if mw:',
+      `    mw.setGeometry(${x}, ${y}, ${w}, ${h})`,
+    ].join('\n');
+    void executeCode(rpcUrl, code, 5_000).catch(() => {
+      // FreeCAD addon unreachable — ignore (window simply stays put).
+    });
+  }
+
+  function syncTiling(): void {
+    if (!isFreecadRunning()) return;
+    const win = windowManager.getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    const bounds = win.getBounds();
+    const display = screen.getDisplayMatching(bounds);
+    const wa = display.workArea;
+    const left = Math.round(bounds.x + bounds.width);
+    const top = Math.round(bounds.y);
+    const width = Math.round(Math.max(wa.x + wa.width - left, 640));
+    const height = Math.round(Math.max(bounds.height, 480));
+    repositionFreecad(left, top, width, height);
+  }
+
+  function scheduleSync(): void {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      syncTimer = null;
+      syncTiling();
+    }, 200);
+  }
+
+  function ensureWindowBinding(): void {
+    if (boundWindow) return;
+    const win = windowManager.getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    boundWindow = win;
+    win.on('move', scheduleSync);
+    win.on('resize', scheduleSync);
+  }
+
   async function launch(): Promise<FreecadLaunchInfo> {
+    ensureWindowBinding();
     if (isFreecadRunning()) {
+      // Already running — (re)tile: resize coderix to give FreeCAD at least 1/3,
+      // then reposition FreeCAD flush on the right (the snippet also activates it).
+      const g = tileForFreecad();
+      if (g) repositionFreecad(g.x, g.y, g.w, g.h);
       return { connected: true, launched: false };
     }
     const now = Date.now();
@@ -232,6 +332,11 @@ export function createFreecadPreviewManager(windowManager: WindowManager): Freec
     lastLaunchAttempt = now;
     tileForFreecad();
     spawnFreecad();
+    // FreeCAD has no `--window-geometry` flag, so retry the flush-right
+    // reposition a few times while it starts (RPC comes up after the GUI loads).
+    for (const ms of [3_000, 6_000, 10_000]) {
+      setTimeout(syncTiling, ms);
+    }
     return { connected: false, launched: true };
   }
 
@@ -244,6 +349,13 @@ export function createFreecadPreviewManager(windowManager: WindowManager): Freec
     preview,
     launch,
     destroy(): void {
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = null;
+      if (boundWindow && !boundWindow.isDestroyed()) {
+        boundWindow.removeListener('move', scheduleSync);
+        boundWindow.removeListener('resize', scheduleSync);
+      }
+      boundWindow = null;
       ipcMain.removeHandler(FREECAD_PREVIEW_CHANNELS.STATUS);
       ipcMain.removeHandler(FREECAD_PREVIEW_CHANNELS.PREVIEW);
       ipcMain.removeHandler(FREECAD_PREVIEW_CHANNELS.LAUNCH);
