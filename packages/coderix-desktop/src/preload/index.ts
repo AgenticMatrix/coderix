@@ -140,6 +140,11 @@ const CH = {
   BLENDER_STATUS: 'blender:status',
   BLENDER_PREVIEW: 'blender:preview',
   BLENDER_LAUNCH: 'blender:launch',
+
+  // FreeCAD preview (live screenshot of the running FreeCAD document for apps)
+  FREECAD_STATUS: 'freecad:status',
+  FREECAD_PREVIEW: 'freecad:preview',
+  FREECAD_LAUNCH: 'freecad:launch',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -962,6 +967,21 @@ const coderixAPI = {
     /** Auto-launch Blender if it isn't running (no-op when already up). */
     launch(): Promise<{ connected: boolean; launched?: boolean }> {
       return ipcRenderer.invoke(CH.BLENDER_LAUNCH);
+    },
+  },
+
+  // ── FreeCAD preview (live screenshot of the running FreeCAD document) ────
+
+  freecad: {
+    status(): Promise<{ connected: boolean }> {
+      return ipcRenderer.invoke(CH.FREECAD_STATUS);
+    },
+    preview(): Promise<{ connected: boolean; png?: string }> {
+      return ipcRenderer.invoke(CH.FREECAD_PREVIEW);
+    },
+    /** Auto-launch FreeCAD if it isn't running (no-op when already up). */
+    launch(): Promise<{ connected: boolean; launched?: boolean }> {
+      return ipcRenderer.invoke(CH.FREECAD_LAUNCH);
     },
   },
 

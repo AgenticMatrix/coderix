@@ -24,6 +24,9 @@ import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
 import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
+import { installFreecadMcp, installFreecadPluginManifest } from './freecad-mcp.js';
+import { createFreecadPreviewManager } from './freecad-preview.js';
+import type { FreecadPreviewManager } from './freecad-preview.js';
 import { safeSend } from './safe-send.js';
 import { extractOpenUrl } from './open-url.js';
 import { startProtocolGateway } from './protocol-gateway/server.js';
@@ -72,6 +75,7 @@ let trayManager: TrayManager | null = null;
 let browserViewManager: BrowserViewManager | null = null;
 let cadViewerManager: CadViewerManager | null = null;
 let blenderPreviewManager: BlenderPreviewManager | null = null;
+let freecadPreviewManager: FreecadPreviewManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
 let activeWorkDir = process.cwd();
 let activeModel = 'deepseek-v4-pro';
@@ -113,6 +117,11 @@ async function bootstrap(): Promise<void> {
     installBlenderPluginManifest();
     installBlenderMcp();
 
+    // Seed the freecad-harness plugin manifest + register the freecad-mcp server
+    // so plugin conversations can drive a running FreeCAD. Idempotent.
+    installFreecadPluginManifest();
+    installFreecadMcp();
+
     const initialConfig = loadDesktopConfig();
     // Restore the last-used workspace across restarts. `loadConfig().cwd` is
     // `process.cwd()` (the app's launch dir, e.g. `packages/coderix-desktop`),
@@ -144,6 +153,11 @@ async function bootstrap(): Promise<void> {
     // blender:preview / blender:launch IPC handlers, plus the launch/tiling and
     // follow-window logic for the "Open Blender" nav button).
     blenderPreviewManager = createBlenderPreviewManager(windowManager);
+
+    // Step 1e: Create the freecad-preview manager (registers freecad:status /
+    // freecad:preview / freecad:launch IPC handlers, plus the launch/tiling logic
+    // for the "Open FreeCAD" nav button).
+    freecadPreviewManager = createFreecadPreviewManager(windowManager);
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
@@ -566,6 +580,7 @@ app.on('before-quit', () => {
   browserViewManager?.destroy();
   cadViewerManager?.destroy();
   blenderPreviewManager?.destroy();
+  freecadPreviewManager?.destroy();
   fileWatcher?.destroy();
   terminalManager?.destroyAll();
   trayManager?.destroy();

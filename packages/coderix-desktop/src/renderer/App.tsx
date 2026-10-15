@@ -860,10 +860,12 @@ export function App(): React.ReactElement {
   // display page on the right, while the conversation continues on the left.
   const handleOpenApp = useCallback(
     (app: AppDefinition) => {
-      if (app.display.kind !== 'blender-viewer') {
-        setActiveAppId(app.id);
-      } else {
+      if (app.display.kind === 'blender-viewer') {
         void window.coderixAPI?.blender?.launch();
+      } else if (app.display.kind === 'freecad-viewer') {
+        void window.coderixAPI?.freecad?.launch();
+      } else {
+        setActiveAppId(app.id);
       }
       const nextSkills = Array.from(new Set([...selectedSkills, ...app.skills]));
       setSelectedSkills(nextSkills);
@@ -905,10 +907,12 @@ export function App(): React.ReactElement {
         useStreamStore.getState().setViewedSession(sid);
         setSessionId(sid);
       }
-      if (app.display.kind !== 'blender-viewer') {
-        setActiveAppId(app.id);
-      } else {
+      if (app.display.kind === 'blender-viewer') {
         void window.coderixAPI?.blender?.launch();
+      } else if (app.display.kind === 'freecad-viewer') {
+        void window.coderixAPI?.freecad?.launch();
+      } else {
+        setActiveAppId(app.id);
       }
       setSidebarTab('sessions');
       setProjectManageOpen(false);
@@ -1106,7 +1110,15 @@ export function App(): React.ReactElement {
             void window.coderixAPI?.blender?.launch();
           },
         }
-      : currentPluginId === 'cad-harness' && activeApp === null
+      : currentPluginId === 'freecad-harness'
+        ? {
+            icon: <Boxes size={15} />,
+            title: t('nav.openFreecad'),
+            onClick: () => {
+              void window.coderixAPI?.freecad?.launch();
+            },
+          }
+        : currentPluginId === 'cad-harness' && activeApp === null
         ? {
             icon: <Boxes size={15} />,
             title: t('nav.openAppDisplay'),

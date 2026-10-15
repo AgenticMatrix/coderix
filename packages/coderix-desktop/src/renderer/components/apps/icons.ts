@@ -13,6 +13,10 @@ const APP_ICONS: Record<string, LucideIcon> = {
   boxes: Boxes,
   cad: Boxes,
   'cad-harness': Boxes,
+  // FreeCAD uses a placeholder icon for now (falls back to Boxes); swap in a
+  // FreeCAD app-icon data URI here once extracted, like BLENDER_ICON.
+  freecad: Boxes,
+  'freecad-harness': Boxes,
 };
 
 export function resolveAppIcon(key: string | null | undefined): LucideIcon | string {
