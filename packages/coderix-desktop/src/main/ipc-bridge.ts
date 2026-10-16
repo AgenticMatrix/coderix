@@ -650,20 +650,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 forwardStreamEvent(mainWindow, msg.event, streamSessionId);
               } else if (msg.type === 'assistant' && msg.message) {
                 // The `message_stop` stream event (forwarded above) is the
-                // authoritative end-of-turn signal. The Claude Code SDK also
-                // emits partial `assistant` snapshots mid-stream with no
-                // stop reason yet; treating those as done would commit the
-                // message prematurely and render it twice. Only fall back to
-                // STREAM_DONE here for a final message that carries a stop
-                // reason (e.g. the Coderix engine's end-of-turn message, or a
-                // non-streaming response without a message_stop event).
-                //
-                // Note: the Coderix engine uses camelCase `stopReason`, the
-                // Claude Code SDK uses snake_case `stop_reason`.
+                // authoritative end-of-turn signal for the claude-code engine,
+                // so never fall back to STREAM_DONE here for it. The Claude
+                // Code SDK emits one `assistant` message *per content block*
+                // (thinking and text arrive separately, each carrying the
+                // turn's final `stop_reason`); firing STREAM_DONE on the
+                // thinking-only message would commit it and mark the turn done
+                // before the text block streams, so the renderer drops the
+                // final answer. STREAM_DONE below is only a fallback for the
+                // Coderix engine, whose end-of-turn message uses camelCase
+                // `stopReason` and has no message_stop event.
                 const stopReason =
                   msg.message.stop_reason ??
                   (msg.message as { stopReason?: string }).stopReason;
-                if (stopReason) {
+                if (stopReason && engine !== 'claude-code') {
                   safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
                     stopReason,
                     usage: msg.message.usage,
