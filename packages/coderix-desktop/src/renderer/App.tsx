@@ -149,6 +149,12 @@ export function App(): React.ReactElement {
   const currentPluginId = useSessionStore((s) =>
     s.sessions.find((x) => x.id === s.currentSessionId)?.pluginId,
   );
+  // The active conversation's own workspace (persisted on the session). This is
+  // the authoritative directory for the right-hand app panel — it tracks the
+  // conversation automatically, unlike the manually-synced `projectPath`.
+  const activeSessionWorkDir = useSessionStore((s) =>
+    s.sessions.find((x) => x.id === s.currentSessionId)?.workDir,
+  );
   const loadSessions = useSessionStore((s) => s.loadSessions);
   const createSession = useSessionStore((s) => s.createSession);
   // The current session's plugin identity — gates the "reopen app display"
@@ -1150,7 +1156,7 @@ export function App(): React.ReactElement {
           activeApp ? (
             <AppDisplayPanel
               app={activeApp}
-              workspaceDir={projectPath}
+              workspaceDir={activeSessionWorkDir ?? projectPath}
               onClose={() => setActiveAppId(null)}
             />
           ) : undefined

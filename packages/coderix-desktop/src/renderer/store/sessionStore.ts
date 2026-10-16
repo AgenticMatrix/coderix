@@ -159,6 +159,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
         createdAt: Date.now(),
         ...(result.agentType ? { agentType: result.agentType } : {}),
         ...(result.pluginId ? { pluginId: result.pluginId } : {}),
+        // Persist the session's workspace immediately so the app panel can track
+        // the conversation's directory without waiting for a full reload.
+        ...(result.cwd ? { workDir: result.cwd } : {}),
       };
       set((state) => ({
         sessions: [newSession, ...state.sessions],
