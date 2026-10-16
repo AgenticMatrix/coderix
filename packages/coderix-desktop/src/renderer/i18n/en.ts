@@ -27,6 +27,7 @@ export const en: Record<TranslationKey, string> = {
   'workspace.removeFromHistory': 'Remove from history',
   'workspace.pathPlaceholder': 'Enter a workspace path…',
   'workspace.invalidPath': 'Directory does not exist or is not accessible',
+  'workspace.create': 'Create',
 
   // ── 设置 ──────────────────────────────────────────────
   'settings.title': 'Settings',

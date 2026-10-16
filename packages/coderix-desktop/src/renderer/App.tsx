@@ -17,7 +17,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Folder, ChevronDown, MessageSquarePlus, Check, X, Boxes } from 'lucide-react';
+import { FolderOpen, Folder, FolderPlus, ChevronDown, MessageSquarePlus, Check, X, Boxes } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
 import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
@@ -57,6 +57,8 @@ import {
   pickProjectDirectory,
   listProjectDirectories,
   setProjectDirectory,
+  projectExists,
+  createProjectDirectory,
   removeProjectDirectory,
   getHomeDir,
   listSkills,
@@ -180,6 +182,10 @@ export function App(): React.ReactElement {
   const [workspaceQuery, setWorkspaceQuery] = useState('');
   const [workspaceHome, setWorkspaceHome] = useState('');
   const [workspaceError, setWorkspaceError] = useState('');
+  // Whether the typed workspace path currently resolves to an existing directory
+  // (null = unknown/empty, still probing). Drives the confirm button's label:
+  // existing → 「确认」(switch), missing → 「新建」(create).
+  const [workspaceExists, setWorkspaceExists] = useState<boolean | null>(null);
   const workspaceInputRef = useRef<HTMLInputElement>(null);
   // The active session's own model ("provider/model" or bare name). Tracked
   // here (not read from the global default) so switching models in one session
@@ -821,9 +827,37 @@ export function App(): React.ReactElement {
     [switchToProject, t],
   );
 
-  const handleWorkspaceConfirm = useCallback(() => {
-    void applyWorkspacePath(workspaceValue);
-  }, [applyWorkspacePath, workspaceValue]);
+  // Create the typed path as a brand-new workspace folder, then switch to it.
+  const applyWorkspaceCreate = useCallback(
+    async (path: string) => {
+      const trimmed = path.trim();
+      if (!trimmed) return;
+      try {
+        const result = await createProjectDirectory(trimmed);
+        setWorkspaceError('');
+        await switchToProject(result.path);
+        setWorkspaceOpen(false);
+      } catch (err) {
+        console.error('[App] Failed to create project directory:', err);
+        setWorkspaceError(t('workspace.invalidPath'));
+      }
+    },
+    [switchToProject, t],
+  );
+
+  // Confirm switches to an existing folder, or creates it when the typed path
+  // doesn't exist yet (the button reads 「新建」in that case). Re-probing here
+  // keeps the click correct even if the debounced existence check is stale.
+  const handleWorkspaceConfirm = useCallback(async () => {
+    const trimmed = workspaceValue.trim();
+    if (!trimmed) return;
+    const exists = await projectExists(trimmed).catch(() => false);
+    if (exists) {
+      await applyWorkspacePath(trimmed);
+    } else {
+      await applyWorkspaceCreate(trimmed);
+    }
+  }, [applyWorkspacePath, applyWorkspaceCreate, workspaceValue]);
 
   const handleWorkspaceBrowse = useCallback(async () => {
     try {
@@ -977,6 +1011,30 @@ export function App(): React.ReactElement {
       return next;
     });
   }, [projectPath, workspaceHome]);
+
+  // Probe whether the typed workspace path exists (debounced) so the confirm
+  // button can switch between 「确认」and「新建」without an extra round-trip on click.
+  useEffect(() => {
+    const trimmed = workspaceValue.trim();
+    if (!trimmed) {
+      setWorkspaceExists(null);
+      return;
+    }
+    let canceled = false;
+    const timer = setTimeout(() => {
+      projectExists(trimmed)
+        .then((exists) => {
+          if (!canceled) setWorkspaceExists(exists);
+        })
+        .catch(() => {
+          if (!canceled) setWorkspaceExists(false);
+        });
+    }, 200);
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
+  }, [workspaceValue]);
 
   const handleComposerSubmit = useCallback(
     async (value: string) => {
@@ -1296,8 +1354,17 @@ export function App(): React.ReactElement {
                       disabled={!workspaceValue.trim()}
                       className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-quaternary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      <Check size={13} />
-                      {t('common.confirm')}
+                      {workspaceExists === false ? (
+                        <>
+                          <FolderPlus size={13} />
+                          {t('workspace.create')}
+                        </>
+                      ) : (
+                        <>
+                          <Check size={13} />
+                          {t('common.confirm')}
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1316,7 +1383,7 @@ export function App(): React.ReactElement {
                         setWorkspaceError('');
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); handleWorkspaceConfirm(); }
+                        if (e.key === 'Enter') { e.preventDefault(); void handleWorkspaceConfirm(); }
                         else if (e.key === 'Escape') { setWorkspaceOpen(false); }
                       }}
                       placeholder={t('workspace.pathPlaceholder')}
