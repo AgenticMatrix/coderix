@@ -1547,6 +1547,33 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return { canceled: false, path: nextWorkDir };
   });
 
+  ipcMain.handle('project:exists', async (_event, path: string) => {
+    if (!path || typeof path !== 'string') {
+      return { exists: false, path: '' };
+    }
+    const resolved = resolve(path.replace(/^~/, homedir()));
+    return { exists: existsSync(resolved), path: resolved };
+  });
+
+  // Create the directory (and any missing parents) then activate it as the
+  // current workspace — used when the user types a path that doesn't exist yet.
+  ipcMain.handle('project:create', async (_event, path: string) => {
+    if (!path || typeof path !== 'string') {
+      throw new Error('Invalid project path');
+    }
+    const nextWorkDir = resolve(path.replace(/^~/, homedir()));
+    mkdirSync(nextWorkDir, { recursive: true });
+
+    currentWorkDir = nextWorkDir;
+    rememberProject(nextWorkDir);
+
+    if (config.reloadQueryEngine) {
+      await config.reloadQueryEngine(nextWorkDir);
+    }
+
+    return { canceled: false, path: nextWorkDir };
+  });
+
   ipcMain.handle('project:select', async () => {
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) {
@@ -2593,6 +2620,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler('project:get');
       ipcMain.removeHandler('project:list');
       ipcMain.removeHandler('project:set');
+      ipcMain.removeHandler('project:exists');
+      ipcMain.removeHandler('project:create');
       ipcMain.removeHandler('project:select');
       ipcMain.removeHandler('project:pick');
       ipcMain.removeHandler('project:remove');

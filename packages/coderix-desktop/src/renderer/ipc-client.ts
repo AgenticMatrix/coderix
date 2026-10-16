@@ -728,6 +728,21 @@ export async function setProjectDirectory(path: string): Promise<{ canceled: boo
   );
 }
 
+/** Check whether a typed path resolves to an existing directory. */
+export async function projectExists(path: string): Promise<boolean> {
+  const result = await invokeWithTimeout<{ exists: boolean; path: string }>('project:exists', () =>
+    getAPI().project.exists(path),
+  );
+  return result.exists;
+}
+
+/** Create the directory (and parents) then activate it as the workspace. */
+export async function createProjectDirectory(path: string): Promise<{ canceled: boolean; path: string }> {
+  return invokeWithTimeout('project:create', () =>
+    getAPI().project.create(path),
+  );
+}
+
 /** Get the default workspace base dir (where new conversations spawn). */
 export async function getDefaultWorkspace(): Promise<{ path: string }> {
   return invokeWithTimeout('defaultWorkspace:get', () =>

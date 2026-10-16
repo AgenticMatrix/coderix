@@ -722,6 +722,16 @@ const coderixAPI = {
       return ipcRenderer.invoke('project:set', path);
     },
 
+    /** Check whether a path resolves to an existing directory. */
+    exists(path: string): Promise<{ exists: boolean; path: string }> {
+      return ipcRenderer.invoke('project:exists', path);
+    },
+
+    /** Create the directory (and parents) then activate it as the workspace. */
+    create(path: string): Promise<{ canceled: boolean; path: string }> {
+      return ipcRenderer.invoke('project:create', path);
+    },
+
     /** Select a new project directory. */
     select(): Promise<{ canceled: boolean; path: string }> {
       return ipcRenderer.invoke('project:select');

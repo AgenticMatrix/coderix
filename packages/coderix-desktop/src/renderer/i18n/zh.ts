@@ -23,6 +23,7 @@ export const zh = {
   'workspace.removeFromHistory': '从历史中移除',
   'workspace.pathPlaceholder': '输入工作区路径…',
   'workspace.invalidPath': '目录不存在或无法访问',
+  'workspace.create': '新建',
 
   // ── 设置 ──────────────────────────────────────────────
   'settings.title': '设置',
