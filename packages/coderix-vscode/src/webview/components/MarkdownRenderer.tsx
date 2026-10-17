@@ -28,13 +28,13 @@ function protectMath(md: string): string {
 
 function storeDisplayMath(_m: string, formula: string): string {
   const idx = MATH_PLACEHOLDERS.length;
-  MATH_PLACEHOLDERS.push(`<span class="katex-display">${katex.renderToString(formula.trim(), { displayMode: true, throwOnError: false })}</span>`);
+  MATH_PLACEHOLDERS.push(`<span class="katex-display">${katex.renderToString(formula.trim(), { displayMode: true, throwOnError: false, strict: false })}</span>`);
   return `\x00MATH${idx}\x00`;
 }
 
 function storeInlineMath(_m: string, formula: string): string {
   const idx = MATH_PLACEHOLDERS.length;
-  MATH_PLACEHOLDERS.push(`<span class="katex-inline">${katex.renderToString(formula.trim(), { displayMode: false, throwOnError: false })}</span>`);
+  MATH_PLACEHOLDERS.push(`<span class="katex-inline">${katex.renderToString(formula.trim(), { displayMode: false, throwOnError: false, strict: false })}</span>`);
   return `\x00MATH${idx}\x00`;
 }
 
