@@ -23,7 +23,7 @@ export function Markdown({ children, className }: MarkdownProps): React.ReactEle
     <div className={className ?? 'text-[var(--color-text-primary)]'}>
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm]}
-        rehypePlugins={[rehypeKatex]}
+        rehypePlugins={[[rehypeKatex, { strict: false }]]}
         components={{
           // Code blocks — use dedicated CodeBlock component
           pre({ children }) {
