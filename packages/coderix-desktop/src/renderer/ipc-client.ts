@@ -304,18 +304,35 @@ export function onStreamDone(callback: (stopReason?: string, sessionId?: string)
 }
 
 /**
+ * Subscribe to the terminal turn-done signal (engine `done`), separate from
+ * `onStreamDone` which fires per model step on `message_stop`.
+ * Returns an unsubscribe function.
+ */
+export function onStreamTurnDone(callback: (sessionId?: string, epoch?: number) => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'turnDone') {
+      callback(event.sessionId as string | undefined, event.epoch as number | undefined);
+    }
+  });
+}
+
+/**
  * Subscribe to stream errors.
  * Filters `onStreamEvent` for `{ type: 'error' }` events.
  * Returns an unsubscribe function.
  */
-export function onStreamError(callback: (error: string, code?: string, sessionId?: string) => void): () => void {
+export function onStreamError(callback: (error: string, code?: string, sessionId?: string, epoch?: number) => void): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'error') {
-      callback(event.message, event.code, event.sessionId as string | undefined);
+      callback(event.message, event.code, event.sessionId as string | undefined, event.epoch as number | undefined);
     }
   });
 }

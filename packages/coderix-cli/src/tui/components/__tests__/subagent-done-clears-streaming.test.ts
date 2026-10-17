@@ -6,10 +6,10 @@ import type { ChatAction, Message, ThinkingBlock } from '../../../types.js';
 /**
  * Regression: a sub-agent turn that ends with an engine `done` but no
  * `message_stop` (non-streaming provider, compacted turn, aborted stream)
- * used to leave `isStreaming` true forever while `respondingDone` was set
- * by FINISH_TURN. The ActivityLine — which keys off `isStreaming` — kept
+ * used to leave `isStreaming` true forever while `turnStatus` was set to
+ * 'idle' by FINISH_TURN. The ActivityLine — which keys off `isStreaming` — kept
  * rendering "✽ Streaming…", while the status bar (keyed off
- * `mainStreaming`/`respondingDone`) showed idle: a terminated agent still
+ * `mainStreaming`/`turnStatus`) showed idle: a terminated agent still
  * displaying streaming.
  *
  * The invariant this guards:
@@ -63,7 +63,7 @@ describe('sub-agent done without message_stop', () => {
 
     // The turn is dead: nothing may render streaming/thinking for it.
     expect(state.isStreaming).toBe(false);
-    expect(state.respondingDone).toBe(true);
+    expect(state.turnStatus).toBe('idle');
     expect(state.thinkingStartedAt).toBeUndefined();
 
     // The thinking block was finalized (the message carries a duration, which
@@ -81,6 +81,6 @@ describe('sub-agent done without message_stop', () => {
     // A tool turn: tools still settling, next LLM call not started yet —
     // the turn has NOT finished responding.
     expect(state.isStreaming).toBe(false);
-    expect(state.respondingDone).toBe(false);
+    expect(state.turnStatus).toBe('running');
   });
 });

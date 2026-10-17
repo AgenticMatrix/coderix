@@ -9,6 +9,7 @@ import {
   onStreamBlock,
   onStreamDone,
   onStreamError,
+  onStreamTurnDone,
   onTokenUsage,
 } from '../ipc-client.js';
 
@@ -381,18 +382,19 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubBlock);
 
     // ── Stream Done ────────────────────────────────────────
-    const unsubDone = onStreamDone((stopReason?: string, sessionId?: string) => {
+    const unsubDone = onStreamDone((_stopReason?: string, sessionId?: string) => {
       const sid = sessionOf(sessionId);
 
       // Commit any blocks still buffered (the last deltas of the turn may not
       // have flushed yet) before reading `currentMessage` below.
       flushPendingBlocks(sid);
 
-      // A stop reason of 'tool_use' means this turn ended to run tools — the
-      // engine will emit another assistant turn right after the tool results.
-      // Keep streaming true in that case; only reset it on a terminal turn
-      // (end_turn / max_tokens / stop_sequence / refusal, or undefined).
-      const isToolTurn = stopReason === 'tool_use';
+      // `message_stop` fires per model step, so it only commits this step's
+      // assistant message. It must NOT flip `isStreaming` off — that decision
+      // belongs to the engine's terminal `done` (see onStreamTurnDone), which
+      // is the authoritative per-turn signal and the only reliable way to know
+      // the turn actually ended (a tool_use turn keeps streaming across tool
+      // execution gaps).
       const current = getCurrent(sid);
       if (current) {
         const chatMsg: ChatMessage = {
@@ -402,18 +404,37 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
           blocks: current.blocks,
           timestamp: Date.now(),
         };
-        useChatStore.getState().commitAssistantMessage(sid || undefined, chatMsg, isToolTurn);
+        useChatStore.getState().commitAssistantMessage(sid || undefined, chatMsg);
         writeCurrent(sid, null);
-      } else if (!isToolTurn) {
-        useChatStore.getState().setSessionStreaming(sid || undefined, false);
       }
       refreshSidebarSession(true, sid);
     });
     cleanups.push(unsubDone);
 
-    // ── Stream Error ───────────────────────────────────────
-    const unsubError = onStreamError((error: string, code?: string, sessionId?: string) => {
+    // ── Stream Turn Done (engine `done`) ───────────────────
+    // The engine emitted its terminal `done` for this turn — the authoritative
+    // per-turn end signal. Only now may the turn flip to idle (its ActivityLine
+    // shows Done and `isStreaming` stops), no matter how many tool steps ran.
+    const unsubTurnDone = onStreamTurnDone((sessionId?: string, epoch?: number) => {
       const sid = sessionOf(sessionId);
+      // Ignore a stale turn's late terminal signal: only the current epoch may
+      // flip streaming off. An interrupt-and-resend bumps the epoch, so the old
+      // turn's `done` (lower epoch) must not kill the new turn's streaming.
+      const currentEpoch = useChatStore.getState().streamEpochBySession[sid] ?? 0;
+      if (epoch !== undefined && epoch !== currentEpoch) return;
+      useChatStore.getState().setSessionStreaming(sid || undefined, false);
+      refreshSidebarSession(false, sid);
+    });
+    cleanups.push(unsubTurnDone);
+
+    // ── Stream Error ───────────────────────────────────────
+    const unsubError = onStreamError((error: string, code?: string, sessionId?: string, epoch?: number) => {
+      const sid = sessionOf(sessionId);
+
+      // Same epoch guard as onStreamTurnDone: a stale turn's late error must not
+      // reset the new turn's streaming state after an interrupt-and-resend.
+      const currentEpoch = useChatStore.getState().streamEpochBySession[sid] ?? 0;
+      if (epoch !== undefined && epoch !== currentEpoch) return;
 
       // Drop any buffered partial message for this session's stream.
       discardPending(sid);

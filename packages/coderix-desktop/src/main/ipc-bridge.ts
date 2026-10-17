@@ -147,6 +147,7 @@ export const IPC_CHANNELS = {
   STREAM_TOOL_STATE: 'stream:toolState',
   STREAM_TOOL_RESULT: 'stream:toolResult',
   STREAM_DONE: 'stream:done',
+  STREAM_TURN_DONE: 'stream:turnDone',
   STREAM_ERROR: 'stream:error',
   STATE_PERMISSION_REQ: 'state:permissionReq',
   STATE_QUESTION_REQ: 'state:questionReq',
@@ -214,6 +215,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   // Per-session abort controllers: one in-flight stream per session id, so
   // starting a query in one session never aborts another session's stream.
   const abortControllers = new Map<string, AbortController>();
+  // Per-session stream epoch: a monotonic counter bumped on every sendMessage so
+  // the renderer can ignore a stale turn's late terminal events (done/error)
+  // after an interrupt-and-resend. Mirrors ZCode's inputId turn anchoring.
+  const streamEpochs = new Map<string, number>();
   // One QueryEngine per concurrently-running session. The in-process coderix
   // engine is serial per instance (`isActive`/`messageQueue`/`abortController`
   // are instance fields), so true parallel requires an instance per session.
@@ -346,6 +351,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // event from this query is tagged correctly even as other sessions stream
     // concurrently (no shared global to race on).
     const streamSessionId = sessionManager.getActive()?.id ?? sessionId ?? '';
+    const streamEpoch = (streamEpochs.get(streamSessionId) ?? 0) + 1;
+    streamEpochs.set(streamSessionId, streamEpoch);
 
     // Abort any existing query for THIS session only (one turn per session),
     // never another session's in-flight stream.
@@ -650,20 +657,32 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 forwardStreamEvent(mainWindow, msg.event, streamSessionId);
               } else if (msg.type === 'assistant' && msg.message) {
                 // The `message_stop` stream event (forwarded above) is the
-                // authoritative end-of-turn signal for the claude-code engine,
-                // so never fall back to STREAM_DONE here for it. The Claude
-                // Code SDK emits one `assistant` message *per content block*
-                // (thinking and text arrive separately, each carrying the
-                // turn's final `stop_reason`); firing STREAM_DONE on the
-                // thinking-only message would commit it and mark the turn done
-                // before the text block streams, so the renderer drops the
-                // final answer. STREAM_DONE below is only a fallback for the
-                // Coderix engine, whose end-of-turn message uses camelCase
-                // `stopReason` and has no message_stop event.
+                // authoritative end-of-turn signal, but it is not the only one:
+                // for the claude-code engine we also fall back to STREAM_DONE
+                // here, because the assistant message carries the turn's real
+                // `stop_reason` (reliable) and keeps the turn marked streaming
+                // across tool calls. The Claude Code SDK emits one `assistant`
+                // message *per content block* — thinking and text/tool_use
+                // arrive separately, each carrying the same `stop_reason` — so
+                // firing on the thinking-only message would commit the turn and
+                // mark it done before the text/tool_use block streams (dropping
+                // the final answer). Only fire for a non-thinking block (the
+                // reliable, final content). The Coderix engine uses camelCase
+                // `stopReason` and has no message_stop event, so keep the
+                // unconditional fallback for it.
                 const stopReason =
                   msg.message.stop_reason ??
                   (msg.message as { stopReason?: string }).stopReason;
-                if (stopReason && engine !== 'claude-code') {
+                const assistantContent = msg.message.content;
+                const hasNonThinkingBlock =
+                  Array.isArray(assistantContent) &&
+                  assistantContent.some(
+                    (b) =>
+                      b &&
+                      typeof b === 'object' &&
+                      (b as { type?: string }).type !== 'thinking',
+                  );
+                if (stopReason && (engine !== 'claude-code' || hasNonThinkingBlock)) {
                   safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
                     stopReason,
                     usage: msg.message.usage,
@@ -886,6 +905,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   });
                 }
               }
+              // The engine emitted its terminal `done` for this turn — signal
+              // the renderer to move the session's turn status to 'idle'. This
+              // is the authoritative per-turn signal (unlike `message_stop`,
+              // which fires per model step and whose stop reason is unreliable).
+              safeSend(mainWindow, IPC_CHANNELS.STREAM_TURN_DONE, {
+                sessionId: streamSessionId,
+                epoch: streamEpoch,
+              });
               break;
             }
           }
@@ -894,7 +921,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         discardStreamBuffer(streamSessionId);
         const rawMessage = err instanceof Error ? err.message : String(err);
         const message = sanitizeErrorMessage(rawMessage);
-        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: streamSessionId });
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: streamSessionId, epoch: streamEpoch });
       } finally {
         // Cancel any dangling flush timer and drop buffered deltas — a normal
         // completion has already flushed via message_stop, and an aborted turn's
@@ -906,6 +933,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             message: 'Query interrupted by user',
             code: 'INTERRUPTED',
             sessionId: streamSessionId,
+            epoch: streamEpoch,
           });
         }
         // Release this session's controller once its stream has wound down so a

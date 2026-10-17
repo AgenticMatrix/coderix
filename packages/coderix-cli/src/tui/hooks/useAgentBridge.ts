@@ -714,7 +714,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
     } finally {
       // Manual /compact never emits a `done` event, so nothing else would
       // dispatch FINISH_TURN. The compact_boundary / compact_summary events
-      // dispatch ADD_USER_MESSAGE, which resets respondingDone to false —
+      // dispatch ADD_USER_MESSAGE, which resets turnStatus to 'running' —
       // combined with the prevPhase fallback in App.tsx the phase would stick
       // on the stale 'compacting' snapshot (spinner + 0% bar) forever.
       // Mark the turn finished so the ActivityLine falls back to idle/Done.

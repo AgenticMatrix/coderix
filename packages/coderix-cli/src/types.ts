@@ -290,11 +290,12 @@ export interface ChatState extends CoreState {
   queuedCount: number;
   /** When true, the current turn was interrupted via Ctrl+C. */
   interrupted: boolean;
-  /** When true, the model has finished responding (engine emitted `done`)
-   *  and no more LLM calls are expected this turn. False between LLM calls
-   *  (tool-execution gaps) so the UI keeps its current activity phase
-   *  instead of flipping to idle/showing Done prematurely. */
-  respondingDone: boolean;
+  /** Turn lifecycle phase — the single source of truth for "is a turn in
+   *  flight". `running` from the user message until the engine emits `done`
+   *  (its authoritative per-turn signal); `idle` otherwise. Tool-execution
+   *  gaps keep it `running`, so the UI holds its activity phase instead of
+   *  flipping to idle/Done prematurely. */
+  turnStatus: 'idle' | 'running';
   /** When true, /compact is actively running — used to show progress in ActivityLine. */
   isCompacting: boolean;
   /** Accumulated text from compact LLM summarization streaming. */

@@ -11,17 +11,16 @@ export interface ChatState {
   streamingContent: string;
   sessionId: string | null;
   error: string | null;
-  /** True once the model finished responding for the current turn (a terminal
-   *  stop reason, not 'tool_use'). While false, `agentStatus` must NOT fall
-   *  back to 'idle' even if `isStreaming` is momentarily false — the turn is
-   *  between LLM calls (tools settling) and another response is coming. */
-  respondingDone: boolean;
 
   // Backgrounded sessions' state. A session's transcript is stored here only
   // while it is *not* the viewed session; on switch-in it is popped into the
   // flat `messages`/`isStreaming` above, so there is never a stale duplicate.
   messagesBySession: Record<string, ChatMessage[]>;
   streamingBySession: Record<string, boolean>;
+  // Per-session stream epoch — bumped on each sendMessage, echoed back by the
+  // main process on terminal events (done/error) so a stale turn's late signal
+  // can be ignored after an interrupt-and-resend.
+  streamEpochBySession: Record<string, number>;
 
   // Actions
   sendMessage: (content: string) => Promise<void>;
@@ -32,7 +31,7 @@ export interface ChatState {
 
   // Per-session routing helpers used by streamStore to land a stream event in
   // the right session (flat when it is the viewed session, else the map).
-  commitAssistantMessage: (sessionId: string | undefined, message: ChatMessage, isToolTurn: boolean) => void;
+  commitAssistantMessage: (sessionId: string | undefined, message: ChatMessage) => void;
   patchSessionMessages: (sessionId: string | undefined, updater: (msgs: ChatMessage[]) => ChatMessage[]) => void;
   setSessionStreaming: (sessionId: string | undefined, streaming: boolean) => void;
 }
@@ -63,9 +62,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   streamingContent: '',
   sessionId: null,
   error: null,
-  respondingDone: true,
   messagesBySession: {},
   streamingBySession: {},
+  streamEpochBySession: {},
 
   sendMessage: async (content: string) => {
     const { sessionId } = get();
@@ -83,7 +82,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       messages: [...state.messages, userMsg],
       isStreaming: true,
       error: null,
-      respondingDone: false,
+      streamEpochBySession: sessionId
+        ? {
+            ...state.streamEpochBySession,
+            [sessionId]: (state.streamEpochBySession[sessionId] ?? 0) + 1,
+          }
+        : state.streamEpochBySession,
     }));
   },
 
@@ -96,7 +100,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       }));
       return;
     }
-    set({ isStreaming: false, streamingContent: '', respondingDone: true });
+    set({ isStreaming: false, streamingContent: '' });
   },
 
   clearMessages: () => {
@@ -132,8 +136,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       sessionId: id,
       messages: nextMessages,
       isStreaming: nextStreaming,
-      // A backgrounded session that was mid-turn has not finished responding.
-      respondingDone: !nextStreaming,
       streamingContent: '',
       error: null,
       messagesBySession,
@@ -143,20 +145,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   setError: (error: string | null) => {
-    set({ error, isStreaming: false, respondingDone: true });
+    set({ error, isStreaming: false });
   },
 
-  commitAssistantMessage: (sessionId, message, isToolTurn) => {
+  commitAssistantMessage: (sessionId, message) => {
     const viewed = get().sessionId;
     const target = resolveTarget(sessionId, viewed);
     if (target === viewed) {
       set((s) => ({
         messages: [...s.messages, message],
-        // A tool_use turn keeps streaming AND keeps respondingDone false —
-        // the engine will respond again once the tools settle. Only a
-        // terminal turn (the responding result) may show idle.
-        isStreaming: isToolTurn ? s.isStreaming : false,
-        respondingDone: !isToolTurn,
         streamingContent: '',
       }));
     } else {
@@ -164,10 +161,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         messagesBySession: {
           ...s.messagesBySession,
           [target]: [...(s.messagesBySession[target] ?? []), message],
-        },
-        streamingBySession: {
-          ...s.streamingBySession,
-          [target]: isToolTurn ? (s.streamingBySession[target] ?? true) : false,
         },
       }));
     }
@@ -192,10 +185,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const viewed = get().sessionId;
     const target = resolveTarget(sessionId, viewed);
     if (target === viewed) {
-      // Turning streaming off outside a commit (streamStore's no-pending-message
-      // path) means the responding result is done; turning it on (a new message
-      // starting) means the model is responding again.
-      set({ isStreaming: streaming, respondingDone: streaming ? get().respondingDone : true });
+      set({ isStreaming: streaming });
     } else {
       set((s) => ({
         streamingBySession: { ...s.streamingBySession, [target]: streaming },
