@@ -74,6 +74,7 @@ const CH = {
   STREAM_TOOL_STATE: 'stream:toolState',
   STREAM_TOOL_RESULT: 'stream:toolResult',
   STREAM_DONE: 'stream:done',
+  STREAM_TURN_DONE: 'stream:turnDone',
   STREAM_ERROR: 'stream:error',
   STATE_PERMISSION_REQ: 'state:permissionReq',
   STATE_QUESTION_REQ: 'state:questionReq',
@@ -199,6 +200,13 @@ interface StreamError {
   message: string;
   code: string;
   sessionId?: string;
+  epoch?: number;
+}
+
+interface StreamTurnDone {
+  type: 'turnDone';
+  sessionId?: string;
+  epoch?: number;
 }
 
 type StreamEventData =
@@ -208,6 +216,7 @@ type StreamEventData =
   | StreamToolState
   | StreamToolResult
   | StreamDone
+  | StreamTurnDone
   | StreamError;
 
 // ---------------------------------------------------------------------------
@@ -295,12 +304,20 @@ function createEventListener(
             sessionId: data?.sessionId as string | undefined,
           });
           break;
+        case CH.STREAM_TURN_DONE:
+          callback({
+            type: 'turnDone',
+            sessionId: data?.sessionId as string | undefined,
+            epoch: data?.epoch as number | undefined,
+          });
+          break;
         case CH.STREAM_ERROR:
           callback({
             type: 'error',
             message: (data?.message as string) ?? 'Unknown error',
             code: (data?.code as string) ?? 'UNKNOWN',
             sessionId: data?.sessionId as string | undefined,
+            epoch: data?.epoch as number | undefined,
           });
           break;
       }
@@ -1046,6 +1063,7 @@ const coderixAPI = {
         CH.STREAM_TOOL_STATE,
         CH.STREAM_TOOL_RESULT,
         CH.STREAM_DONE,
+        CH.STREAM_TURN_DONE,
         CH.STREAM_ERROR,
       ],
       callback,

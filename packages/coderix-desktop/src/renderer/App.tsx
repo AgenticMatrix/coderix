@@ -1094,19 +1094,25 @@ export function App(): React.ReactElement {
   // built: an in-flight tool_use → "executing"; otherwise the most recent
   // block type drives the label (thinking → "thinking", text → "output").
   //
-  // Only show 'idle' once the model has actually finished responding for this
-  // turn (respondingDone).  Between LLM calls (tools settling between two
-  // model turns) isStreaming can be momentarily false even though another
-  // response is coming — in that gap we keep the previous status instead of
-  // flashing idle.
-  const respondingDone = useChatStore((s) => s.respondingDone);
-  const prevAgentStatusRef = useRef<'idle' | 'thinking' | 'executing' | 'output'>('idle');
+  // `isStreaming` is the turn lifecycle: true from the user message until the
+  // engine emits its terminal `done` (via stream:turnDone), so it stays true
+  // across tool-execution gaps. It is never flipped off by `message_stop`, so
+  // "still working" can no longer be mistaken for idle.
   const agentStatus = useMemo<'idle' | 'thinking' | 'executing' | 'output'>(() => {
     if (!isStreaming) {
-      if (respondingDone) return 'idle';
-      // Turn still in flight (between LLM calls) — keep current status.
-      return prevAgentStatusRef.current;
+      // Defense in depth: even if `isStreaming` flipped off unexpectedly (a
+      // non-streaming provider, an aborted stream, or a late `done`), a
+      // committed assistant message with an executing/pending tool_use is
+      // blocking evidence that the turn is still working — mirror ZCode's
+      // snapshot-driven "still busy" check rather than trusting one boolean.
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+      const stillRunning =
+        lastAssistant?.blocks.some(
+          (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
+        ) ?? false;
+      return stillRunning ? 'executing' : 'idle';
     }
+
     const blocks = streamCurrentMessage?.blocks ?? [];
     const toolRunning = blocks.some(
       (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
@@ -1117,8 +1123,7 @@ export function App(): React.ReactElement {
     if (last.type === 'thinking' || last.type === 'tool_result') return 'thinking';
     if (last.type === 'text') return 'output';
     return 'thinking';
-  }, [isStreaming, respondingDone, streamCurrentMessage]);
-  prevAgentStatusRef.current = agentStatus;
+  }, [isStreaming, streamCurrentMessage, messages]);
 
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an

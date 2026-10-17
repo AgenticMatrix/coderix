@@ -615,9 +615,9 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     // has NOT finished responding — stay 'wait' instead of flipping to idle.
     // A dead turn (viewed sub-agent no longer running, so nothing can still
     // arrive) falls through to idle, staying consistent with currentPhase.
-    if (!state.respondingDone && viewedAgentRunning) return 'wait';
+    if (state.turnStatus === 'running' && viewedAgentRunning) return 'wait';
     return 'idle';
-  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick, state.respondingDone, viewedAgentRunning]);
+  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick, state.turnStatus, viewedAgentRunning]);
 
   useInputHandler({
     inputText: state.inputText,
@@ -906,17 +906,17 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   // `isStreaming` is set on message_start and cleared on message_stop /
   // FINISH_ASSISTANT_RESPONSE / INTERRUPT / error. Two stale cases survive
   // past the real end of a turn, and neither may render as live activity:
-  //   1. The engine emitted `done` (respondingDone) without a message_stop —
+  //   1. The engine emitted `done` (turnStatus 'idle') without a message_stop —
   //      the flag is simply never reset.
   //   2. A sub-agent turn ended silently (abort without INTERRUPT) — the
   //      viewed agent is no longer running, so nothing can still arrive.
   // In both cases the turn is dead: the ActivityLine must show Done, not
   // Streaming…/Thinking….
-  const llmOutputting = state.isStreaming && viewedAgentRunning && !state.respondingDone;
+  const llmOutputting = state.isStreaming && viewedAgentRunning && state.turnStatus === 'running';
 
   // Last computed phase — used to bridge the gaps BETWEEN LLM calls within
   // one turn (after a message_stop, while tools settle and the next call has
-  // not started yet).  Until the engine emits `done` (respondingDone), the
+  // not started yet).  Until the engine emits `done` (turnStatus 'idle'), the
   // phase must NOT fall through to idle, otherwise the ActivityLine would
   // flash a premature "Done…" between two model calls.
   const prevPhaseRef = useRef<ActivityPhase>('idle');
@@ -943,9 +943,9 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     // and the turn is still alive — keep the current phase unchanged instead
     // of showing a premature Done. A dead turn (no process running at all)
     // falls through to idle.
-    if (!state.respondingDone && viewedAgentRunning) return prevPhaseRef.current;
+    if (state.turnStatus === 'running' && viewedAgentRunning) return prevPhaseRef.current;
     return 'idle';
-  }, [state.error, state.isCompacting, latestThinking, state.messages, llmOutputting, agentTick, state.respondingDone, viewedAgentRunning]);
+  }, [state.error, state.isCompacting, latestThinking, state.messages, llmOutputting, agentTick, state.turnStatus, viewedAgentRunning]);
   prevPhaseRef.current = currentPhase;
 
   // Turn elapsed timer — starts on new user message, runs continuously until next user message
@@ -977,7 +977,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   // Two guards keep it from showing on a bare launch / resume / mid-turn gap:
   //   - turnStartedAt > 0: a user message was sent this session (ADD_USER_MESSAGE
   //     stamps it; LOAD_CHAT does not, so initial load and resume stay 0).
-  //   - respondingDone: the engine emitted `done` for this turn. Without it the
+  //   - turnStatus === 'idle': the engine emitted `done` for this turn. Without it the
   //     brief window between ADD_USER_MESSAGE and the first message_start (where
   //     currentPhase is still 'idle') would flash a premature "Done (0 tokens)".
   // Elapsed is computed directly from turnStartRef rather than turnElapsedRef:
@@ -986,7 +986,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   // turn finishing before the first tick read a stale 0, never set completedTurn,
   // and left the sticky ActivityLine snapshot stuck on "✽ Streaming…" forever.
   useEffect(() => {
-    if (currentPhase === 'idle' && state.respondingDone && state.turnStartedAt > 0) {
+    if (currentPhase === 'idle' && state.turnStatus === 'idle' && state.turnStartedAt > 0) {
       const elapsed = Date.now() - turnStartRef.current;
       if (elapsed > 0) {
         setCompletedTurn({
@@ -997,7 +997,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     } else {
       setCompletedTurn(null);
     }
-  }, [currentPhase === 'idle', state.respondingDone, state.turnStartedAt, state.turnOutputTokens]);
+  }, [currentPhase === 'idle', state.turnStatus, state.turnStartedAt, state.turnOutputTokens]);
 
   // Elapsed timer — stops completely when idle, ticks at 1s when active.
   // Only calls setState when the displayed second changes to minimize re-renders.

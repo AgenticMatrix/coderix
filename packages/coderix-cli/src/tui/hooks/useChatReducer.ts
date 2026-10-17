@@ -209,9 +209,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isStreaming: result.isStreaming,
         // Track main agent streaming separately from sub-agent streaming
         mainStreaming: result.isStreaming,
-        // Propagate respondingDone so a background FINISH_TURN while viewing
+        // Propagate turnStatus so a background FINISH_TURN while viewing
         // a sub-agent still lets the main view leave its activity phase.
-        respondingDone: result.respondingDone,
+        turnStatus: result.turnStatus,
       };
     }
 
@@ -237,7 +237,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isFrozen: false,
         interrupted: false,
         // A new user message starts a turn — the model has not responded yet.
-        respondingDone: false,
+        turnStatus: 'running',
       };
 
     case 'START_ASSISTANT_RESPONSE': {
@@ -597,14 +597,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       // The engine emitted `done`: the model produced its final response
       // for this turn and no further LLM calls are expected. Only now may
       // the activity phase fall back to idle (and show the Done line).
-      return { ...state, respondingDone: true };
+      // Entering idle also resets the turn-kind orthogonal field so a compact
+      // interrupted/errored mid-turn can't leave the ActivityLine stuck.
+      return { ...state, turnStatus: 'idle', isCompacting: false, compactProgressText: '' };
 
     case 'INTERRUPT': {
       // Mark all pending/executing tool blocks as done so the UI
       // transitions out of 'wait' status phase immediately.
       // Also finalize any in-progress thinking block so the ActivityLine
       // shows "Interrupted" instead of a spinning "Thinking…".
-      let nextState = { ...state, isStreaming: false, interrupted: true, respondingDone: true };
+      let nextState = {
+        ...state,
+        isStreaming: false,
+        interrupted: true,
+        turnStatus: 'idle' as const,
+        isCompacting: false,
+        compactProgressText: '',
+      };
       if (state.thinkingStartedAt != null) {
         const lastMsg = state.messages[state.messages.length - 1];
         if (lastMsg?.role === 'assistant') {
@@ -660,7 +669,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       }
       if (lastUserIdx === -1) {
-        return { ...state, isStreaming: false, interrupted: true, turnUndone: true, respondingDone: true };
+        return {
+          ...state,
+          isStreaming: false,
+          interrupted: true,
+          turnUndone: true,
+          turnStatus: 'idle',
+          isCompacting: false,
+          compactProgressText: '',
+        };
       }
       const undoneMsg = msgs[lastUserIdx]!;
       // Extract text from the undone user message's blocks
@@ -671,7 +688,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         isStreaming: false,
         turnUndone: true,
         error: null,
-        respondingDone: true,
+        turnStatus: 'idle',
+        isCompacting: false,
+        compactProgressText: '',
         messages: msgs.slice(0, lastUserIdx),
         inputText: restoredText,
         cursorPosition: restoredText.length,
@@ -890,7 +909,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_ERROR':
       // Suppress errors from the aborted stream when the turn was undone
       if (state.turnUndone) return { ...state, turnUndone: false };
-      return { ...state, error: action.error, isStreaming: false, respondingDone: true };
+      return {
+        ...state,
+        error: action.error,
+        isStreaming: false,
+        turnStatus: 'idle',
+        isCompacting: false,
+        compactProgressText: '',
+      };
 
     case 'CLEAR_ERROR':
       return { ...state, error: null };
@@ -1103,7 +1129,7 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     turnOutputTokens: 0,
     turnEstimatedTokens: 0,
     turnStartedAt: 0,
-    respondingDone: true,
+    turnStatus: 'idle',
     queuedCount: 0,
     interrupted: false,
     isCompacting: false,
