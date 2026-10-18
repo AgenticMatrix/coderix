@@ -133,6 +133,7 @@ export interface ClaudePermissionResponse {
 function buildAskUserQuestionHook(
   onAsk: (req: AskUserQuestionRequest) => Promise<Record<string, string | string[]>>,
   abortController: AbortController,
+  resetIdleTimer: () => void,
 ): HookCallback {
   return async (input) => {
     const i = input as unknown as { tool_input?: unknown; tool_use_id?: string };
@@ -146,9 +147,17 @@ function buildAskUserQuestionHook(
     // Wait for the host to answer (or the turn to be aborted).
     const byHeader = await new Promise<Record<string, string | string[]>>((resolve) => {
       let settled = false;
+      // The SDK emits no stream messages while the hook waits for the answer, so
+      // the turn's idle watchdog (which is only reset on each stream message)
+      // would otherwise fire TURN_IDLE_TIMEOUT_MS after the question is asked and
+      // abort the turn mid-question — leaving the AskUserQuestion tool_use stuck
+      // in "executing" with no tool_result. Keep the watchdog alive until the
+      // answer arrives (or the turn is genuinely aborted).
+      const keepalive = setInterval(() => resetIdleTimer(), 60_000);
       const done = (v: Record<string, string | string[]>): void => {
         if (settled) return;
         settled = true;
+        clearInterval(keepalive);
         resolve(v);
       };
       onAsk({ toolUseId: i.tool_use_id ?? '', questions }).then(done, () => done({}));
@@ -446,10 +455,23 @@ export async function* runClaudeCodeQuery(
     options.plugins = [{ type: 'local', path: CUSTOM_SKILL_SHIM_DIR }];
   }
   const preToolUseHooks: HookCallbackMatcher[] = [];
+  // The idle watchdog is defined before the hooks so AskUserQuestion's
+  // PreToolUse hook can keep it alive while the question waits for an answer.
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetIdleTimer = (): void => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      console.error(
+        `[claude-code] turn idle for ${TURN_IDLE_TIMEOUT_MS}ms — aborting (possible hang)`,
+      );
+      abortController.abort();
+    }, TURN_IDLE_TIMEOUT_MS);
+  };
+  resetIdleTimer();
   if (onAskUserQuestion) {
     preToolUseHooks.push({
       matcher: 'AskUserQuestion',
-      hooks: [buildAskUserQuestionHook(onAskUserQuestion, abortController)],
+      hooks: [buildAskUserQuestionHook(onAskUserQuestion, abortController, resetIdleTimer)],
     });
     console.log('[AskUserQuestion] registered PreToolUse hook (matcher: AskUserQuestion)');
   } else {
@@ -490,18 +512,6 @@ export async function* runClaudeCodeQuery(
   }
 
   const stream = claudeQuery({ prompt, options });
-
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-  const resetIdleTimer = (): void => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      console.error(
-        `[claude-code] turn idle for ${TURN_IDLE_TIMEOUT_MS}ms — aborting (possible hang)`,
-      );
-      abortController.abort();
-    }, TURN_IDLE_TIMEOUT_MS);
-  };
-  resetIdleTimer();
 
   // Latest turn's per-call usage (captured from the assistant messages) — used
   // at `result` to report the *current* context footprint rather than the
