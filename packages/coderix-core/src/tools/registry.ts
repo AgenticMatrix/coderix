@@ -135,6 +135,7 @@ export function createToolRegistry(opts: CreateToolRegistryOptions = {}): ToolRe
         isError: result.isError,
         duration: result.duration,
         metadata: result.metadata,
+        image: result.image,
       };
     };
 
