@@ -137,6 +137,18 @@ function createToolErrorResult(toolUseId: string, error: string): ToolResultBloc
   };
 }
 
+/** Flatten a tool_result's content to plain text for display-only paths
+ *  (tool_completed events / TUI renderers). Image blocks have no text, so a
+ *  read-image result collapses to its `[Image]` text block instead of the
+ *  base64 payload. */
+function toolResultText(content: ToolResultBlock['content']): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((b) => (b.type === 'text' ? b.text ?? '' : '')).join('\n');
+  }
+  return '';
+}
+
 const TASK_TOOL_NAMES = new Set(['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet']);
 
 /**
@@ -305,10 +317,27 @@ async function executeSingleTool(
 
   try {
     const execResult = await toolRegistry.execute(toolBlock.name, toolBlock.input, toolCtx);
+    // When the tool read an image (e.g. the Read tool), carry the base64 data
+    // into the tool_result as a proper image content block so the provider
+    // adapter can emit it to the model as an image (not garbled UTF-8 text).
+    const resultContent: ToolResultBlock['content'] =
+      execResult.image && execResult.image.data
+        ? [
+            { type: 'text', text: execResult.content || '[Image]' },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: execResult.image.media_type,
+                data: execResult.image.data,
+              },
+            },
+          ]
+        : execResult.content;
     const resultBlock: ToolResultBlock = {
       type: 'tool_result',
       tool_use_id: toolBlock.id,
-      content: execResult.content,
+      content: resultContent,
       is_error: execResult.isError,
       duration: execResult.duration,
       metadata: execResult.metadata,
@@ -1336,7 +1365,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           data: {
             toolUseId: cr.tool_use_id,
             duration: cr.duration,
-            content: cr.content,
+            // Display-only: flatten image content blocks to plain text so the
+            // TUI renderers (which expect a string) never receive an array.
+            content: toolResultText(cr.content),
             isError: cr.is_error,
             metadata: cr.metadata,
           },
@@ -1436,7 +1467,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
             data: {
               toolUseId: listenBlock.id,
               duration: snapshot.duration,
-              content: snapshot.content,
+              content: toolResultText(snapshot.content),
               isError: false,
               metadata: snapshot.metadata,
             },

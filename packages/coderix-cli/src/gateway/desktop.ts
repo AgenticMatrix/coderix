@@ -96,6 +96,7 @@ function buildToolRegistry(): ToolRegistry {
             isError: r.isError,
             duration: r.duration,
             metadata: r.metadata,
+            image: r.image,
           };
         } catch (err) {
           return {

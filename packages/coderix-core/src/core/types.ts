@@ -77,7 +77,7 @@ export interface ToolUseBlock {
 export interface ToolResultBlock {
   type: 'tool_result';
   tool_use_id: string;
-  content: string | TextBlock[];
+  content: string | ContentBlock[];
   is_error?: boolean;
   /** Execution duration in milliseconds. */
   duration?: number;
@@ -223,7 +223,7 @@ export type QueryMessage =
   | { type: 'system'; subtype: 'compact_progress'; data: { status: 'started' | 'streaming' | 'completed'; message?: string; textDelta?: string; step: 'micro' | 'session_memory' | 'llm_summarize' } }
   | { type: 'system'; subtype: 'error'; error: AgentError }
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
-  | { type: 'system'; subtype: 'tool_completed'; data: { toolUseId: string; duration?: number; content: string | TextBlock[]; isError?: boolean; metadata?: Record<string, unknown> } }
+  | { type: 'system'; subtype: 'tool_completed'; data: { toolUseId: string; duration?: number; content: string; isError?: boolean; metadata?: Record<string, unknown> } }
   | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission }
   | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion }
   | { type: 'usage'; sessionId: string; usage: CompletionUsage };
@@ -430,6 +430,8 @@ export interface ToolExecutionResult {
   duration?: number;
   /** Tool-specific structured metadata carried through to the result renderer. */
   metadata?: Record<string, unknown>;
+  /** Image data when the tool read an image file (base64 + media type). */
+  image?: { data: string; media_type: string };
 }
 
 // ── Session ───────────────────────────────────────────────────────────
