@@ -556,7 +556,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // the final assistant turn. A `user` message from the SDK is the turn
       // boundary — it arrives only after the assistant turn's blocks finish
       // streaming — so we flush the current assistant turn there.
-      const claudeTurnMessages: Message[] = [];
       let claudeAssistantBlocks: ContentBlock[] = [];
       const claudeBlockIndexByStreamIndex = new Map<number, number>();
       const claudeRawInputByStreamIndex = new Map<number, string>();
@@ -569,13 +568,28 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const subagentTranscripts = new Map<string, Message[]>();
       const subagentMeta = new Map<string, { agentType?: string; description?: string }>();
 
-      const flushClaudeAssistant = (): void => {
-        if (claudeAssistantBlocks.length > 0) {
-          claudeTurnMessages.push({ role: 'assistant', content: claudeAssistantBlocks });
-          claudeAssistantBlocks = [];
-          claudeBlockIndexByStreamIndex.clear();
-          claudeRawInputByStreamIndex.clear();
+      // Persist one completed LLM call (an assistant message with its thinking /
+      // tool_use / text blocks) to the session store the moment it finishes,
+      // rather than batching every call until the whole turn ends. Persisting per
+      // call means a turn that later errors or is aborted still keeps every call
+      // it already finished — reloading shows the trajectory up to the failure
+      // point instead of dropping the entire turn.
+      const flushClaudeAssistant = (): boolean => {
+        if (claudeAssistantBlocks.length === 0) return false;
+        try {
+          // `sessionManager` is a module-level `let` narrowed to non-null at the
+          // top of the handler; the assertion re-states that for this closure.
+          sessionManager!.addMessage(streamSessionId, {
+            role: 'assistant',
+            content: claudeAssistantBlocks,
+          });
+        } catch {
+          // best-effort — never let a persist failure kill the stream
         }
+        claudeAssistantBlocks = [];
+        claudeBlockIndexByStreamIndex.clear();
+        claudeRawInputByStreamIndex.clear();
+        return true;
       };
 
       // Clear any stale coalescing state from a previous (possibly aborted) turn.
@@ -700,6 +714,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   // separate user message — the same interleaving the Coderix
                   // engine persists (assistant → user(tool results) → …).
                   if (engine === 'claude-code') {
+                    // A `user` message from the SDK is the LLM-call boundary: it
+                    // carries the tool results for the assistant call that just
+                    // finished. Persist that call now, then persist the results as
+                    // a user message (the same interleaving the Coderix engine
+                    // stores: assistant → user(tool results) → …).
                     flushClaudeAssistant();
                     const toolResultBlocks: ContentBlock[] = [];
                     for (const block of content) {
@@ -709,7 +728,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                       }
                     }
                     if (toolResultBlocks.length > 0) {
-                      claudeTurnMessages.push({ role: 'user', content: toolResultBlocks });
+                      try {
+                        sessionManager.addMessage(streamSessionId, {
+                          role: 'user',
+                          content: toolResultBlocks,
+                        });
+                      } catch {
+                        // best-effort
+                      }
                     }
                   }
                   for (const block of content) {
@@ -844,21 +870,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   totalCost?: number;
                   lastUsage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
                 };
-                // Flush the final assistant turn, then persist the accumulated
-                // interleaved transcript (thinking + tool cards + final text) so
-                // switching sessions preserves it in the same message order the
-                // Coderix engine stores. Fall back to the raw result string when
-                // no structured content was captured (e.g. a plain text response).
-                flushClaudeAssistant();
-                try {
-                  if (claudeTurnMessages.length > 0) {
-                    for (const m of claudeTurnMessages) {
-                      sessionManager.addMessage(streamSessionId, m);
-                    }
-                  } else if (data.result) {
-                    sessionManager.addMessage(streamSessionId, { role: 'assistant', content: data.result });
-                  }
-                } catch { /* ignore — best-effort persistence */ }
+                // Persist the final LLM call. When the SDK delivered the answer as
+                // structured blocks, `flushClaudeAssistant` already wrote it; the
+                // `data.result` fallback covers a plain-text response that never
+                // streamed any blocks (e.g. the CLI surfacing a login/quota error
+                // as text with no stream_event traffic).
+                const flushedFinalCall = flushClaudeAssistant();
+                if (!flushedFinalCall && data.result) {
+                  try {
+                    sessionManager.addMessage(streamSessionId, {
+                      role: 'assistant',
+                      content: data.result,
+                    });
+                  } catch { /* ignore — best-effort persistence */ }
+                }
                 // The emitted `usage` is this turn's *delta* (see claude-code-engine),
                 // so price it directly from the model's configured price rather than
                 // trusting the SDK's `total_cost_usd` (which uses the SDK's hardcoded
