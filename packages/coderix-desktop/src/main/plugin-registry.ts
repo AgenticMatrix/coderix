@@ -1,47 +1,27 @@
 /**
  * Registered plugin loader — the generic "registration" mechanism.
  *
- * Reads `~/.coderix/plugin-registry.json` (see
- * `@coderix/core` `readPluginRegistry`) and, for every registered plugin
- * directory, loads its self-contained content into the running engine:
+ * Reads `~/.coderix/plugin-registry.json` (see `@coderix/core`
+ * `readPluginRegistry`) and, for every registered plugin directory:
  *
- *   1. skills  — symlink each `skills/<name>/` into `~/.coderix/skills/`
- *   2. MCP     — register each server declared in `plugin.json` `mcp` block
- *   3. env     — export the plugin's `.env` + `runtime.env` into `process.env`
+ *   1. MCP     — register each server declared in `plugin.json` `mcp` block
+ *   2. env     — export the plugin's `.env` + `runtime.env` into `process.env`
  *
- * This replaces the cad-specific `installCadSkills` / `installCadControlMcp` /
- * `applyCadEnv` trio: a plugin now ships everything it needs, and being listed
- * in the registry is all that's required for it to load. Idempotent: an existing
- * skill symlink is never touched; MCP entries are re-written from the plugin's
- * declaration (so a plugin that moves keeps working).
+ * Skills are NOT symlinked anywhere: each registered plugin is a self-contained
+ * local Claude Code plugin (its `skills/` tree ships with it), and
+ * `claude-code-engine.ts` loads those plugin directories through the SDK's
+ * `plugins` option — so loading a plugin auto-loads its bundled skills.
+ *
+ * This replaces the cad-specific `installCadControlMcp` / `applyCadEnv` /
+ * `installCadSkills` trio. Idempotent: MCP entries are re-written from the
+ * plugin's declaration (so a plugin that moves keeps working).
  */
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  readlinkSync,
-  symlinkSync,
-  unlinkSync,
-} from 'node:fs';
-import os from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { readPluginRegistry } from '../../../../packages/coderix-core/src/plugins/registry.js';
 import { readPluginManifest } from '../../../../packages/coderix-core/src/agents/plugin-manifest.js';
 import { addMcpConfig } from '../../../../packages/coderix-core/src/mcp/config-loader.js';
-
-const CODERIX_SKILLS_DIR = path.join(os.homedir(), '.coderix', 'skills');
-
-function pathExists(p: string): boolean {
-  try {
-    lstatSync(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** Parse a minimal `KEY=VALUE` env file (comments and blank lines skipped). */
 function loadDotEnv(dir: string): Record<string, string> {
@@ -70,52 +50,18 @@ function resolvePlaceholders(
     .replace(/\$\{ENV:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_m, name: string) => env[name] ?? '');
 }
 
-/** Symlink every `skills/<name>/` (with a SKILL.md) into `~/.coderix/skills/`. */
-function installPluginSkills(pluginRoot: string): number {
-  const skillsRoot = path.join(pluginRoot, 'skills');
-  let names: string[];
-  try {
-    names = readdirSync(skillsRoot, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => e.name);
-  } catch {
-    return 0;
-  }
-
-  try {
-    mkdirSync(CODERIX_SKILLS_DIR, { recursive: true });
-  } catch {
-    // best-effort
-  }
-
-  let linked = 0;
-  for (const name of names) {
-    const src = path.join(skillsRoot, name);
-    if (!existsSync(path.join(src, 'SKILL.md'))) continue;
-    const dest = path.join(CODERIX_SKILLS_DIR, name);
-    if (pathExists(dest)) {
-      // A stale symlink (pointing elsewhere, e.g. a former cad_harness checkout)
-      // is replaced so the plugin's own skills take effect. A real directory is
-      // a user-created skill and is never touched.
-      try {
-        if (!lstatSync(dest).isSymbolicLink()) continue;
-        if (readlinkSync(dest) === src) continue;
-        unlinkSync(dest);
-      } catch {
-        continue;
-      }
-    }
-    try {
-      symlinkSync(src, dest, 'dir');
-      linked++;
-    } catch (err) {
-      console.warn(`[Plugins] failed to link skill ${name}:`, err);
-    }
-  }
-  return linked;
+/**
+ * Directories of registered plugins that ship a `skills/` tree. The claude-code
+ * engine loads these as local plugins via the SDK `plugins` option, so a plugin's
+ * bundled skills become available to any conversation that enables them.
+ */
+export function listRegisteredPluginDirs(): string[] {
+  return readPluginRegistry()
+    .map((entry) => entry.path)
+    .filter((dir) => existsSync(path.join(dir, 'skills')));
 }
 
-/** Load every registered plugin's skills / MCP / env into the engine. */
+/** Load every registered plugin's MCP servers + runtime env into the engine. */
 export async function installRegisteredPlugins(): Promise<void> {
   const registry = readPluginRegistry();
   for (const entry of registry) {
@@ -135,11 +81,7 @@ export async function installRegisteredPlugins(): Promise<void> {
     const dotEnv = loadDotEnv(root);
     const resolveEnv: Record<string, string | undefined> = { ...process.env, ...dotEnv };
 
-    // 1. Skills
-    const linked = installPluginSkills(root);
-    if (linked > 0) console.log(`[Plugins] ${pluginName}: linked ${linked} skills`);
-
-    // 2. MCP servers
+    // 1. MCP servers
     for (const [name, decl] of Object.entries(manifest.mcp ?? {})) {
       const command = resolvePlaceholders(decl.command, root, resolveEnv);
       if (!command) {
@@ -159,7 +101,7 @@ export async function installRegisteredPlugins(): Promise<void> {
       console.log(`[Plugins] ${pluginName}: registered mcp '${name}'`);
     }
 
-    // 3. Runtime env
+    // 2. Runtime env
     for (const [k, v] of Object.entries(dotEnv)) process.env[k] = v;
     for (const [k, v] of Object.entries(manifest.runtime?.env ?? {})) {
       process.env[k] = resolvePlaceholders(v, root, resolveEnv);

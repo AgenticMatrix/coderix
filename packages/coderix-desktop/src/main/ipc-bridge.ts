@@ -391,11 +391,25 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // engine. Falls back to the global config when the session has no bound
     // model yet.
     const activeSession = sessionManager.getActive();
+    // The renderer's payload is authoritative when it carries a non-empty list,
+    // but a reloaded plugin session (cad-harness, blender-harness, …) must keep
+    // its persisted skill selection even if the renderer hasn't re-hydrated it
+    // yet after a restart — fall back to the session's own skills so reopening
+    // the app doesn't silently drop which skills the conversation was using.
+    const effectiveSkills =
+      skills && skills.length > 0 ? skills : (activeSession?.skills ?? []);
     const activeSessionModel = activeSession?.model;
     const sessionResolved =
       activeSessionModel && activeSessionModel !== 'unknown'
         ? resolveModelByName(activeSessionModel)
         : undefined;
+
+    // The claude-code engine must run in the session's OWN workspace — where its
+    // claude session lives — not the global `currentWorkDir`, which may still be
+    // the boot default if this session was resumed without a prior SESSION_LOAD.
+    // Fall back to `currentWorkDir` when the session's cwd is missing/deleted.
+    const sessionCwd = activeSession?.cwd ? resolve(activeSession.cwd) : '';
+    const engineCwd = sessionCwd && existsSync(sessionCwd) ? sessionCwd : currentWorkDir;
 
     // Resolve (or lazily build) the in-process engine bound to this session and
     // apply its per-session skill selection. The claude-code engine receives the
@@ -403,7 +417,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     let coderixEngine: QueryEngine | null = null;
     if (engine === 'coderix') {
       coderixEngine = await getEngineForSession(activeSession);
-      coderixEngine.setSkills(skills ?? []);
+      coderixEngine.setSkills(effectiveSkills);
     }
 
     const engineStream: AsyncGenerator<QueryEngineEvent> =
@@ -411,14 +425,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         ? runClaudeCodeQuery({
             prompt: userInput,
             sessionId: streamSessionId,
-            cwd: currentWorkDir,
+            cwd: engineCwd,
+            history: activeSession ? [...activeSession.messages] : [],
             permissionMode: resolvePermissionMode(loadSettings()) as PermissionMode,
             model: sessionResolved?.model ?? activeConfig.model,
             baseUrl: sessionResolved?.baseUrl ?? activeConfig.baseUrl,
             apiKey: sessionResolved?.apiKey ?? activeConfig.apiKey,
             protocol: sessionResolved?.protocol ?? activeConfig.protocol,
             abortController: controller,
-            skills: skills ?? [],
+            skills: effectiveSkills,
             customSkillDirs: loadSettings().custom_skill_dirs ?? [],
             // Forward AskUserQuestion to the renderer through the same
             // question-request channel the in-process engine uses, so the
