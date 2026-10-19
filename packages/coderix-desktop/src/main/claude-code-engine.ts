@@ -12,9 +12,9 @@
  * to Claude Code.
  */
 
-import { query as claudeQuery, getSubagentMessages } from '@anthropic-ai/claude-agent-sdk';
-import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess } from '@anthropic-ai/claude-agent-sdk';
-import type { QueryEngineEvent } from '@coderix/core';
+import { query as claudeQuery, getSubagentMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess, SdkPluginConfig } from '@anthropic-ai/claude-agent-sdk';
+import type { QueryEngineEvent, Message } from '@coderix/core';
 import { PermissionMode } from '@coderix/core';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -24,6 +24,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { extractOpenUrl } from './open-url.js';
 import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
 import { CUSTOM_SKILL_SHIM_DIR, refreshCustomSkillShim } from './skills.js';
+import { listRegisteredPluginDirs } from './plugin-registry.js';
 import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 
 /**
@@ -110,6 +111,14 @@ export interface ClaudeCodeQueryOptions {
   /** Coderix session id — used as the resume key across turns. */
   sessionId: string;
   cwd: string;
+  /**
+   * Prior messages in this Coderix session (a snapshot taken before the current
+   * turn). When no resumable claude session id is known — e.g. a conversation
+   * created before cross-restart persistence existed, or whose mapping was lost —
+   * these are replayed as a context preamble so the model keeps its history
+   * instead of being handed a blank context.
+   */
+  history?: Message[];
   /** Coderix permission mode for this turn (plan/ask/auto/low). Defaults to 'ask'. */
   permissionMode?: PermissionMode;
   model?: string;
@@ -441,10 +450,73 @@ function createSpawnFn(
   };
 }
 
+/**
+ * Max tool-result text replayed per block — long outputs add little context and
+ * would balloon the preamble past the model's context budget.
+ */
+const REPLAY_TOOL_RESULT_MAX = 1000;
+/** Max prior messages replayed into the preamble (most recent wins). */
+const REPLAY_MAX_MESSAGES = 50;
+
+/**
+ * Rebuild a plain-text transcript from the Coderix session's prior messages,
+ * used as a context preamble when the claude-session-id mapping is missing (a
+ * conversation created before cross-restart persistence was deployed, or a
+ * mapping that was lost). Tool calls are summarized rather than re-executed and
+ * thinking blocks are dropped (provider-signed, can't round-trip across
+ * providers). This is a fallback — the native `--resume` path preserves full
+ * tool structure and is always preferred when the id is known.
+ */
+function buildReplayPreamble(history: Message[]): string {
+  const recent = history.slice(-REPLAY_MAX_MESSAGES);
+  const lines: string[] = [
+    '以下是本会话之前的历史记录（由桌面恢复，仅供你参考上下文；请在此基础上继续，不要重复执行其中已经完成的工具调用）。',
+    '',
+  ];
+  for (const msg of recent) {
+    if (msg.role === 'system') continue;
+    const blocks = Array.isArray(msg.content)
+      ? msg.content
+      : [{ type: 'text' as const, text: String(msg.content) }];
+    const parts: string[] = [];
+    for (const b of blocks) {
+      if (b.type === 'text' && b.text) {
+        parts.push(b.text);
+      } else if (b.type === 'tool_use') {
+        const name = b.name ?? '工具';
+        const input = b.input ? ` ${JSON.stringify(b.input)}` : '';
+        parts.push(`[调用了工具 ${name}${input}]`);
+      } else if (b.type === 'tool_result') {
+        let content = '';
+        if (typeof b.content === 'string') {
+          content = b.content;
+        } else if (Array.isArray(b.content)) {
+          content = b.content
+            .map((c) => (typeof c === 'string' ? c : (c?.text ?? '')))
+            .join('\n');
+        }
+        if (content) {
+          const clipped =
+            content.length > REPLAY_TOOL_RESULT_MAX
+              ? content.slice(0, REPLAY_TOOL_RESULT_MAX) + '…'
+              : content;
+          parts.push(`[工具结果]\n${clipped}`);
+        }
+      }
+      // `thinking` and `image` blocks can't be replayed — skip.
+    }
+    const text = parts.join('\n').trim();
+    if (!text) continue;
+    lines.push(`${msg.role === 'user' ? '用户' : '助手'}: ${text}`);
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}
+
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
+  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, history, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
   // Restore the persisted claude session id + usage (survives a restart) when
   // the in-memory maps have no entry yet, so a resumed conversation keeps its
@@ -460,7 +532,45 @@ export async function* runClaudeCodeQuery(
       }
     }
   }
-  const resume = claudeSessionByCoderixSession.get(sessionId);
+
+  let resume = claudeSessionByCoderixSession.get(sessionId);
+
+  // A stale resume id (the claude session was deleted, expired, or lives in a
+  // different project dir) would make the CLI silently start a fresh session
+  // and drop context. Verify the session still exists before committing to it;
+  // when it's gone — or there was never a mapping — replay the Coderix session's
+  // transcript instead so the model keeps its history.
+  if (resume) {
+    try {
+      let info = await getSessionInfo(resume, { dir: cwd });
+      if (!info) {
+        // The id wasn't found under this cwd's project dir — the session may have
+        // been created under a symlinked/normalized path. Search every project
+        // dir before declaring it lost (native resume beats a lossy replay).
+        info = await getSessionInfo(resume);
+      }
+      if (!info) {
+        console.warn(
+          `[claude-code] persisted claude session ${resume} not found — falling back to transcript replay`,
+        );
+        resume = undefined;
+      }
+    } catch (err) {
+      // Best-effort: if the lookup itself fails (permissions, SDK change), keep
+      // the resume id — the init-verification below still catches a real miss.
+      console.warn('[claude-code] could not verify resume session; proceeding with resume', err);
+    }
+  }
+
+  // When there's no resumable claude session but the Coderix session has prior
+  // messages, replay them so the model isn't handed a blank context. This is
+  // what lets a conversation created before cross-restart persistence continue
+  // correctly after its first restart.
+  const effectivePrompt =
+    !resume && history && history.length > 0
+      ? buildReplayPreamble(history) + '\n\n' + prompt
+      : prompt;
+
   let pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
 
   // Not bundled with the packaged app — install the native CLI on demand into
@@ -516,13 +626,23 @@ export async function* runClaudeCodeQuery(
   // Always set the skill filter so an empty selection is honored as "no skills"
   // (rather than falling through to the CLI's load-everything default).
   options.skills = skills ?? [];
+  // Load registered plugins as local Claude Code plugins so their bundled
+  // `skills/` trees are discoverable; also load the custom-skill shim. MCP
+  // discovery is skipped for registered plugins — `installRegisteredPlugins`
+  // registers those servers itself (they need the plugin's own python/interpreter).
+  const plugins: SdkPluginConfig[] = listRegisteredPluginDirs().map((dir) => ({
+    type: 'local',
+    path: dir,
+    skipMcpDiscovery: true,
+  }));
   // Expose custom skill directories to the CLI as a managed local plugin. The
   // CLI won't discover skills outside its fixed roots, so we materialize a shim
   // (`~/.coderix/custom-skills/skills/*` symlinks) and load it via `plugins`.
   if (customSkillDirs && customSkillDirs.length > 0) {
     refreshCustomSkillShim();
-    options.plugins = [{ type: 'local', path: CUSTOM_SKILL_SHIM_DIR }];
+    plugins.push({ type: 'local', path: CUSTOM_SKILL_SHIM_DIR });
   }
+  if (plugins.length > 0) options.plugins = plugins;
   const preToolUseHooks: HookCallbackMatcher[] = [];
   // The idle watchdog is defined before the hooks so AskUserQuestion's
   // PreToolUse hook can keep it alive while the question waits for an answer.
@@ -580,7 +700,7 @@ export async function* runClaudeCodeQuery(
     console.log('[Permission] canUseTool registered');
   }
 
-  const stream = claudeQuery({ prompt, options });
+  const stream = claudeQuery({ prompt: effectivePrompt, options });
 
   // Latest turn's per-call usage (captured from the assistant messages) — used
   // at `result` to report the *current* context footprint rather than the
@@ -592,8 +712,21 @@ export async function* runClaudeCodeQuery(
       resetIdleTimer();
       // Remember the Claude Code session id for the next turn.
       if (msg.type === 'system' && msg.subtype === 'init') {
+        // Verify a requested resume actually took effect. If the CLI reports a
+        // DIFFERENT session id than the one we asked to resume, the resume failed
+        // (stale/foreign id, wrong cwd) and this turn has no prior context. Log it
+        // loudly and DON'T overwrite the on-disk mapping — the old id is the only
+        // pointer to the real session, and clobbering it would destroy the
+        // recovery path.
+        if (resume && msg.session_id !== resume) {
+          console.error(
+            `[claude-code] resume of claude session ${resume} failed — CLI started ${msg.session_id} instead (this turn has no prior context)`,
+          );
+        } else {
+          persistSessionState(sessionId, { claudeSessionId: msg.session_id });
+        }
+        // Always keep the in-memory map current for this run's follow-up turns.
         claudeSessionByCoderixSession.set(sessionId, msg.session_id);
-        persistSessionState(sessionId, { claudeSessionId: msg.session_id });
         continue;
       }
 
@@ -615,8 +748,13 @@ export async function* runClaudeCodeQuery(
           yield { type: 'message', data: { type: 'user', message: msg.message, parentToolUseId: msg.parent_tool_use_id } };
           break;
         case 'result':
-          claudeSessionByCoderixSession.set(sessionId, msg.session_id);
-          persistSessionState(sessionId, { claudeSessionId: msg.session_id });
+          // Mirror the init guard: only persist the session id when it's the one
+          // we actually resumed (or there was no resume), so a failed resume
+          // doesn't overwrite the recoverable on-disk mapping.
+          if (!resume || msg.session_id === resume) {
+            claudeSessionByCoderixSession.set(sessionId, msg.session_id);
+            persistSessionState(sessionId, { claudeSessionId: msg.session_id });
+          }
           if (msg.is_error) {
             const errors = (msg as { errors?: string[] }).errors;
             const message =

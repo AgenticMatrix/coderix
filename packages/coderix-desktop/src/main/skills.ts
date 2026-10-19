@@ -38,6 +38,7 @@ import {
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { loadSettings, saveSettings } from '@coderix/core';
+import { listRegisteredPluginDirs } from './plugin-registry.js';
 
 export interface SkillInfo {
   name: string;
@@ -122,7 +123,14 @@ const CLAUDE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
  * so a selected custom skill resolves for the built-in engine too.
  */
 export function coderixSkillDirs(): string[] {
-  return [CODERIX_SKILLS_DIR, CLAUDE_SKILLS_DIR, ...readCustomSkillDirs()];
+  const dirs = [CODERIX_SKILLS_DIR, CLAUDE_SKILLS_DIR, ...readCustomSkillDirs()];
+  // Registered plugins ship their own `skills/` trees — add them as roots so the
+  // in-process coderix engine (which runs plugin sessions like cad-harness) can
+  // load a plugin's bundled skills without symlinking them anywhere.
+  for (const pluginDir of listRegisteredPluginDirs()) {
+    dirs.push(join(pluginDir, 'skills'));
+  }
+  return dirs;
 }
 
 /**
@@ -144,6 +152,11 @@ export function listCoderixSkills(): SkillInfo[] {
   for (const dir of readCustomSkillDirs()) {
     if (!existsSync(dir)) continue;
     for (const skill of scanSkillDir(dir, 'custom')) {
+      registerSkill(byName, skill);
+    }
+  }
+  for (const pluginDir of listRegisteredPluginDirs()) {
+    for (const skill of scanSkillDir(join(pluginDir, 'skills'), 'plugin')) {
       registerSkill(byName, skill);
     }
   }
