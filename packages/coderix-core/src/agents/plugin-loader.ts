@@ -44,7 +44,7 @@ export async function loadPluginAgents(
   for (const { pluginPath, pluginName, manifest } of entries) {
     // ── 1. Manifest-only agent identity (plugin.json `agent` block) ──────
     if (manifest?.agent) {
-      agents.push(synthesizeManifestAgent(pluginPath, pluginName, manifest));
+      agents.push(await synthesizeManifestAgent(pluginPath, pluginName, manifest));
     }
 
     // ── 2. Agent definition files (agents/ + agentsPaths) ────────────────
@@ -118,12 +118,13 @@ export async function loadPluginAgents(
 /**
  * Synthesize a PluginAgentDefinition from a manifest-only plugin's `agent` block.
  */
-function synthesizeManifestAgent(
+async function synthesizeManifestAgent(
   pluginPath: string,
   pluginName: string,
   manifest: PluginManifest,
-): PluginAgentDefinition {
+): Promise<PluginAgentDefinition> {
   const a = manifest.agent!;
+  const systemPrompt = await resolveManifestSystemPrompt(pluginPath, a);
   return {
     agentType: pluginAgentType(manifest),
     whenToUse: a.whenToUse ?? manifest.description ?? '',
@@ -134,8 +135,31 @@ function synthesizeManifestAgent(
     ...(a.permissionMode ? { permissionMode: a.permissionMode } : {}),
     source: 'plugin' as const,
     plugin: pluginName,
-    getSystemPrompt: () => (a.systemPrompt ?? '').replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath),
+    getSystemPrompt: () => systemPrompt,
   };
+}
+
+/**
+ * Resolve a manifest agent's system prompt: when `systemPromptFile` is set, its
+ * file content wins (with `${CODERIX_PLUGIN_ROOT}` substituted); otherwise the
+ * inline `systemPrompt` is used.
+ */
+async function resolveManifestSystemPrompt(
+  pluginPath: string,
+  a: NonNullable<PluginManifest['agent']>,
+): Promise<string> {
+  let prompt = a.systemPrompt ?? '';
+  if (a.systemPromptFile) {
+    const filePath = a.systemPromptFile.startsWith('/')
+      ? a.systemPromptFile
+      : join(pluginPath, a.systemPromptFile);
+    try {
+      prompt = await readFile(filePath, 'utf-8');
+    } catch {
+      // unreadable prompt file — fall back to inline systemPrompt
+    }
+  }
+  return prompt.replace(/\$\{CODERIX_PLUGIN_ROOT\}/g, pluginPath);
 }
 
 /**

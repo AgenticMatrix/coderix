@@ -76,7 +76,11 @@ export { PermissionMode, RiskLevel, SETTING_SOURCE_PRIORITY } from './core/types
 // ── Agents ─────────────────────────────────────────────────────────
 export { buildAgentRegistry } from './agents/registry.js';
 export { loadPluginManifests } from './agents/plugin-manifest.js';
-export type { PluginManifest, PluginManifestRecord } from './agents/plugin-manifest.js';
+export type {
+  PluginManifest, PluginManifestRecord, PluginMcpServerDecl, PluginRuntimeDecl, PluginSource,
+} from './agents/plugin-manifest.js';
+export { readPluginRegistry, PLUGIN_REGISTRY_PATH } from './plugins/registry.js';
+export type { RegisteredPlugin } from './plugins/registry.js';
 export { createAgentRuntime } from './agents/runtime.js';
 export type { AgentRuntime } from './agents/runtime.js';
 export { getSubAgentRegistry, setSubAgentRegistry } from './agents/agent-spawn/registry-ref.js';

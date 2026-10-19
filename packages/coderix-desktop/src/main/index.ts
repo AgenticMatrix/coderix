@@ -18,9 +18,7 @@ import { createBrowserViewManager } from './browser-view-manager.js';
 import type { BrowserViewManager } from './browser-view-manager.js';
 import { createCadViewerManager } from './cad-viewer-manager.js';
 import type { CadViewerManager } from './cad-viewer-manager.js';
-import { installCadSkills } from './cad-skills.js';
-import { applyCadEnv } from './cad-paths.js';
-import { installCadControlMcp, installCadPluginManifest } from './cad-mcp.js';
+import { installRegisteredPlugins } from './plugin-registry.js';
 import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
@@ -99,18 +97,11 @@ async function bootstrap(): Promise<void> {
     // Idempotent: existing settings.json / user-customized skills are preserved.
     bootstrapConfig();
 
-    // Make cad_harness's vendored CAD skills available to the engine (symlink the
-    // whole skills root into ~/.coderix/skills/). Idempotent; no-op if absent.
-    installCadSkills();
-
-    // Export the CAD toolchain paths (CAD_PYTHON etc.) so the engine's bash
-    // tool and the skill scripts it runs resolve the right Python interpreter.
-    applyCadEnv();
-
-    // Seed the cad-harness plugin manifest + register the cad-control MCP server
-    // so plugin conversations can control the CAD component via MCP. Idempotent.
-    installCadPluginManifest();
-    installCadControlMcp();
+    // Load every registered plugin (skills symlinks, MCP servers, runtime env).
+    // Replaces the cad-specific installCadSkills/applyCadEnv/installCadPluginManifest/
+    // installCadControlMcp trio: a plugin now ships its own content and the registry
+    // is all that's required to auto-load it. Idempotent.
+    await installRegisteredPlugins();
 
     // Seed the blender-harness plugin manifest + register the official blender
     // MCP server so plugin conversations can drive a running Blender. Idempotent.
