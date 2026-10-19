@@ -14,15 +14,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 /**
- * The official Blender MCP server dir (`<repo>/mcp`, containing `pyproject.toml`
- * with the `blender-mcp = blmcp:main` entry point). Prefers an explicit
- * `BLENDER_MCP_DIR` env var, then the sibling `blender-mcp` checkout under
- * `~/Documents/apps/`.
+ * The official Blender MCP server dir (`mcp/blender`, containing `pyproject.toml`
+ * with the `blender-mcp = blmcp:main` entry point) — now self-contained under the
+ * registered `blender_plugins` plugin. Prefers an explicit `BLENDER_MCP_DIR` env
+ * var, then the self-contained checkout under `~/Documents/apps/`.
  */
 export function resolveBlenderMcpDir(): string {
   const override = process.env.BLENDER_MCP_DIR?.trim();
   if (override) return override;
-  return path.join(os.homedir(), 'Documents', 'apps', 'blender-mcp', 'mcp');
+  return path.join(os.homedir(), 'Documents', 'apps', 'blender_plugins', 'mcp', 'blender');
 }
 
 /**
