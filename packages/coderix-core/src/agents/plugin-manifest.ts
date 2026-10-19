@@ -19,7 +19,21 @@
 
 import { readdir, readFile, stat } from 'fs/promises';
 import { homedir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
+import { readPluginRegistry } from '../plugins/registry.js';
+
+/** An MCP stdio server a plugin ships and asks coderix to register for it. */
+export interface PluginMcpServerDecl {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+/** Runtime environment + launch hints a plugin needs to run its skills/viewer. */
+export interface PluginRuntimeDecl {
+  /** Env vars to export; `${CODERIX_PLUGIN_ROOT}` is resolved to the plugin dir. */
+  env?: Record<string, string>;
+}
 
 export interface PluginManifest {
   name: string;
@@ -31,6 +45,10 @@ export interface PluginManifest {
   skills?: string[];
   /** MCP server names enabled on a conversation created from this plugin. */
   mcpServers?: string[];
+  /** MCP servers to register (relative paths resolved against the plugin dir). */
+  mcp?: Record<string, PluginMcpServerDecl>;
+  /** Runtime env to export while the plugin is loaded. */
+  runtime?: PluginRuntimeDecl;
   /** Render component discriminator (e.g. `{ kind: 'cad-viewer' }`). */
   display?: { kind: string };
   /** Top-level agent identity for manifest-only plugins (no agents/* files). */
@@ -40,6 +58,8 @@ export interface PluginManifest {
     whenToUse?: string;
     /** System prompt; `${CODERIX_PLUGIN_ROOT}` is replaced with the plugin dir. */
     systemPrompt?: string;
+    /** Path (relative to the plugin dir) to a file whose content is the system prompt. */
+    systemPromptFile?: string;
     model?: string;
     permissionMode?: string;
     tools?: string[];
@@ -64,11 +84,13 @@ export interface PluginManifestRecord {
   root: string;
 }
 
+export type PluginSource = 'global' | 'project' | 'registry';
+
 export interface PluginScanEntry {
   pluginPath: string;
   pluginName: string;
   manifest: PluginManifest | null;
-  source: 'global' | 'project';
+  source: PluginSource;
 }
 
 /**
@@ -92,6 +114,12 @@ export async function readPluginManifest(pluginPath: string): Promise<PluginMani
         ...(Array.isArray(p.mcpServers)
           ? { mcpServers: p.mcpServers.filter((s): s is string => typeof s === 'string') }
           : {}),
+        ...(p.mcp && typeof p.mcp === 'object'
+          ? { mcp: normalizeMcpBlock(p.mcp as Record<string, unknown>) }
+          : {}),
+        ...(p.runtime && typeof p.runtime === 'object'
+          ? { runtime: normalizeRuntime(p.runtime as Record<string, unknown>) }
+          : {}),
         ...(p.display && typeof p.display === 'object' && typeof (p.display as Record<string, unknown>).kind === 'string'
           ? { display: { kind: (p.display as Record<string, unknown>).kind as string } }
           : {}),
@@ -112,12 +140,45 @@ function normalizeAgentManifest(a: Record<string, unknown>): NonNullable<PluginM
   if (typeof a.agentType === 'string') out.agentType = a.agentType;
   if (typeof a.whenToUse === 'string') out.whenToUse = a.whenToUse;
   if (typeof a.systemPrompt === 'string') out.systemPrompt = a.systemPrompt;
+  if (typeof a.systemPromptFile === 'string') out.systemPromptFile = a.systemPromptFile;
   if (typeof a.model === 'string') out.model = a.model;
   if (typeof a.permissionMode === 'string') out.permissionMode = a.permissionMode;
   if (Array.isArray(a.tools)) out.tools = a.tools.filter((t): t is string => typeof t === 'string');
   if (Array.isArray(a.disallowedTools))
     out.disallowedTools = a.disallowedTools.filter((t): t is string => typeof t === 'string');
   return out;
+}
+
+function normalizeMcpBlock(block: Record<string, unknown>): Record<string, PluginMcpServerDecl> {
+  const out: Record<string, PluginMcpServerDecl> = {};
+  for (const [name, raw] of Object.entries(block)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const decl = raw as Record<string, unknown>;
+    if (typeof decl.command !== 'string') continue;
+    const server: PluginMcpServerDecl = { command: decl.command };
+    if (Array.isArray(decl.args)) server.args = decl.args.filter((a): a is string => typeof a === 'string');
+    if (decl.env && typeof decl.env === 'object') {
+      const env: Record<string, string> = {};
+      for (const [k, v] of Object.entries(decl.env as Record<string, unknown>)) {
+        if (typeof v === 'string') env[k] = v;
+      }
+      if (Object.keys(env).length > 0) server.env = env;
+    }
+    out[name] = server;
+  }
+  return out;
+}
+
+function normalizeRuntime(raw: Record<string, unknown>): PluginRuntimeDecl {
+  const runtime: PluginRuntimeDecl = {};
+  if (raw.env && typeof raw.env === 'object') {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw.env as Record<string, unknown>)) {
+      if (typeof v === 'string') env[k] = v;
+    }
+    if (Object.keys(env).length > 0) runtime.env = env;
+  }
+  return runtime;
 }
 
 /**
@@ -160,6 +221,26 @@ export async function scanPluginDirs(
         source,
       });
     }
+  }
+
+  // Registered plugins — external self-contained dirs listed in the registry.
+  // They are discovered here (not symlinked into ~/.coderix/plugins/) so a
+  // registered plugin is picked up everywhere `scanPluginDirs` is used.
+  for (const entry of readPluginRegistry()) {
+    const pluginPath = entry.path;
+    try {
+      const st = await stat(pluginPath);
+      if (!st.isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const manifest = await readPluginManifest(pluginPath);
+    entries.push({
+      pluginPath,
+      pluginName: manifest?.name ?? entry.name ?? basename(pluginPath),
+      manifest,
+      source: 'registry',
+    });
   }
 
   return entries;
