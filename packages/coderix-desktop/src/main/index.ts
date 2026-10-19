@@ -19,7 +19,6 @@ import type { BrowserViewManager } from './browser-view-manager.js';
 import { createCadViewerManager } from './cad-viewer-manager.js';
 import type { CadViewerManager } from './cad-viewer-manager.js';
 import { installRegisteredPlugins } from './plugin-registry.js';
-import { installBlenderMcp, installBlenderPluginManifest } from './blender-mcp.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
 import { installFreecadMcp, installFreecadPluginManifest } from './freecad-mcp.js';
@@ -103,10 +102,10 @@ async function bootstrap(): Promise<void> {
     // is all that's required to auto-load it. Idempotent.
     await installRegisteredPlugins();
 
-    // Seed the blender-harness plugin manifest + register the official blender
-    // MCP server so plugin conversations can drive a running Blender. Idempotent.
-    installBlenderPluginManifest();
-    installBlenderMcp();
+    // Blender is a registered self-contained plugin too (see plugin-registry.json):
+    // installRegisteredPlugins() above already registered its `blender` MCP server
+    // (pointing at the plugin's own mcp/blender) and its bundled skills — no
+    // separate installBlenderMcp / manifest seeding needed.
 
     // Seed the freecad-harness plugin manifest + register the freecad-mcp server
     // so plugin conversations can drive a running FreeCAD. Idempotent.
