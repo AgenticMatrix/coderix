@@ -17,7 +17,7 @@ import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkP
 import type { QueryEngineEvent } from '@coderix/core';
 import { PermissionMode } from '@coderix/core';
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
@@ -33,11 +33,66 @@ import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-r
 const claudeSessionByCoderixSession = new Map<string, string>();
 
 /**
+ * On-disk persistence of the coderix-session → claude-session mapping (and the
+ * SDK's cumulative usage per session), so a restarted desktop can resume a
+ * conversation's context and keep its per-turn usage delta correct instead of
+ * starting a fresh Claude Code session (the in-memory maps are lost on restart).
+ */
+const CLAUDE_SESSION_MAP_PATH = join(homedir(), '.coderix', 'claude-sessions.json');
+
+interface PersistedUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+}
+
+interface PersistedSessionState {
+  claudeSessionId: string;
+  previousUsage?: PersistedUsage;
+}
+
+function loadPersistedSessionStates(): Map<string, PersistedSessionState> {
+  try {
+    if (existsSync(CLAUDE_SESSION_MAP_PATH)) {
+      const raw = readFileSync(CLAUDE_SESSION_MAP_PATH, 'utf-8');
+      const obj = JSON.parse(raw) as Record<string, PersistedSessionState | string>;
+      const map = new Map<string, PersistedSessionState>();
+      for (const [k, v] of Object.entries(obj)) {
+        // Accept a legacy plain-string value ({ id: "..." }).
+        map.set(k, typeof v === 'string' ? { claudeSessionId: v } : v);
+      }
+      return map;
+    }
+  } catch {
+    // Corrupt/missing map — fall through to empty.
+  }
+  return new Map();
+}
+
+function persistSessionState(
+  coderixSessionId: string,
+  patch: { claudeSessionId?: string; previousUsage?: PersistedUsage },
+): void {
+  try {
+    const map = loadPersistedSessionStates();
+    const existing = map.get(coderixSessionId) ?? { claudeSessionId: '' };
+    if (patch.claudeSessionId) existing.claudeSessionId = patch.claudeSessionId;
+    if (patch.previousUsage) existing.previousUsage = patch.previousUsage;
+    map.set(coderixSessionId, existing);
+    mkdirSync(dirname(CLAUDE_SESSION_MAP_PATH), { recursive: true });
+    writeFileSync(CLAUDE_SESSION_MAP_PATH, JSON.stringify(Object.fromEntries(map), null, 2), 'utf-8');
+  } catch {
+    // best-effort — a failed persist only means the next restart resumes fresh.
+  }
+}
+
+/**
  * Tracks the SDK's cumulative `result.usage` per Coderix session so each turn
  * can report its own *delta* (the SDK reports whole-session aggregates, which
  * the ipc-bridge would otherwise accumulate into inflated totals).
  */
-const previousUsageBySession = new Map<string, { input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number }>();
+const previousUsageBySession = new Map<string, PersistedUsage>();
 
 /**
  * Idle timeout for a Claude Code turn. The spawned `claude` CLI streams events
@@ -391,6 +446,20 @@ export async function* runClaudeCodeQuery(
 ): AsyncGenerator<QueryEngineEvent> {
   const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
 
+  // Restore the persisted claude session id + usage (survives a restart) when
+  // the in-memory maps have no entry yet, so a resumed conversation keeps its
+  // context and its per-turn usage delta stays correct.
+  if (!claudeSessionByCoderixSession.has(sessionId) || !previousUsageBySession.has(sessionId)) {
+    const persisted = loadPersistedSessionStates().get(sessionId);
+    if (persisted) {
+      if (persisted.claudeSessionId && !claudeSessionByCoderixSession.has(sessionId)) {
+        claudeSessionByCoderixSession.set(sessionId, persisted.claudeSessionId);
+      }
+      if (persisted.previousUsage && !previousUsageBySession.has(sessionId)) {
+        previousUsageBySession.set(sessionId, persisted.previousUsage);
+      }
+    }
+  }
   const resume = claudeSessionByCoderixSession.get(sessionId);
   let pathToClaudeCodeExecutable = resolveClaudeCodeExecutable();
 
@@ -524,6 +593,7 @@ export async function* runClaudeCodeQuery(
       // Remember the Claude Code session id for the next turn.
       if (msg.type === 'system' && msg.subtype === 'init') {
         claudeSessionByCoderixSession.set(sessionId, msg.session_id);
+        persistSessionState(sessionId, { claudeSessionId: msg.session_id });
         continue;
       }
 
@@ -546,6 +616,7 @@ export async function* runClaudeCodeQuery(
           break;
         case 'result':
           claudeSessionByCoderixSession.set(sessionId, msg.session_id);
+          persistSessionState(sessionId, { claudeSessionId: msg.session_id });
           if (msg.is_error) {
             const errors = (msg as { errors?: string[] }).errors;
             const message =
@@ -581,6 +652,7 @@ export async function* runClaudeCodeQuery(
                 }
               : cur;
             previousUsageBySession.set(sessionId, cur);
+            persistSessionState(sessionId, { previousUsage: cur });
             yield {
               type: 'done',
               data: {

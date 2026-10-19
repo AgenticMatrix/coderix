@@ -445,6 +445,24 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       if (code === 'INTERRUPTED') {
         writeCurrent(sid, null);
         useChatStore.getState().setSessionStreaming(sid || undefined, false);
+        // Complete any committed tool_use still marked "executing"/"pending".
+        // A tool whose result was never attached (e.g. an answered AskUserQuestion
+        // whose tool_result didn't round-trip) would otherwise leave the status
+        // bar stuck on "executing" even after the turn is stopped.
+        useChatStore.getState().patchSessionMessages(sid, (msgs) =>
+          msgs.map((m) =>
+            m.role === 'assistant'
+              ? {
+                  ...m,
+                  blocks: m.blocks.map((b) =>
+                    b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending')
+                      ? { ...b, state: 'done' }
+                      : b,
+                  ),
+                }
+              : m,
+          ),
+        );
         return;
       }
 
