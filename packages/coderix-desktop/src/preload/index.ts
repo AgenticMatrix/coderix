@@ -137,6 +137,12 @@ const CH = {
   CAD_VIEWER_STATUS_CHANGED: 'cadViewer:statusChanged',
   CAD_LIST_STEPS: 'cad:listSteps',
 
+  // OfficeHarness (embedded native Impress workspace for apps)
+  OFFICE_HARNESS_START: 'officeHarness:start',
+  OFFICE_HARNESS_STOP: 'officeHarness:stop',
+  OFFICE_HARNESS_STATUS: 'officeHarness:status',
+  OFFICE_HARNESS_STATUS_CHANGED: 'officeHarness:statusChanged',
+
   // Blender preview (live render of the running Blender scene for apps)
   BLENDER_STATUS: 'blender:status',
   BLENDER_PREVIEW: 'blender:preview',
@@ -982,8 +988,34 @@ const coderixAPI = {
     },
   },
 
-  // ── Blender preview (live render of the running Blender scene) ──────────
+  // ── OfficeHarness (embedded native Impress workspace for apps) ──────────
 
+  officeHarness: {
+    start(): Promise<{ status: string; url: string; port: number; root: string; error?: string }> {
+      return ipcRenderer.invoke(CH.OFFICE_HARNESS_START);
+    },
+    stop(): Promise<{ status: string; url: string; port: number; root: string; error?: string }> {
+      return ipcRenderer.invoke(CH.OFFICE_HARNESS_STOP);
+    },
+    status(): Promise<{ status: string; url: string; port: number; root: string; error?: string }> {
+      return ipcRenderer.invoke(CH.OFFICE_HARNESS_STATUS);
+    },
+    /** Subscribe to OfficeHarness host lifecycle changes (starting/running/error). */
+    onStatusChanged(
+      callback: (info: { status: string; url: string; port: number; root: string; error?: string }) => void,
+    ): () => void {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        info: { status: string; url: string; port: number; root: string; error?: string },
+      ): void => {
+        callback(info);
+      };
+      ipcRenderer.on(CH.OFFICE_HARNESS_STATUS_CHANGED, handler as (...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener(CH.OFFICE_HARNESS_STATUS_CHANGED, handler as (...args: unknown[]) => void);
+    },
+  },
+
+  // ── Blender preview (live render of the running Blender scene) ──────────
   blender: {
     status(): Promise<{ connected: boolean }> {
       return ipcRenderer.invoke(CH.BLENDER_STATUS);

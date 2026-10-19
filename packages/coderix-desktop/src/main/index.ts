@@ -18,6 +18,8 @@ import { createBrowserViewManager } from './browser-view-manager.js';
 import type { BrowserViewManager } from './browser-view-manager.js';
 import { createCadViewerManager } from './cad-viewer-manager.js';
 import type { CadViewerManager } from './cad-viewer-manager.js';
+import { createOfficeHarnessManager } from './officeharness-preview.js';
+import type { OfficeHarnessManager } from './officeharness-preview.js';
 import { installRegisteredPlugins } from './plugin-registry.js';
 import { createBlenderPreviewManager } from './blender-preview.js';
 import type { BlenderPreviewManager } from './blender-preview.js';
@@ -71,6 +73,7 @@ let terminalManager: TerminalManager | null = null;
 let trayManager: TrayManager | null = null;
 let browserViewManager: BrowserViewManager | null = null;
 let cadViewerManager: CadViewerManager | null = null;
+let officeHarnessManager: OfficeHarnessManager | null = null;
 let blenderPreviewManager: BlenderPreviewManager | null = null;
 let freecadPreviewManager: FreecadPreviewManager | null = null;
 let sessionManagerRef: SessionManager | null = null;
@@ -138,6 +141,10 @@ async function bootstrap(): Promise<void> {
     // Step 1c: Create cad-viewer manager (spawns the 3D viewer on demand for the
     // "apps" display panel) so its IPC handlers are registered before load.
     cadViewerManager = createCadViewerManager(windowManager);
+
+    // Step 1c2: Create the OfficeHarness preview manager (starts/reuses the
+    // plugin's managed host and returns its workspace URL for the app panel).
+    officeHarnessManager = createOfficeHarnessManager(windowManager);
 
     // Step 1d: Create the blender-preview manager (registers blender:status /
     // blender:preview / blender:launch IPC handlers, plus the launch/tiling and
@@ -569,6 +576,7 @@ app.on('before-quit', () => {
   ipcBridge?.destroy();
   browserViewManager?.destroy();
   cadViewerManager?.destroy();
+  officeHarnessManager?.destroy();
   blenderPreviewManager?.destroy();
   freecadPreviewManager?.destroy();
   fileWatcher?.destroy();
