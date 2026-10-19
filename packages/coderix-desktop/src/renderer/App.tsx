@@ -780,19 +780,15 @@ export function App(): React.ReactElement {
     return () => document.removeEventListener('mousedown', clickOut);
   }, []);
 
-  // Shared post-switch cleanup: reset the active session/chat and reload the
-  // session list for the new workspace directory.
+  // Shared post-switch cleanup: reload the session list for the new workspace
+  // directory. The active session is left in place — switching the workspace
+  // only changes the directory, it must not drop a plugin conversation's
+  // per-session skills/model. Callers that want to leave the conversation (e.g.
+  // the library's "open project") clear it themselves afterwards.
   const switchToProject = useCallback(async (path: string) => {
     setProjectPath(path);
-    // Leave the conversation without killing any running task: stash the viewed
-    // session's live state so it resumes intact when re-selected.
-    useStreamStore.getState().setViewedSession(null);
-    setSessionId(null);
-    useSessionStore.getState().setCurrentSessionId(null);
-    setSessionModelState(null);
-    setSelectedSkills([]);
     await loadSessions();
-  }, [loadSessions, setSessionId]);
+  }, [loadSessions]);
 
   const handleProjectSelect = useCallback(async () => {
     try {
@@ -968,6 +964,14 @@ export function App(): React.ReactElement {
     try {
       const result = await setProjectDirectory(path);
       await switchToProject(result.path);
+      // Opening a project's management view leaves the current conversation:
+      // stash the viewed session's live state and clear the active session so
+      // the "create conversation" prompt is shown instead.
+      useStreamStore.getState().setViewedSession(null);
+      setSessionId(null);
+      useSessionStore.getState().setCurrentSessionId(null);
+      setSessionModelState(null);
+      setSelectedSkills([]);
       // Reveal the sidebar (its persistent file list now points at this
       // project) and swap the chat area for the "create conversation" prompt.
       useUIStore.getState().setSidebarOpen(true);
@@ -976,7 +980,7 @@ export function App(): React.ReactElement {
     } catch (err) {
       console.error('[App] Failed to open project:', err);
     }
-  }, [switchToProject]);
+  }, [switchToProject, setSessionId]);
 
   // Create a new conversation in the currently-open project workspace. Keep the
   // left sidebar on the project view (files/git), but swap the main area from
