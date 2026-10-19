@@ -97,6 +97,18 @@ export function listAvailableSkills(cwd: string): SkillInfo[] {
     }
   }
 
+  // Registered plugins — self-contained external dirs listed in the registry —
+  // ship their own `skills/` trees too. The claude-code engine loads these dirs
+  // via the SDK `plugins` option, so the picker must list the same skills the
+  // engine can actually load (mirrors `listCoderixSkills()`). Without this, a
+  // plugin session's skills disappear from the picker once the app's default
+  // engine is `claude-code` and a workspace switch re-runs `listSkills()`.
+  for (const pluginDir of listRegisteredPluginDirs()) {
+    for (const skill of scanSkillDir(join(pluginDir, 'skills'), 'plugin')) {
+      registerSkill(byName, skill);
+    }
+  }
+
   // Custom directories — scanned last so they shadow built-ins; equal-priority
   // (custom vs custom) keeps the first-listed directory's skill.
   for (const dir of readCustomSkillDirs()) {
