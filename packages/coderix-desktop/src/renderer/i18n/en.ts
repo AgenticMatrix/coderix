@@ -291,6 +291,8 @@ export const en: Record<TranslationKey, string> = {
   'apps.back': 'Back',
   'apps.viewerStarting': 'Starting 3D viewer…',
   'apps.viewerFailed': 'Failed to start 3D viewer',
+  'apps.officeStarting': 'Starting OfficeHarness…',
+  'apps.officeFailed': 'Failed to start OfficeHarness',
   'apps.artifacts': 'Artifacts',
   'apps.noArtifacts': 'No CAD artifacts yet — generate one in the conversation',
   'apps.assembly': 'Assembly',

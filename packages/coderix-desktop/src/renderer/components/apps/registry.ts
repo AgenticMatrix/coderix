@@ -16,7 +16,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { resolveAppIcon } from './icons';
 
-export type AppDisplayKind = 'cad-viewer' | 'blender-viewer' | 'freecad-viewer';
+export type AppDisplayKind = 'cad-viewer' | 'blender-viewer' | 'freecad-viewer' | 'office-viewer';
 
 export interface AppDefinition {
   id: string;
@@ -67,6 +67,16 @@ export const APPS: AppDefinition[] = [
     mcpServers: ['freecad'],
     agentType: 'freecad-harness',
     display: { kind: 'freecad-viewer' },
+  },
+  {
+    id: 'office-harness',
+    name: 'OfficeHarness',
+    description: '对话式 PPT 编辑',
+    icon: 'presentation',
+    skills: ['ppt'],
+    mcpServers: ['officeharness'],
+    agentType: 'office-harness',
+    display: { kind: 'office-viewer' },
   },
 ];
 

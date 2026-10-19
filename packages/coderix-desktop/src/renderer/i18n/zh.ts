@@ -287,6 +287,8 @@ export const zh = {
   'apps.back': '返回',
   'apps.viewerStarting': '正在启动 3D 查看器…',
   'apps.viewerFailed': '3D 查看器启动失败',
+  'apps.officeStarting': '正在启动 OfficeHarness…',
+  'apps.officeFailed': 'OfficeHarness 启动失败',
   'apps.artifacts': '产物',
   'apps.noArtifacts': '暂无 CAD 产物，在左侧对话中生成后会出现在这里',
   'apps.assembly': '装配体',

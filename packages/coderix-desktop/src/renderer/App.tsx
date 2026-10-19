@@ -17,11 +17,12 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Folder, FolderPlus, ChevronDown, MessageSquarePlus, Check, X, Boxes } from 'lucide-react';
+import { FolderOpen, Folder, FolderPlus, ChevronDown, MessageSquarePlus, Check, X, Boxes, Presentation } from 'lucide-react';
 import { AppLayout } from './components/layout/AppLayout';
 import { Sidebar, type SidebarTab } from './components/sidebar/Sidebar';
 import { LibraryView, SkillsView, PluginsView } from './components/library/LibraryView';
 import { AppDisplayPanel } from './components/apps/AppDisplayPanel';
+import { OfficeHarnessPanel } from './components/apps/OfficeHarnessPanel';
 import { BLENDER_ICON, FREECAD_ICON } from './components/apps/icons';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
@@ -1197,6 +1198,12 @@ export function App(): React.ReactElement {
             title: t('nav.openAppDisplay'),
             onClick: () => setActiveAppId('cad-harness'),
           }
+        : currentPluginId === 'office-harness' && activeApp === null
+        ? {
+            icon: <Presentation size={15} />,
+            title: t('nav.openAppDisplay'),
+            onClick: () => setActiveAppId('office-harness'),
+          }
         : undefined;
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -1221,11 +1228,15 @@ export function App(): React.ReactElement {
         onToggleDetailPanel={toggleDetailPanel}
         appDisplayPanel={
           activeApp ? (
-            <AppDisplayPanel
-              app={activeApp}
-              workspaceDir={activeSessionWorkDir ?? projectPath}
-              onClose={() => setActiveAppId(null)}
-            />
+            activeApp.display.kind === 'office-viewer' ? (
+              <OfficeHarnessPanel app={activeApp} onClose={() => setActiveAppId(null)} />
+            ) : (
+              <AppDisplayPanel
+                app={activeApp}
+                workspaceDir={activeSessionWorkDir ?? projectPath}
+                onClose={() => setActiveAppId(null)}
+              />
+            )
           ) : undefined
         }
         appDisplayVisible={activeApp !== null}

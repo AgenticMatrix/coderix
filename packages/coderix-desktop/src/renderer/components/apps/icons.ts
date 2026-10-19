@@ -1,4 +1,4 @@
-import { Boxes, type LucideIcon } from 'lucide-react';
+import { Boxes, Presentation, type LucideIcon } from 'lucide-react';
 
 /**
  * App icon map — resolves a plugin manifest's icon key to a LucideIcon, or
@@ -16,6 +16,7 @@ const APP_ICONS: Record<string, LucideIcon> = {
   boxes: Boxes,
   cad: Boxes,
   'cad-harness': Boxes,
+  presentation: Presentation,
 };
 
 export function resolveAppIcon(key: string | null | undefined): LucideIcon | string {
