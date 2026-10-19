@@ -410,7 +410,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       engine === 'claude-code'
         ? runClaudeCodeQuery({
             prompt: userInput,
-            sessionId: sessionManager.getActive()?.id ?? '',
+            sessionId: streamSessionId,
             cwd: currentWorkDir,
             permissionMode: resolvePermissionMode(loadSettings()) as PermissionMode,
             model: sessionResolved?.model ?? activeConfig.model,
@@ -506,14 +506,19 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // never written to disk and `session:load` fails with "Session not found").
     if (engine === 'claude-code') {
       try {
+        // Resolve the stream's session explicitly (by id, not the shared active
+        // pointer) so a concurrent query to another session can't reroute the
+        // user message into the wrong conversation.
+        const session = sessionManager.get(streamSessionId);
+        if (!session) throw new Error(`Session not found: ${streamSessionId}`);
+
         // Capture whether this is the conversation's first message BEFORE
         // addMessage() mutates the in-memory message list.
-        const isFirstMessage = sessionManager.getActive().messages.length === 0;
+        const isFirstMessage = session.messages.length === 0;
 
-        sessionManager.addMessage({ role: 'user', content: userInput });
+        sessionManager.addMessage(streamSessionId, { role: 'user', content: userInput });
 
-        const active = sessionManager.getActive();
-        if (active) {
+        {
           // addMessage() derives a title from the first user message but only
           // writes workDir to meta.json — the title itself is never persisted,
           // so the sidebar falls back to a bare "Session <id>". Persist a
@@ -523,22 +528,24 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           const fallback =
             userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
           const isPlaceholderTitle =
-            !active.title ||
-            active.title === '新对话' ||
-            active.title.startsWith('Session ') ||
-            /\.{3}$/.test(active.title);
+            !session.title ||
+            session.title === '新对话' ||
+            session.title.startsWith('Session ') ||
+            /\.{3}$/.test(session.title);
 
           if (isFirstMessage) {
             // No summary can exist yet — always persist the fallback and
             // kick off background refinement.
-            active.title = fallback;
-            sessionManager.saveSession(active);
-            void summarizeClaudeSessionTitle(active.id, userInput);
-          } else if (isPlaceholderTitle) {
+            session.title = fallback;
+            sessionManager.saveSession(session);
+            void summarizeClaudeSessionTitle(session.id, userInput);
+          } else if (isPlaceholderTitle && !pendingTitleSummaries.has(session.id)) {
             // A later turn with no refined summary yet (e.g. refinement failed
             // earlier): keep the fallback in sync with the latest user input.
-            active.title = fallback;
-            sessionManager.saveSession(active);
+            // Skip while a summary is still in flight so the slow summarizer
+            // isn't clobbered by the second message's fallback.
+            session.title = fallback;
+            sessionManager.saveSession(session);
           }
         }
       } catch { /* ignore — best-effort persistence */ }
@@ -1447,6 +1454,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     if (pending) {
       pendingQuestions.delete(payload.toolUseId);
       pending.deferred.resolve(payload.answers);
+      // Complete the AskUserQuestion tool card in the renderer immediately, keyed
+      // by the same tool_use id. The Claude Code CLI surfaces the answer as a
+      // user-facing text turn ("[User answered …]") rather than a matching
+      // tool_result in some paths, so relying only on the SDK's tool_result can
+      // leave the card stuck in "executing" (and the status bar stuck after a
+      // stop). Synthesizing a result here guarantees the card resolves on answer.
+      safeSend(getMainWindow(windowManager), IPC_CHANNELS.STREAM_TOOL_RESULT, {
+        toolUseId: payload.toolUseId,
+        toolName: 'AskUserQuestion',
+        result: JSON.stringify(payload.answers),
+        sessionId: pending.sessionId,
+      });
     }
     return { status: 'answered' };
   });
@@ -2961,6 +2980,14 @@ export function getLastWorkspace(): string | undefined {
 // ---------------------------------------------------------------------------
 
 /**
+ * Sessions with a title summary currently in flight. While a summary is pending,
+ * the placeholder-title fallback (which would otherwise overwrite the title on
+ * the next turn) is suppressed — otherwise a slow summary loses to the second
+ * user message and the sidebar shows the wrong topic.
+ */
+const pendingTitleSummaries = new Set<string>();
+
+/**
  * Summarize a claude-code session's first user input into a short topic title
  * using the configured LLM, then write it to the session's meta.json.
  *
@@ -2970,6 +2997,7 @@ export function getLastWorkspace(): string | undefined {
  */
 async function summarizeClaudeSessionTitle(sessionId: string, text: string): Promise<void> {
   if (!text || text.trim().length <= 30) return;
+  pendingTitleSummaries.add(sessionId);
   try {
     const config = loadDesktopConfig();
     if (!config.apiKey || !config.baseUrl || !config.model) return;
@@ -3000,5 +3028,7 @@ async function summarizeClaudeSessionTitle(sessionId: string, text: string): Pro
     }
   } catch {
     // Best-effort — keep the persisted fallback title on any failure.
+  } finally {
+    pendingTitleSummaries.delete(sessionId);
   }
 }
