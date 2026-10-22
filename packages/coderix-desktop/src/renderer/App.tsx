@@ -718,7 +718,7 @@ export function App(): React.ReactElement {
                     cacheReadTokens: tu.cacheReadInputTokens ?? 0,
                     cacheWriteTokens: tu.cacheCreationInputTokens ?? 0,
                     totalCost: session?.totalCost ?? 0,
-                    currency: 'USD',
+                    currency: session?.currency ?? 'USD',
                     contextTokens: session?.contextTokens ?? 0,
                   });
                 }
@@ -1312,6 +1312,8 @@ export function App(): React.ReactElement {
           agentStatus,
           inputTokens: tokenUsage.inputTokens || undefined,
           outputTokens: tokenUsage.outputTokens || undefined,
+          cacheReadTokens: tokenUsage.cacheReadTokens || undefined,
+          cacheWriteTokens: tokenUsage.cacheWriteTokens || undefined,
           contextTokens: tokenUsage.contextTokens || undefined,
           contextMax,
           cost: tokenUsage.totalCost || undefined,

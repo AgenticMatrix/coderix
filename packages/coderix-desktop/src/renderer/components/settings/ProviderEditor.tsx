@@ -4,6 +4,7 @@ import {
   PROVIDER_CATALOG,
   getProviderModels,
   getProviderBaseUrl,
+  getProviderCurrency,
   toModelConfigs,
   type ProviderConfig,
   type ModelConfig,
@@ -29,6 +30,7 @@ const EMPTY_FIELDS: ModelConfig = {
   cachePrice: 0,
   inputPrice: 0,
   outputPrice: 0,
+  currency: 'USD',
 };
 
 // Inline form-control styles (mirrors SettingsView's warm Coderix tokens).
@@ -98,7 +100,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
     setSelectedIndex(index);
     setOpen(false);
     setConfirmDeleteIndex(null);
-    setFields(index !== null ? models[index] ?? { ...EMPTY_FIELDS } : { ...EMPTY_FIELDS });
+    setFields(index !== null ? models[index] ?? { ...EMPTY_FIELDS } : { ...EMPTY_FIELDS, currency: models[0]?.currency ?? 'USD' });
   };
 
   const addModel = () => {
@@ -146,7 +148,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
 
   const addDetectedModel = (modelName: string) => {
     if (!modelName || models.some((m) => m.name === modelName)) return;
-    const next = [...models, { ...EMPTY_FIELDS, name: modelName }];
+    const next = [...models, { ...EMPTY_FIELDS, name: modelName, currency: models[0]?.currency ?? 'USD' }];
     setModels(next);
     emit({ models: next });
   };
@@ -176,7 +178,7 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
     const isCustom = key === '__custom__';
     setName(isCustom ? '' : key);
     setBaseUrl(isCustom ? '' : getProviderBaseUrl(key));
-    const nextModels = isCustom ? [] : toModelConfigs(getProviderModels(key));
+    const nextModels = isCustom ? [] : toModelConfigs(getProviderModels(key), 65536, getProviderCurrency(key));
     setModels(nextModels);
     setSelectedIndex(nextModels.length > 0 ? 0 : null);
     setFields(nextModels[0] ?? { ...EMPTY_FIELDS });
@@ -662,6 +664,20 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   value={fields.outputPrice}
                   onChange={(e) => patchFields({ outputPrice: parseFloat(e.target.value) || 0 })}
                 />
+              </label>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <label style={labelStyle}>
+                {t('provider.currency')}
+                <select
+                  style={{ ...inputStyle, marginTop: '4px' }}
+                  value={fields.currency ?? 'USD'}
+                  onChange={(e) => patchFields({ currency: e.target.value })}
+                >
+                  {['USD', 'CNY', 'EUR', 'GBP', 'JPY', 'KRW'].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </label>
             </div>
 

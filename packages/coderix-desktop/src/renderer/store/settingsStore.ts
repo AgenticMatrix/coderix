@@ -271,8 +271,17 @@ export function getProviderBaseUrl(providerName: string): string {
   return PROVIDER_CATALOG[key]?.baseUrl ?? 'https://api.example.com';
 }
 
+/** Providers whose published list prices are denominated in CNY. */
+const CNY_PROVIDERS = new Set(['glm', 'deepseek', 'qwen', 'moonshot', 'tencent', 'bytedance', 'minimax']);
+
+/** Default pricing currency for a catalog provider. Custom providers are USD
+ *  until the user picks another currency in the editor. */
+export function getProviderCurrency(providerName: string): string {
+  return CNY_PROVIDERS.has(providerName.toLowerCase()) ? 'CNY' : 'USD';
+}
+
 /** Map a catalog provider's model names to full ModelConfig entries with defaults. */
-export function toModelConfigs(names: string[], maxTokens = 65536): ModelConfig[] {
+export function toModelConfigs(names: string[], maxTokens = 65536, currency = 'USD'): ModelConfig[] {
   return names.map((name) => ({
     name,
     temperature: 0.7,
@@ -282,6 +291,7 @@ export function toModelConfigs(names: string[], maxTokens = 65536): ModelConfig[
     cachePrice: 0,
     inputPrice: 0,
     outputPrice: 0,
+    currency,
   }));
 }
 

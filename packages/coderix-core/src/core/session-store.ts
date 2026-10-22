@@ -653,8 +653,10 @@ export interface SessionMeta {
   pluginId?: string;
   /** Cumulative token usage across all turns, persisted for resume. */
   tokenUsage?: TokenUsageSummary;
-  /** Cumulative cost in USD, persisted for resume. */
+  /** Cumulative cost in the currency the price configuration used, persisted for resume. */
   totalCost?: number;
+  /** Currency code of {@link totalCost} (e.g. "USD", "CNY"). */
+  currency?: string;
   /** Real context footprint (most recent call's input + output + cache_read). */
   contextTokens?: number;
 }

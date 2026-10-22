@@ -40,6 +40,7 @@ import {
   readTailMetadata,
   readSessionMeta,
   writeSessionMeta,
+  type SessionMeta,
   generateSessionTitle,
   isAutoTitle,
   stripCompactWrapper,
@@ -157,6 +158,8 @@ export class SessionManager {
     pluginId?: string;
     skills?: string[];
     mcpServers?: string[];
+    /** Currency the session's price configuration is denominated in. */
+    currency?: string;
   }): Session {
     const id = randomUUID();
     const now = new Date();
@@ -168,6 +171,7 @@ export class SessionManager {
       messages: [],
       turnCount: 0,
       totalCost: 0,
+      currency: options.currency,
       createdAt: now,
       updatedAt: now,
       cwd: options.cwd ?? process.cwd(),
@@ -274,6 +278,20 @@ export class SessionManager {
   /** Bind the active session to a model (delegator — see setModel). */
   setActiveModel(model: string): void {
     this.setModel(this.getActive().id, model);
+  }
+
+  /**
+   * Bind a session to the currency its price configuration is denominated in
+   * and persist it to meta.json so a resumed session prices and formats cost
+   * the same way it did when the turns were recorded.
+   */
+  setCurrency(sessionId: string, currency: string | undefined): void {
+    const session = this.requireSession(sessionId);
+    if (!currency || session.currency === currency) return;
+    session.currency = currency;
+    session.updatedAt = new Date();
+    const dir = getSessionDir(session.id);
+    writeSessionMeta(dir, { currency }).catch(() => {});
   }
 
   /**
@@ -443,6 +461,7 @@ export class SessionManager {
     cached.updatedAt = fresh.updatedAt;
     cached.tokenUsage = fresh.tokenUsage;
     cached.totalCost = fresh.totalCost;
+    cached.currency = fresh.currency;
     cached.cwd = fresh.cwd;
     cached.model = fresh.model;
     cached.skills = fresh.skills;
@@ -494,6 +513,7 @@ export class SessionManager {
       mcpServers: parent.mcpServers,
       agentType: parent.agentType,
       pluginId: parent.pluginId,
+      currency: parent.currency,
     });
 
     const dir = getSessionDir(forked.id);
@@ -811,7 +831,10 @@ export class SessionManager {
       session.tokenUsage.cacheReadInputTokens =
         (session.tokenUsage.cacheReadInputTokens ?? 0) + usage.cacheReadInputTokens;
     session.tokenUsage.totalTokens =
-      session.tokenUsage.inputTokens + session.tokenUsage.outputTokens;
+      session.tokenUsage.inputTokens +
+      session.tokenUsage.outputTokens +
+      (session.tokenUsage.cacheCreationInputTokens ?? 0) +
+      (session.tokenUsage.cacheReadInputTokens ?? 0);
   }
 
   /**
@@ -942,13 +965,18 @@ export class SessionManager {
    */
   private appendMetadata(session: Session): void {
     const dir = getSessionDir(session.id);
-    writeSessionMeta(dir, {
+    // Omit an absent currency instead of writing `undefined`: the meta write
+    // merges over the existing file, so an explicit undefined would erase the
+    // currency another process just persisted.
+    const meta: SessionMeta = {
       title: session.title,
       workDir: session.cwd,
       model: session.model,
       totalCost: session.totalCost,
       tokenUsage: session.tokenUsage,
-    }).catch(() => {});
+    };
+    if (session.currency) meta.currency = session.currency;
+    writeSessionMeta(dir, meta).catch(() => {});
   }
 
   /**
@@ -1469,6 +1497,7 @@ export class SessionManager {
         messages,
         turnCount: messages.filter((m) => m.role === 'assistant').length,
         totalCost: meta?.totalCost ?? 0,
+        currency: meta?.currency,
         createdAt: now,
         updatedAt: now,
         cwd: meta?.workDir ?? process.cwd(),

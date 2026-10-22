@@ -57,11 +57,11 @@ function currencySymbol(currency?: string): string {
   return currency ?? '$';
 }
 
-/** Format accumulated cost in dollars. */
-function formatCost(cost: number): string {
+/** Format an accumulated cost with the currency symbol always before the amount. */
+function formatCost(cost: number, currency?: string): string {
   const fixed = cost.toFixed(4);
   const stripped = fixed.replace(/\.?0+$/, '').replace(/\.?0+$/, '');
-  return stripped || '0';
+  return `${currencySymbol(currency)}${stripped || '0'}`;
 }
 
 /** Format seconds into a readable duration. */
@@ -215,7 +215,7 @@ export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen,
       <Sep />
 
       <Text dimColor>
-        {formatCost(accumulatedCost)}{currencySymbol(currency)}
+        {formatCost(accumulatedCost, currency)}
       </Text>
 
       <Sep />

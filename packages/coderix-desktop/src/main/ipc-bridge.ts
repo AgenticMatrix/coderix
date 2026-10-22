@@ -36,7 +36,7 @@ import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgen
 import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests } from '@coderix/core';
 import type { McpManager } from '@coderix/core';
 import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '@coderix/core';
-import { runClaudeCodeQuery, getClaudeSessionId, loadClaudeSubagentTranscript } from './claude-code-engine.js';
+import { runClaudeCodeQuery, getClaudeSessionId, getClaudeCumulativeUsage, loadClaudeSubagentTranscript } from './claude-code-engine.js';
 import { normalizeSubAgentEvent } from './subagent-events.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { listAvailableSkills, listCustomSkillDirs, addCustomSkillDir, removeCustomSkillDir, coderixSkillDirs, listCoderixSkills } from './skills.js';
@@ -406,6 +406,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       activeSessionModel && activeSessionModel !== 'unknown'
         ? resolveModelByName(activeSessionModel)
         : undefined;
+
+    // Remember the currency this session's prices are denominated in so a
+    // reloaded session formats its persisted cost with the right symbol
+    // instead of silently falling back to USD.
+    const resolvedCurrency = sessionResolved?.currency ?? activeSession?.currency ?? activeConfig.currency;
+    if (activeSession && resolvedCurrency) {
+      sessionManager.setCurrency(activeSession.id, resolvedCurrency);
+    }
 
     // The claude-code engine must run in the session's OWN workspace — where its
     // claude session lives — not the global `currentWorkDir`, which may still be
@@ -795,6 +803,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
                 cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
                 totalCost: usage.totalCost ?? 0,
+                currency: resolvedCurrency,
                 contextTokens:
                   (usage.input_tokens ?? 0) +
                   (usage.output_tokens ?? 0) +
@@ -919,7 +928,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 const inputPrice = sessionResolved?.inputPrice ?? activeConfig.inputPrice ?? 0;
                 const outputPrice = sessionResolved?.outputPrice ?? activeConfig.outputPrice ?? 0;
                 const cacheReadPrice = sessionResolved?.cacheReadPrice ?? activeConfig.cacheReadPrice ?? 0;
-                const currency = sessionResolved?.currency ?? activeConfig.currency ?? 'USD';
+                const currency = sessionResolved?.currency ?? activeSession?.currency ?? activeConfig.currency ?? 'USD';
                 const turnCost =
                   (inputTokens / 1_000_000) * inputPrice +
                   (outputTokens / 1_000_000) * outputPrice +
@@ -927,6 +936,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 if (data.usage) {
                   try {
                     sessionManager.addCost(streamSessionId, turnCost);
+                    // Persist the same turn delta that the status bar renders,
+                    // so a reloaded session shows tokens alongside its cost
+                    // instead of a cost with an all-zero token breakdown.
+                    sessionManager.updateUsage(streamSessionId, {
+                      inputTokens,
+                      outputTokens,
+                      cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
+                      cacheReadInputTokens: cacheReadTokens,
+                    });
                     // addCost only mutates the in-memory session; persist the
                     // running total so a reloaded session doesn't reset to zero.
                     const session = sessionManager.get(streamSessionId);
@@ -1108,6 +1126,25 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const session = sessionManager.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
+    // Sessions recorded before usage deltas were persisted carry a cost but an
+    // all-zero token breakdown. Backfill the buckets from the Claude Code
+    // engine's cumulative usage so the reloaded status bar can reconcile its
+    // cost with real tokens.
+    const tu = session.tokenUsage;
+    const hasTokens =
+      (tu.inputTokens ?? 0) + (tu.outputTokens ?? 0) +
+      (tu.cacheReadInputTokens ?? 0) + (tu.cacheCreationInputTokens ?? 0) > 0;
+    if (!hasTokens) {
+      const backfill = getClaudeCumulativeUsage(sessionId);
+      const hasBackfill = backfill &&
+        backfill.inputTokens + backfill.outputTokens +
+        backfill.cacheReadInputTokens + backfill.cacheCreationInputTokens > 0;
+      if (backfill && hasBackfill) {
+        sessionManager.updateUsage(sessionId, backfill);
+        sessionManager.saveSession(session);
+      }
+    }
+
     // Restore the session's workspace so a reloaded conversation opens in the
     // directory it was created in (the next submit uses this as its cwd).
     let reloadWorkDir: string | undefined;
@@ -1147,6 +1184,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       pluginId: session.pluginId,
       tokenUsage: session.tokenUsage,
       totalCost: session.totalCost,
+      // Older sessions predate the persisted currency field; recover it from
+      // the model's price configuration so the symbol is not assumed to be USD.
+      currency: session.currency ?? resolveModelByName(session.model)?.currency,
       contextTokens: session.contextTokens,
       // Another live client is writing it; the renderer must not send here.
       busy: sessionManager.isBusy(sessionId),
