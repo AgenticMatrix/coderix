@@ -44,6 +44,13 @@ function discardPending(sessionId: string): void {
   p.msg = null;
 }
 
+/**
+ * Pending "the engine ended without a terminal event" timers, keyed by session.
+ * Module-scoped so teardown can cancel them (a stale timer must never mutate a
+ * torn-down store).
+ */
+const turnEndFallbacks = new Map<string, ReturnType<typeof setTimeout>>();
+
 function emptyTokenUsage(): AggregatedTokenUsage {
   return {
     inputTokens: 0,
@@ -237,6 +244,69 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       return useChatStore.getState().messagesBySession[sessionId] ?? [];
     };
 
+    // Read a session's turn lifecycle flag (flat if viewed, map slot if not).
+    const isSessionStreaming = (sessionId: string): boolean =>
+      sessionId === viewedSession()
+        ? useChatStore.getState().isStreaming
+        : (useChatStore.getState().streamingBySession[sessionId] ?? false);
+
+    const currentEpoch = (sessionId: string): number =>
+      useChatStore.getState().streamEpochBySession[sessionId] ?? 0;
+
+    // A terminal event (done/error) is only trusted when it belongs to the
+    // current turn. If the main process reports a *higher* epoch than the
+    // renderer counted, the two counters drifted (a submit that failed before
+    // reaching the engine, a session that was forked on submit, a renderer
+    // reload mid-turn …) — adopt the main process's authoritative counter
+    // instead of silently ignoring the end of the turn forever.
+    const acceptTerminalEpoch = (sessionId: string, epoch?: number): boolean => {
+      if (epoch === undefined || !sessionId) return true;
+      const current = currentEpoch(sessionId);
+      if (epoch < current) return false;
+      if (epoch > current) useChatStore.getState().setStreamEpoch(sessionId, epoch);
+      return true;
+    };
+
+    // The step ended with a terminal stop reason, so the engine's own `done`
+    // should follow within milliseconds. If it never arrives (a provider that
+    // ends the stream without a terminal event), the turn would otherwise stay
+    // "thinking" until the next message. Treat that unconfirmed stop as the end
+    // of the turn after a grace period. A tool that is still executing keeps the
+    // turn alive — its result may still be coming.
+    const TERMINAL_STOP_REASONS = new Set(['end_turn', 'stop_sequence', 'max_tokens', 'refusal']);
+    const TURN_END_GRACE_MS = 2500;
+
+    const clearTurnEndFallback = (sessionId: string): void => {
+      const timer = turnEndFallbacks.get(sessionId);
+      if (timer === undefined) return;
+      clearTimeout(timer);
+      turnEndFallbacks.delete(sessionId);
+    };
+
+    const lastAssistantHasActiveTool = (sessionId: string): boolean => {
+      const messages = getMessages(sessionId);
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role !== 'assistant') continue;
+        return msg.blocks.some(
+          (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
+        );
+      }
+      return false;
+    };
+
+    const scheduleTurnEndFallback = (sessionId: string): void => {
+      clearTurnEndFallback(sessionId);
+      const timer = setTimeout(() => {
+        turnEndFallbacks.delete(sessionId);
+        if (!isSessionStreaming(sessionId)) return;
+        if (lastAssistantHasActiveTool(sessionId)) return;
+        useChatStore.getState().setSessionStreaming(sessionId || undefined, false);
+        refreshSidebarSession(false, sessionId);
+      }, TURN_END_GRACE_MS);
+      turnEndFallbacks.set(sessionId, timer);
+    };
+
     // Attach a tool_result to the matching tool_use across a session's committed
     // messages. Returns true when the result found a home.
     const attachToolResult = (sessionId: string, block: StreamBlock): boolean => {
@@ -282,6 +352,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // Route the block to its owning session (never drop it): a backgrounded
       // session keeps accumulating into its own cache.
       const sid = sessionOf(block.sessionId);
+
+      // New activity means the turn is alive — cancel a pending "the engine
+      // ended without a terminal event" fallback scheduled by message_stop.
+      clearTurnEndFallback(sid);
 
       // Accumulate against the pending message when a flush is already
       // scheduled (mid-frame), otherwise against the last committed message.
@@ -382,7 +456,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubBlock);
 
     // ── Stream Done ────────────────────────────────────────
-    const unsubDone = onStreamDone((_stopReason?: string, sessionId?: string) => {
+    const unsubDone = onStreamDone((stopReason?: string, sessionId?: string) => {
       const sid = sessionOf(sessionId);
 
       // Commit any blocks still buffered (the last deltas of the turn may not
@@ -407,6 +481,11 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         useChatStore.getState().commitAssistantMessage(sid || undefined, chatMsg);
         writeCurrent(sid, null);
       }
+      // The final step ended without a tool call — arm the fallback in case the
+      // engine's `done` never arrives. Any further block cancels it.
+      if (stopReason && TERMINAL_STOP_REASONS.has(stopReason)) {
+        scheduleTurnEndFallback(sid);
+      }
       refreshSidebarSession(true, sid);
     });
     cleanups.push(unsubDone);
@@ -417,11 +496,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     // shows Done and `isStreaming` stops), no matter how many tool steps ran.
     const unsubTurnDone = onStreamTurnDone((sessionId?: string, epoch?: number) => {
       const sid = sessionOf(sessionId);
-      // Ignore a stale turn's late terminal signal: only the current epoch may
-      // flip streaming off. An interrupt-and-resend bumps the epoch, so the old
-      // turn's `done` (lower epoch) must not kill the new turn's streaming.
-      const currentEpoch = useChatStore.getState().streamEpochBySession[sid] ?? 0;
-      if (epoch !== undefined && epoch !== currentEpoch) return;
+      // Ignore a stale turn's late terminal signal: only the current (or a
+      // newer, adopted) epoch may flip streaming off. See acceptTerminalEpoch.
+      if (!acceptTerminalEpoch(sid, epoch)) return;
+      clearTurnEndFallback(sid);
       useChatStore.getState().setSessionStreaming(sid || undefined, false);
       refreshSidebarSession(false, sid);
     });
@@ -433,8 +511,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
       // Same epoch guard as onStreamTurnDone: a stale turn's late error must not
       // reset the new turn's streaming state after an interrupt-and-resend.
-      const currentEpoch = useChatStore.getState().streamEpochBySession[sid] ?? 0;
-      if (epoch !== undefined && epoch !== currentEpoch) return;
+      if (!acceptTerminalEpoch(sid, epoch)) return;
+      clearTurnEndFallback(sid);
 
       // Drop any buffered partial message for this session's stream.
       discardPending(sid);
@@ -506,6 +584,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       discardPending(sid);
     }
     pendingBySession.clear();
+    for (const timer of turnEndFallbacks.values()) clearTimeout(timer);
+    turnEndFallbacks.clear();
     const { _cleanups } = get();
     for (const cleanup of _cleanups) {
       cleanup();
