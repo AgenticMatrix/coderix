@@ -95,12 +95,14 @@ export const IPC_CHANNELS = {
   SESSION_LIST: 'session:list',
   SESSION_GET: 'session:get',
   SESSION_LOAD: 'session:load',
+  SESSION_CLAIM: 'session:claim',
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
   SESSION_SET_AGENT_TYPE: 'session:setAgentType',
+  SESSION_SET_CWD: 'session:setCwd',
   PLUGINS_LIST: 'plugins:list',
   MCP_LIST: 'mcp:list',
   MCP_CATALOG: 'mcp:catalog',
@@ -320,12 +322,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       sessionManager.create({ title: '新对话', cwd: currentWorkDir, model: currentModel });
     }
 
-    // Switch to requested session if it exists
+    // Switch to requested session if it exists. `resumeOrFork` never writes
+    // into a conversation another live client owns — it copies it instead.
+    let forkedFrom: string | undefined;
     if (sessionId) {
       try {
-        if (sessionManager.tryGetActive()?.id !== sessionId) {
-          sessionManager.resume(sessionId);
-        }
+        const resumed = sessionManager.resumeOrFork(sessionId);
+        if (resumed.forkedFrom) forkedFrom = resumed.forkedFrom;
       } catch {
         // Session doesn't exist — keep using the current (newly created) one
         console.warn(`[IpcBridge] Session not found: ${sessionId}, using current session`);
@@ -993,7 +996,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
     })();
 
-    return { status: 'submitted' };
+    return {
+      status: 'submitted',
+      // The effective session may differ from the requested one when it was
+      // owned by another live client and got copied.
+      sessionId: streamSessionId,
+      forkedFrom,
+    };
   });
 
   ipcMain.handle(IPC_CHANNELS.QUERY_INTERRUPT, async (_event, sessionId?: string) => {
@@ -1061,7 +1070,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
-    if (sessionManager) return sessionManager.listSessions();
+    // Strict: if the sessions root cannot be read, reject the IPC so the
+    // renderer keeps its last good list instead of wiping the sidebar with [].
+    if (sessionManager) return sessionManager.listSessions(undefined, { strict: true });
     // Disk fallback before QueryEngine is ready
     try {
       const sessionsDir = join(homedir(), '.coderix', 'sessions');
@@ -1087,10 +1098,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD, async (_event, sessionId: string) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
-    // Read-only load: `get()` reads/caches from disk without flipping the global
-    // active-session pointer, so loading a session to view it can't hijack the
-    // session resolution of a concurrent stream (QUERY_SUBMIT calls resume()
-    // when the user actually sends a message).
+    // Read-only load: refresh from disk when nothing is streaming for this
+    // session. Another client (e.g. the CLI) may have appended since this
+    // process cached the conversation; serving the cache would hide its turns.
+    if (!abortControllers.has(sessionId)) {
+      await sessionManager.flush();
+      sessionManager.reload(sessionId);
+    }
     const session = sessionManager.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -1134,6 +1148,19 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       tokenUsage: session.tokenUsage,
       totalCost: session.totalCost,
       contextTokens: session.contextTokens,
+      // Another live client is writing it; the renderer must not send here.
+      busy: sessionManager.isBusy(sessionId),
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_CLAIM, async (_event, sessionId: string) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const { session, forkedFrom } = sessionManager.resumeOrFork(sessionId);
+    return {
+      id: session.id,
+      forkedFrom,
+      title: session.title,
+      turnCount: session.turnCount,
     };
   });
 
@@ -1259,6 +1286,40 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       }
     }
     return { status: 'ok', agentType, pluginId: payload?.pluginId };
+  });
+
+  // Re-bind a conversation to a different workspace directory. Switching the
+  // workspace only changed the global `currentWorkDir`, while QUERY_SUBMIT
+  // prefers the active session's own cwd — so the conversation kept running in
+  // its old directory. Persisting the cwd here makes the open conversation
+  // follow the switch (skills/model stay untouched).
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_CWD, async (_event, payload: { sessionId?: string; cwd: string }) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const cwd = payload?.cwd;
+    if (!cwd || typeof cwd !== 'string') {
+      throw new Error('Invalid cwd');
+    }
+    const nextCwd = resolve(cwd);
+    if (!existsSync(nextCwd)) {
+      throw new Error(`Directory does not exist: ${nextCwd}`);
+    }
+    const sessionId = payload?.sessionId;
+    if (sessionId) {
+      sessionManager.setCwd(sessionId, nextCwd);
+      // Drop the cached per-session engine so the next submit rebuilds in the
+      // new directory. A live stream is unaffected — its generator already
+      // holds the old engine and finishes in the directory it started in.
+      engineBySession.delete(sessionId);
+    } else {
+      try {
+        const activeId = sessionManager.getActive().id;
+        sessionManager.setCwd(activeId, nextCwd);
+        engineBySession.delete(activeId);
+      } catch {
+        // No active session yet — nothing to re-bind.
+      }
+    }
+    return { status: 'ok', cwd: nextCwd };
   });
 
   ipcMain.handle(IPC_CHANNELS.PLUGINS_LIST, async () => {
@@ -2681,9 +2742,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LIST);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_GET);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LOAD);
+      ipcMain.removeHandler(IPC_CHANNELS.SESSION_CLAIM);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_FORK);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_DELETE);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_SET_MODEL);
+      ipcMain.removeHandler(IPC_CHANNELS.SESSION_SET_CWD);
       ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_APPROVE);
       ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_APPROVE_SESSION);
       ipcMain.removeHandler(IPC_CHANNELS.PERMISSION_APPROVE_ALWAYS);

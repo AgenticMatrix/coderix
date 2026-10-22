@@ -50,6 +50,7 @@ import { useAgentEvents } from './hooks/useAgentEvents';
 import {
   submitQuery,
   interruptQuery,
+  claimSession,
   onPermissionRequest,
   approvePermission,
   denyPermission,
@@ -67,6 +68,7 @@ import {
   listMcpCatalog,
   setSessionMcpServers,
   setSessionAgentType,
+  setSessionCwd,
   listSkillDirs,
   addSkillDir,
   removeSkillDir,
@@ -735,15 +737,23 @@ export function App(): React.ReactElement {
   useEffect(() => {
     async function init(): Promise<void> {
       await loadSessions();
-      const sessions = useSessionStore.getState().sessions;
+      const { sessions, error } = useSessionStore.getState();
+      // A failed list read is not "no sessions". Creating a fresh conversation
+      // over a transient IPC/FS error would pile a new empty chat on top of a
+      // sidebar that already looks empty; leave the user's view alone.
+      if (error) return;
       if (sessions.length === 0) {
         await createSession();
       } else {
-        // Auto-select the most recent session and hydrate it fully (transcript,
-        // model, skills, workspace) through the same path as a sidebar click.
-        // Selecting without hydrating left the first session "current" but with
-        // an empty chat pane, so clicking it was a no-op (it was already active).
-        await handleSessionSelect(sessions[0].id);
+        // Auto-select the most recent session that no other client is writing.
+        // The newest transcript may be a live CLI conversation; attaching the
+        // desktop to it would make both processes write one transcript.
+        const target = sessions.find((s) => !s.busy);
+        if (target) {
+          await handleSessionSelect(target.id);
+        } else {
+          await createSession();
+        }
       }
     }
     init().catch((err) => console.error('[App] Session init failed:', err));
@@ -781,15 +791,36 @@ export function App(): React.ReactElement {
     return () => document.removeEventListener('mousedown', clickOut);
   }, []);
 
-  // Shared post-switch cleanup: reload the session list for the new workspace
-  // directory. The active session is left in place — switching the workspace
-  // only changes the directory, it must not drop a plugin conversation's
-  // per-session skills/model. Callers that want to leave the conversation (e.g.
-  // the library's "open project") clear it themselves afterwards.
+  // Shared post-switch cleanup: point the active conversation at the new
+  // workspace directory. The conversation itself is left in place — switching
+  // the workspace only changes the directory, it must not drop a plugin
+  // conversation's per-session skills/model. Callers that want to leave the
+  // conversation (e.g. the library's "open project") clear it BEFORE calling
+  // this so the old conversation isn't dragged along.
+  //
+  // Deliberately does NOT reload the whole session list. The list is global
+  // (not workspace-filtered), and reloading here replaced the renderer's list
+  // with the on-disk view — which drops a conversation that was just created
+  // but has no session.jsonl yet (create() defers the first write until the
+  // first message). That is exactly the "new conversation disappears when I
+  // pick a new workspace folder" bug: it stayed hidden until an app restart.
   const switchToProject = useCallback(async (path: string) => {
     setProjectPath(path);
-    await loadSessions();
-  }, [loadSessions]);
+    // The main process now runs queries in the active session's own cwd, so
+    // without re-binding it the conversation would keep using its old
+    // workspace even though the label (and `currentWorkDir`) changed.
+    const activeSid = useSessionStore.getState().currentSessionId;
+    if (activeSid) {
+      try {
+        await setSessionCwd(activeSid, path);
+        // Patch the conversation's workspace locally so the sidebar grouping
+        // and the app panel stay in sync without touching other sessions.
+        useSessionStore.getState().setSessionWorkDir(activeSid, path);
+      } catch (err) {
+        console.error('[App] Failed to re-bind session workspace:', err);
+      }
+    }
+  }, []);
 
   const handleProjectSelect = useCallback(async () => {
     try {
@@ -964,15 +995,17 @@ export function App(): React.ReactElement {
     if (!path) return;
     try {
       const result = await setProjectDirectory(path);
-      await switchToProject(result.path);
       // Opening a project's management view leaves the current conversation:
       // stash the viewed session's live state and clear the active session so
-      // the "create conversation" prompt is shown instead.
+      // the "create conversation" prompt is shown instead. Clear it BEFORE the
+      // workspace switch so switchToProject doesn't re-bind the old
+      // conversation to this project's directory.
       useStreamStore.getState().setViewedSession(null);
       setSessionId(null);
       useSessionStore.getState().setCurrentSessionId(null);
       setSessionModelState(null);
       setSelectedSkills([]);
+      await switchToProject(result.path);
       // Reveal the sidebar (its persistent file list now points at this
       // project) and swap the chat area for the "create conversation" prompt.
       useUIStore.getState().setSidebarOpen(true);
@@ -1056,14 +1089,45 @@ export function App(): React.ReactElement {
         }
       }
 
+      // Never write into a conversation another live client owns (a CLI turn,
+      // or a second desktop window). Claiming copies the transcript first, so
+      // neither side's messages can be orphaned by the other's append.
+      if (currentSid) {
+        try {
+          const claim = await claimSession(currentSid);
+          if (claim.forkedFrom) {
+            await handleSessionSelect(claim.id);
+            currentSid = useSessionStore.getState().currentSessionId ?? claim.id;
+            await loadSessions();
+            useUIStore.getState().addNotification({
+              type: 'info',
+              message: t('session.busyCopied'),
+            });
+          }
+        } catch (err) {
+          useChatStore.getState().setError(
+            err instanceof Error ? err.message : 'Failed to claim session',
+          );
+          return;
+        }
+      }
+
       // Add the user message to the chat store (triggers streaming state)
       await sendMessage(value);
-
       // Submit the query via IPC to the main process
       if (currentSid) {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
-          await submitQuery(value, currentSid, selectedSkills);
+          const submitted = (await submitQuery(value, currentSid, selectedSkills)) as
+            | { sessionId?: string; forkedFrom?: string }
+            | undefined;
+          // The main process only forks here if another client grabbed the
+          // conversation between our claim and the submit. Follow the copy.
+          if (submitted?.forkedFrom && submitted.sessionId) {
+            await handleSessionSelect(submitted.sessionId);
+            await loadSessions();
+            currentSid = useSessionStore.getState().currentSessionId;
+          }
           // Refresh the workspace label so it reflects the conversation's dir.
           getProjectDirectory()
             .then((r) => setProjectPath(r.path))
@@ -1079,7 +1143,7 @@ export function App(): React.ReactElement {
         useChatStore.getState().setError('No active session');
       }
     },
-    [sendMessage, createSession, setSessionId, selectedSkills],
+    [sendMessage, createSession, setSessionId, selectedSkills, handleSessionSelect, loadSessions, t],
   );
 
   // ── Build trajectory calls for the trajectory view ───────────────────────

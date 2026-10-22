@@ -91,6 +91,14 @@ export interface SessionInfo {
   pluginId?: string;
   /** Working directory of the session (for workspace grouping). */
   workDir?: string;
+  /** Another live client (CLI) is currently writing this session. */
+  busy?: boolean;
+  /** First 60 chars of the latest user message. */
+  lastUserPreview?: string;
+  /** Display title derived from the first user message. */
+  displayTitle?: string;
+  /** Full text of the first user message. */
+  firstUserText?: string;
 }
 
 /** A versioned CAD step surfaced by `cad:listSteps` (mirrors cad_harness's Step). */

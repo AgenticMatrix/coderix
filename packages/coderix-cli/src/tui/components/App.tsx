@@ -703,7 +703,21 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
         currentSessionRef.current = id;
         let session;
         try {
-          session = sessionManager.resume(id);
+          const resumed = sessionManager.resumeOrFork(id);
+          session = resumed.session;
+          if (resumed.forkedFrom) {
+            currentSessionRef.current = session.id;
+            dispatch({
+              type: 'ADD_USER_MESSAGE',
+              message: {
+                id: Date.now(),
+                role: 'system',
+                content: 'That session is in use by another client — continuing in a copy.',
+                blocks: [{ type: 'text' as const, content: 'That session is in use by another client — continuing in a copy.' }],
+                timestamp: Date.now(),
+              },
+            });
+          }
           await restoreSessionAgents(sessionManager);
         } catch (e) {
           dispatch({
@@ -1511,7 +1525,20 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
               }))}
               onSelect={async (sessionId) => {
                 dispatch({ type: 'HIDE_SESSION_PICKER' });
-                const session = sessionManager.resume(sessionId);
+                const { session, forkedFrom } = sessionManager.resumeOrFork(sessionId);
+                if (forkedFrom) {
+                  currentSessionRef.current = session.id;
+                  dispatch({
+                    type: 'ADD_USER_MESSAGE',
+                    message: {
+                      id: Date.now(),
+                      role: 'system',
+                      content: 'That session is in use by another client — continuing in a copy.',
+                      blocks: [{ type: 'text' as const, content: 'That session is in use by another client — continuing in a copy.' }],
+                      timestamp: Date.now(),
+                    },
+                  });
+                }
                 await restoreSessionAgents(sessionManager);
                 if (session && session.messages.length > 0) {
                   const msgs = convertTranscriptToMessages(session.messages);

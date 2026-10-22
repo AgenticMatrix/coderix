@@ -27,6 +27,14 @@ export interface SessionSummary {
   pluginId?: string;
   /** Working directory of the session (for workspace grouping). */
   workDir?: string;
+  /** Another live client (CLI) is currently writing this session. */
+  busy?: boolean;
+  /** First 60 chars of the latest user message. */
+  lastUserPreview?: string;
+  /** Display title derived from the first user message. */
+  displayTitle?: string;
+  /** Full text of the first user message. */
+  firstUserText?: string;
 }
 
 /** Aggregated token usage for the current session */

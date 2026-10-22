@@ -488,6 +488,8 @@ export interface SessionSummary {
   agentType?: string;
   /** Plugin name this session was created from. */
   pluginId?: string;
+  /** Another live client (CLI or desktop) is currently writing this session. */
+  busy?: boolean;
 }
 
 export interface Session {

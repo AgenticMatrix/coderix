@@ -138,7 +138,7 @@ async function runPrintMode(queryText: string): Promise<void> {
   const { createCallModel } = await import('@coderix/core');
   const callModel = createCallModel(config, config.model);
   const { SessionManager } = await import('@coderix/core');
-  const sm = new SessionManager(); sm.create({ cwd: process.cwd(), model: config.model });
+  const sm = new SessionManager(false, 'cli'); sm.create({ cwd: process.cwd(), model: config.model });
   const { QueryEngine } = await import('@coderix/core');
   const { PermissionMode } = await import('@coderix/core');
   const { createToolRegistry, createAgentRuntime } = await import('@coderix/core');
@@ -373,7 +373,7 @@ async function main(): Promise<void> {
   const { createCallModel } = await import('@coderix/core');
   const callModel = createCallModel(config, config.model);
   const { SessionManager } = await import('@coderix/core');
-  const sm = new SessionManager();
+  const sm = new SessionManager(false, 'cli');
   let initialMessages: any[] | null = null;
   let initialTokenUsage: any = undefined;
   let showSessionPicker = false;
@@ -412,10 +412,14 @@ async function main(): Promise<void> {
     } else if (cliArgs.resume === 'last') {
       try {
         const list = sm.list();
-        const last = list.find((s) => s.turnCount > 0);
+        const last = list.find((s) => s.turnCount > 0 && !s.busy);
         if (last) {
-          sm.resume(last.id);
-          const session = sm.getActive()!;
+          const { session, forkedFrom } = sm.resumeOrFork(last.id);
+          if (forkedFrom) {
+            process.stderr.write(
+              `[session] ${forkedFrom} is in use by another client — continuing in a copy: ${session.id}\n`,
+            );
+          }
           if (session.messages.length > 0) {
             const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
             initialMessages = convert(session.messages);
@@ -432,8 +436,12 @@ async function main(): Promise<void> {
       } catch { /* fall through */ }
     } else {
       try {
-        sm.resume(cliArgs.resume!);
-        const session = sm.getActive()!;
+        const { session, forkedFrom } = sm.resumeOrFork(cliArgs.resume!);
+        if (forkedFrom) {
+          process.stderr.write(
+            `[session] ${forkedFrom} is in use by another client — continuing in a copy: ${session.id}\n`,
+          );
+        }
         if (session.messages.length > 0) {
           const { convertTranscriptToMessages: convert } = await import('../tui/hooks/useChatReducer.js');
           initialMessages = convert(session.messages);

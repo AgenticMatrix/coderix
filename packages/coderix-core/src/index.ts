@@ -40,6 +40,16 @@ export {
 } from './core/session-store.js';
 export type { EntryBatcher } from './core/session-store.js';
 export type { SessionMeta } from './core/session-store.js';
+export {
+  acquireLeaseSync,
+  inspectLease,
+  readLease,
+  releaseLeaseSync,
+  renewLeaseSync,
+  SessionBusyError,
+  startLeaseHeartbeat,
+} from './core/session-lease.js';
+export type { SessionClient, SessionLease, LeaseInspection } from './core/session-lease.js';
 export { CheckpointManager } from './core/checkpoint.js';
 export { SubAgentRegistry } from './core/subagent-registry.js';
 export type { SubAgentRecord } from './core/subagent-registry.js';

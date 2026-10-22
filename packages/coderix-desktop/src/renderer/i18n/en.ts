@@ -157,6 +157,7 @@ export const en: Record<TranslationKey, string> = {
   'session.delete': 'Delete session',
   'session.turns': '{n} turns',
   'session.newSession': 'New chat',
+  'session.busyCopied': 'That conversation is in use by another client — continuing in a copy.',
   'session.search': 'Search sessions...',
   'session.new': 'New session',
   'session.viewOptions': 'View options',

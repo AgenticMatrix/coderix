@@ -22,8 +22,54 @@ export interface SessionState {
   }) => Promise<string | undefined>;
   forkSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
+  /** Patch a conversation's workspace locally, without reloading the list. */
+  setSessionWorkDir: (id: string, workDir: string) => void;
   setCurrentSessionId: (id: string | null) => void;
   setError: (error: string | null) => void;
+}
+
+/** Raw session shape returned by the main process over IPC. */
+type RawSessionInfo = {
+  id: string;
+  title: string;
+  turnCount: number;
+  model: string;
+  updatedAt: number;
+  createdAt: number;
+  agentType?: string;
+  pluginId?: string;
+  workDir?: string;
+  busy?: boolean;
+  lastUserPreview?: string;
+  displayTitle?: string;
+  firstUserText?: string;
+};
+
+/** Normalize the preload's untyped payload into the renderer's summary shape. */
+function normalizeSession(s: RawSessionInfo): SessionSummary {
+  return {
+    id: s.id,
+    title: s.title,
+    turnCount: s.turnCount,
+    model: s.model,
+    updatedAt: s.updatedAt,
+    createdAt: s.createdAt,
+    ...(s.agentType ? { agentType: s.agentType } : {}),
+    ...(s.pluginId ? { pluginId: s.pluginId } : {}),
+    ...(s.workDir ? { workDir: s.workDir } : {}),
+    ...(s.busy ? { busy: true } : {}),
+    ...(s.lastUserPreview ? { lastUserPreview: s.lastUserPreview } : {}),
+    ...(s.displayTitle ? { displayTitle: s.displayTitle } : {}),
+    ...(s.firstUserText ? { firstUserText: s.firstUserText } : {}),
+  };
+}
+
+/** Keep "most recently updated first" without refetching. */
+function sortByRecency(sessions: SessionSummary[]): SessionSummary[] {
+  sessions.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+  return sessions;
 }
 
 /**
@@ -50,29 +96,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     }
     try {
       const sessions = await listSessions();
-      // Normalize: the preload returns unknown, but we expect SessionInfo[]
-      const normalized: SessionSummary[] = (sessions as unknown as Array<{
-        id: string;
-        title: string;
-        turnCount: number;
-        model: string;
-        updatedAt: number;
-        createdAt: number;
-        agentType?: string;
-        pluginId?: string;
-        workDir?: string;
-      }>).map((s) => ({
-        id: s.id,
-        title: s.title,
-        turnCount: s.turnCount,
-        model: s.model,
-        updatedAt: s.updatedAt,
-        createdAt: s.createdAt,
-        ...(s.agentType ? { agentType: s.agentType } : {}),
-        ...(s.pluginId ? { pluginId: s.pluginId } : {}),
-        ...(s.workDir ? { workDir: s.workDir } : {}),
-      }));
-      set({ sessions: normalized, isLoading: false });
+      const normalized = (sessions as unknown as RawSessionInfo[]).map(normalizeSession);
+      set({ sessions: sortByRecency(normalized), isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load sessions';
       set({ error: message, isLoading: false });
@@ -84,34 +109,25 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       if (!window.coderixAPI) return;
       const s = await getSession(id);
       if (!s) return;
-      const normalized: SessionSummary = {
-        id: s.id,
-        title: s.title,
-        turnCount: s.turnCount,
-        model: s.model,
-        updatedAt: s.updatedAt,
-        createdAt: s.createdAt,
-        ...(s.agentType ? { agentType: s.agentType } : {}),
-        ...(s.pluginId ? { pluginId: s.pluginId } : {}),
-        ...(s.workDir ? { workDir: s.workDir } : {}),
-      };
-      // Patch only the matching entry — do not toggle isLoading or touch others.
+      const normalized = normalizeSession(s as unknown as RawSessionInfo);
+      // Patch the matching entry, or insert it when the conversation is not in
+      // the list yet. A full list reload between "session created" and "first
+      // message persisted" can drop an in-progress conversation; this upsert
+      // guarantees it comes back as soon as a turn has been written.
       set((state) => {
-        const sessions = state.sessions.map((existing) =>
-          existing.id === id
-            ? {
-                ...normalized,
-                // Never let a briefly-stale disk read revert an optimistic bump.
-                turnCount: Math.max(existing.turnCount, normalized.turnCount),
-              }
-            : existing,
-        );
-        // Preserve "most recently updated first" ordering without refetching.
-        sessions.sort(
-          (a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-        );
-        return { sessions };
+        const exists = state.sessions.some((existing) => existing.id === id);
+        const sessions = exists
+          ? state.sessions.map((existing) =>
+              existing.id === id
+                ? {
+                    ...normalized,
+                    // Never let a briefly-stale disk read revert an optimistic bump.
+                    turnCount: Math.max(existing.turnCount, normalized.turnCount),
+                  }
+                : existing,
+            )
+          : [normalized, ...state.sessions];
+        return { sessions: sortByRecency(sessions) };
       });
     } catch {
       // Best-effort refresh — never disturb the list over a single-session miss.
@@ -180,13 +196,14 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const result = await ipcForkSession(id);
-      const newSession = result as { id: string; title: string };
+      const newSession = result as { id: string; title: string; turnCount?: number };
       set((state) => ({
         sessions: [
           {
             id: newSession.id,
             title: newSession.title ?? `${state.sessions.find((s) => s.id === id)?.title ?? ''} (fork)`,
-            turnCount: 0,
+            // A fork copies the parent's transcript, so it starts with its turns.
+            turnCount: newSession.turnCount ?? 0,
             model: '',
             updatedAt: Date.now(),
             createdAt: Date.now(),
@@ -217,6 +234,15 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       const message = err instanceof Error ? err.message : 'Failed to delete session';
       set({ sessions: prevSessions, error: message });
     }
+  },
+
+  setSessionWorkDir: (id: string, workDir: string) => {
+    // Workspace switches only change one conversation's directory. Patching it
+    // in place keeps the rest of the list (including a just-created session
+    // with no transcript file yet) untouched.
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, workDir } : s)),
+    }));
   },
 
   setCurrentSessionId: (id: string | null) => {

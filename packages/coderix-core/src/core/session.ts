@@ -44,7 +44,19 @@ import {
   isAutoTitle,
   stripCompactWrapper,
   isCompactSummaryText,
+  readLastTranscriptUuidSync,
+  rewriteTranscriptPreservingExternal,
+  withSessionWriteLock,
+  flushSessionWrites,
 } from './session-store.js';
+import {
+  SessionBusyError,
+  acquireLeaseSync,
+  inspectLease,
+  releaseLeaseSync,
+  startLeaseHeartbeat,
+  type SessionClient,
+} from './session-lease.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -71,11 +83,63 @@ export class SessionManager {
   private pendingWrites = new Set<Promise<void>>();
   private exitHandlerRegistered = false;
   private readonly diskless: boolean;
+  private readonly client: SessionClient;
+  /** Stops the per-session lease heartbeat (desktop/CLI hold different leases). */
+  private leaseHeartbeats = new Map<string, () => void>();
 
-  constructor(diskless: boolean = false) {
+  constructor(diskless: boolean = false, client: SessionClient = 'unknown') {
     this.diskless = diskless;
+    this.client = client;
     if (!diskless && !existsSync(SESSIONS_DIR)) {
       mkdirSync(SESSIONS_DIR, { recursive: true });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Write-ownership lease
+  // -------------------------------------------------------------------------
+
+  /**
+   * Take (or renew) this process's lease on a session. When another live
+   * process owns it, `throwOnBusy` decides between a hard error (explicit
+   * resume) and proceeding (best-effort background writes).
+   */
+  private ensureLease(session: Session, throwOnBusy: boolean): void {
+    if (this.diskless) return;
+    const dir = getSessionDir(session.id);
+    const { acquired, holder } = acquireLeaseSync(dir, {
+      sessionId: session.id,
+      client: this.client,
+    });
+    if (!acquired) {
+      if (throwOnBusy) {
+        if (holder) throw new SessionBusyError(session.id, holder);
+        throw new Error(`Unable to acquire the write lease for session ${session.id}`);
+      }
+      return;
+    }
+    if (!this.leaseHeartbeats.has(session.id)) {
+      this.leaseHeartbeats.set(
+        session.id,
+        startLeaseHeartbeat(dir, session.id, this.client),
+      );
+    }
+  }
+
+  private releaseLease(sessionId: string): void {
+    const stop = this.leaseHeartbeats.get(sessionId);
+    if (stop) {
+      stop();
+      this.leaseHeartbeats.delete(sessionId);
+    }
+    if (!this.diskless) {
+      releaseLeaseSync(getSessionDir(sessionId), sessionId);
+    }
+  }
+
+  private releaseAllLeases(): void {
+    for (const id of Array.from(this.leaseHeartbeats.keys())) {
+      this.releaseLease(id);
     }
   }
 
@@ -135,6 +199,10 @@ export class SessionManager {
     // Defer disk write until the first message is added.
     // This prevents empty sessions from leaving directories on disk.
     (session as any)._entryCount = 0;
+    // No transcript file yet — a reload() must keep this in-memory session
+    // instead of reporting "not found" before the first append.
+    (session as any)._diskStamp = '';
+    (session as any)._knownUuids = new Set<string>();
 
     return session;
   }
@@ -272,12 +340,22 @@ export class SessionManager {
 
   /**
    * Resume a session from disk.
+   * Throws SessionBusyError when another live process is writing it.
    */
   resume(sessionId: string): Session {
-    const session = this.loadSession(sessionId);
+    const inspection = inspectLease(getSessionDir(sessionId));
+    if (inspection.busy && inspection.holder) {
+      throw new SessionBusyError(sessionId, inspection.holder);
+    }
+
+    const session = this.sessions.has(sessionId)
+      ? this.reload(sessionId)
+      : this.loadSession(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+
+    this.ensureLease(session, true);
 
     session.status = 'active';
     session.updatedAt = new Date();
@@ -292,10 +370,109 @@ export class SessionManager {
   }
 
   /**
+   * Resume a session for writing, copying it first when another client owns
+   * the live conversation. A copy keeps the same history under a new id so
+   * neither side's turns can be orphaned by the other's append.
+   */
+  resumeOrFork(sessionId: string): { session: Session; forkedFrom?: string } {
+    if (this.activeSession?.id === sessionId) {
+      const inspection = inspectLease(getSessionDir(sessionId));
+      if (!inspection.busy) {
+        this.ensureLease(this.activeSession, true);
+        return { session: this.activeSession };
+      }
+    }
+
+    try {
+      return { session: this.resume(sessionId) };
+    } catch (err) {
+      if (!(err instanceof SessionBusyError)) throw err;
+      const forked = this.fork({ sessionId });
+      return { session: forked, forkedFrom: sessionId };
+    }
+  }
+
+  /**
+   * True when another live process owns this session's write lease.
+   * Cheap: reads only the small lease file.
+   */
+  isBusy(sessionId: string): boolean {
+    if (this.diskless) return false;
+    return inspectLease(getSessionDir(sessionId)).busy;
+  }
+
+  /**
+   * Cheap change detector for a transcript file. Used to decide whether a
+   * cached session really needs to be re-read from disk — an unchanged file
+   * means in-memory trims/compaction must not be undone.
+   */
+  private diskStamp(jsonlPath: string): string {
+    try {
+      const stat = statSync(jsonlPath);
+      return `${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Refresh a cached session from disk. Keeps the cached object identity (so
+   * per-session engines stay bound to the same instance) but replaces its
+   * messages/metadata with what another process last wrote.
+   */
+  reload(sessionId: string): Session | undefined {
+    const cached = this.sessions.get(sessionId);
+    const jsonlPath = sessionJsonlPath(getSessionDir(sessionId));
+
+    // Nothing changed on disk since this process last read/wrote it.
+    if (cached && (cached as any)._diskStamp === this.diskStamp(jsonlPath)) {
+      return cached;
+    }
+
+    const fresh = this.loadSession(sessionId);
+    if (!fresh) return undefined;
+
+    if (!cached) {
+      this.sessions.set(sessionId, fresh);
+      return fresh;
+    }
+
+    cached.title = fresh.title;
+    cached.messages = fresh.messages;
+    cached.turnCount = fresh.turnCount;
+    cached.updatedAt = fresh.updatedAt;
+    cached.tokenUsage = fresh.tokenUsage;
+    cached.totalCost = fresh.totalCost;
+    cached.cwd = fresh.cwd;
+    cached.model = fresh.model;
+    cached.skills = fresh.skills;
+    cached.mcpServers = fresh.mcpServers;
+    cached.agentType = fresh.agentType;
+    cached.pluginId = fresh.pluginId;
+    cached.contextTokens = fresh.contextTokens;
+    cached.metadata = fresh.metadata;
+    (cached as any)._lastEntryUuid = (fresh as any)._lastEntryUuid;
+    (cached as any)._entryCount = (fresh as any)._entryCount;
+    (cached as any)._knownUuids = (fresh as any)._knownUuids;
+    (cached as any)._diskStamp = (fresh as any)._diskStamp;
+
+    if (this.activeSession?.id === sessionId) {
+      this.activeSession = cached;
+    }
+    return cached;
+  }
+
+  /**
    * Fork a session — create a new session from the parent's messages up to a turn.
+   * The new session gets its own copy of the transcript so both sides can
+   * continue independently (used when another client owns the live session).
    */
   fork(options: { sessionId: string; fromTurn?: number; cwd?: string }): Session {
-    const parent = this.get(options.sessionId);
+    // Prefer the freshest on-disk snapshot: a copy is usually created because
+    // another client owns the live conversation, and its latest turns matter.
+    const parent = this.sessions.has(options.sessionId)
+      ? this.reload(options.sessionId)
+      : this.get(options.sessionId);
     if (!parent) {
       throw new Error(`Parent session not found: ${options.sessionId}`);
     }
@@ -304,14 +481,65 @@ export class SessionManager {
       ? parent.messages.slice(0, options.fromTurn)
       : [...parent.messages];
 
-    return this.create({
+    const forked = this.create({
       title: `${parent.title} (fork)`,
       cwd: options.cwd ?? parent.cwd,
       model: parent.model,
       provider: parent.provider,
       parentSessionId: parent.id,
       baseCommit: parent.baseCommit,
+      // A copy must keep the conversation's identity, otherwise a plugin
+      // session would reopen on the wrong engine (and lose its skills/MCP).
+      skills: parent.skills,
+      mcpServers: parent.mcpServers,
+      agentType: parent.agentType,
+      pluginId: parent.pluginId,
     });
+
+    const dir = getSessionDir(forked.id);
+    const jsonlPath = sessionJsonlPath(dir);
+    const known = new Set<string>();
+    let prev: string | null = null;
+
+    if (!this.diskless) {
+      for (const message of messages) {
+        const uuid = randomUUID();
+        appendEntrySync(jsonlPath, {
+          type: message.role,
+          uuid,
+          parentUuid: prev,
+          timestamp: Date.now(),
+          message,
+        } as SessionEntry);
+        known.add(uuid);
+        prev = uuid;
+      }
+    }
+
+    forked.messages = messages;
+    forked.turnCount = messages.filter((m) => m.role === 'assistant').length;
+    (forked as any)._lastEntryUuid = prev;
+    (forked as any)._entryCount = messages.length;
+    (forked as any)._knownUuids = known;
+    (forked as any)._diskStamp = this.diskStamp(jsonlPath);
+    // A user-facing fork is a normal, listable conversation — it must not be
+    // mistaken for a sub-agent child session (those are hidden from listings).
+    (forked as any)._isCopy = true;
+
+    writeSessionMeta(dir, {
+      title: forked.title,
+      workDir: forked.cwd,
+      model: forked.model,
+      skills: forked.skills,
+      mcpServers: forked.mcpServers,
+      agentType: forked.agentType,
+      ...(forked.pluginId ? { pluginId: forked.pluginId } : {}),
+    }).catch(() => {});
+
+    this.ensureLease(forked, false);
+    this.appendMetadata(forked);
+
+    return forked;
   }
 
   /**
@@ -469,19 +697,10 @@ export class SessionManager {
       ? (maybeMessage as Message)
       : sessionIdOrMessage;
 
-    // Track the last transcript entry's uuid for parentUuid chaining
-    const prevUuid = (session as any)._lastEntryUuid as string | null ?? null;
-    const uuid = randomUUID();
-
-    const entry: SessionEntry = {
-      type: message.role as 'user' | 'assistant' | 'system',
-      uuid,
-      parentUuid: prevUuid,
-      timestamp: Date.now(),
-      message,
-    } as SessionEntry;
-
-    (session as any)._lastEntryUuid = uuid;
+    // Chain position is resolved against the on-disk tail inside the write
+    // lock below, so a second writer (or a stale cache) can never fork the
+    // parentUuid chain. In-memory state updates synchronously.
+    const isFirstEntry = (((session as any)._entryCount as number) ?? 0) === 0;
 
     // Update in-memory state
     session.messages.push(message);
@@ -506,7 +725,7 @@ export class SessionManager {
     }
 
     // Update in-memory title from the first user message (always)
-    if (((session as any)._entryCount as number ?? 0) === 0) {
+    if (isFirstEntry) {
       if (message.role === 'user') {
         const text = extractMessageText(message);
         if (text) {
@@ -518,41 +737,56 @@ export class SessionManager {
 
     (session as any)._entryCount = ((session as any)._entryCount as number) + 1;
 
-    // Append to JSONL asynchronously (fire-and-forget with throttling).
+    // Append to JSONL asynchronously. Every write is queued and tracked so
+    // flush() can drain the transcript before another client reads it.
     // Skip when diskless — sub-agent sessions are in-memory only.
     if (!this.diskless) {
       const dir = getSessionDir(session.id);
-      const jsonlPath = sessionJsonlPath(dir);
+      const known: Set<string> =
+        (session as any)._knownUuids ??= new Set<string>();
 
-      // Bootstrap the session on first message: write parent metadata and workDir
-      if (((session as any)._entryCount as number) <= 2) {
-        if (session.parentSessionId) {
-          const parentEntry: SessionEntry = {
-            type: 'parent-session',
-            parentSessionId: session.parentSessionId,
-          } as SessionEntry;
-          appendEntry(jsonlPath, parentEntry).catch(() => {});
+      this.ensureLease(session, false);
+
+      const writePromise = withSessionWriteLock(dir, async () => {
+        const jsonlPath = sessionJsonlPath(dir);
+
+        // Bootstrap the session on first message: write parent metadata and workDir
+        if (isFirstEntry) {
+          // A forked copy is a normal conversation, not a sub-agent child.
+          if (session.parentSessionId && !(session as any)._isCopy) {
+            await appendEntry(jsonlPath, {
+              type: 'parent-session',
+              parentSessionId: session.parentSessionId,
+            } as SessionEntry);
+          }
+          // Persist workDir + model on first write so session listing/resume
+          // can restore the workspace and the model the session was created with.
+          writeSessionMeta(dir, { workDir: session.cwd, model: session.model }).catch(() => {});
         }
-        // Persist workDir + model on first write so session listing/resume
-        // can restore the workspace and the model the session was created with.
-        writeSessionMeta(dir, { workDir: session.cwd, model: session.model }).catch(() => {});
-      }
 
-      // Throttle: small sessions flush every 5 messages,
-      // large sessions (>200) every 20 messages
-      const skip = session.messages.length > 200 ? 20 : 5;
-      if (session.messages.length % skip === 0) {
-        // Flush with pending write tracking
-        const writePromise = appendEntry(jsonlPath, entry)
-          .catch(() => {})
-          .finally(() => {
-            this.pendingWrites.delete(writePromise);
-          });
-        this.pendingWrites.add(writePromise);
-      } else {
-        // Fire-and-forget
-        appendEntry(jsonlPath, entry).catch(() => {});
-      }
+        const parentUuid = readLastTranscriptUuidSync(jsonlPath);
+        const uuid = randomUUID();
+        await appendEntry(jsonlPath, {
+          type: message.role as 'user' | 'assistant' | 'system',
+          uuid,
+          parentUuid,
+          timestamp: Date.now(),
+          message,
+        } as SessionEntry);
+
+        (session as any)._lastEntryUuid = uuid;
+        known.add(uuid);
+        (session as any)._diskStamp = this.diskStamp(jsonlPath);
+      }).catch((err) => {
+        console.error(`[session] Failed to append message to ${session.id}:`, err);
+      });
+
+      this.pendingWrites.add(writePromise);
+      writePromise
+        .finally(() => {
+          this.pendingWrites.delete(writePromise);
+        })
+        .catch(() => {});
     }
   }
 
@@ -669,6 +903,7 @@ export class SessionManager {
     session.completedAt = new Date();
     session.updatedAt = new Date();
     this.appendMetadata(session);
+    this.releaseLease(session.id);
     this.activeSession = null;
   }
 
@@ -680,6 +915,7 @@ export class SessionManager {
     session.status = 'paused';
     session.updatedAt = new Date();
     this.appendMetadata(session);
+    this.releaseLease(session.id);
     this.activeSession = null;
   }
 
@@ -722,7 +958,6 @@ export class SessionManager {
    */
   private rebuildJsonlFromSession(session: Session): void {
     const dir = getSessionDir(session.id);
-    const jsonlPath = sessionJsonlPath(dir);
 
     const entries: SessionEntry[] = [];
     let prevUuid: string | null = null;
@@ -741,7 +976,37 @@ export class SessionManager {
 
     (session as any)._lastEntryUuid = prevUuid;
 
-    rewriteEntries(jsonlPath, entries).catch(() => {});
+    const newUuids = new Set(
+      entries.filter(isTranscriptEntry).map((e) => e.uuid),
+    );
+    const known: Set<string> =
+      (session as any)._knownUuids ?? new Set<string>();
+
+    // Entries appended by another client while this process was compacting are
+    // re-chained onto the new tail instead of being overwritten.
+    const writePromise = rewriteTranscriptPreservingExternal(dir, entries, known)
+      .then(({ tailUuid, externalCount, externalUuids }) => {
+        (session as any)._lastEntryUuid = tailUuid;
+        const next = new Set(newUuids);
+        for (const uuid of externalUuids) next.add(uuid);
+        (session as any)._knownUuids = next;
+        (session as any)._diskStamp = this.diskStamp(sessionJsonlPath(dir));
+        if (externalCount > 0) {
+          console.warn(
+            `[session] Preserved ${externalCount} externally appended entr${externalCount === 1 ? 'y' : 'ies'} while rewriting ${session.id}`,
+          );
+        }
+      })
+      .catch((err) => {
+        console.error(`[session] Failed to rewrite transcript ${session.id}:`, err);
+      });
+
+    this.pendingWrites.add(writePromise);
+    writePromise
+      .finally(() => {
+        this.pendingWrites.delete(writePromise);
+      })
+      .catch(() => {});
   }
 
   /**
@@ -753,6 +1018,9 @@ export class SessionManager {
     if (this.pendingWrites.size > 0) {
       await Promise.all(Array.from(this.pendingWrites));
     }
+    // Also drain writes queued by per-session managers (desktop engines) that
+    // share this session object but not this instance's pendingWrites set.
+    await flushSessionWrites();
   }
 
   /**
@@ -760,6 +1028,7 @@ export class SessionManager {
    */
   async flushAndExit(code = 0): Promise<void> {
     await this.flush();
+    this.releaseAllLeases();
     process.exit(code);
   }
 
@@ -841,62 +1110,170 @@ export class SessionManager {
       workDir: meta?.workDir,
       agentType: meta?.agentType,
       pluginId: meta?.pluginId,
+      busy: inspectLease(dir).busy,
     };
+  }
+
+  /**
+   * Build a summary for a session that exists only in this process's memory.
+   *
+   * `create()` deliberately defers the first disk write until the first
+   * message, so a freshly created conversation has no session.jsonl yet.
+   * Listing only the disk would hide it — and any full list reload (switching
+   * workspace, opening the sidebar, a renderer reload) would drop it from the
+   * sidebar until the app restarted. The creating process already knows the
+   * session, so its list must include it.
+   */
+  private buildSummaryFromMemory(session: Session): SessionSummary {
+    let firstUserText: string | undefined;
+    let lastUserPreview: string | undefined;
+    for (const message of session.messages) {
+      if (message.role !== 'user') continue;
+      const text = extractMessageText(message);
+      if (!text || isCompactSummaryText(text)) continue;
+      if (!firstUserText) firstUserText = text;
+      lastUserPreview = text.length > 60 ? text.slice(0, 60) + '...' : text;
+    }
+
+    return {
+      id: session.id,
+      title: session.title,
+      status: session.status,
+      turnCount: session.turnCount,
+      totalCost: session.totalCost,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      model: session.model,
+      lastUserPreview,
+      displayTitle: session.title,
+      firstUserText,
+      workDir: session.cwd,
+      agentType: session.agentType,
+      pluginId: session.pluginId,
+      busy: this.isBusy(session.id),
+    };
+  }
+
+  /**
+   * Whether an in-memory session may still appear as a top-level list entry.
+   *
+   * A session that has completed at least one disk write but whose directory is
+   * now gone was deleted by another client (or by cleanup); the process cache
+   * must not resurrect it. A session with no completed write is either brand
+   * new or has workspace metadata only, and must stay visible.
+   */
+  private isInMemorySessionListable(session: Session): boolean {
+    // A sub-agent child lives in its parent's transcript, never as a top-level
+    // list entry. Forked copies set `_isCopy` and are real conversations.
+    if (session.parentSessionId && !(session as any)._isCopy) return false;
+    const everPersisted = Boolean((session as any)._diskStamp);
+    if (everPersisted && !existsSync(getSessionDir(session.id))) return false;
+    return true;
   }
 
   /**
    * Get a single session summary by ID without listing all sessions.
    * Returns null when the session no longer exists or is a child session.
+   * Falls back to the in-memory session when it has not been written to disk.
    */
   getSummary(id: string): SessionSummary | null {
-    return this.buildSummaryFromDir(id);
+    const fromDisk = this.buildSummaryFromDir(id);
+    if (fromDisk) return fromDisk;
+
+    const inMemory = this.sessions.get(id);
+    if (!inMemory || !this.isInMemorySessionListable(inMemory)) return null;
+    return this.buildSummaryFromMemory(inMemory);
   }
 
   /**
    * List sessions matching a filter.
-   * Uses fast tail reads of JSONL files instead of parsing full files.
+   * Uses fast tail reads of JSONL files instead of parsing full files, then
+   * merges sessions that only exist in this process's memory (created but not
+   * yet persisted — see `buildSummaryFromMemory`).
+   *
+   * `strict` makes an unreadable sessions root throw instead of degrading to
+   * an empty list. The desktop's list endpoint uses it so a transient FS error
+   * cannot wipe the sidebar; other callers keep the tolerant, best-effort
+   * behavior they were written against.
    */
-  list(filter?: SessionFilter): SessionSummary[] {
+  list(
+    filter?: SessionFilter,
+    options: { strict?: boolean } = {},
+  ): SessionSummary[] {
     let entries: string[];
     try {
       entries = readdirSync(SESSIONS_DIR, { withFileTypes: true })
         .filter((e) => e.isDirectory())
         .map((e) => e.name);
-    } catch {
-      return [];
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        entries = [];
+      } else if (options.strict) {
+        throw err;
+      } else {
+        // Best-effort callers (CLI/TUI pickers) should not crash on a
+        // temporarily unreadable root.
+        console.error('[session] Failed to read sessions directory:', err);
+        entries = [];
+      }
     }
 
-    const summaries: SessionSummary[] = [];
+    const summaries = new Map<string, SessionSummary>();
     for (const id of entries) {
-      const summary = this.buildSummaryFromDir(id);
-      if (summary) summaries.push(summary);
+      try {
+        const summary = this.buildSummaryFromDir(id);
+        if (summary) summaries.set(id, summary);
+      } catch (err) {
+        // One unreadable/mid-write session directory must not take down the
+        // whole list.
+        console.error(`[session] Skipping unreadable session ${id}:`, err);
+      }
     }
+
+    // Merge sessions created by this process that have not reached disk yet.
+    // Disk summaries win when both exist (they are the shared, durable view).
+    for (const [id, session] of this.sessions) {
+      if (summaries.has(id)) continue;
+      if (!this.isInMemorySessionListable(session)) continue;
+      summaries.set(id, this.buildSummaryFromMemory(session));
+    }
+
+    const list = Array.from(summaries.values());
 
     // Sort by most recently updated (session IDs are random, use dir mtime)
-    summaries.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    list.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
     if (filter?.limit) {
-      return summaries.slice(filter.offset ?? 0, (filter.offset ?? 0) + filter.limit);
+      return list.slice(filter.offset ?? 0, (filter.offset ?? 0) + filter.limit);
     }
-    return summaries;
+    return list;
   }
 
   /**
-   * Continue the most recently updated session.
+   * Continue the most recently updated session that no other live client is
+   * writing. `--continue` must not attach to a conversation the desktop is
+   * still streaming into.
    */
   continueLatest(): Session {
-    const sessions = this.list({ limit: 1 });
+    const sessions = this.list({ limit: 50 });
     if (sessions.length === 0) {
       throw new Error('No sessions found. Call create() first.');
     }
-    return this.resume(sessions[0]!.id);
+    const target = sessions.find((s) => !s.busy);
+    if (!target) {
+      throw new Error('All recent sessions are in use by another client.');
+    }
+    return this.resume(target.id);
   }
 
   /**
    * List all sessions (convenience wrapper).
    */
-  listSessions(limit?: number): SessionSummary[] {
-    return this.list({ limit: limit ?? 50 });
+  listSessions(
+    limit?: number,
+    options: { strict?: boolean } = {},
+  ): SessionSummary[] {
+    return this.list({ limit: limit ?? 50 }, options);
   }
 
   /**
@@ -920,14 +1297,20 @@ export class SessionManager {
   delete(sessionId: string): boolean {
     const dir = getSessionDir(sessionId);
 
+    // Evict from this process's cache first. A conversation created but not yet
+    // written has no directory, and must still disappear from list() after the
+    // user deletes it; list() merges in-memory sessions, so leaving it cached
+    // would resurrect the row on the next reload.
+    this.releaseLease(sessionId);
+    this.sessions.delete(sessionId);
+    if (this.activeSession?.id === sessionId) {
+      this.activeSession = null;
+    }
+
     if (!existsSync(dir)) return false;
 
     try {
       rmSync(dir, { recursive: true, force: true });
-      this.sessions.delete(sessionId);
-      if (this.activeSession?.id === sessionId) {
-        this.activeSession = null;
-      }
       return true;
     } catch {
       return false;
@@ -939,7 +1322,19 @@ export class SessionManager {
    * Removes sessions that lack session.jsonl or have no assistant entry in it.
    * Returns the number of deleted sessions.
    */
-  cleanupIncompleteSessions(): number {
+  /**
+   * Clean up incomplete session directories.
+   *
+   * Removes sessions that lack session.jsonl or have no assistant entry in it.
+   * A session another live client owns, or one written within `minAgeMs`, is
+   * never touched: its first assistant reply may still be streaming from a
+   * concurrent CLI/desktop turn.
+   *
+   * Returns the number of deleted sessions.
+   */
+  cleanupIncompleteSessions(options: { minAgeMs?: number } = {}): number {
+    const minAgeMs = options.minAgeMs ?? 10 * 60_000;
+    const now = Date.now();
     let entries: string[];
     try {
       entries = readdirSync(SESSIONS_DIR, { withFileTypes: true })
@@ -953,6 +1348,16 @@ export class SessionManager {
     for (const id of entries) {
       const dir = getSessionDir(id);
       const jsonlPath = sessionJsonlPath(dir);
+
+      if (inspectLease(dir).busy) continue;
+
+      let newestMtime = 0;
+      try {
+        newestMtime = statSync(existsSync(jsonlPath) ? jsonlPath : dir).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (now - newestMtime < minAgeMs) continue;
 
       if (!existsSync(jsonlPath)) {
         // No session.jsonl — incomplete session, remove directory
@@ -1091,6 +1496,10 @@ export class SessionManager {
 
       (session as any)._lastEntryUuid = lastUuid;
       (session as any)._entryCount = allEntries.length;
+      (session as any)._knownUuids = new Set(
+        allEntries.filter(isTranscriptEntry).map((e) => e.uuid),
+      );
+      (session as any)._diskStamp = this.diskStamp(jsonlPath);
 
       return session;
     } catch {
