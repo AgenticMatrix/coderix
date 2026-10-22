@@ -28,12 +28,12 @@ export function ThinkingBlock({
 
   const text = content ?? '';
 
-  // While a thinking block is streaming, always render the reasoning text
-  // expanded so the user sees it arrive in real time. A collapsed block only
-  // shows a single truncated gray line, which during streaming reads as a
-  // static "思考中" with no output — and looks like a hang. Once streaming
-  // finishes we fall back to the user's collapsed/expanded preference.
-  const expanded = isExpanded || isStreaming || reveal;
+  // Streaming never force-expands the block: opening the surrounding 正在工作
+  // region should not dump a wall of in-progress reasoning on top of the user's
+  // current view. The "思考中" header (with its animated dots) carries the
+  // liveness signal on its own; the reasoning text appears only when the user
+  // clicks that header.
+  const expanded = isExpanded || reveal;
 
   // Empty thinking blocks (a persisted block with no reasoning text) render
   // nothing — no "Thought" label, no brain icon, no copy button. During
