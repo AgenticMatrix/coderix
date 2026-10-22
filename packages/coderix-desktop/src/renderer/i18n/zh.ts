@@ -153,6 +153,7 @@ export const zh = {
   'session.delete': '删除会话',
   'session.turns': '{n} 轮',
   'session.newSession': '新对话',
+  'session.busyCopied': '该会话正在另一个客户端使用，已复制为新会话继续。',
   'session.search': '搜索会话...',
   'session.new': '新建会话',
   'session.viewOptions': '视图选项',

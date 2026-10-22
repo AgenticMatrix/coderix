@@ -360,6 +360,14 @@ export async function forkSession(id: string): Promise<unknown> {
   return invokeWithTimeout('session:fork', () => getAPI().session.fork(id));
 }
 
+/**
+ * Claim a session for writing. When another live client owns it, the main
+ * process copies the conversation and returns the copy's id.
+ */
+export async function claimSession(id: string): Promise<{ id: string; forkedFrom?: string }> {
+  return invokeWithTimeout('session:claim', () => getAPI().session.claim(id));
+}
+
 /** Delete a session permanently. */
 export async function deleteSession(id: string): Promise<unknown> {
   return invokeWithTimeout('session:delete', () =>
@@ -396,6 +404,13 @@ export async function setSessionAgentType(
 ): Promise<unknown> {
   return invokeWithTimeout('session:setAgentType', () =>
     getAPI().session.setAgentType(sessionId ?? '', agentType, pluginId),
+  );
+}
+
+/** Re-bind a session to a different workspace directory. */
+export async function setSessionCwd(sessionId: string, cwd: string): Promise<unknown> {
+  return invokeWithTimeout('session:setCwd', () =>
+    getAPI().session.setCwd(sessionId, cwd),
   );
 }
 

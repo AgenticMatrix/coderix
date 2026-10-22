@@ -227,7 +227,7 @@ describe('session-store', () => {
 
     it('subAgentJsonlPath returns correct path', () => {
       const p = subAgentJsonlPath(dir, 'agent-123');
-      expect(p).toBe(join(dir, 'subagents', 'agent-agent-123.jsonl'));
+      expect(p).toBe(join(dir, 'subagents', 'agent-123', 'transcript.jsonl'));
     });
 
     it('legacySessionJsonPath returns correct path', () => {

@@ -158,7 +158,7 @@ async function bootstrap(): Promise<void> {
 
     // Step 2: Create SessionManager early so session IPC handlers work
     // before QueryEngine is initialized (renderer calls session:create on load)
-    const sessionManager = new SessionManager();
+    const sessionManager = new SessionManager(false, 'desktop');
     sessionManagerRef = sessionManager;
 
     // Remove incomplete sessions left behind by prior runs — most notably
@@ -449,7 +449,7 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
   // Union of the session's selected skills and the agent's declared skills.
   const skills = Array.from(new Set([...(session.skills ?? []), ...(agentDef?.skills ?? [])]));
 
-  const perSessionManager = new SessionManager(false);
+  const perSessionManager = new SessionManager(false, 'desktop');
   perSessionManager.adopt(session);
 
   const toolRegistry = await getToolRegistry(cwd, session.mcpServers ?? []);

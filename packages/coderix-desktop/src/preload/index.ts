@@ -21,12 +21,14 @@ const CH = {
   SESSION_LIST: 'session:list',
   SESSION_GET: 'session:get',
   SESSION_LOAD: 'session:load',
+  SESSION_CLAIM: 'session:claim',
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
   SESSION_SET_MODEL: 'session:setModel',
   SESSION_SET_SKILLS: 'session:setSkills',
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
   SESSION_SET_AGENT_TYPE: 'session:setAgentType',
+  SESSION_SET_CWD: 'session:setCwd',
   PLUGINS_LIST: 'plugins:list',
   MCP_LIST: 'mcp:list',
   MCP_CATALOG: 'mcp:catalog',
@@ -406,6 +408,14 @@ const coderixAPI = {
       return ipcRenderer.invoke(CH.SESSION_LOAD, sessionId);
     },
 
+    /**
+     * Claim a session for writing. When another live client owns it, the main
+     * process copies the conversation and returns the copy's id.
+     */
+    claim(sessionId: string): Promise<unknown> {
+      return ipcRenderer.invoke(CH.SESSION_CLAIM, sessionId);
+    },
+
     /** Fork a session from an existing one. */
     fork(sessionId: string): Promise<unknown> {
       return ipcRenderer.invoke(CH.SESSION_FORK, sessionId);
@@ -438,6 +448,11 @@ const coderixAPI = {
       pluginId?: string,
     ): Promise<{ status: string; agentType: string; pluginId?: string }> {
       return ipcRenderer.invoke(CH.SESSION_SET_AGENT_TYPE, { sessionId, agentType, pluginId });
+    },
+
+    /** Re-bind a session to a different workspace directory. */
+    setCwd(sessionId: string, cwd: string): Promise<{ status: string; cwd: string }> {
+      return ipcRenderer.invoke(CH.SESSION_SET_CWD, { sessionId, cwd });
     },
   },
 

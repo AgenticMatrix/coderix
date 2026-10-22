@@ -13,11 +13,12 @@
  *       agent-<id>.jsonl       # Per-sub-agent sidechain transcript
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, unlinkSync } from 'node:fs';
 import { appendFile, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import lockfile from 'proper-lockfile';
 import type {
   Session,
   SessionEntry,
@@ -31,7 +32,11 @@ import { isTranscriptEntry } from './types.js';
 // Paths
 // ---------------------------------------------------------------------------
 
-export const SESSIONS_DIR = join(homedir(), '.coderix', 'sessions');
+// CODERIX_SESSIONS_DIR is an escape hatch for tests (and for running isolated
+// instances without touching the user's real transcripts).
+export const SESSIONS_DIR = process.env.CODERIX_SESSIONS_DIR
+  ? resolve(process.env.CODERIX_SESSIONS_DIR)
+  : join(homedir(), '.coderix', 'sessions');
 
 export function sessionDir(sessionId: string): string {
   return join(SESSIONS_DIR, sessionId);
@@ -87,12 +92,11 @@ export async function appendEntry(
  * Synchronous version of appendEntry for use in sync contexts.
  */
 export function appendEntrySync(filePath: string, entry: SessionEntry): void {
-  const { appendFileSync, mkdirSync: mkdirSync2 } = require('node:fs');
   const line = JSON.stringify(entry) + '\n';
   try {
     appendFileSync(filePath, line, { mode: 0o600 });
   } catch {
-    mkdirSync2(dirname(filePath), { recursive: true, mode: 0o700 });
+    mkdirSync(dirname(filePath), { recursive: true, mode: 0o700 });
     appendFileSync(filePath, line, { mode: 0o600 });
   }
 }
@@ -182,6 +186,188 @@ export async function rewriteEntries(
 }
 
 // ---------------------------------------------------------------------------
+// Cross-process write serialization
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-session-dir promise chain. Serializes writes inside one process so two
+ * appends (or an append racing a rewrite) cannot land out of order; the file
+ * lock below handles other processes.
+ */
+const sessionWriteQueues = new Map<string, Promise<unknown>>();
+
+function enqueueSessionWrite<T>(
+  sessionDir: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = sessionWriteQueues.get(sessionDir) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  sessionWriteQueues.set(sessionDir, next);
+  next
+    .finally(() => {
+      if (sessionWriteQueues.get(sessionDir) === next) {
+        sessionWriteQueues.delete(sessionDir);
+      }
+    })
+    .catch(() => {});
+  return next;
+}
+
+/**
+ * Run `fn` while holding the transcript write lock for a session.
+ *
+ * The lock is held only around the append/rewrite itself, so a long-running
+ * agent turn never blocks another session. Nested acquisition on the same
+ * session directory deadlocks — callers must take the lock once.
+ */
+export async function withSessionWriteLock<T>(
+  sessionDir: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return enqueueSessionWrite(sessionDir, async () => {
+    await mkdir(sessionDir, { recursive: true, mode: 0o700 });
+    const lockTarget = join(sessionDir, '.transcript.lock');
+    try {
+      await writeFile(lockTarget, '', { flag: 'wx', mode: 0o600 });
+    } catch {
+      /* already created by an earlier writer */
+    }
+
+    const release = await lockfile.lock(lockTarget, {
+      realpath: false,
+      stale: 30_000,
+      update: 10_000,
+      retries: { retries: 50, minTimeout: 5, maxTimeout: 100 },
+    });
+    try {
+      return await fn();
+    } finally {
+      await release().catch(() => {});
+    }
+  });
+}
+
+/**
+ * Wait until every queued transcript write (in this process) has landed.
+ * Queues are module-level, so this also drains writes issued by per-session
+ * SessionManager instances that share the same session object.
+ */
+export async function flushSessionWrites(): Promise<void> {
+  // New writes can be enqueued while we await; loop until the map settles.
+  for (let pass = 0; pass < 10; pass++) {
+    const pending = Array.from(sessionWriteQueues.values());
+    if (pending.length === 0) return;
+    await Promise.allSettled(pending);
+    if (sessionWriteQueues.size === 0) return;
+  }
+}
+
+/**
+ * Read the uuid of the last transcript entry in a JSONL file without loading
+ * the whole thing. Tool results make individual lines large, so the window
+ * grows until a complete transcript line is found.
+ */
+export function readLastTranscriptUuidSync(filePath: string): string | null {
+  if (!existsSync(filePath)) return null;
+
+  let size: number;
+  try {
+    size = statSync(filePath).size;
+  } catch {
+    return null;
+  }
+  if (size === 0) return null;
+
+  let windowBytes = 256 * 1024;
+
+  for (;;) {
+    const start = Math.max(0, size - windowBytes);
+    const buffer = Buffer.alloc(size - start);
+    let fd: number | null = null;
+    try {
+      fd = openSync(filePath, 'r');
+      readSync(fd, buffer, 0, buffer.length, start);
+    } catch {
+      return null;
+    } finally {
+      if (fd !== null) {
+        try { closeSync(fd); } catch { /* ignore */ }
+      }
+    }
+
+    let text = buffer.toString('utf-8');
+    if (start > 0) {
+      // Drop the first (possibly partial) line.
+      const newline = text.indexOf('\n');
+      if (newline < 0) {
+        if (start === 0) return null;
+        windowBytes *= 2;
+        continue;
+      }
+      text = text.slice(newline + 1);
+    }
+
+    const lines = text.split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!.trim();
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line) as SessionEntry;
+        if (isTranscriptEntry(entry)) return entry.uuid;
+      } catch {
+        /* partial or corrupted line — keep scanning backwards */
+      }
+    }
+
+    if (start === 0) return null;
+    windowBytes *= 2;
+  }
+}
+
+/**
+ * Rewrite a transcript from a compacted/truncated message set while keeping
+ * entries another process appended that this process has never seen.
+ *
+ * `knownUuids` is the set of transcript entries the caller's in-memory session
+ * represents. Entries on disk outside that set were appended by someone else
+ * (or after this process loaded) and are re-chained onto the new tail instead
+ * of being dropped. Entries inside the set are dropped on purpose — that is
+ * what rewind/compaction asked for.
+ */
+export async function rewriteTranscriptPreservingExternal(
+  sessionDir: string,
+  entries: SessionEntry[],
+  knownUuids: ReadonlySet<string>,
+): Promise<{ tailUuid: string | null; externalCount: number; externalUuids: string[] }> {
+  return withSessionWriteLock(sessionDir, async () => {
+    const filePath = sessionJsonlPath(sessionDir);
+    const diskEntries = readEntriesSync(filePath);
+    const external = diskEntries.filter(
+      (e): e is TranscriptEntry => isTranscriptEntry(e) && !knownUuids.has(e.uuid),
+    );
+
+    let tailUuid: string | null = entries.length
+      ? ((entries[entries.length - 1] as TranscriptEntry).uuid ?? null)
+      : null;
+    const merged = [...entries];
+    for (const entry of external) {
+      merged.push({ ...entry, parentUuid: tailUuid } as SessionEntry);
+      tailUuid = entry.uuid;
+    }
+
+    // Nothing to write and nothing on disk: leave the file absent.
+    if (merged.length > 0) {
+      await rewriteEntries(filePath, merged);
+    }
+    return {
+      tailUuid,
+      externalCount: external.length,
+      externalUuids: external.map((e) => e.uuid),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Transcript reconstruction
 // ---------------------------------------------------------------------------
 
@@ -202,8 +388,11 @@ export function entriesToMessages(entries: SessionEntry[]): Message[] {
 
   // Build uuid → entry map
   const byUuid = new Map<string, TranscriptEntry>();
-  for (const e of transcriptEntries) {
+  const fileIndex = new Map<string, number>();
+  for (let i = 0; i < transcriptEntries.length; i++) {
+    const e = transcriptEntries[i]!;
     byUuid.set(e.uuid, e);
+    fileIndex.set(e.uuid, i);
   }
 
   // Build child set: all uuids that are referenced as parentUuid
@@ -212,28 +401,95 @@ export function entriesToMessages(entries: SessionEntry[]): Message[] {
     if (e.parentUuid) hasChild.add(e.parentUuid);
   }
 
+  const walk = (leaf: TranscriptEntry): TranscriptEntry[] => {
+    const chain: TranscriptEntry[] = [];
+    const seen = new Set<string>();
+    let current: TranscriptEntry | undefined = leaf;
+    while (current) {
+      if (seen.has(current.uuid)) break; // cycle guard
+      seen.add(current.uuid);
+      chain.push(current);
+      current = current.parentUuid ? byUuid.get(current.parentUuid) : undefined;
+    }
+    return chain.reverse();
+  };
+
   // Find all leaf entries (no child references them)
   const leaves = transcriptEntries.filter((e) => !hasChild.has(e.uuid));
 
-  // Use the chronologically last leaf (highest index in the file = most recent)
-  const leaf = leaves.length > 0 ? leaves[leaves.length - 1]! : transcriptEntries[transcriptEntries.length - 1]!;
-
-  // Walk backwards from leaf following parentUuid
-  const chain: TranscriptEntry[] = [];
-  const seen = new Set<string>();
-  let current: TranscriptEntry | undefined = leaf;
-  while (current) {
-    if (seen.has(current.uuid)) break; // cycle guard
-    seen.add(current.uuid);
-    chain.push(current);
-    current = current.parentUuid ? byUuid.get(current.parentUuid) : undefined;
+  if (leaves.length <= 1) {
+    const leaf = leaves[0] ?? transcriptEntries[transcriptEntries.length - 1]!;
+    return walk(leaf).map((e) => e.message);
   }
 
-  // Reverse to get chronological order
-  chain.reverse();
+  // Multiple leaves mean the transcript was written by more than one writer at
+  // once. Older builds silently replayed only the last leaf, which made the
+  // other branch's turn vanish. Pick the longest (tie: most recent) chain as
+  // the main line and merge every unreachable entry back by timestamp so no
+  // message is lost from the view.
+  let primary = walk(leaves[0]!);
+  for (const leaf of leaves.slice(1)) {
+    const chain = walk(leaf);
+    if (chain.length > primary.length) {
+      primary = chain;
+    } else if (
+      chain.length === primary.length &&
+      lastTimestamp(chain) > lastTimestamp(primary)
+    ) {
+      primary = chain;
+    }
+  }
 
-  // Extract messages
-  return chain.map((e) => e.message);
+  const primaryUuids = new Set(primary.map((e) => e.uuid));
+  const orphans = transcriptEntries.filter((e) => !primaryUuids.has(e.uuid));
+  if (orphans.length === 0) return primary.map((e) => e.message);
+
+  // Keep the primary chain's order untouched: it contains complete
+  // tool_use/tool_result pairs, and re-sorting the whole transcript by
+  // timestamp can place a result before its call (older writers appended
+  // lines out of order). Append each orphan subtree after the main line
+  // instead, preserving parent → child order within the recovered branch.
+  const orphanUuids = new Set(orphans.map((e) => e.uuid));
+  const childrenOf = new Map<string, TranscriptEntry[]>();
+  const roots: TranscriptEntry[] = [];
+  for (const orphan of orphans) {
+    if (orphan.parentUuid && orphanUuids.has(orphan.parentUuid)) {
+      const siblings = childrenOf.get(orphan.parentUuid) ?? [];
+      siblings.push(orphan);
+      childrenOf.set(orphan.parentUuid, siblings);
+    } else {
+      roots.push(orphan);
+    }
+  }
+
+  const byTime = (a: TranscriptEntry, b: TranscriptEntry): number => {
+    const dt = (a.timestamp ?? 0) - (b.timestamp ?? 0);
+    if (dt !== 0) return dt;
+    return (fileIndex.get(a.uuid) ?? 0) - (fileIndex.get(b.uuid) ?? 0);
+  };
+  roots.sort(byTime);
+  for (const siblings of childrenOf.values()) siblings.sort(byTime);
+
+  const merged = [...primary];
+  const emitted = new Set<string>(primaryUuids);
+  const emit = (entry: TranscriptEntry): void => {
+    if (emitted.has(entry.uuid)) return;
+    emitted.add(entry.uuid);
+    merged.push(entry);
+    for (const child of childrenOf.get(entry.uuid) ?? []) emit(child);
+  };
+  for (const root of roots) emit(root);
+  // Entries whose parent never existed (or cycles) are appended last.
+  for (const orphan of orphans) emit(orphan);
+
+  console.error(
+    `[session-store] Recovered ${orphans.length} message(s) from ${leaves.length} concurrent transcript branches`,
+  );
+  return merged.map((e) => e.message);
+}
+
+function lastTimestamp(chain: TranscriptEntry[]): number {
+  return chain.length > 0 ? (chain[chain.length - 1]!.timestamp ?? 0) : 0;
 }
 
 /**

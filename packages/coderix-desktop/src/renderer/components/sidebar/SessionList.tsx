@@ -50,10 +50,19 @@ export function SessionList({
     setDeleting(null);
   };
 
-  const filtered = useMemo(
-    () => sessions.filter((s) => s.title.toLowerCase().includes(searchQuery.toLowerCase())),
-    [sessions, searchQuery],
-  );
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sessions;
+    // Sessions are titled after their FIRST user message, which may be a setup
+    // question ("你的工作目录是哪个") rather than the real topic. Search the
+    // preview fields too so a conversation stays findable by what was actually
+    // asked later on.
+    return sessions.filter((s) =>
+      [s.title, s.displayTitle, s.lastUserPreview, s.firstUserText].some(
+        (value) => value?.toLowerCase().includes(query),
+      ),
+    );
+  }, [sessions, searchQuery]);
 
   // Group sessions by workspace (按工作区). Groups keep recency order — the
   // first-seen (most recent) session of each group determines its position.
