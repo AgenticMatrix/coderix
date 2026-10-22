@@ -459,8 +459,32 @@ export class SessionManager {
     cached.messages = fresh.messages;
     cached.turnCount = fresh.turnCount;
     cached.updatedAt = fresh.updatedAt;
-    cached.tokenUsage = fresh.tokenUsage;
-    cached.totalCost = fresh.totalCost;
+    // Token counters and cost only grow within a session. A reload can race a
+    // client whose meta snapshot predates the live totals held here — replacing
+    // them with that stale (often all-zero) snapshot would blank the status
+    // bar's usage until the next turn, so keep the higher of the two.
+    const maxCounter = (current: number | undefined, disk: number | undefined): number =>
+      Math.max(current ?? 0, disk ?? 0);
+    const currentUsage = cached.tokenUsage;
+    const diskUsage = fresh.tokenUsage;
+    const inputTokens = maxCounter(currentUsage.inputTokens, diskUsage.inputTokens);
+    const outputTokens = maxCounter(currentUsage.outputTokens, diskUsage.outputTokens);
+    const cacheCreationInputTokens = maxCounter(
+      currentUsage.cacheCreationInputTokens,
+      diskUsage.cacheCreationInputTokens,
+    );
+    const cacheReadInputTokens = maxCounter(
+      currentUsage.cacheReadInputTokens,
+      diskUsage.cacheReadInputTokens,
+    );
+    cached.tokenUsage = {
+      inputTokens,
+      outputTokens,
+      cacheCreationInputTokens,
+      cacheReadInputTokens,
+      totalTokens: inputTokens + outputTokens + cacheCreationInputTokens + cacheReadInputTokens,
+    };
+    cached.totalCost = Math.max(cached.totalCost, fresh.totalCost);
     cached.currency = fresh.currency;
     cached.cwd = fresh.cwd;
     cached.model = fresh.model;

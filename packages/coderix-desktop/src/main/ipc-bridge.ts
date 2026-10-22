@@ -810,6 +810,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   (usage.cache_read_input_tokens ?? 0),
                 sessionId: streamSessionId,
               });
+              // Persist the same delta the renderer just accumulated. Without
+              // this, a reopened session finds an all-zero meta snapshot and
+              // the status bar loses its token/cache figures until the next turn.
+              try {
+                sessionManager.updateUsage(streamSessionId, {
+                  inputTokens: usage.input_tokens ?? 0,
+                  outputTokens: usage.output_tokens ?? 0,
+                  cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+                  cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+                });
+                if (usage.totalCost) sessionManager.addCost(streamSessionId, usage.totalCost);
+                const usageSession = sessionManager.get(streamSessionId);
+                if (usageSession) sessionManager.saveSession(usageSession);
+              } catch { /* best-effort — a failed persist only affects reloads */ }
               break;
             }
             case 'permission_required': {
