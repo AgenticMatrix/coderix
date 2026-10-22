@@ -1,8 +1,16 @@
-import React from 'react';
-import { Bot, ArrowUp, ArrowDown, Database, GitBranch, Command, Terminal, Gauge, Sun, Moon, Settings } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Bot, ArrowUp, ArrowDown, Database, GitBranch, Command, Terminal, Gauge, Timer, Sun, Moon, Settings } from 'lucide-react';
 import { Badge, type BadgeProps } from './Badge';
-import { useT, type TranslationKey } from '../../i18n/index.js';
+import { StatPill, type StatRow } from './StatPill';
+import { useT, formatRelativeTime, type TranslationKey } from '../../i18n/index.js';
 import { useUIStore } from '../../store/uiStore';
+import {
+  cacheHitPercent,
+  formatCompactTokens,
+  formatExactTokens,
+  formatStatDuration,
+  totalBillableTokens,
+} from './status-stats';
 import './StatusBar.css';
 
 export interface StatusBarProps {
@@ -19,6 +27,16 @@ export interface StatusBarProps {
   contextTokens?: number;
   /** Maximum context window size in tokens */
   contextMax?: number;
+  /** Session start timestamp (ms epoch) — first message or session creation. */
+  sessionStartedAt?: number;
+  /** Timestamp of the newest message (ms epoch). */
+  lastActiveAt?: number;
+  /** Conversation turns (user messages). */
+  turnCount?: number;
+  /** Model steps (assistant messages). */
+  stepCount?: number;
+  /** Tool calls across the session. */
+  toolCallCount?: number;
   /** Cost */
   cost?: number;
   /** Currency code for the cost (e.g. "USD", "CNY", "EUR"). */
@@ -44,13 +62,6 @@ export interface StatusBarProps {
   className?: string;
 }
 
-function formatTokens(num: number): string {
-  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}B`;
-  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
-  return String(num);
-}
-
 function currencySymbol(currency?: string): string {
   switch ((currency ?? 'USD').toUpperCase()) {
     case 'USD': return '$';
@@ -67,6 +78,13 @@ function formatCost(cost: number, currency?: string): string {
   const sym = currencySymbol(currency);
   if (cost >= 0.01) return `${sym}${cost.toFixed(2)}`;
   return `<${sym}0.01`;
+}
+
+/** Full precision (up to 4 decimals) for the cost row in the detail dialog. */
+function formatCostPrecise(cost: number, currency?: string): string {
+  const sym = currencySymbol(currency);
+  const fixed = cost.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  return `${sym}${fixed || '0'}`;
 }
 
 const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKey: TranslationKey; variant: NonNullable<BadgeProps['variant']> }> = {
@@ -91,6 +109,11 @@ export function StatusBar({
   cacheWriteTokens,
   contextTokens: contextFootprint,
   contextMax,
+  sessionStartedAt,
+  lastActiveAt,
+  turnCount = 0,
+  stepCount = 0,
+  toolCallCount = 0,
   cost,
   currency,
   gitBranch,
@@ -112,8 +135,8 @@ export function StatusBar({
 
   // Context footprint mirrors the CLI: input + output + cache-read tokens for
   // the *current* turn. This is the only correct "context" number. The
-  // accumulated input/output/cache-read counters are session totals (for the
-  // ↑/↓ arrows and cost) and must NOT be summed into the context gauge — the
+  // accumulated input/output/cache-read counters are session totals (see the
+  // token dialog) and must NOT be summed into the context gauge — the
   // accumulated cache-read alone reaches tens of millions of tokens.
   const contextTokens = contextFootprint ?? 0;
   const contextRatio = contextMax && contextMax > 0 ? contextTokens / contextMax : 0;
@@ -123,6 +146,96 @@ export function StatusBar({
     : contextRatio > 0.7
       ? 'var(--color-warning)'
       : 'var(--color-success)';
+
+  // One exclusive slot for both detail dialogs: opening either closes the other.
+  const [openStat, setOpenStat] = useState<'session' | 'usage' | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  // Both pills share this container so clicking one counts as "inside" for the
+  // other's outside-close check, letting a single click switch dialogs.
+  const statsRef = useRef<HTMLDivElement | null>(null);
+
+  // Tick only while the session dialog is open — the bar must stay static
+  // between renders, otherwise it would repaint once per second while idle.
+  useEffect(() => {
+    if (openStat !== 'session') return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [openStat]);
+
+  const toggleStat = useCallback((name: 'session' | 'usage') => {
+    setOpenStat((current) => (current === name ? null : name));
+  }, []);
+  const closeStat = useCallback(() => setOpenStat(null), []);
+
+  const hasTokenUsage =
+    inputTokens !== undefined ||
+    outputTokens !== undefined ||
+    cacheReadTokens !== undefined ||
+    cacheWriteTokens !== undefined;
+
+  const usage = {
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    cacheReadTokens: cacheReadTokens ?? 0,
+    cacheWriteTokens: cacheWriteTokens ?? 0,
+    totalCost: cost ?? 0,
+    currency: currency ?? 'USD',
+    contextTokens,
+  };
+  const totalTokens = totalBillableTokens(usage);
+  const cacheRate = cacheHitPercent(usage);
+  const hasSessionStats = turnCount > 0 || stepCount > 0;
+
+  const sessionRows: StatRow[] = [];
+  if (sessionStartedAt !== undefined) {
+    sessionRows.push({
+      label: t('status.sessionDuration'),
+      value: formatStatDuration((now - sessionStartedAt) / 1000),
+    });
+  }
+  sessionRows.push(
+    { label: t('status.turns'), value: String(turnCount) },
+    { label: t('status.steps'), value: String(stepCount) },
+    { label: t('status.toolCalls'), value: String(toolCallCount) },
+  );
+  if (turnCount > 0) {
+    sessionRows.push({
+      label: t('status.avgOutput'),
+      value: formatCompactTokens(usage.outputTokens / turnCount),
+    });
+  }
+  if (lastActiveAt !== undefined) {
+    sessionRows.push({
+      label: t('status.lastActive'),
+      value: formatRelativeTime(lastActiveAt),
+    });
+  }
+
+  const usageRows: StatRow[] = [
+    { label: t('status.totalTokens'), value: formatExactTokens(totalTokens) },
+    // Always render the rate so the metric never disappears from the dialog —
+    // a session whose provider reports no prompt buckets shows "—" instead.
+    { label: t('status.cacheHitRate'), value: cacheRate !== null ? `${cacheRate}%` : '—' },
+  ];
+  usageRows.push(
+    { label: t('status.uncachedInput'), value: formatExactTokens(usage.inputTokens) },
+    { label: t('status.cacheReadDetail'), value: formatExactTokens(usage.cacheReadTokens) },
+    { label: t('status.cacheWritten'), value: formatExactTokens(usage.cacheWriteTokens) },
+    { label: t('status.outputDetail'), value: formatExactTokens(usage.outputTokens) },
+  );
+  if (contextMax !== undefined && contextMax > 0) {
+    usageRows.push({
+      label: t('status.contextDetail'),
+      value: `${formatCompactTokens(contextTokens)}/${formatCompactTokens(contextMax)}`,
+    });
+  }
+  if (cost !== undefined) {
+    usageRows.push({
+      label: t('status.costDetail'),
+      value: formatCostPrecise(cost, currency),
+    });
+  }
 
   const leading = (
     <>
@@ -187,33 +300,41 @@ export function StatusBar({
         </>
       )}
 
-      {/* Token usage */}
-      {(inputTokens !== undefined || outputTokens !== undefined || cacheReadTokens !== undefined) && (
+      {/* Session + token statistics — click either pill for the full breakdown */}
+      {(hasSessionStats || hasTokenUsage) && (
         <>
-          <div className="flex items-center gap-3">
-            {inputTokens !== undefined && (
-              <span className="inline-flex items-center gap-1">
-                <ArrowUp size={10} className="text-[var(--color-text-tertiary)]" />
-                <span>{formatTokens(inputTokens)}</span>
-              </span>
+          <div ref={statsRef} className="flex items-center gap-3">
+            {hasSessionStats && (
+              <StatPill
+                groupRef={statsRef}
+                icon={<Timer size={10} className="text-[var(--color-text-tertiary)]" />}
+                label={t('status.sessionSummary', { turns: turnCount, steps: stepCount })}
+                title={t('status.sessionStats')}
+                rows={sessionRows}
+                open={openStat === 'session'}
+                onToggle={() => toggleStat('session')}
+                onClose={closeStat}
+                buttonTitle={t('status.openDetails')}
+              />
             )}
-            {outputTokens !== undefined && (
-              <span className="inline-flex items-center gap-1">
-                <ArrowDown size={10} className="text-[var(--color-text-tertiary)]" />
-                <span>{formatTokens(outputTokens)}</span>
-              </span>
-            )}
-            {cacheReadTokens !== undefined && cacheReadTokens > 0 && (
-              <span className="inline-flex items-center gap-1" title={t('status.cacheRead')}>
-                <Database size={10} className="text-[var(--color-text-tertiary)]" />
-                <span>{formatTokens(cacheReadTokens)}</span>
-              </span>
-            )}
-            {cacheWriteTokens !== undefined && cacheWriteTokens > 0 && (
-              <span className="inline-flex items-center gap-1" title={t('status.cacheWrite')}>
-                <Database size={10} className="text-[var(--color-text-tertiary)]" />
-                <span>{formatTokens(cacheWriteTokens)}</span>
-              </span>
+            {hasTokenUsage && (
+              <StatPill
+                groupRef={statsRef}
+                icon={<Database size={10} className="text-[var(--color-text-tertiary)]" />}
+                label={cacheRate !== null
+                  ? t('status.tokenSummaryCached', {
+                      total: formatCompactTokens(totalTokens),
+                      pct: cacheRate,
+                    })
+                  : formatCompactTokens(totalTokens)}
+                title={t('status.tokenUsage')}
+                summary={formatExactTokens(totalTokens)}
+                rows={usageRows}
+                open={openStat === 'usage'}
+                onToggle={() => toggleStat('usage')}
+                onClose={closeStat}
+                buttonTitle={t('status.openDetails')}
+              />
             )}
           </div>
           <div className="w-px h-3 bg-[var(--color-separator)]" />
@@ -241,7 +362,7 @@ export function StatusBar({
             </div>
             <span className="font-mono">{contextPercent}%</span>
             <span className="text-[var(--color-text-tertiary)]">
-              {formatTokens(contextTokens)}/{formatTokens(contextMax)}
+              {formatCompactTokens(contextTokens)}/{formatCompactTokens(contextMax)}
             </span>
           </div>
           <div className="w-px h-3 bg-[var(--color-separator)]" />

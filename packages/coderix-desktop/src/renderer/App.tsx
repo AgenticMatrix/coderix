@@ -45,6 +45,7 @@ import { HOME_URL } from './store/browserStore.js';
 import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
+import { deriveSessionStats } from './components/shared/status-stats';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import { useAgentEvents } from './hooks/useAgentEvents';
 import {
@@ -151,6 +152,12 @@ export function App(): React.ReactElement {
 
   // ── Session State ───────────────────────────────────────────────────────
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
+  // Session age is the fallback for the status bar's duration when the
+  // transcript hasn't loaded its first message yet.
+  const activeSessionCreatedAt = useSessionStore(
+    (s) => s.sessions.find((x) => x.id === s.currentSessionId)?.createdAt,
+  );
+  const sessionStats = useMemo(() => deriveSessionStats(messages), [messages]);
   const currentPluginId = useSessionStore((s) =>
     s.sessions.find((x) => x.id === s.currentSessionId)?.pluginId,
   );
@@ -1316,6 +1323,11 @@ export function App(): React.ReactElement {
           cacheWriteTokens: tokenUsage.cacheWriteTokens || undefined,
           contextTokens: tokenUsage.contextTokens || undefined,
           contextMax,
+          sessionStartedAt: sessionStats.startedAt ?? activeSessionCreatedAt,
+          lastActiveAt: messages[messages.length - 1]?.timestamp,
+          turnCount: sessionStats.turns,
+          stepCount: sessionStats.steps,
+          toolCallCount: sessionStats.toolCalls,
           cost: tokenUsage.totalCost || undefined,
           currency: tokenUsage.currency || undefined,
           gitBranch: gitBranch || undefined,
