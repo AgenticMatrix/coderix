@@ -54,6 +54,10 @@ export {
 export { useInput, measureElement, useBoxMetrics } from 'ink';
 export type { DOMElement } from 'ink';
 
+// Passive (commit-safe) replacement for ink's `useBoxMetrics`. See the hook.
+export { useMeasuredBox } from './use-measured-box.js';
+export type { BoxMetrics } from './use-measured-box.js';
+
 // Append-only committed output. See `static-region.tsx`.
 export { Static } from './static-region.js';
 export type { StaticProps } from './static-region.js';

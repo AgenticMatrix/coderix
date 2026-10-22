@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Box, useBoxMetrics } from 'ink';
+import { Box } from 'ink';
 import type { BoxProps, DOMElement } from 'ink';
+import { useMeasuredBox } from './use-measured-box.js';
 
 /**
  * Imperative scroll API exposed via `ref`.
@@ -32,7 +33,7 @@ export type ScrollBoxProps = Omit<
    * better choice whenever the leftover space depends on a sibling whose height
    * varies — a footer that grows when a panel appears, say. Computing such a
    * height in the caller means measuring that sibling, and measurement costs a
-   * frame: `useBoxMetrics` reports from an effect, so a value read during
+   * frame: `useMeasuredBox` reports from an effect, so a value read during
    * render describes the PREVIOUS layout. On the one frame where the sibling
    * changes size the two disagree, and the frame overruns its parent. Yoga
    * divides a fixed-height parent in a single pass and has no such gap.
@@ -62,7 +63,7 @@ export type ScrollBoxProps = Omit<
   shrinkToContent?: boolean;
   /**
    * Receives the inner content box, so a caller can read the content's natural
-   * height with `useBoxMetrics` — the height the content WANTS, before clipping.
+   * height with `useMeasuredBox` — the height the content WANTS, before clipping.
    * `getContentHeight()` on the handle reports the same number, but only
    * imperatively; this makes it available during render.
    */
@@ -104,7 +105,7 @@ function ScrollBox({
   ...style
 }: ScrollBoxProps): React.ReactNode {
   const contentRef = useRef<DOMElement | null>(null);
-  const { height: contentHeight } = useBoxMetrics(contentRef);
+  const { height: contentHeight } = useMeasuredBox(contentRef);
 
   // In flex mode the height comes from the parent's layout, so it has to be
   // read back off the outer box. Being a frame stale here costs nothing: this
@@ -112,7 +113,7 @@ function ScrollBox({
   // guaranteed by Yoga. That is the whole point of deferring to flex — a stale
   // measurement can no longer produce an oversized frame.
   const outerRef = useRef<DOMElement | null>(null);
-  const { height: measuredOuter } = useBoxMetrics(outerRef);
+  const { height: measuredOuter } = useMeasuredBox(outerRef);
 
   // Forward the content node to the caller's ref as well, so both this
   // component and the caller can measure it.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { Box, Text, ScrollBox, Static, Divider, useBoxMetrics } from '@coderix/tui';
+import { Box, Text, ScrollBox, Static, Divider, useMeasuredBox } from '@coderix/tui';
 import type { ScrollBoxHandle, DOMElement } from '@coderix/tui';
 import { useTerminalSize } from '@coderix/tui';
 
@@ -1112,7 +1112,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   //
   // That division is left to Yoga (a shrinkable live half against
   // `flexShrink={0}` on the footer) rather than computed from a measured footer
-  // height, because measuring costs a frame. `useBoxMetrics` reports from an
+  // height, because measuring costs a frame. `useMeasuredBox` reports from an
   // effect, so a measurement taken during render is always the PREVIOUS
   // layout's. On the frame where the footer grows — a TaskPanel appearing
   // because several tools started at once — the live half would still be sized
@@ -1199,13 +1199,13 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   );
 
   const liveRef = useRef<DOMElement | null>(null);
-  const liveMetrics = useBoxMetrics(liveRef);
+  const liveMetrics = useMeasuredBox(liveRef);
 
   // The footer's height, measured — used ONLY to size up the live region's
   // capacity for the flush policy below, never to lay anything out.
   //
   // Measuring it for LAYOUT is the defect that moved the live region to flex
-  // sizing in the first place: `useBoxMetrics` reports from an effect, so a
+  // sizing in the first place: `useMeasuredBox` reports from an effect, so a
   // value read during render is the previous layout's, and on the frame where
   // the footer grows the two disagree and the frame overruns the root. Reading
   // it for a cost decision is safe for exactly the reason the layout use was
@@ -1213,7 +1213,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   // rule (never commit something that can still change) belongs to
   // `splitTranscript` alone.
   const footerRef = useRef<DOMElement | null>(null);
-  const footerMetrics = useBoxMetrics(footerRef);
+  const footerMetrics = useMeasuredBox(footerRef);
 
   const [committedCount, setCommittedCount] = useState(0);
 
