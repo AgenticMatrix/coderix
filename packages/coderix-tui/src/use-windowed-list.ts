@@ -1,7 +1,8 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Box, useBoxMetrics } from 'ink';
+import { Box } from 'ink';
 import type { DOMElement } from 'ink';
 import type { ScrollBoxHandle } from './scroll-viewport.js';
+import { useMeasuredBox } from './use-measured-box.js';
 
 const DEFAULT_MAX_MOUNTED = 200;
 const DEFAULT_OVERSCAN = 20;
@@ -36,8 +37,9 @@ export type VirtualScrollResult = {
 /**
  * Wraps one list item and reports its height as laid out by Yoga.
  *
- * `useBoxMetrics` tracks the live layout, so a height change (text rewrapping
- * after a resize, a streaming message growing) is reported without polling.
+ * `useMeasuredBox` re-reads the live layout after every render, so a height
+ * change (text rewrapping after a resize, a streaming message growing) is
+ * reported without polling and without a layout-commit subscription.
  */
 export function MeasuredItem({
   itemKey,
@@ -49,7 +51,7 @@ export function MeasuredItem({
   children?: ReactNode;
 }): ReactNode {
   const ref = useRef<DOMElement | null>(null);
-  const { height, hasMeasured } = useBoxMetrics(ref);
+  const { height, hasMeasured } = useMeasuredBox(ref);
 
   useEffect(() => {
     if (hasMeasured) onMeasure(itemKey, height);

@@ -95,7 +95,11 @@ export function convertTranscriptToMessages(rawMessages: Array<{ role: string; c
     }
 
     return {
-      id: base + i,
+      // Index-based, NOT Date.now(): the transcript poll re-converts the whole
+      // array on every growth, and unstable ids remount every row (and resets
+      // every measured height) each time. Ids only need to be unique within the
+      // displayed list; live messages use timestamp ids, which never collide.
+      id: i + 1,
       role: raw.role as Message['role'],
       content: textContent,
       blocks,
