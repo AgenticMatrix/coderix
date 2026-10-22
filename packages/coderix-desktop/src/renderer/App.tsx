@@ -46,6 +46,7 @@ import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
 import { deriveSessionStats } from './components/shared/status-stats';
+import { deriveAgentStatus, type AgentStatus } from './agent-status';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import { useAgentEvents } from './hooks/useAgentEvents';
 import {
@@ -1126,8 +1127,17 @@ export function App(): React.ReactElement {
         try {
           console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
           const submitted = (await submitQuery(value, currentSid, selectedSkills)) as
-            | { sessionId?: string; forkedFrom?: string }
+            | { sessionId?: string; forkedFrom?: string; epoch?: number }
             | undefined;
+          // Adopt the turn id the main process assigned. It is the counter every
+          // terminal event echoes; if the submit never reached the engine, this
+          // also corrects the optimistic bump from sendMessage so the next
+          // turn's `done` is not mistaken for a stale one.
+          if (submitted?.epoch !== undefined) {
+            useChatStore
+              .getState()
+              .setStreamEpoch(submitted.sessionId ?? currentSid, submitted.epoch);
+          }
           // The main process only forks here if another client grabbed the
           // conversation between our claim and the submit. Follow the copy.
           if (submitted?.forkedFrom && submitted.sessionId) {
@@ -1166,40 +1176,26 @@ export function App(): React.ReactElement {
   const isEmpty = trajectoryCalls.length === 0;
 
   // ── Agent status derivation ─────────────────────────────────────────────
-  // While streaming, derive a finer-grained status from the blocks being
-  // built: an in-flight tool_use → "executing"; otherwise the most recent
-  // block type drives the label (thinking → "thinking", text → "output").
-  //
   // `isStreaming` is the turn lifecycle: true from the user message until the
   // engine emits its terminal `done` (via stream:turnDone), so it stays true
-  // across tool-execution gaps. It is never flipped off by `message_stop`, so
-  // "still working" can no longer be mistaken for idle.
-  const agentStatus = useMemo<'idle' | 'thinking' | 'executing' | 'output'>(() => {
-    if (!isStreaming) {
-      // Defense in depth: even if `isStreaming` flipped off unexpectedly (a
-      // non-streaming provider, an aborted stream, or a late `done`), a
-      // committed assistant message with an executing/pending tool_use is
-      // blocking evidence that the turn is still working — mirror ZCode's
-      // snapshot-driven "still busy" check rather than trusting one boolean.
-      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-      const stillRunning =
-        lastAssistant?.blocks.some(
-          (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
-        ) ?? false;
-      return stillRunning ? 'executing' : 'idle';
-    }
-
-    const blocks = streamCurrentMessage?.blocks ?? [];
-    const toolRunning = blocks.some(
-      (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
-    );
-    if (toolRunning) return 'executing';
-    const last = blocks[blocks.length - 1];
-    if (!last) return 'thinking';
-    if (last.type === 'thinking' || last.type === 'tool_result') return 'thinking';
-    if (last.type === 'text') return 'output';
-    return 'thinking';
-  }, [isStreaming, streamCurrentMessage, messages]);
+  // across tool-execution gaps and is never flipped off by `message_stop`.
+  // The phase itself comes from the in-flight blocks *or* the committed
+  // transcript (a tool whose step was already committed is still running), and
+  // it keeps the previous phase while the turn is between model steps. See
+  // deriveAgentStatus for why the in-flight message alone is not enough.
+  const prevAgentStatusRef = useRef<AgentStatus>('idle');
+  const agentStatus = useMemo<AgentStatus>(
+    () =>
+      deriveAgentStatus({
+        isStreaming,
+        currentMessage: streamCurrentMessage,
+        messages,
+        awaitingUser: pendingQuestion !== null || pendingPermission !== null,
+        previous: prevAgentStatusRef.current,
+      }),
+    [isStreaming, streamCurrentMessage, messages, pendingQuestion, pendingPermission],
+  );
+  prevAgentStatusRef.current = agentStatus;
 
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an

@@ -578,6 +578,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     (async () => {
+      // Set once this turn's terminal signal has been pushed (engine `done`) or
+      // an error was reported. If the engine ends without either — a provider
+      // that closes the stream silently, or an SDK path that returns early —
+      // the renderer would otherwise stay on "thinking" until the next message,
+      // so the `finally` below publishes a best-effort turn end.
+      let turnEnded = false;
       // Accumulate Claude Code's structured content (thinking / tool_use /
       // tool_result) across the turn so the full transcript — not just the
       // final text — can be persisted for later session reloads. The Coderix
@@ -991,6 +997,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // the renderer to move the session's turn status to 'idle'. This
               // is the authoritative per-turn signal (unlike `message_stop`,
               // which fires per model step and whose stop reason is unreliable).
+              turnEnded = true;
               safeSend(mainWindow, IPC_CHANNELS.STREAM_TURN_DONE, {
                 sessionId: streamSessionId,
                 epoch: streamEpoch,
@@ -1001,6 +1008,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         }
       } catch (err) {
         discardStreamBuffer(streamSessionId);
+        turnEnded = true;
         const rawMessage = err instanceof Error ? err.message : String(err);
         const message = sanitizeErrorMessage(rawMessage);
         safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: streamSessionId, epoch: streamEpoch });
@@ -1014,6 +1022,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           safeSend(mw, IPC_CHANNELS.STREAM_ERROR, {
             message: 'Query interrupted by user',
             code: 'INTERRUPTED',
+            sessionId: streamSessionId,
+            epoch: streamEpoch,
+          });
+        } else if (!turnEnded) {
+          // The stream ended without a terminal event or an error. Publish the
+          // turn end so the renderer can't be left stuck on "thinking" — this
+          // is a last-resort safety net, not the normal completion path.
+          safeSend(mainWindow, IPC_CHANNELS.STREAM_TURN_DONE, {
             sessionId: streamSessionId,
             epoch: streamEpoch,
           });
@@ -1034,6 +1050,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // owned by another live client and got copied.
       sessionId: streamSessionId,
       forkedFrom,
+      // The turn id echoed by every terminal event. The renderer adopts it so
+      // both sides agree on which `done`/`error` belongs to the current turn.
+      epoch: streamEpoch,
     };
   });
 

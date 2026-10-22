@@ -34,6 +34,8 @@ export interface ChatState {
   commitAssistantMessage: (sessionId: string | undefined, message: ChatMessage) => void;
   patchSessionMessages: (sessionId: string | undefined, updater: (msgs: ChatMessage[]) => ChatMessage[]) => void;
   setSessionStreaming: (sessionId: string | undefined, streaming: boolean) => void;
+  /** Adopt the epoch the main process assigned to a submitted turn. */
+  setStreamEpoch: (sessionId: string, epoch: number) => void;
 }
 
 /** Resolve which session a write targets, falling back to the viewed session. */
@@ -191,5 +193,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         streamingBySession: { ...s.streamingBySession, [target]: streaming },
       }));
     }
+  },
+
+  setStreamEpoch: (sessionId, epoch) => {
+    // Exact assignment: the main process owns the counter, so a submit that
+    // failed before reaching the engine must not leave the renderer one turn
+    // ahead (which would make every following terminal event look stale).
+    set((s) =>
+      s.streamEpochBySession[sessionId] === epoch
+        ? s
+        : { streamEpochBySession: { ...s.streamEpochBySession, [sessionId]: epoch } },
+    );
   },
 }));
