@@ -121,10 +121,11 @@ export const zh = {
   'provider.maxTokens': '最大 Tokens',
   'provider.topP': 'Top P',
   'provider.maxContext': '最大上下文窗口 (tokens)',
-  'provider.pricing': '价格（$/Mtokens）',
+  'provider.pricing': '价格（每百万 tokens）',
   'provider.cache': '缓存',
   'provider.input': '输入',
   'provider.output': '输出',
+  'provider.currency': '计价币种',
 
   // ── 输入框 ────────────────────────────────────────────
   'composer.placeholder': '向 Coderix 提问...',
@@ -313,6 +314,8 @@ export const zh = {
   'status.error': '错误',
   'status.engine': '当前智能体引擎',
   'status.context': '上下文长度',
+  'status.cacheRead': '缓存读 tokens（会话累计）',
+  'status.cacheWrite': '缓存写 tokens（会话累计）',
   'status.commands': 'K 命令',
   'status.terminal': '终端',
   'status.hideTerminal': '隐藏终端 (⌘`)',

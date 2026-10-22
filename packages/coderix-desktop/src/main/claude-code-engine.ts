@@ -829,6 +829,30 @@ export function getClaudeSessionId(coderixSessionId: string): string | undefined
 }
 
 /**
+ * The Claude Code session's cumulative provider usage, in Coderix's bucket
+ * shape. Used to backfill token stats for turns recorded before the bridge
+ * started persisting usage deltas into the session store.
+ */
+export function getClaudeCumulativeUsage(coderixSessionId: string):
+  | {
+      inputTokens: number;
+      outputTokens: number;
+      cacheCreationInputTokens: number;
+      cacheReadInputTokens: number;
+    }
+  | undefined {
+  const usage = previousUsageBySession.get(coderixSessionId)
+    ?? loadPersistedSessionStates().get(coderixSessionId)?.previousUsage;
+  if (!usage) return undefined;
+  return {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cacheCreationInputTokens: usage.cache_creation_input_tokens,
+    cacheReadInputTokens: usage.cache_read_input_tokens,
+  };
+}
+
+/**
  * Load a sub-agent's full conversation transcript for the claude-code engine.
  * Returns the raw message array (role/content), or null when not found.
  */

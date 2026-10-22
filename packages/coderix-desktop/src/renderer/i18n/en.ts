@@ -125,10 +125,11 @@ export const en: Record<TranslationKey, string> = {
   'provider.maxTokens': 'Max tokens',
   'provider.topP': 'Top P',
   'provider.maxContext': 'Max context window (tokens)',
-  'provider.pricing': 'Pricing ($/Mtokens)',
+  'provider.pricing': 'Pricing (per 1M tokens)',
   'provider.cache': 'Cache',
   'provider.input': 'Input',
   'provider.output': 'Output',
+  'provider.currency': 'Currency',
 
   // ── 输入框 ────────────────────────────────────────────
   'composer.placeholder': 'Ask Coderix anything...',
@@ -317,6 +318,8 @@ export const en: Record<TranslationKey, string> = {
   'status.error': 'Error',
   'status.engine': 'Current agent engine',
   'status.context': 'Context usage',
+  'status.cacheRead': 'Cache-read tokens (session total)',
+  'status.cacheWrite': 'Cache-write tokens (session total)',
   'status.commands': 'K commands',
   'status.terminal': 'Terminal',
   'status.hideTerminal': 'Hide Terminal (⌘`)',

@@ -499,6 +499,8 @@ export interface Session {
   messages: Message[];
   turnCount: number;
   totalCost: number;
+  /** Currency the price configuration is denominated in (e.g. "USD", "CNY"). */
+  currency?: string;
   createdAt: Date;
   updatedAt: Date;
   completedAt?: Date;

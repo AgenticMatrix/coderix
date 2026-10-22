@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, ArrowUp, ArrowDown, GitBranch, Command, Terminal, Gauge, Sun, Moon, Settings } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDown, Database, GitBranch, Command, Terminal, Gauge, Sun, Moon, Settings } from 'lucide-react';
 import { Badge, type BadgeProps } from './Badge';
 import { useT, type TranslationKey } from '../../i18n/index.js';
 import { useUIStore } from '../../store/uiStore';
@@ -11,6 +11,10 @@ export interface StatusBarProps {
   /** Tokens used */
   inputTokens?: number;
   outputTokens?: number;
+  /** Cache-read tokens accumulated across the session (billed at the cache rate) */
+  cacheReadTokens?: number;
+  /** Cache-write tokens accumulated across the session */
+  cacheWriteTokens?: number;
   /** Current context footprint in tokens (last turn's input + output + cache-read) */
   contextTokens?: number;
   /** Maximum context window size in tokens */
@@ -41,6 +45,8 @@ export interface StatusBarProps {
 }
 
 function formatTokens(num: number): string {
+  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}B`;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
   return String(num);
 }
@@ -81,6 +87,8 @@ export function StatusBar({
   engine,
   inputTokens,
   outputTokens,
+  cacheReadTokens,
+  cacheWriteTokens,
   contextTokens: contextFootprint,
   contextMax,
   cost,
@@ -180,7 +188,7 @@ export function StatusBar({
       )}
 
       {/* Token usage */}
-      {(inputTokens !== undefined || outputTokens !== undefined) && (
+      {(inputTokens !== undefined || outputTokens !== undefined || cacheReadTokens !== undefined) && (
         <>
           <div className="flex items-center gap-3">
             {inputTokens !== undefined && (
@@ -193,6 +201,18 @@ export function StatusBar({
               <span className="inline-flex items-center gap-1">
                 <ArrowDown size={10} className="text-[var(--color-text-tertiary)]" />
                 <span>{formatTokens(outputTokens)}</span>
+              </span>
+            )}
+            {cacheReadTokens !== undefined && cacheReadTokens > 0 && (
+              <span className="inline-flex items-center gap-1" title={t('status.cacheRead')}>
+                <Database size={10} className="text-[var(--color-text-tertiary)]" />
+                <span>{formatTokens(cacheReadTokens)}</span>
+              </span>
+            )}
+            {cacheWriteTokens !== undefined && cacheWriteTokens > 0 && (
+              <span className="inline-flex items-center gap-1" title={t('status.cacheWrite')}>
+                <Database size={10} className="text-[var(--color-text-tertiary)]" />
+                <span>{formatTokens(cacheWriteTokens)}</span>
               </span>
             )}
           </div>
