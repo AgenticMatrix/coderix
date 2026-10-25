@@ -119,7 +119,7 @@ export function createToolRegistry(opts: CreateToolRegistryOptions = {}): ToolRe
         cwd: ctx.cwd ?? process.cwd(),
         allowMutation: true,
         maxOutput: 50_000,
-        bashTimeout: ctx.timeoutMs ?? 30_000,
+        bashTimeout: ctx.timeoutMs ?? 120_000,
         agentSpawn: ctx.agentSpawn,
         sessionId: ctx.sessionId,
         setPermissionMode: ctx.setPermissionMode,
@@ -129,6 +129,7 @@ export function createToolRegistry(opts: CreateToolRegistryOptions = {}): ToolRe
         emitToolRequest: ctx.emitToolRequest,
         toolUseId: ctx.toolUseId,
         readFileTracker: ctx.readFileTracker,
+        signal: ctx.signal,
       } as ResolvedExecutorOptions);
       return {
         content: result.content,
@@ -210,7 +211,7 @@ const EXECUTOR_DEFAULTS: ResolvedExecutorOptions = {
   cwd: process.cwd(),
   allowMutation: true,
   maxOutput: 50_000,
-  bashTimeout: 30_000,
+  bashTimeout: 120_000,
   agentSpawn: undefined,
   setPermissionMode: undefined,
 };

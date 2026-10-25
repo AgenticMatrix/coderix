@@ -533,6 +533,8 @@ export const zh = {
   'chat.emptyTitle': '向 Coderix 提问',
   'chat.emptySubtitle': '我可以协助代码审查、调试、重构等。在下方输入消息开始。',
   'chat.scrollToBottom': '滚动到底部',
+  'chat.showEarlier': '显示更早消息',
+  'chat.hiddenCalls': '已折叠 {count} 条早期记录',
 
   // ── 错误页 ──────────────────────────────────────────
   'error.title': '出现错误',

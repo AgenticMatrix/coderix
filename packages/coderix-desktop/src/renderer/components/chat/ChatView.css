@@ -431,3 +431,32 @@
 .chat-messages.compact {
   padding: 12px 0;
 }
+
+/* Windowed history: only the tail of the conversation is mounted. */
+.trajectory-history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 12px;
+}
+
+.trajectory-history-btn {
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.trajectory-history-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.trajectory-history-hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}

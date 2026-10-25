@@ -172,7 +172,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
           cwd: ctx.cwd ?? process.cwd(),
           allowMutation: true,
           maxOutput: 50_000,
-          bashTimeout: 30_000,
+          bashTimeout: 120_000,
           sessionId: ctx.sessionId,
         },
       );

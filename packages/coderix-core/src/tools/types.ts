@@ -73,12 +73,15 @@ export interface ExecutorOptions {
   toolUseId?: string;
   /** Track recently read files for post-compact restoration. */
   readFileTracker?: import('../core/read-file-tracker.js').ReadFileTracker;
+  /** Aborts when the owning turn is interrupted, so long-running tools can
+   *  release their child processes instead of leaking past the turn. */
+  signal?: AbortSignal;
 }
 
 /** Executor options with all core fields resolved (non-optional) but
  *  agentSpawn, sessionId, setPermissionMode kept optional. */
-export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'toolUseId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>> &
-  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'toolUseId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker'>;
+export type ResolvedExecutorOptions = Required<Omit<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'toolUseId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker' | 'signal'>> &
+  Pick<ExecutorOptions, 'agentSpawn' | 'sessionId' | 'setPermissionMode' | 'agentId' | 'toolUseId' | 'getCoreState' | 'emitToolRequest' | 'getPermissionMode' | 'planModeState' | 'readFileTracker' | 'signal'>;
 
 export type ToolExecutor = (
   input: Record<string, unknown>,

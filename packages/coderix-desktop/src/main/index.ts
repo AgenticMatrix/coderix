@@ -8,6 +8,7 @@ import { createWindowManager } from './window-manager.js';
 import type { WindowManager } from './window-manager.js';
 import { createIpcBridge, getLastWorkspace, getDefaultWorkspaceDir, isDefaultWorkspaceContext, IPC_CHANNELS } from './ipc-bridge.js';
 import type { IpcBridge } from './ipc-bridge.js';
+import { createManagerCache } from './mcp-manager-cache.js';
 import { createFileWatcherManager } from './file-watcher.js';
 import type { FileWatcherManager } from './file-watcher.js';
 import { createTerminalManager } from './native-terminal.js';
@@ -38,6 +39,10 @@ import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/co
 import type { Session, ToolContext, ToolExecutionResult } from '../../../../packages/coderix-core/src/core/types.js';
 import { SessionManager } from '../../../../packages/coderix-core/src/core/session.js';
 import { ToolRegistry } from '../../../../packages/coderix-core/src/core/tool-registry.js';
+import {
+  killSessionProcesses,
+  killAllProcesses,
+} from '../../../../packages/coderix-core/src/tools/bash/process-registry.js';
 import { createEventBus } from '../../../../packages/coderix-core/src/state/observable.js';
 import type { EventBus } from '../../../../packages/coderix-core/src/state/observable.js';
 import { createCallModel } from '../../../../packages/coderix-core/src/core/provider-adapter.js';
@@ -204,6 +209,7 @@ async function bootstrap(): Promise<void> {
       createEngineForSession,
       listMcpServers,
       getMcpManager,
+      killSessionProcesses,
       eventBus: sharedEventBus,
     });
 
@@ -309,7 +315,23 @@ function autoInstallCli(): void {
 type RegistryExecutor = (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolExecutionResult>;
 
 const toolRegistryByCwd = new Map<string, ToolRegistry>();
-const mcpManagerByCwd = new Map<string, McpManager>();
+const mcpManagerCache = createManagerCache<McpManager>(async (cwd) => {
+  const manager = new McpManager(cwd);
+  try {
+    await manager.initialize();
+  } catch (err) {
+    // initialize() may have connected some servers before failing.
+    await manager.shutdown().catch(() => {});
+    throw err;
+  }
+  const servers = manager.getConnectedServerNames();
+  if (servers.length > 0) {
+    console.log(`[Coderix] MCP connected for ${cwd}: ${servers.join(', ')}`);
+  }
+  return manager;
+});
+/** Set once the quit sequence starts. */
+let shuttingDown = false;
 
 /** Desktop-specific executor hook: route `bash` `open <url>` to the embedded browser. */
 const desktopWrapExecutor = (plugin: ToolPlugin, base: RegistryExecutor): RegistryExecutor =>
@@ -329,17 +351,7 @@ const desktopWrapExecutor = (plugin: ToolPlugin, base: RegistryExecutor): Regist
 
 /** The cached McpManager for a workspace (connected + discovered on first use). */
 async function getMcpManager(cwd: string): Promise<McpManager> {
-  let manager = mcpManagerByCwd.get(cwd);
-  if (!manager) {
-    manager = new McpManager(cwd);
-    await manager.initialize();
-    mcpManagerByCwd.set(cwd, manager);
-    const servers = manager.getConnectedServerNames();
-    if (servers.length > 0) {
-      console.log(`[Coderix] MCP connected for ${cwd}: ${servers.join(', ')}`);
-    }
-  }
-  return manager;
+  return mcpManagerCache.get(cwd);
 }
 
 /** MCP tool plugins for a workspace, filtered to the session's enabled servers. */
@@ -374,10 +386,8 @@ async function getToolRegistry(cwd: string, mcpServers?: string[]): Promise<Tool
 
 /** Close every cached MCP manager on shutdown. */
 async function shutdownMcpManagers(): Promise<void> {
-  const managers = [...mcpManagerByCwd.values()];
-  mcpManagerByCwd.clear();
   toolRegistryByCwd.clear();
-  await Promise.all(managers.map((m) => m.shutdown().catch(() => {})));
+  await mcpManagerCache.closeAll();
 }
 
 // Build a callModel bound to a specific model + endpoint, falling back to an
@@ -570,7 +580,14 @@ app.on('activate', () => {
 // Graceful shutdown
 // ---------------------------------------------------------------------------
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  // Give MCP transports a bounded window to close their child processes.
+  // Without awaiting, `client.close()` never runs and every stdio server
+  // survives the app as an orphan.
+  if (shuttingDown) return;
+  shuttingDown = true;
+  event.preventDefault();
+
   console.log('[Coderix] Shutting down...');
   windowManager?.saveWindowState();
   ipcBridge?.destroy();
@@ -583,9 +600,17 @@ app.on('before-quit', () => {
   terminalManager?.destroyAll();
   trayManager?.destroy();
   protocolGateway?.close();
-  // Best-effort: disconnect MCP servers (don't block quit on slow servers).
-  void shutdownMcpManagers();
-  console.log('[Coderix] Shutdown complete');
+
+  // Reap every tracked bash tree, including explicit background tasks.
+  killAllProcesses();
+
+  void Promise.race([
+    shutdownMcpManagers(),
+    new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+  ]).finally(() => {
+    console.log('[Coderix] Shutdown complete');
+    app.exit(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

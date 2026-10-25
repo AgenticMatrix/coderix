@@ -65,6 +65,8 @@ export interface IpcBridgeConfig {
   listMcpServers?: (cwd: string) => Promise<import('../../../../packages/coderix-core/src/mcp/manager.js').McpServerStatus[]>;
   /** The workspace's cached McpManager — used for test / enable / remove actions. */
   getMcpManager?: (cwd: string) => Promise<McpManager>;
+  /** Reap a session's spawned bash processes (session delete). */
+  killSessionProcesses?: (sessionId: string) => void;
   /** Shared EventBus the per-session engine emits sub-agent lifecycle events on. */
   eventBus?: EventBus;
 }
@@ -230,6 +232,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   const createEngineForSession = config.createEngineForSession ?? null;
   const listMcpServers = config.listMcpServers ?? null;
   const getMcpManager = config.getMcpManager ?? null;
+  const killSessionProcesses = config.killSessionProcesses ?? null;
 
   const getEngineForSession = async (session: Session): Promise<QueryEngine> => {
     const existing = engineBySession.get(session.id);
@@ -1060,12 +1063,19 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // Interrupt only the named session's stream (the one the user is viewing);
     // other sessions' streams keep running. Omit `sessionId` to abort every
     // in-flight stream (teardown / "stop all").
+    //
+    // The in-process engine owns its own AbortController, which is what
+    // reaches the running tool (query-engine -> query -> ToolContext.signal).
+    // Aborting the bridge controller alone only silences the renderer stream.
+    // Commands that already moved to the background are owned by the task
+    // registry and survive: stopping a turn must not reap a server an earlier
+    // turn started.
     if (sessionId) {
       abortControllers.get(sessionId)?.abort();
+      engineBySession.get(sessionId)?.interrupt();
     } else {
-      for (const controller of abortControllers.values()) {
-        controller.abort();
-      }
+      for (const controller of abortControllers.values()) controller.abort();
+      for (const engine of engineBySession.values()) engine.interrupt();
     }
     return { status: 'interrupted' };
   });
@@ -1249,6 +1259,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     // its files, so a mid-stream delete never leaves a zombie engine writing
     // to a deleted session directory.
     abortControllers.get(sessionId)?.abort();
+    killSessionProcesses?.(sessionId);
     engineBySession.delete(sessionId);
     sessionManager.delete(sessionId);
     return { status: 'deleted' };

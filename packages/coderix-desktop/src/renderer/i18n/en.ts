@@ -537,6 +537,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.emptyTitle': 'Ask Coderix anything',
   'chat.emptySubtitle': 'I can help with code review, debugging, refactoring, and more. Start by typing a message below.',
   'chat.scrollToBottom': 'Scroll to bottom',
+  'chat.showEarlier': 'Show earlier messages',
+  'chat.hiddenCalls': '{count} earlier calls hidden',
 
   // ── 错误页 ──────────────────────────────────────────
   'error.title': 'Something went wrong',
