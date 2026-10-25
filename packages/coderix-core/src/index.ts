@@ -174,6 +174,7 @@ export {
 
 // ── Tasks ──────────────────────────────────────────────────────────
 export type { TrackedTask } from './tasks/task-tracker.js';
+export { installProcessCleanup } from './tools/bash/process-registry.js';
 export { getTask } from './tasks/store.js';
 export { getTaskListId, setTaskListId, listTasks, getAgentStatuses } from './tasks/store.js';
 export type { Task } from './tasks/schema.js';

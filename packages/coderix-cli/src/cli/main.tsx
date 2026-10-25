@@ -10,6 +10,7 @@
  */
 
 import { loadConfig, loadSettings, getMaxToolConcurrency } from './config.js';
+import { installProcessCleanup } from '@coderix/core';
 import type { ToolDefinition, ToolContext, ToolExecutionResult, QueryMessage, StreamEvent, PermissionMode } from '@coderix/core';
 
 // ── CLI args ──────────────────────────────────────────────────────────
@@ -299,6 +300,9 @@ async function restoreSubAgents(
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // Bash children lead their own process group, so closing the terminal no
+  // longer takes them down with the CLI's group.
+  installProcessCleanup();
   const cliArgs = parseCliArgs(process.argv.slice(2));
 
   // ── MCP subcommand (before help/version to allow `coderix mcp --help`) ─

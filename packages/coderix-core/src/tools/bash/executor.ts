@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolExecutor, ToolResult } from '../types.js';
 import type { ToolRequestEvent } from '../../state/observable.js';
-import { registerTask, updateTask, notifyTaskCompletion } from '../../tasks/task-tracker.js';
+import { registerTask, updateTask, getTask, notifyTaskCompletion } from '../../tasks/task-tracker.js';
 import type { TrackedTask } from '../../tasks/task-tracker.js';
 import {
   tokenizeCommand,
@@ -12,6 +12,7 @@ import {
   type TokenizeResult,
 } from './command-tokenizer.js';
 import { CommandCategory, type ClassificationResult } from './command-classifier.js';
+import { registerProcess, killProcess } from './process-registry.js';
 import { IS_WINDOWS } from '../../utils/platform.js';
 import { toPosixPath } from '../../utils/windows-paths.js';
 import { detectShell } from '../../utils/shell-detect.js';
@@ -94,6 +95,15 @@ function nextRequestId(): string {
 }
 
 /** Emit a background task update to the frontend via EventBus. */
+/**
+ * A task stopped through TaskStop exits non-zero because we killed it. Keep
+ * the `stopped` status TaskStop reported instead of rewriting it as `error`.
+ */
+function settledStatus(taskId: string, code: number | null): 'done' | 'error' | 'stopped' {
+  if (getTask(taskId)?.status === 'stopped') return 'stopped';
+  return code === 0 ? 'done' : 'error';
+}
+
 function emitTaskUpdate(
   emit: ((req: ToolRequestEvent) => void) | undefined,
   taskId: string,
@@ -154,7 +164,26 @@ export function getPreExecSecurityCheck(): PreExecSecurityCheck | null {
 }
 
 const BG_CAPTURE_MS = 3000;
-const AUTO_BG_MS = 15000; // 15 seconds before auto-backgrounding
+const AUTO_BG_MS = 120_000; // 2 minutes before auto-backgrounding a foreground command
+
+const TRUNCATION_MARKER = '\n…[output truncated]…\n';
+
+/**
+ * Append output while keeping it under `limit`. A background command can run
+ * for hours, so keeping only the first `limit` characters would silently drop
+ * everything recent; keep the head for startup diagnostics and the tail for
+ * what the process is doing now.
+ */
+function appendBounded(current: string, chunk: string, limit: number): string {
+  if (limit <= 0) return '';
+  const next = current + chunk;
+  if (next.length <= limit) return next;
+  // Too small to hold both ends and the marker: keep the newest bytes.
+  if (limit <= TRUNCATION_MARKER.length * 2) return next.slice(-limit);
+  const tailLength = Math.floor(limit * 0.75);
+  const headLength = limit - tailLength - TRUNCATION_MARKER.length;
+  return next.slice(0, headLength) + TRUNCATION_MARKER + next.slice(-tailLength);
+}
 
 function isErrorStatus(status: number | null): boolean {
   return status !== 0;
@@ -164,6 +193,8 @@ function runCommand(command: string, opts: {
   cwd: string;
   timeout: number;
   maxBuffer: number;
+  sessionId?: string;
+  signal?: AbortSignal;
 }): Promise<{
   stdout: string;
   stderr: string;
@@ -181,17 +212,27 @@ function runCommand(command: string, opts: {
       cwd: opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' },
+      // Own process group on POSIX so the whole tree can be signalled even
+      // after the shell exits and its children are reparented.
+      detached: !IS_WINDOWS,
+    });
+
+    registerProcess(child, {
+      sessionId: opts.sessionId ?? '',
+      processGroup: !IS_WINDOWS,
     });
 
     const output = { stdout: '', stderr: '' };
     let settled = false;
     let autoBackgrounded = false;
+    let onAbort: (() => void) | null = null;
 
     const finish = (error: Error | null, exitCode: number | null, signal: string | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       clearTimeout(autoBgTimer);
+      if (onAbort) opts.signal?.removeEventListener('abort', onAbort);
       resolve({ stdout: output.stdout, stderr: output.stderr, exitCode, signal, error, pid: child.pid ?? 0, child, autoBackgrounded, collector: output });
     };
 
@@ -203,6 +244,9 @@ function runCommand(command: string, opts: {
       autoBackgrounded = true;
       clearTimeout(timer);
       clearTimeout(autoBgTimer);
+      // Once backgrounded, reaping is owned by process-registry (interrupt /
+      // session delete) — not by this turn's abort.
+      if (onAbort) opts.signal?.removeEventListener('abort', onAbort);
       // Keep data listeners attached so output continues to accumulate
       child.removeAllListeners('close');
       child.removeAllListeners('error');
@@ -215,18 +259,22 @@ function runCommand(command: string, opts: {
     // Timeout also triggers auto-background instead of killing the process
     const timer = setTimeout(doAutoBackground, opts.timeout);
 
+    onAbort = () => {
+      if (settled) return;
+      killProcess(child);
+      finish(new Error('Command aborted'), null, 'SIGKILL');
+    };
+    if (opts.signal) {
+      if (opts.signal.aborted) onAbort();
+      else opts.signal.addEventListener('abort', onAbort, { once: true });
+    }
+
     child.stdout?.on('data', (chunk: Buffer) => {
-      const str = chunk.toString();
-      if (output.stdout.length < opts.maxBuffer) {
-        output.stdout += str;
-      }
+      output.stdout = appendBounded(output.stdout, chunk.toString(), opts.maxBuffer);
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
-      const str = chunk.toString();
-      if (output.stderr.length < opts.maxBuffer) {
-        output.stderr += str;
-      }
+      output.stderr = appendBounded(output.stderr, chunk.toString(), opts.maxBuffer);
     });
 
     child.on('error', (err) => {
@@ -246,6 +294,7 @@ function runCommand(command: string, opts: {
 function runBackgroundCommand(command: string, opts: {
   cwd: string;
   maxBuffer: number;
+  sessionId?: string;
 }): Promise<{
   stdout: string;
   stderr: string;
@@ -262,7 +311,12 @@ function runBackgroundCommand(command: string, opts: {
       cwd: opts.cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' },
-      detached: true,
+      detached: !IS_WINDOWS,
+    });
+
+    registerProcess(child, {
+      sessionId: opts.sessionId ?? '',
+      processGroup: !IS_WINDOWS,
     });
 
     const collector = { stdout: '', stderr: '' };
@@ -286,12 +340,10 @@ function runBackgroundCommand(command: string, opts: {
 
     // Accumulate output indefinitely (listeners stay attached after capture)
     child.stdout?.on('data', (chunk: Buffer) => {
-      const str = chunk.toString();
-      if (collector.stdout.length < opts.maxBuffer) collector.stdout += str;
+      collector.stdout = appendBounded(collector.stdout, chunk.toString(), opts.maxBuffer);
     });
     child.stderr?.on('data', (chunk: Buffer) => {
-      const str = chunk.toString();
-      if (collector.stderr.length < opts.maxBuffer) collector.stderr += str;
+      collector.stderr = appendBounded(collector.stderr, chunk.toString(), opts.maxBuffer);
     });
 
     // If the process exits during the capture window, resolve immediately
@@ -467,6 +519,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       const result = await runBackgroundCommand(command, {
         cwd: opts.cwd,
         maxBuffer: opts.maxOutput,
+        sessionId: opts.sessionId,
       });
 
       const duration = Date.now() - startTime;
@@ -505,7 +558,13 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         process: result.child,
         createdAt: startTime,
       };
-      registerTask(trackedTask);
+      registerTask({
+        ...trackedTask,
+        readOutput: () => ({
+          stdout: result.collector.stdout,
+          stderr: result.collector.stderr,
+        }),
+      });
       emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask);
 
       // Diagnostic: does the backgrounded process tree hold a terminal fd?
@@ -513,7 +572,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
 
       // Listen for process exit to update tracker
       result.child.on('close', (code: number | null) => {
-        const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
+        const newStatus = settledStatus(taskId, code);
         const fullOutput = [result.collector.stdout, result.collector.stderr].filter(Boolean).join('\n');
         updateTask(taskId, { status: newStatus, finishedAt: Date.now(), result: fullOutput });
         emitTaskUpdate(opts.emitToolRequest, taskId, {
@@ -540,6 +599,8 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       cwd: opts.cwd,
       timeout,
       maxBuffer: opts.maxOutput,
+      sessionId: opts.sessionId,
+      signal: opts.signal,
     });
 
     const duration = Date.now() - startTime;
@@ -570,14 +631,20 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         process: result.child,
         createdAt: startTime,
       };
-      registerTask(trackedTask);
+      registerTask({
+        ...trackedTask,
+        readOutput: () => ({
+          stdout: result.collector?.stdout ?? '',
+          stderr: result.collector?.stderr ?? '',
+        }),
+      });
       emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask);
 
       // Diagnostic: does the auto-backgrounded process tree hold a terminal fd?
       void diagnoseBackgroundStdio(result.pid, `auto-backgrounded bash (task_id=${taskId})`);
 
       result.child.on('close', (code: number | null) => {
-        const newStatus: 'done' | 'error' = code === 0 ? 'done' : 'error';
+        const newStatus = settledStatus(taskId, code);
         const fullOutput = [result.collector?.stdout ?? result.stdout, result.collector?.stderr ?? result.stderr].filter(Boolean).join('\n');
         updateTask(taskId, { status: newStatus, finishedAt: Date.now(), result: fullOutput });
         emitTaskUpdate(opts.emitToolRequest, taskId, {

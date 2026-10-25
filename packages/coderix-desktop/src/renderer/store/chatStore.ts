@@ -44,6 +44,32 @@ function resolveTarget(sessionId: string | undefined, viewed: string | null): st
 }
 
 /**
+ * Backgrounded transcripts kept in memory. Opening another session hydrates
+ * from disk (`setSessionId` returns false), so dropping an evicted entry only
+ * costs a re-read — never data.
+ */
+const MAX_CACHED_SESSIONS = 2;
+
+function trimSessionCache(
+  messagesBySession: Record<string, ChatMessage[]>,
+  streamingBySession: Record<string, boolean>,
+): Record<string, ChatMessage[]> {
+  const keys = Object.keys(messagesBySession);
+  let excess = keys.length - MAX_CACHED_SESSIONS;
+  if (excess <= 0) return messagesBySession;
+
+  const next = { ...messagesBySession };
+  for (const key of keys) {
+    if (excess <= 0) break;
+    // A live background stream must keep the blocks it is still accumulating.
+    if (streamingBySession[key]) continue;
+    delete next[key];
+    excess--;
+  }
+  return next;
+}
+
+/**
  * Chat store — manages the chat message list, streaming state, and error state.
  *
  * The `sendMessage` action delegates the actual IPC call to the chat hook
@@ -115,9 +141,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     if (id === oldId) return false;
 
     // Stash the currently-viewed session's live state into its cache slot.
-    const messagesBySession = { ...state.messagesBySession };
+    let messagesBySession = { ...state.messagesBySession };
     const streamingBySession = { ...state.streamingBySession };
     if (oldId) {
+      // Re-insert so the newest entry sorts last and eviction drops the oldest.
+      delete messagesBySession[oldId];
       messagesBySession[oldId] = state.messages;
       streamingBySession[oldId] = state.isStreaming;
     }
@@ -133,6 +161,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       delete messagesBySession[id];
       delete streamingBySession[id];
     }
+    messagesBySession = trimSessionCache(messagesBySession, streamingBySession);
 
     set({
       sessionId: id,
@@ -160,10 +189,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       }));
     } else {
       set((s) => ({
-        messagesBySession: {
-          ...s.messagesBySession,
-          [target]: [...(s.messagesBySession[target] ?? []), message],
-        },
+        messagesBySession: trimSessionCache(
+          {
+            ...s.messagesBySession,
+            [target]: [...(s.messagesBySession[target] ?? []), message],
+          },
+          s.streamingBySession,
+        ),
       }));
     }
   },
@@ -175,10 +207,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       set((s) => ({ messages: updater(s.messages) }));
     } else {
       set((s) => ({
-        messagesBySession: {
-          ...s.messagesBySession,
-          [target]: updater(s.messagesBySession[target] ?? []),
-        },
+        messagesBySession: trimSessionCache(
+          {
+            ...s.messagesBySession,
+            [target]: updater(s.messagesBySession[target] ?? []),
+          },
+          s.streamingBySession,
+        ),
       }));
     }
   },

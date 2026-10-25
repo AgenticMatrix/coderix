@@ -14,8 +14,6 @@ export interface TrackedTask {
   type: TrackedTaskType;
   status: 'running' | 'done' | 'error' | 'stopped';
   description: string;
-  /** File path where task output is written (if available). */
-  outputPath?: string;
   /** For bash tasks: the child process handle for stop/kill. */
   process?: ChildProcess;
   /** For agent tasks: the abort controller for cancellation. */
@@ -24,12 +22,45 @@ export interface TrackedTask {
   finishedAt?: number;
   result?: string;
   error?: string;
+  /**
+   * Live output reader for a running task. Never part of the emitted task
+   * payload — it is a closure, not serialisable state.
+   */
+  readOutput?: () => { stdout: string; stderr: string };
 }
 
 const tasks = new Map<string, TrackedTask>();
 
+/**
+ * Terminal records kept after their notification is delivered. Each one holds
+ * its full `result` plus the child handle, so an unbounded map grows for the
+ * life of the process.
+ */
+const MAX_TERMINAL_TASKS = 20;
+
+/**
+ * Drop the oldest terminal records. Running tasks are never evicted, and
+ * `keepId` protects the record whose settlement triggered this call — two
+ * tasks finishing in the same millisecond share a `finishedAt`, so ordering
+ * alone cannot tell which one is newest.
+ */
+function pruneTerminalTasks(keepId?: string): void {
+  const terminal = [...tasks.values()].filter((task) => task.status !== 'running');
+  let excess = terminal.length - MAX_TERMINAL_TASKS;
+  if (excess <= 0) return;
+  const candidates = terminal
+    .filter((task) => task.id !== keepId)
+    .sort((a, b) => (a.finishedAt ?? a.createdAt) - (b.finishedAt ?? b.createdAt));
+  for (const task of candidates) {
+    if (excess <= 0) break;
+    tasks.delete(task.id);
+    excess--;
+  }
+}
+
 export function registerTask(task: TrackedTask): void {
   tasks.set(task.id, task);
+  pruneTerminalTasks(task.id);
 }
 
 export function getTask(id: string): TrackedTask | undefined {
@@ -38,7 +69,11 @@ export function getTask(id: string): TrackedTask | undefined {
 
 export function updateTask(id: string, patch: Partial<TrackedTask>): void {
   const existing = tasks.get(id);
-  if (existing) Object.assign(existing, patch);
+  if (!existing) return;
+  Object.assign(existing, patch);
+  // The task that just settled must survive this call long enough for its
+  // notification to be built.
+  if (existing.status !== 'running') pruneTerminalTasks(id);
 }
 
 export function listTasks(): TrackedTask[] {

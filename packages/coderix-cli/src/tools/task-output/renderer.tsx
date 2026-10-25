@@ -31,7 +31,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
     const displayLines = props.contentExpanded ? lines : lines.slice(0, 1);
     const hiddenCount = props.contentExpanded ? 0 : lines.length - 1;
     const isTaskError = taskStatus === 'error';
-    const isTimeout = taskStatus === 'timeout';
+    const isRunning = taskStatus === 'running';
 
     // TaskOutput itself failed (e.g. invalid task_id) — metadata has no status
     if (props.result?.isError && !taskStatus) {
@@ -53,7 +53,7 @@ export function TaskOutputRenderer(props: ToolUseRendererProps): React.ReactNode
 
     let statusLabel: string;
     if (isTaskError) statusLabel = 'Task Error';
-    else if (isTimeout) statusLabel = 'Task not completed';
+    else if (isRunning) statusLabel = 'Still running (partial output)';
     else statusLabel = 'Task completed successfully';
 
     return (

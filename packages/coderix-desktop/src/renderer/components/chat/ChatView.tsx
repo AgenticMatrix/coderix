@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useLayoutEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Zap } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
@@ -15,6 +15,11 @@ export interface ChatViewProps {
   isStreaming: boolean;
 }
 
+/** Only the tail of the conversation is mounted. Each call carries a full tool
+ *  transcript, so rendering all of them keeps weeks of DOM alive. */
+const INITIAL_VISIBLE_CALLS = 30;
+const LOAD_MORE_CALLS = 20;
+
 /**
  * ChatView — ZCode live-chat style conversation view.
  *
@@ -27,9 +32,16 @@ export function ChatView({ calls, isEmpty, isStreaming }: ChatViewProps): React.
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_CALLS);
   const prevCallCountRef = useRef(calls.length);
   const userScrolledUpRef = useRef(false);
   const t = useT();
+
+  const hiddenCount = Math.max(0, calls.length - visibleCount);
+  const visibleCalls = useMemo(
+    () => (hiddenCount > 0 ? calls.slice(hiddenCount) : calls),
+    [calls, hiddenCount],
+  );
 
   const scrollToBottom = useCallback(
     (smooth = true) => {
@@ -51,6 +63,18 @@ export function ChatView({ calls, isEmpty, isStreaming }: ChatViewProps): React.
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     userScrolledUpRef.current = distanceFromBottom > 80;
     setShowScrollBtn(distanceFromBottom > 200);
+  }, []);
+
+  // Expanding the window inserts calls above the viewport; keep the message
+  // the user was reading in place instead of letting it jump downward.
+  const handleShowEarlier = useCallback(() => {
+    const container = containerRef.current;
+    const before = container?.scrollHeight ?? 0;
+    setVisibleCount((n) => n + LOAD_MORE_CALLS);
+    requestAnimationFrame(() => {
+      if (!container) return;
+      container.scrollTop += container.scrollHeight - before;
+    });
   }, []);
 
   // Auto-scroll on new calls (smooth).
@@ -92,8 +116,22 @@ export function ChatView({ calls, isEmpty, isStreaming }: ChatViewProps): React.
   return (
     <div className="chat-container">
       <div ref={containerRef} className="chat-messages" onScroll={handleScroll}>
+        {hiddenCount > 0 && (
+          <div className="trajectory-history-toggle">
+            <button
+              type="button"
+              className="trajectory-history-btn"
+              onClick={handleShowEarlier}
+            >
+              {t('chat.showEarlier')}
+            </button>
+            <span className="trajectory-history-hint">
+              {t('chat.hiddenCalls', { count: hiddenCount })}
+            </span>
+          </div>
+        )}
         <AnimatePresence initial={false}>
-          {calls.map((call) => (
+          {visibleCalls.map((call) => (
             <motion.div
               key={call.key}
               initial={{ opacity: 0, y: 6 }}

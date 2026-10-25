@@ -60,7 +60,7 @@ export async function startMcpServer(): Promise<void> {
         cwd: process.cwd(),
         allowMutation: true,
         maxOutput: 50_000,
-        bashTimeout: 30_000,
+        bashTimeout: 120_000,
       };
 
       try {

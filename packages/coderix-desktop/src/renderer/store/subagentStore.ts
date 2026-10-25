@@ -6,6 +6,27 @@ export interface SubagentTab {
   parentSessionId: string | null;
 }
 
+/** Completed transcripts kept in memory. Summaries are tiny; transcripts are
+ *  whole conversations, so only the most recent ones stay resident. */
+const MAX_AGENT_TRANSCRIPTS = 5;
+
+function capTranscripts(
+  agents: Record<string, SubagentSummary>,
+): Record<string, SubagentSummary> {
+  // Running agents still need their live transcript; only settle old history.
+  const withTranscript = Object.keys(agents).filter(
+    (id) => agents[id]?.transcript && agents[id]?.status !== 'running',
+  );
+  const excess = withTranscript.length - MAX_AGENT_TRANSCRIPTS;
+  if (excess <= 0) return agents;
+
+  const next = { ...agents };
+  for (const id of withTranscript.slice(0, excess)) {
+    next[id] = { ...next[id], transcript: undefined };
+  }
+  return next;
+}
+
 export interface SubagentState {
   /** Live sub-agent summaries keyed by agent id, fed by agent_register/update events. */
   agents: Record<string, SubagentSummary>;
@@ -92,7 +113,7 @@ export const useSubagentStore = create<SubagentState>()((set) => ({
       // conversation after the agent finishes.
       const transcript = agent?.transcript ?? prev.transcript;
       return {
-        agents: { ...state.agents, [agentId]: { ...prev, ...agent, transcript } },
+        agents: capTranscripts({ ...state.agents, [agentId]: { ...prev, ...agent, transcript } }),
       };
     }),
 }));

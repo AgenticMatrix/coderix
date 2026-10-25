@@ -122,7 +122,7 @@ export class EngineHost {
               cwd: ctx.cwd ?? cwd,
               allowMutation: true,
               maxOutput: 50_000,
-              bashTimeout: ctx.timeoutMs ?? 30_000,
+              bashTimeout: ctx.timeoutMs ?? 120_000,
               agentSpawn: ctx.agentSpawn,
               sessionId: this.sessionId,
               setPermissionMode: ctx.setPermissionMode,
