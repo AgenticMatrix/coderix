@@ -29,6 +29,7 @@ const CH = {
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
   SESSION_SET_AGENT_TYPE: 'session:setAgentType',
   SESSION_SET_CWD: 'session:setCwd',
+  SESSION_TITLE_UPDATED: 'session:titleUpdated',
   PLUGINS_LIST: 'plugins:list',
   MCP_LIST: 'mcp:list',
   MCP_CATALOG: 'mcp:catalog',
@@ -1205,6 +1206,23 @@ const coderixAPI = {
     };
     ipcRenderer.on(CH.AGENT_UPDATE, handler as (...args: unknown[]) => void);
     return () => ipcRenderer.removeListener(CH.AGENT_UPDATE, handler as (...args: unknown[]) => void);
+  },
+
+  /**
+   * Subscribe to title updates emitted by the engine (fallback immediately,
+   * provider refinement later). Returns an unsubscribe function.
+   */
+  onSessionTitleUpdated(
+    callback: (update: { sessionId: string; title: string; source?: string }) => void,
+  ): () => void {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      data: { sessionId: string; title: string; source?: string },
+    ) => {
+      callback(data);
+    };
+    ipcRenderer.on(CH.SESSION_TITLE_UPDATED, handler);
+    return () => ipcRenderer.removeListener(CH.SESSION_TITLE_UPDATED, handler);
   },
 
   /**

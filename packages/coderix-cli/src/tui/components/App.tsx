@@ -5,7 +5,7 @@ import { useTerminalSize } from '@coderix/tui';
 
 import type { QueryEngine } from '@coderix/core';
 import type { AppConfig, Message, ContentBlock, ThinkingBlock, TokenUsage } from '../../types.js';
-import { getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, writeSessionMeta } from '@coderix/core';
+import { getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, summarizeSessionTitle, createCallModel, resolveModelByName } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
@@ -206,40 +206,37 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     }
   }, [showSessionPicker]);
 
-  // ── Session title refinement: use LLM to summarize first user message ──
+  // ── Legacy title backfill for sessions created before the core strategy ──
+  // New sessions are titled by QueryEngine (fallback + provider refinement).
+  // Old rows only get a fallback on list; refine them once when the picker
+  // opens, using each session's own model route.
   const [refinedTitles, setRefinedTitles] = useState<Map<string, string>>(new Map());
   const titleRefineRun = useRef(false);
   useEffect(() => {
     if (!state.sessionPicker || titleRefineRun.current) return;
     titleRefineRun.current = true;
 
-    const sessions = sessionManager.list();
+    const sessions = sessionManager.list().filter((s) => (
+      s.firstUserText
+      && (!s.titleSource || s.titleSource === 'fallback' || s.titleSource === 'default')
+    ));
     const refine = async () => {
-      const Anthropic = (await import('@anthropic-ai/sdk')).default;
-      const client = new Anthropic({ baseURL: config.baseUrl, apiKey: config.apiKey });
-
       for (const s of sessions) {
-        if (!s.firstUserText || s.firstUserText.length <= 30) continue;
         try {
-          const newTitle = await refineSessionTitle(s.id, async (text: string) => {
-            const stream = client.messages.stream({
-              model: config.model,
-              max_tokens: 50,
-              messages: [{
-                role: 'user',
-                content: `将以下内容总结为5-10个字的标题，只返回标题本身，不要加任何其他内容：\n\n${text}`,
-              }],
-              thinking: { type: 'disabled' },
-            });
-            let result = '';
-            for await (const event of stream) {
-              if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                result += event.delta.text;
-              }
-            }
-            return result.trim() || text.slice(0, 10) + '...';
-          });
+          const resolved = resolveModelByName(s.model);
+          const baseUrl = resolved?.baseUrl ?? config.baseUrl;
+          const apiKey = resolved?.apiKey ?? config.apiKey;
+          const model = resolved?.model ?? (s.model !== 'unknown' ? s.model : config.model);
+          if (!baseUrl || !apiKey || !model) continue;
+          const callModel = createCallModel(
+            { baseUrl, apiKey, protocol: resolved?.protocol },
+            model,
+          );
+          const newTitle = await refineSessionTitle(s.id, async (text: string) => (
+            (await summarizeSessionTitle(callModel, text)) ?? ''
+          ));
           if (newTitle) {
+            sessionManager.setSessionTitle(s.id, newTitle, 'provider', s.model);
             setRefinedTitles((prev) => new Map(prev).set(s.id, newTitle));
           }
         } catch {
@@ -247,8 +244,8 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
         }
       }
     };
-    refine();
-  }, [state.sessionPicker]);
+    void refine();
+  }, [state.sessionPicker, sessionManager, config.baseUrl, config.apiKey, config.model]);
 
   // Sync briefMode → QueryEngine (rebuilds system prompt on toggle)
   useEffect(() => {
@@ -387,61 +384,6 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   const { runAgentTurn, runCompact } = useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef });
   const { sendToSubAgent } = useSubAgentBridge({ engine, dispatch, setAppState });
 
-  // ── Title generation for the first user message ─────────────────
-  // LLM-first: >30 chars calls LLM summarization, truncation only as fallback.
-  // ≤30 chars writes directly as title.
-  // IMPORTANT: Must update session.title in memory so appendMetadata
-  // writes the correct title on session pause/complete.
-  const generateAndPersistTitle = useCallback((text: string, sessionId: string) => {
-    const dir = sessionDir(sessionId);
-    const trimmed = text.trim();
-
-    // Short input: use directly
-    if (trimmed.length <= 30) {
-      const session = sessionManager.getActive();
-      if (session) session.title = trimmed;
-      writeSessionMeta(dir, { title: trimmed }).catch(() => {});
-      return;
-    }
-
-    // Long input: LLM summarization in background
-    (async () => {
-      try {
-        const Anthropic = (await import('@anthropic-ai/sdk')).default;
-        const client = new Anthropic({ baseURL: config.baseUrl, apiKey: config.apiKey });
-        const stream = client.messages.stream({
-          model: config.model,
-          max_tokens: 50,
-          messages: [{
-            role: 'user',
-            content: `将以下内容总结为5-10个字的标题，只返回标题本身，不要加任何其他内容：\n\n${trimmed}`,
-          }],
-          thinking: { type: 'disabled' },
-        });
-        let title = '';
-        for await (const event of stream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            title += event.delta.text;
-          }
-        }
-        const cleaned = title.trim().slice(0, 20);
-        if (cleaned) {
-          await writeSessionMeta(dir, { title: cleaned });
-          const session = sessionManager.getActive();
-          if (session) session.title = cleaned;
-          return;
-        }
-      } catch {
-        // LLM failed, use fallback below
-      }
-      // Fallback: truncated title
-      const fallback = trimmed.slice(0, 10) + '...';
-      writeSessionMeta(dir, { title: fallback }).catch(() => {});
-      const session = sessionManager.getActive();
-      if (session) session.title = fallback;
-    })();
-  }, [config.baseUrl, config.apiKey, config.model, sessionManager]);
-
   // ── Direct team message: @agent-name message ─────────────────
   // Intercepts messages starting with @agent-name and routes them
   // to the team mailbox instead of the main agent loop.
@@ -486,15 +428,8 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
       return;
     }
 
-    // Generate title from first user message (before runAgentTurn writes anything)
-    const session = sessionManager.getActive();
-    const entryCount = (session as any)._entryCount as number ?? 0;
-    if (session && entryCount === 0) {
-      generateAndPersistTitle(text.trim(), session.id);
-    }
-
     await runAgentTurn(text);
-  }, [runAgentTurn, store, dispatch, sessionManager, generateAndPersistTitle]);
+  }, [runAgentTurn, store, dispatch, sessionManager]);
 
   // Load sub-agent transcript when entering immersive mode.
   // Polls every 400ms while the agent is running, progressively loading

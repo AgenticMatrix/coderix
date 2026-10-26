@@ -49,6 +49,7 @@ import { deriveSessionStats } from './components/shared/status-stats';
 import { deriveAgentStatus, type AgentStatus } from './agent-status';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import { useAgentEvents } from './hooks/useAgentEvents';
+import { useSessionTitleEvents } from './hooks/useSessionTitleEvents';
 import {
   submitQuery,
   interruptQuery,
@@ -240,6 +241,7 @@ export function App(): React.ReactElement {
   // via the preload contextBridge. Cleaned up on unmount.
   useStreamEvents();
   useAgentEvents();
+  useSessionTitleEvents();
 
   // ── Close the sub-agent side pane when the viewed session changes ─────────
   // The pane's tabs are scoped to the conversation that spawned them, so

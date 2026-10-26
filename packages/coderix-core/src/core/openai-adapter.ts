@@ -226,7 +226,7 @@ export function createCallModelFromOpenAI(
   const proxyAgent = config.proxy ? new ProxyAgent({ uri: config.proxy }) : undefined;
 
   return async function* (params: CallModelParams): AsyncGenerator<StreamEvent | AssistantMessage> {
-    const { system, messages, tools, signal } = params;
+    const { system, messages, tools, signal, maxTokens } = params;
 
     const baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
     // OpenAI Chat Completions lives under `/v1/chat/completions`. A base_url may
@@ -246,7 +246,7 @@ export function createCallModelFromOpenAI(
       messages: openaiMessages,
       stream: true,
       stream_options: { include_usage: true },
-      max_tokens: config.maxTokens ?? 65536,
+      max_tokens: maxTokens ?? config.maxTokens ?? 65536,
     };
     if (openaiTools.length > 0) {
       requestBody.tools = openaiTools;

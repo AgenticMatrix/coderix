@@ -33,7 +33,7 @@ import type {
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests } from '@coderix/core';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle } from '@coderix/core';
 import type { McpManager } from '@coderix/core';
 import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '@coderix/core';
 import { runClaudeCodeQuery, getClaudeSessionId, getClaudeCumulativeUsage, loadClaudeSubagentTranscript } from './claude-code-engine.js';
@@ -105,6 +105,7 @@ export const IPC_CHANNELS = {
   SESSION_SET_MCP_SERVERS: 'session:setMcpServers',
   SESSION_SET_AGENT_TYPE: 'session:setAgentType',
   SESSION_SET_CWD: 'session:setCwd',
+  SESSION_TITLE_UPDATED: 'session:titleUpdated',
   PLUGINS_LIST: 'plugins:list',
   MCP_LIST: 'mcp:list',
   MCP_CATALOG: 'mcp:catalog',
@@ -373,22 +374,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     const mainWindow = getMainWindow(windowManager);
     if (!mainWindow) throw new Error('No main window');
 
-    // Update session title to first question (if still default).
-    // This only applies to the in-process Coderix engine — Claude Code
-    // sessions persist their own title in the claude-code branch below.
-    if (engine === 'coderix') {
-      try {
-        const active = sessionManager.getActive();
-        if (active && (active.title === '新对话' || active.title.startsWith('Session '))) {
-          const title = userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
-          active.title = title;
-          const sessionDir = join(homedir(), '.coderix', 'sessions', active.id);
-          if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-          writeFileSync(join(sessionDir, 'session.json'), JSON.stringify(active, null, 2), 'utf-8');
-        }
-      } catch { /* ignore */ }
-    }
-
     // Start streaming in background (don't await — send via push channels)
     const activeConfig = loadDesktopConfig();
 
@@ -557,35 +542,53 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
         sessionManager.addMessage(streamSessionId, { role: 'user', content: userInput });
 
-        {
-          // addMessage() derives a title from the first user message but only
-          // writes workDir to meta.json — the title itself is never persisted,
-          // so the sidebar falls back to a bare "Session <id>". Persist a
-          // fallback title (the latest user input) so the sidebar always shows
-          // something meaningful, then refine long first inputs into a short
-          // topic summary in the background.
-          const fallback =
-            userInput.length > 30 ? userInput.slice(0, 30) + '...' : userInput;
-          const isPlaceholderTitle =
-            !session.title ||
-            session.title === '新对话' ||
-            session.title.startsWith('Session ') ||
-            /\.{3}$/.test(session.title);
-
-          if (isFirstMessage) {
-            // No summary can exist yet — always persist the fallback and
-            // kick off background refinement.
-            session.title = fallback;
-            sessionManager.saveSession(session);
-            void summarizeClaudeSessionTitle(session.id, userInput);
-          } else if (isPlaceholderTitle && !pendingTitleSummaries.has(session.id)) {
-            // A later turn with no refined summary yet (e.g. refinement failed
-            // earlier): keep the fallback in sync with the latest user input.
-            // Skip while a summary is still in flight so the slow summarizer
-            // isn't clobbered by the second message's fallback.
-            session.title = fallback;
-            sessionManager.saveSession(session);
+        // The Coderix engine derives titles inside QueryEngine; the Claude Code
+        // path bypasses it, so do the same two-layer derivation here: persist
+        // the deterministic fallback immediately, then refine on the session's
+        // own model route in the background.
+        if (isFirstMessage) {
+          const fallback = sessionManager.applyFallbackTitle(session.id, userInput);
+          if (fallback) {
+            safeSend(mainWindow, IPC_CHANNELS.SESSION_TITLE_UPDATED, {
+              sessionId: session.id,
+              title: fallback,
+              source: 'fallback',
+            });
           }
+
+          void (async () => {
+            try {
+              const cfg = loadDesktopConfig();
+              const resolved = resolveModelByName(session.model);
+              const baseURL = resolved?.baseUrl ?? cfg.baseUrl;
+              const apiKey = resolved?.apiKey ?? cfg.apiKey;
+              const model = resolved?.model ?? (session.model !== 'unknown' ? session.model : cfg.model);
+              if (!baseURL || !apiKey || !model) return;
+              const callModel = createCallModel(
+                { ...cfg, baseUrl: baseURL, apiKey, protocol: resolved?.protocol ?? cfg.protocol },
+                model,
+              );
+              const title = await summarizeSessionTitle(callModel, userInput);
+              if (!title) return;
+              const live = sessionManager.get(session.id);
+              if (!live || live.titleSource === 'user' || live.titleSource === 'fork') return;
+              const applied = sessionManager.setSessionTitle(
+                session.id,
+                title,
+                'provider',
+                session.model !== 'unknown' ? session.model : model,
+              );
+              if (applied) {
+                safeSend(mainWindow, IPC_CHANNELS.SESSION_TITLE_UPDATED, {
+                  sessionId: session.id,
+                  title: applied,
+                  source: 'provider',
+                });
+              }
+            } catch {
+              // Best-effort: keep the fallback.
+            }
+          })();
         }
       } catch { /* ignore — best-effort persistence */ }
     }
@@ -2824,6 +2827,25 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       })
     : null;
 
+  // Forward title updates from the engine's EventBus. Provider refinement is
+  // asynchronous and may finish after the turn's generator is exhausted, so
+  // the event bus (not the stream) is the reliable push channel.
+  const unsubTitleEvents = config.eventBus
+    ? config.eventBus.engineEvents.subscribe({
+        next(event) {
+          if (event.type !== 'title') return;
+          const data = event.data as { sessionId?: unknown; title?: unknown; source?: unknown } | undefined;
+          if (typeof data?.sessionId !== 'string' || typeof data.title !== 'string') return;
+          safeSend(getMainWindow(windowManager), IPC_CHANNELS.SESSION_TITLE_UPDATED, {
+            sessionId: data.sessionId,
+            title: data.title,
+            source: data.source,
+          });
+        },
+        error() {},
+      })
+    : null;
+
   // -----------------------------------------------------------------------
   // Public API
   // -----------------------------------------------------------------------
@@ -2868,6 +2890,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
     destroy(): void {
       unsubAgentEvents?.();
+      unsubTitleEvents?.();
       ipcMain.removeHandler(IPC_CHANNELS.AGENT_TRANSCRIPT);
       for (const controller of abortControllers.values()) {
         controller.abort();
@@ -3190,60 +3213,4 @@ export function getLastWorkspace(): string | undefined {
   return undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Claude Code session title refinement
-// ---------------------------------------------------------------------------
 
-/**
- * Sessions with a title summary currently in flight. While a summary is pending,
- * the placeholder-title fallback (which would otherwise overwrite the title on
- * the next turn) is suppressed — otherwise a slow summary loses to the second
- * user message and the sidebar shows the wrong topic.
- */
-const pendingTitleSummaries = new Set<string>();
-
-/**
- * Summarize a claude-code session's first user input into a short topic title
- * using the configured LLM, then write it to the session's meta.json.
- *
- * Fire-and-forget from the caller: on any failure (missing config, network,
- * provider error) the fallback title persisted by `saveSession()` remains in
- * place, so the sidebar never regresses to "Session <id>".
- */
-async function summarizeClaudeSessionTitle(sessionId: string, text: string): Promise<void> {
-  if (!text || text.trim().length <= 30) return;
-  pendingTitleSummaries.add(sessionId);
-  try {
-    const config = loadDesktopConfig();
-    if (!config.apiKey || !config.baseUrl || !config.model) return;
-
-    const { default: Anthropic } = require('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: config.apiKey, baseURL: config.baseUrl });
-
-    const stream = client.messages.stream({
-      model: config.model,
-      max_tokens: 50,
-      messages: [{
-        role: 'user',
-        content: `将以下内容总结为5-10个字的标题，只返回标题本身，不要加任何其他内容：\n\n${text}`,
-      }],
-      thinking: { type: 'disabled' },
-    });
-
-    let result = '';
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        result += event.delta.text;
-      }
-    }
-
-    const title = result.trim().slice(0, 20);
-    if (title) {
-      await writeSessionMeta(sessionDir(sessionId), { title });
-    }
-  } catch {
-    // Best-effort — keep the persisted fallback title on any failure.
-  } finally {
-    pendingTitleSummaries.delete(sessionId);
-  }
-}

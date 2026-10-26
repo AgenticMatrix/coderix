@@ -26,7 +26,6 @@ export class EngineHost {
   private sessionId = '';
   private bridgeState: BridgeState;
   private model = '';
-  private sessionTitleSet = false;
   private activeDeferred: any = null;
 
   constructor(send: MessageSender) {
@@ -193,24 +192,16 @@ export class EngineHost {
     this.bridgeState = createBridgeState(this.sessionId);
     this.bridgeState.model = this.model;
 
-    // Set session title from first message only
-    if (!this.sessionTitleSet) {
-      const title = text.length > 50 ? text.slice(0, 50) + '...' : text;
-      this.send({ type: 'sessionSwitched', sessionId: this.sessionId, title });
-      this.sessionTitleSet = true;
-      // Persist title to session
-      if (this.sessionManager) {
-        const s = this.sessionManager.get(this.sessionId);
-        if (s) {
-          s.title = title;
-          this.sessionManager.saveSession(s);
-        }
-      }
-    }
-
     try {
       for await (const event of this.engine.submitMessage(text)) {
         switch (event.type) {
+          case 'title': {
+            const data = event.data as { title?: string } | undefined;
+            if (data?.title) {
+              this.send({ type: 'sessionSwitched', sessionId: this.sessionId, title: data.title });
+            }
+            break;
+          }
           case 'message': {
             const msg = event.data as any;
             // Route through existing bridge to produce GatewayEvent[]
@@ -321,7 +312,6 @@ export class EngineHost {
 
   async createSession(_silent?: boolean): Promise<void> {
     await this.ensureEngine();
-    this.sessionTitleSet = false;
     const session = this.sessionManager?.create({
       cwd: this.engine?.config?.cwd ?? process.cwd(),
       model: this.model,
@@ -336,7 +326,6 @@ export class EngineHost {
 
   async resumeSession(id: string): Promise<void> {
     await this.ensureEngine();
-    this.sessionTitleSet = true; // resumed session already has a title
     try {
       const session = this.sessionManager?.resume(id);
       if (session) {

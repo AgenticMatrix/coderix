@@ -40,6 +40,7 @@ import {
   readTailMetadata,
   readSessionMeta,
   writeSessionMeta,
+  writeSessionMetaExisting,
   type SessionMeta,
   generateSessionTitle,
   isAutoTitle,
@@ -50,6 +51,12 @@ import {
   withSessionWriteLock,
   flushSessionWrites,
 } from './session-store.js';
+import {
+  fallbackSessionTitle,
+  isPlaceholderTitle,
+  normalizeSessionTitle,
+  type SessionTitleSource,
+} from './session-title.js';
 import {
   SessionBusyError,
   acquireLeaseSync,
@@ -164,9 +171,13 @@ export class SessionManager {
     const id = randomUUID();
     const now = new Date();
     const title = options.title ?? `Session ${id.slice(0, 8)}`;
+    // An explicit non-placeholder title is user-owned; the built-in defaults
+    // ("Session <id>", "新对话", "New chat") remain replaceable on first input.
+    const titleSource: SessionTitleSource = isPlaceholderTitle(title) ? 'default' : 'user';
     const session: Session = {
       id,
       title,
+      titleSource,
       status: 'active',
       messages: [],
       turnCount: 0,
@@ -562,6 +573,9 @@ export class SessionManager {
 
     forked.messages = messages;
     forked.turnCount = messages.filter((m) => m.role === 'assistant').length;
+    // The fork suffix is a deliberate user-facing label, not a replaceable
+    // placeholder derived from the first prompt.
+    forked.titleSource = 'fork';
     (forked as any)._lastEntryUuid = prev;
     (forked as any)._entryCount = messages.length;
     (forked as any)._knownUuids = known;
@@ -572,6 +586,7 @@ export class SessionManager {
 
     writeSessionMeta(dir, {
       title: forked.title,
+      titleSource: 'fork',
       workDir: forked.cwd,
       model: forked.model,
       skills: forked.skills,
@@ -770,10 +785,13 @@ export class SessionManager {
 
     // Update in-memory title from the first user message (always)
     if (isFirstEntry) {
-      if (message.role === 'user') {
+      const titlePinned = session.titleSource === 'user' || session.titleSource === 'fork';
+      if (message.role === 'user' && !titlePinned) {
         const text = extractMessageText(message);
-        if (text) {
+        if (text && !isCompactSummaryText(text)) {
           session.title = generateSessionTitle(text);
+          session.titleSource = 'fallback';
+          session.titleModel = undefined;
         }
       }
       (session as any)._entryCount = 1;
@@ -805,7 +823,16 @@ export class SessionManager {
           }
           // Persist workDir + model on first write so session listing/resume
           // can restore the workspace and the model the session was created with.
-          writeSessionMeta(dir, { workDir: session.cwd, model: session.model }).catch(() => {});
+          // The title/source are persisted here too: the first message already
+          // derived a fallback, and the sidebar may list the session before the
+          // turn's final saveSession().
+          const bootMeta: SessionMeta = {
+            workDir: session.cwd,
+            model: session.model,
+            title: session.title,
+          };
+          if (session.titleSource) bootMeta.titleSource = session.titleSource;
+          writeSessionMeta(dir, bootMeta).catch(() => {});
         }
 
         const parentUuid = readLastTranscriptUuidSync(jsonlPath);
@@ -977,6 +1004,57 @@ export class SessionManager {
   }
 
   /**
+   * Accept a normalized title and persist its origin.
+   *
+   * Returns `null` when the session no longer exists or the title normalizes
+   * to empty. A user-sourced title pins the session: later automatic
+   * refinement must check {@link Session.titleSource} before writing.
+   */
+  setSessionTitle(
+    sessionId: string,
+    title: string,
+    source: SessionTitleSource,
+    model?: string,
+  ): string | null {
+    const session = this.get(sessionId);
+    if (!session) return null;
+    const cleaned = normalizeSessionTitle(title);
+    if (!cleaned) return null;
+
+    session.title = cleaned;
+    session.titleSource = source;
+    session.titleModel = model;
+    session.updatedAt = new Date();
+
+    if (!this.diskless) {
+      const meta: SessionMeta = { title: cleaned, titleSource: source };
+      if (model) meta.titleModel = model;
+      const dir = getSessionDir(session.id);
+      // Background (fallback/provider) writes must never recreate a session
+      // directory the user just deleted. User renames and fork labels are
+      // explicit actions and may create metadata for a brand-new session.
+      const write = source === 'provider' || source === 'fallback'
+        ? writeSessionMetaExisting
+        : writeSessionMeta;
+      write(dir, meta).catch(() => {});
+    }
+    return cleaned;
+  }
+
+  /**
+   * Derive and store the deterministic fallback for the first user prompt.
+   * Pinned titles (explicit user rename, fork label) are left untouched, and
+   * compaction's synthetic continuation message never becomes a title.
+   */
+  applyFallbackTitle(sessionId: string, text: string): string | null {
+    const session = this.get(sessionId);
+    if (!session) return null;
+    if (session.titleSource === 'user' || session.titleSource === 'fork') return null;
+    if (isCompactSummaryText(text)) return null;
+    return this.setSessionTitle(sessionId, fallbackSessionTitle(text), 'fallback');
+  }
+
+  /**
    * Save the session metadata to JSONL.
    * Appends title entry (last-wins), does NOT rewrite messages.
    */
@@ -999,6 +1077,8 @@ export class SessionManager {
       totalCost: session.totalCost,
       tokenUsage: session.tokenUsage,
     };
+    if (session.titleSource) meta.titleSource = session.titleSource;
+    if (session.titleModel) meta.titleModel = session.titleModel;
     if (session.currency) meta.currency = session.currency;
     writeSessionMeta(dir, meta).catch(() => {});
   }
@@ -1129,12 +1209,14 @@ export class SessionManager {
 
     // Read title from meta.json (new), fall back to session.jsonl title entry (legacy)
     const meta = readSessionMeta(dir);
-    // A persisted "Session <id>" or "..." placeholder carries no real signal —
-    // treat it as absent so the picker regenerates a meaningful title from the
-    // first user message instead of showing a bare session id.
-    const metaTitle = meta?.title && !isAutoTitle(meta.title) ? meta.title : undefined;
+    // A persisted placeholder carries no real signal — treat it as absent so
+    // the picker regenerates a meaningful title from the first user message.
+    const metaTitle = meta?.title && !isAutoTitle(meta.title, meta.titleSource)
+      ? meta.title
+      : undefined;
     const generatedTitle = firstUserText ? generateSessionTitle(firstUserText) : undefined;
-    const title = metaTitle ?? lastTitle ?? generatedTitle ?? `Session ${id.slice(0, 8)}`;
+    const legacyTitle = lastTitle && !isAutoTitle(lastTitle) ? lastTitle : undefined;
+    const title = metaTitle ?? legacyTitle ?? generatedTitle ?? `Session ${id.slice(0, 8)}`;
     const mtime = statSync(jsonlPath).mtime;
 
     // Compute display title for the session picker
@@ -1150,6 +1232,8 @@ export class SessionManager {
     return {
       id,
       title,
+      titleSource: meta?.titleSource,
+      titleModel: meta?.titleModel,
       status: 'active' as const,
       turnCount: approxTurns,
       totalCost: 0,
@@ -1190,6 +1274,8 @@ export class SessionManager {
     return {
       id: session.id,
       title: session.title,
+      titleSource: session.titleSource,
+      titleModel: session.titleModel,
       status: session.status,
       turnCount: session.turnCount,
       totalCost: session.totalCost,
@@ -1489,11 +1575,26 @@ export class SessionManager {
       }
 
       // Fall back to meta.json title (LLM-summarized titles are stored there).
-      // Ignore persisted placeholders ("Session <id>"/"...") — they carry no
-      // real signal and would otherwise lock a placeholder in on resume.
+      // Ignore persisted placeholders — they carry no real signal and would
+      // otherwise lock a placeholder in on resume.
       const meta = readSessionMeta(dir);
-      if (!title && meta?.title && !isAutoTitle(meta.title)) {
+      // A real meta title is authoritative; a legacy JSONL title entry is only
+      // a fallback (and may be a stale placeholder from an older format).
+      let resolvedTitleSource: SessionTitleSource | undefined;
+      if (meta?.title && !isAutoTitle(meta.title, meta.titleSource)) {
         title = meta.title;
+        resolvedTitleSource = meta.titleSource;
+      }
+
+      let resolvedTitle = title;
+      if (!resolvedTitle) {
+        if (firstUserText) {
+          resolvedTitle = generateSessionTitle(firstUserText);
+          resolvedTitleSource = 'fallback';
+        } else {
+          resolvedTitle = `Session ${id.slice(0, 8)}`;
+          resolvedTitleSource = 'default';
+        }
       }
 
       const persistedContextLength = meta?.contextLength ?? 0;
@@ -1512,11 +1613,9 @@ export class SessionManager {
 
       const session: Session = {
         id,
-        title:
-          title ??
-          (firstUserText
-            ? generateSessionTitle(firstUserText)
-            : `Session ${id.slice(0, 8)}`),
+        title: resolvedTitle,
+        titleSource: resolvedTitleSource,
+        titleModel: meta?.titleModel,
         status: 'active',
         messages,
         turnCount: messages.filter((m) => m.role === 'assistant').length,

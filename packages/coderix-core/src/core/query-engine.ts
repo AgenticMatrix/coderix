@@ -38,7 +38,11 @@ import {
   saveAgentTranscript,
   writeAgentMetadata,
 } from '../agents/agent-persistence.js';
-import { sessionDir as getSessionDir, sessionJsonlPath } from './session-store.js';
+import { sessionDir as getSessionDir, sessionJsonlPath, isCompactSummaryText } from './session-store.js';
+import {
+  summarizeSessionTitle,
+  type SessionTitleUpdate,
+} from './session-title.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../config.js';
 import { loadSettings, saveSettings } from '../config.js';
 import type { ToolResult } from '../tools/types.js';
@@ -108,7 +112,7 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title';
   data?: unknown;
   deferred?: DeferredPermission | DeferredQuestion;
 }
@@ -328,6 +332,10 @@ export class QueryEngine {
     this.isActive = true;
 
     const session = this.config.sessionManager.getActive();
+    // Capture this before any synthetic user messages (tool-result repair, team
+    // notifications, memory recall) are injected — only the real first prompt
+    // may derive a title.
+    const isFirstUserTurn = !session.messages.some((m) => m.role === 'user');
     this.abortController = new AbortController();
 
     // Handle orphaned tool_use blocks from prior interrupted turn
@@ -462,6 +470,13 @@ export class QueryEngine {
     }
 
     this.config.sessionManager.addMessage(userMessage);
+
+    if (isFirstUserTurn && !session.parentSessionId) {
+      const fallbackTitle = this.startSessionTitle(session, userInput);
+      if (fallbackTitle) {
+        yield { type: 'title', data: fallbackTitle };
+      }
+    }
 
     // Memory recall: search for relevant memories and inject as system context
     if (this.memoryConfig.enabled && this.memoryConfig.recallEnabled) {
@@ -655,6 +670,63 @@ export class QueryEngine {
       this.isActive = false;
       this.config.sessionManager.saveSession(session);
       this.messageQueue.drainNext();
+    }
+  }
+
+  /**
+   * Publish the deterministic fallback immediately, then refine it with the
+   * session's own model in the background. Never blocks the agent turn.
+   *
+   * The fallback is returned so the caller can also yield it through the
+   * AsyncGenerator; the provider result reaches clients via the event bus
+   * (and is persisted in meta.json for the next session-list load).
+   */
+  private startSessionTitle(session: Session, text: string): SessionTitleUpdate | null {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    if (isCompactSummaryText(trimmed)) return null;
+    // An explicit user title or a fork label is pinned; automatic derivation
+    // must not replace it.
+    if (session.titleSource === 'user' || session.titleSource === 'fork') return null;
+
+    const fallback = this.config.sessionManager.applyFallbackTitle(session.id, trimmed);
+    if (!fallback) return null;
+    const fallbackUpdate: SessionTitleUpdate = {
+      sessionId: session.id,
+      title: fallback,
+      source: 'fallback',
+    };
+    this.publishTitleUpdate(fallbackUpdate);
+
+    void (async () => {
+      try {
+        const title = await summarizeSessionTitle(this.config.callModel, trimmed);
+        if (!title) return;
+        const live = this.config.sessionManager.get(session.id);
+        // A user rename while the summary was in flight pins the title.
+        if (!live || live.titleSource === 'user') return;
+        const applied = this.config.sessionManager.setSessionTitle(
+          session.id,
+          title,
+          'provider',
+          live.model ?? this.config.model,
+        );
+        if (applied) {
+          this.publishTitleUpdate({ sessionId: session.id, title: applied, source: 'provider' });
+        }
+      } catch {
+        // Best-effort: keep the fallback title.
+      }
+    })();
+
+    return fallbackUpdate;
+  }
+
+  private publishTitleUpdate(update: SessionTitleUpdate): void {
+    try {
+      this.config.eventBus?.engineEvents.next({ type: 'title', data: update });
+    } catch {
+      // Best-effort notification; the title is already persisted.
     }
   }
 

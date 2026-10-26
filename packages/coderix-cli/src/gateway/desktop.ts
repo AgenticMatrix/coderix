@@ -720,16 +720,23 @@ export async function startDesktopGateway(
         case 'session.rename': {
           const id = (req.params?.session_id as string) ?? '';
           const title = (req.params?.title as string) ?? '';
-          const s = sessionManager.get(id);
-          if (s) {
-            s.title = title;
-            sessionManager.saveSession(s);
-            ws.send(makeResponse(req.id, { ok: true }));
-          } else {
+          if (!sessionManager.get(id)) {
             ws.send(
               makeResponse(req.id, undefined, {
                 code: 404,
                 message: 'Not found',
+              }),
+            );
+            break;
+          }
+          const applied = sessionManager.setSessionTitle(id, title, 'user');
+          if (applied) {
+            ws.send(makeResponse(req.id, { ok: true }));
+          } else {
+            ws.send(
+              makeResponse(req.id, undefined, {
+                code: 400,
+                message: 'Title must contain visible characters',
               }),
             );
           }

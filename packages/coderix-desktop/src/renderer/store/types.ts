@@ -17,6 +17,8 @@ export interface ChatMessage {
 export interface SessionSummary {
   id: string;
   title: string;
+  /** Where the title came from (default/fallback/provider/user). */
+  titleSource?: string;
   turnCount: number;
   model: string;
   updatedAt: number;

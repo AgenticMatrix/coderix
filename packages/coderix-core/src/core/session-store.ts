@@ -27,6 +27,12 @@ import type {
   TokenUsageSummary,
 } from './types.js';
 import { isTranscriptEntry } from './types.js';
+import {
+  fallbackSessionTitle,
+  isPlaceholderTitle,
+  normalizeSessionTitle,
+  type SessionTitleSource,
+} from './session-title.js';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -636,6 +642,10 @@ export function readTailMetadata(filePath: string): {
 
 export interface SessionMeta {
   title?: string;
+  /** Where {@link title} came from; absent on legacy rows. */
+  titleSource?: SessionTitleSource;
+  /** "provider/model" route that produced a provider title, when known. */
+  titleModel?: string;
   /** Last known context token count (input + cache_read) before the most recent LLM call.
    *  Persisted so session resume can pre-populate the context bar instead of showing 0. */
   contextLength?: number;
@@ -696,10 +706,31 @@ export function writeSessionMeta(
   sessionDir: string,
   meta: SessionMeta,
 ): Promise<void> {
+  return enqueueSessionMetaWrite(sessionDir, meta, true);
+}
+
+/**
+ * Write meta.json only if the session directory still exists.
+ *
+ * Used by background title refinement: a summary that resolves after the user
+ * deleted the session must not recreate the directory via `mkdir`.
+ */
+export function writeSessionMetaExisting(
+  sessionDir: string,
+  meta: SessionMeta,
+): Promise<void> {
+  return enqueueSessionMetaWrite(sessionDir, meta, false);
+}
+
+function enqueueSessionMetaWrite(
+  sessionDir: string,
+  meta: SessionMeta,
+  createDir: boolean,
+): Promise<void> {
   const prev = metaWriteQueues.get(sessionDir) ?? Promise.resolve();
   const next = prev
     .catch(() => {}) // keep the chain alive after a prior write failure
-    .then(() => writeSessionMetaUnsafe(sessionDir, meta));
+    .then(() => writeSessionMetaUnsafe(sessionDir, meta, createDir));
   metaWriteQueues.set(sessionDir, next);
   next
     .finally(() => {
@@ -713,6 +744,7 @@ export function writeSessionMeta(
 async function writeSessionMetaUnsafe(
   sessionDir: string,
   meta: SessionMeta,
+  createDir: boolean,
 ): Promise<void> {
   const metaPath = sessionMetaPath(sessionDir);
   const { mkdir, writeFile } = await import('node:fs/promises');
@@ -722,7 +754,11 @@ async function writeSessionMetaUnsafe(
   const existing = readSessionMeta(sessionDir);
   const merged = { ...existing, ...meta };
 
-  await mkdir(sessionDir, { recursive: true, mode: 0o700 });
+  if (createDir) {
+    await mkdir(sessionDir, { recursive: true, mode: 0o700 });
+  } else if (!existsSync(sessionDir)) {
+    return;
+  }
   await writeFile(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
 }
 
@@ -732,28 +768,26 @@ async function writeSessionMetaUnsafe(
 
 /**
  * Generate a session title from the first user message.
- * If the text is 30 characters or fewer, use it directly.
- * Otherwise returns a short placeholder (LLM refinement should follow).
+ * Returns the deterministic fallback: the leading words within the byte cap.
+ * LLM refinement is scheduled separately and replaces this when it succeeds.
  */
 export function generateSessionTitle(firstUserText: string): string {
-  const cleaned = firstUserText.trim();
-  if (cleaned.length <= 30) return cleaned;
-  return cleaned.slice(0, 10) + '...';
+  return fallbackSessionTitle(firstUserText);
 }
 
 /**
  * Check whether a session title is auto-generated and could benefit
- * from LLM-powered summarization.
+ * from LLM-powered summarization. Source-aware for new rows; legacy rows
+ * keep the old placeholder regex.
  */
-export function isAutoTitle(title: string): boolean {
-  return /^Session [0-9a-f]{8}$/.test(title) || /\.{3}$/.test(title);
+export function isAutoTitle(title: string, source?: SessionTitleSource): boolean {
+  return isPlaceholderTitle(title, source);
 }
 
 /**
  * Refine a session's title using an LLM summarizer.
- * Only refines if the first user text is longer than 30 characters
- * and the current title is still a placeholder (ends with '...').
- * Writes the result to meta.json.
+ * Skips titles that are already provider-generated or user-owned. Writes the
+ * result (and its source) to meta.json.
  * Returns the new title, or null if no refinement was needed.
  */
 export async function refineSessionTitle(
@@ -763,17 +797,17 @@ export async function refineSessionTitle(
   const dir = sessionDir(sessionId);
   const jsonlPath = sessionJsonlPath(dir);
   const { firstUserText } = readTailMetadata(jsonlPath);
-  if (!firstUserText || firstUserText.length <= 30) return null;
+  if (!firstUserText) return null;
 
-  // Skip if meta.json already has a non-placeholder title
   const meta = readSessionMeta(dir);
-  if (meta?.title && !isAutoTitle(meta.title)) return null;
+  if (meta?.titleSource === 'provider' || meta?.titleSource === 'user' || meta?.titleSource === 'fork') return null;
+  if (meta?.title && !isAutoTitle(meta.title, meta.titleSource)) return null;
 
   try {
     const title = await summarize(firstUserText);
-    const cleaned = title.trim().slice(0, 20);
+    const cleaned = normalizeSessionTitle(title);
     if (!cleaned) return null;
-    await writeSessionMeta(dir, { title: cleaned });
+    await writeSessionMeta(dir, { title: cleaned, titleSource: 'provider' });
     return cleaned;
   } catch {
     return null;
