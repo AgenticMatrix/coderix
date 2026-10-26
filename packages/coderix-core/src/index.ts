@@ -2,7 +2,7 @@
  * @coderix/core — Public API
  *
  * Framework-agnostic engine for AI coding assistants.
- * Consumers: @coderix/cli, @coderix/desktop, @coderix/vscode.
+ * Consumers: @coderix/cli, @coderix/desktop.
  */
 
 // ── Engine ─────────────────────────────────────────────────────────

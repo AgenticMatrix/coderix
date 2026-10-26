@@ -5,7 +5,7 @@
  * manages a QueryEngine, and writes raw events/responses to stdout.
  * Protocol: newline-delimited JSON (one JSON object per line)
  *
- * The VS Code extension handles bridge-to-webview translation client-side.
+ * Clients consume the raw event stream and handle their own presentation.
  */
 
 import { createInterface } from 'node:readline';
