@@ -85,7 +85,7 @@ export function SessionList({
     return <div className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">{t('session.loading')}</div>;
   }
 
-  const renderSession = (session: SessionSummary): React.ReactElement => {
+  const renderSession = (session: SessionSummary, indented = false): React.ReactElement => {
     const isActive = session.id === activeSessionId;
     return (
       <motion.button
@@ -98,7 +98,7 @@ export function SessionList({
         whileHover={isActive ? undefined : { backgroundColor: 'var(--color-bg-tertiary)' }}
         whileTap={{ scale: 0.98 }}
         className={`
-          w-full text-left px-3 py-2 cursor-pointer transition-colors duration-50 group
+          w-full text-left ${indented ? 'pl-[26px]' : 'pl-3'} pr-3 py-2 cursor-pointer transition-colors duration-50 group
           ${isActive ? 'bg-[var(--color-bg-quaternary)]' : ''}
           border-l-[3px]
           ${isActive ? 'border-l-[var(--color-brand)]' : 'border-l-transparent'}
@@ -180,15 +180,15 @@ export function SessionList({
                   </span>
                 </button>
                 {!isCollapsed && (
-                  <div className="pl-3.5">
-                    {group.sessions.map(renderSession)}
+                  <div>
+                    {group.sessions.map((s) => renderSession(s, true))}
                   </div>
                 )}
               </div>
             );
           })
         ) : (
-          filtered.map(renderSession)
+          filtered.map((s) => renderSession(s))
         )}
       </div>
       {/* Session context menu — right-click only, to avoid accidental deletes */}
