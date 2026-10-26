@@ -165,6 +165,8 @@ export const en: Record<TranslationKey, string> = {
   'session.groupByFlat': 'Single list',
   'session.groupByWorkspace': 'By workspace',
   'session.ungrouped': 'Ungrouped',
+  'session.origin.desktop': 'Desktop',
+  'session.origin.cli': 'CLI',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '{n} answers needed',

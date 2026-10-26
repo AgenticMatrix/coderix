@@ -56,7 +56,7 @@ async function createEngine(cwd: string): Promise<{ engine: QueryEngine; session
   const config = loadConfig();
   const callModel = createCallModel(config, config.model);
   const toolRegistry = createToolRegistry();
-  const sessionManager = new SessionManager();
+  const sessionManager = new SessionManager(false, 'cli');
   sessionManager.create({ cwd, model: config.model });
   const settings = loadSettings();
   const agentRuntime = await createAgentRuntime(cwd);

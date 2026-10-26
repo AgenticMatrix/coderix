@@ -50,6 +50,7 @@ import {
   rewriteTranscriptPreservingExternal,
   withSessionWriteLock,
   flushSessionWrites,
+  flushSessionMetaWrites,
 } from './session-store.js';
 import {
   fallbackSessionTitle,
@@ -178,6 +179,7 @@ export class SessionManager {
       id,
       title,
       titleSource,
+      origin: this.client === 'unknown' ? undefined : this.client,
       status: 'active',
       messages: [],
       turnCount: 0,
@@ -593,6 +595,7 @@ export class SessionManager {
       mcpServers: forked.mcpServers,
       agentType: forked.agentType,
       ...(forked.pluginId ? { pluginId: forked.pluginId } : {}),
+      ...(forked.origin ? { origin: forked.origin } : {}),
     }).catch(() => {});
 
     this.ensureLease(forked, false);
@@ -832,6 +835,7 @@ export class SessionManager {
             title: session.title,
           };
           if (session.titleSource) bootMeta.titleSource = session.titleSource;
+          if (session.origin) bootMeta.origin = session.origin;
           writeSessionMeta(dir, bootMeta).catch(() => {});
         }
 
@@ -1153,6 +1157,9 @@ export class SessionManager {
     // Also drain writes queued by per-session managers (desktop engines) that
     // share this session object but not this instance's pendingWrites set.
     await flushSessionWrites();
+    // Title/origin/model metadata is queued separately; drain it too so a
+    // client that reloads the list right after flush sees the latest meta.
+    await flushSessionMetaWrites();
   }
 
   /**
@@ -1233,6 +1240,7 @@ export class SessionManager {
       id,
       title,
       titleSource: meta?.titleSource,
+      origin: meta?.origin,
       titleModel: meta?.titleModel,
       status: 'active' as const,
       turnCount: approxTurns,
@@ -1275,6 +1283,7 @@ export class SessionManager {
       id: session.id,
       title: session.title,
       titleSource: session.titleSource,
+      origin: session.origin,
       titleModel: session.titleModel,
       status: session.status,
       turnCount: session.turnCount,
@@ -1615,6 +1624,7 @@ export class SessionManager {
         id,
         title: resolvedTitle,
         titleSource: resolvedTitleSource,
+        origin: meta?.origin,
         titleModel: meta?.titleModel,
         status: 'active',
         messages,

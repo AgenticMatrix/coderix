@@ -161,6 +161,8 @@ export const zh = {
   'session.groupByFlat': '单列表',
   'session.groupByWorkspace': '按工作区',
   'session.ungrouped': '未分组',
+  'session.origin.desktop': '桌面',
+  'session.origin.cli': 'CLI',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '需要你补充 {n} 个回答',

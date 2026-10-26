@@ -19,6 +19,8 @@ export interface SessionSummary {
   title: string;
   /** Where the title came from (default/fallback/provider/user). */
   titleSource?: string;
+  /** Client that created this session; absent on legacy rows. */
+  origin?: 'cli' | 'desktop' | 'unknown';
   turnCount: number;
   model: string;
   updatedAt: number;

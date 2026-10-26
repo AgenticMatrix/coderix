@@ -384,6 +384,7 @@ const coderixAPI = {
     }): Promise<{
       id: string;
       title: string;
+      origin?: 'cli' | 'desktop' | 'unknown';
       turnCount: number;
       cwd: string;
       agentType?: string;

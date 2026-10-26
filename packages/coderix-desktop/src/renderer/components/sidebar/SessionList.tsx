@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { List, Folder, ChevronRight } from 'lucide-react';
+import { List, Folder, ChevronRight, Monitor, Terminal } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore.js';
 import { useT, formatRelativeTime } from '../../i18n/index.js';
 import type { SessionSummary } from '../../store/types.js';
@@ -16,6 +16,40 @@ type ViewMode = 'flat' | 'workspace';
 /** Last path segment (folder name) — handles POSIX and Windows separators. */
 function folderName(p: string): string {
   return p.split(/[\\/]/).pop() || p;
+}
+
+/** Icon marking which client created the conversation shown in the row. */
+export function SessionOriginBadge({
+  origin,
+}: {
+  origin?: SessionSummary['origin'];
+}): React.ReactElement | null {
+  const t = useT();
+  if (origin === 'desktop') {
+    return (
+      <span
+        className="flex-shrink-0 inline-flex items-center text-[var(--color-blue)]"
+        title={t('session.origin.desktop')}
+        aria-label={t('session.origin.desktop')}
+        role="img"
+      >
+        <Monitor size={11} aria-hidden="true" />
+      </span>
+    );
+  }
+  if (origin === 'cli') {
+    return (
+      <span
+        className="flex-shrink-0 inline-flex items-center text-[var(--color-purple)]"
+        title={t('session.origin.cli')}
+        aria-label={t('session.origin.cli')}
+        role="img"
+      >
+        <Terminal size={11} aria-hidden="true" />
+      </span>
+    );
+  }
+  return null;
 }
 
 export function SessionList({
@@ -120,6 +154,9 @@ export function SessionList({
               <span>{formatRelativeTime(session.updatedAt)}</span>
               <span>·</span>
               <span>{t('session.turns', { n: session.turnCount })}</span>
+              <span className="ml-auto inline-flex items-center">
+                <SessionOriginBadge origin={session.origin} />
+              </span>
             </div>
           </div>
         </div>

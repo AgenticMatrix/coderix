@@ -35,6 +35,7 @@ type RawSessionInfo = {
   id: string;
   title: string;
   titleSource?: string;
+  origin?: 'cli' | 'desktop' | 'unknown';
   turnCount: number;
   model: string;
   updatedAt: number;
@@ -54,6 +55,7 @@ function normalizeSession(s: RawSessionInfo): SessionSummary {
     id: s.id,
     title: s.title,
     ...(s.titleSource ? { titleSource: s.titleSource } : {}),
+    ...(s.origin ? { origin: s.origin } : {}),
     turnCount: s.turnCount,
     model: s.model,
     updatedAt: s.updatedAt,
@@ -173,6 +175,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       const newSession: SessionSummary = {
         id: result.id,
         title: result.title,
+        ...(result.origin ? { origin: result.origin } : {}),
         turnCount: result.turnCount,
         model: '',
         updatedAt: Date.now(),
@@ -200,12 +203,18 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const result = await ipcForkSession(id);
-      const newSession = result as { id: string; title: string; turnCount?: number };
+      const newSession = result as {
+        id: string;
+        title: string;
+        origin?: 'cli' | 'desktop' | 'unknown';
+        turnCount?: number;
+      };
       set((state) => ({
         sessions: [
           {
             id: newSession.id,
             title: newSession.title ?? `${state.sessions.find((s) => s.id === id)?.title ?? ''} (fork)`,
+            ...(newSession.origin ? { origin: newSession.origin } : {}),
             // A fork copies the parent's transcript, so it starts with its turns.
             turnCount: newSession.turnCount ?? 0,
             model: '',

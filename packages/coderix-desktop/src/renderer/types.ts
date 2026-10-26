@@ -85,6 +85,8 @@ export interface QuestionRequest {
 export interface SessionInfo {
   id: string;
   title: string;
+  /** Client that created this session; absent on legacy rows. */
+  origin?: 'cli' | 'desktop' | 'unknown';
   turnCount: number;
   model: string;
   updatedAt: number;
