@@ -994,6 +994,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   const contextTokens = last
                     ? (last.input_tokens ?? 0) + (last.output_tokens ?? 0) + (last.cache_read_input_tokens ?? 0)
                     : 0;
+                  // Persist the footprint alongside the session totals. The
+                  // in-process engine writes this from its own turn loop; the
+                  // SDK path has to do it here, otherwise a reloaded session
+                  // finds no `contextTokens` in meta.json and the ctx gauge reads
+                  // 0 until the next turn completes.
+                  if (last) {
+                    const session = sessionManager.get(streamSessionId);
+                    if (session) session.contextTokens = contextTokens;
+                    writeSessionMeta(sessionDir(streamSessionId), { contextTokens }).catch(() => {});
+                  }
                   safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
                     inputTokens,
                     outputTokens,
