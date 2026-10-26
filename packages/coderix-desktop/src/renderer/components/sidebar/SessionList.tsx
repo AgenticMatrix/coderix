@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2, List, Folder, ChevronRight } from 'lucide-react';
+import { List, Folder, ChevronRight } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore.js';
 import { useT, formatRelativeTime } from '../../i18n/index.js';
 import type { SessionSummary } from '../../store/types.js';
@@ -30,6 +30,7 @@ export function SessionList({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('flat');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const toggleGroup = (key: string): void => {
     setCollapsedGroups((prev) => {
@@ -40,8 +41,7 @@ export function SessionList({
     });
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const handleDelete = async (id: string) => {
     setDeleting(id);
     try {
       // deleteSession already removes the entry optimistically.
@@ -91,6 +91,10 @@ export function SessionList({
       <motion.button
         key={session.id}
         onClick={() => onSessionSelect?.(session.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenu({ id: session.id, x: e.clientX, y: e.clientY });
+        }}
         whileHover={{ backgroundColor: 'var(--color-bg-tertiary)' }}
         whileTap={{ scale: 0.98 }}
         className={`
@@ -115,13 +119,6 @@ export function SessionList({
               <span>{t('session.turns', { n: session.turnCount })}</span>
             </div>
           </div>
-          <button
-            onClick={(e) => handleDelete(e, session.id)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--color-bg-primary)]"
-            title={t('session.delete')}
-          >
-            <Trash2 size={12} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)]" />
-          </button>
         </div>
       </motion.button>
     );
@@ -194,6 +191,28 @@ export function SessionList({
           filtered.map(renderSession)
         )}
       </div>
+      {/* Session context menu — right-click only, to avoid accidental deletes */}
+      {menu && (
+        <>
+          <div
+            className="fixed inset-0 z-50"
+            onClick={() => setMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}
+          />
+          <div
+            className="fixed z-50 rounded-[var(--radius-md)] bg-[var(--color-bg-primary)] border border-[var(--color-separator)] shadow-lg py-1 w-40"
+            style={{ left: menu.x, top: menu.y }}
+          >
+            <button
+              type="button"
+              onClick={() => { void handleDelete(menu.id); setMenu(null); }}
+              className="w-full text-left px-3 py-1.5 text-xs text-[var(--color-danger)] hover:bg-[var(--color-bg-tertiary)]"
+            >
+              {t('session.delete')}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
