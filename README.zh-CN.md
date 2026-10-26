@@ -23,7 +23,7 @@
   </details>
 </div>
 
-Coderix 是一个 AI 编程助手，可在终端或桌面应用中使用。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。同一套核心引擎驱动多个前端：Ink/React 终端界面（TUI）、Electron 桌面应用（React DOM + Monaco + xterm）、VS Code 扩展，以及 TypeScript / Python SDK。
+Coderix 是一个 AI 编程助手，可在终端或桌面应用中使用。它能够读取、写入、编辑文件，执行 Shell 命令，搜索代码等等——全部通过自然语言对话完成。同一套核心引擎驱动多个前端：Ink/React 终端界面（TUI）、Electron 桌面应用（React DOM + Monaco + xterm），以及 TypeScript / Python SDK。
 
 ---
 
@@ -47,7 +47,6 @@ Coderix 是一个 [pnpm](https://pnpm.io) monorepo：
 | `packages/coderix-cli` | CLI 入口 + Ink/React 终端界面 |
 | `packages/coderix-tui` | 可复用的终端 UI 原语 |
 | `packages/coderix-desktop` | Electron 桌面应用（React DOM + Monaco + xterm） |
-| `packages/coderix-vscode` | VS Code 扩展 |
 | `packages/coderix-sdk` | TypeScript SDK |
 | `packages/coderix-sdk-python` | Python SDK |
 
@@ -110,7 +109,6 @@ Coderix 提供多种界面，共用同一套核心引擎：
 |---|---|
 | `pnpm run dev:cli` | **TUI 版** —— 终端界面（Ink/React） |
 | `pnpm run dev:desk` | **桌面版** —— Electron 应用（React DOM） |
-| `pnpm run dev:vscode` | **VS Code 扩展** |
 
 ```bash
 # TUI 版（终端界面）
@@ -121,12 +119,9 @@ pnpm run dev:desk
 
 # 桌面版（一键启动，自动释放 5173 端口）
 ./start_desk.sh
-
-# VS Code 扩展
-pnpm run dev:vscode
 ```
 
-其他常用脚本：`pnpm run build`（core + cli）、`pnpm run build:all`（含 vscode）、`pnpm run typecheck`、`pnpm test`。
+其他常用脚本：`pnpm run build`（core + cli）、`pnpm run typecheck`、`pnpm test`。
 
 ### 配置
 
@@ -168,7 +163,6 @@ coderix -m "deepseek/deepseek-v4-pro"
 - **会话管理** — 检查点保存、恢复（`--resume` / `--continue`）、分支会话
 - **模型选择器** — 交互式终端模型选择（`coderix --model` / `coderix setup`）
 - **桌面应用** — Electron 桌面客户端，内置 Monaco 编辑器、xterm 终端和源代码管理
-- **VS Code 扩展** — 在编辑器中使用 Coderix
 - **SDK** — 提供 TypeScript 与 Python SDK，可编程调用
 
 ---

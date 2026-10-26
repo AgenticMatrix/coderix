@@ -23,7 +23,7 @@
   </details>
 </div>
 
-Coderix is an AI coding agent that runs in your terminal or as a desktop app. It can read, write, and edit files, execute shell commands, search code, and more — all through natural-language conversation. One core engine powers several front ends: an Ink/React terminal UI (TUI), an Electron desktop app (React DOM + Monaco + xterm), a VS Code extension, and TypeScript / Python SDKs.
+Coderix is an AI coding agent that runs in your terminal or as a desktop app. It can read, write, and edit files, execute shell commands, search code, and more — all through natural-language conversation. One core engine powers several front ends: an Ink/React terminal UI (TUI), an Electron desktop app (React DOM + Monaco + xterm), and TypeScript / Python SDKs.
 
 ---
 
@@ -47,7 +47,6 @@ Coderix is a [pnpm](https://pnpm.io) monorepo:
 | `packages/coderix-cli` | CLI entry point + Ink/React TUI |
 | `packages/coderix-tui` | Reusable terminal-UI primitives |
 | `packages/coderix-desktop` | Electron desktop app (React DOM + Monaco + xterm) |
-| `packages/coderix-vscode` | VS Code extension |
 | `packages/coderix-sdk` | TypeScript SDK |
 | `packages/coderix-sdk-python` | Python SDK |
 
@@ -111,7 +110,6 @@ Coderix ships several interfaces backed by the same core engine:
 |---|---|
 | `pnpm run dev:cli` | **TUI** — the terminal interface (Ink/React) |
 | `pnpm run dev:desk` | **Desktop** — the Electron app (React DOM) |
-| `pnpm run dev:vscode` | **VS Code** — the extension |
 
 ```bash
 # TUI (terminal) version
@@ -122,12 +120,9 @@ pnpm run dev:desk
 
 # Desktop — one-click launcher, auto-frees port 5173
 ./start_desk.sh
-
-# VS Code extension
-pnpm run dev:vscode
 ```
 
-Other useful scripts: `pnpm run build` (core + cli), `pnpm run build:all` (+ vscode), `pnpm run typecheck`, `pnpm test`.
+Other useful scripts: `pnpm run build` (core + cli), `pnpm run typecheck`, `pnpm test`.
 
 ### Configure
 
@@ -169,7 +164,6 @@ coderix -m "deepseek/deepseek-v4-pro"
 - **Session Management** — Checkpoint, resume (`--resume` / `--continue`), fork sessions
 - **Model Picker** — Interactive terminal model selection (`coderix --model` / `coderix setup`)
 - **Desktop App** — Electron desktop client with Monaco editor, xterm terminal, and source control
-- **VS Code Extension** — Coderix inside your editor
 - **SDKs** — TypeScript and Python SDKs for programmatic access
 
 ---

@@ -18,7 +18,6 @@ function getGuideSystemPrompt(): string {
   - hooks (running commands before or after)
   - custom skills and slash commands
   - configuring MCP servers
-  - IDE integrations (VS Code, JetBrains)
   - settings files and configuration (.coderix/settings.json)
   - keyboard shortcuts and hotkeys
   - sub-agents, teams, and plugins
