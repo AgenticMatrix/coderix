@@ -24,6 +24,9 @@
   --color-bg-secondary:          #F4F2EB;
   --color-bg-tertiary:           #E9E6DC;
   --color-bg-quaternary:         #DBD7CD;
+  /* Selected conversation row — one step darker than the quaternary gray so
+     it stands out from the hover state. */
+  --color-session-active:        #CFC9BA;
 
   /* Glass / Vibrancy backgrounds (solid warm tones) */
   --glass-bg-sidebar:            #F4F2EB;
@@ -134,6 +137,9 @@
   --color-bg-secondary:          #2D2D2A;
   --color-bg-tertiary:           #383733;
   --color-bg-quaternary:         #454440;
+  /* Selected conversation row — lighter than the quaternary gray so it reads
+     as a raised selection against the dark sidebar. */
+  --color-session-active:        #54524A;
 
   /* Glass / Vibrancy */
   --glass-bg-sidebar:            #2D2D2A;
