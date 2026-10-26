@@ -95,11 +95,14 @@ export function SessionList({
           e.preventDefault();
           setMenu({ id: session.id, x: e.clientX, y: e.clientY });
         }}
-        whileHover={isActive ? undefined : { backgroundColor: 'var(--color-bg-tertiary)' }}
         whileTap={{ scale: 0.98 }}
         className={`
           w-full text-left ${indented ? 'pl-[26px]' : 'pl-3'} pr-3 py-2 cursor-pointer transition-colors duration-50 group
-          ${isActive ? 'bg-[var(--color-bg-quaternary)]' : ''}
+          ${
+            isActive
+              ? 'bg-[var(--color-session-active)]'
+              : 'hover:bg-[var(--color-bg-tertiary)]'
+          }
           border-l-[3px]
           ${isActive ? 'border-l-[var(--color-brand)]' : 'border-l-transparent'}
         `}
