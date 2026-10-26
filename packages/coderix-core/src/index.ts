@@ -41,6 +41,30 @@ export {
 export type { EntryBatcher } from './core/session-store.js';
 export type { SessionMeta } from './core/session-store.js';
 export {
+  TITLE_FALLBACK_MAX_WORDS,
+  TITLE_FALLBACK_MAX_BYTES,
+  TITLE_MAX_BYTES,
+  TITLE_MAX_INPUT_BYTES,
+  TITLE_MAX_OUTPUT_TOKENS,
+  TITLE_TIMEOUT_MS,
+  TITLE_TARGET_WORDS,
+  TITLE_TARGET_CJK_CHARACTERS,
+  cleanTitleText,
+  truncateTitleUtf8,
+  normalizeSessionTitle,
+  fallbackSessionTitle,
+  isPlaceholderTitle,
+  titleSystemPrompt,
+  frameTitleInput,
+  summarizeSessionTitle,
+} from './core/session-title.js';
+export type {
+  SessionTitleSource,
+  SessionTitleUpdate,
+  TitleCallModel,
+  SummarizeSessionTitleOptions,
+} from './core/session-title.js';
+export {
   acquireLeaseSync,
   inspectLease,
   readLease,

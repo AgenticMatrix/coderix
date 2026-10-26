@@ -4,6 +4,8 @@
  * Only the types actually imported by query-engine.ts and query.ts are included.
  */
 
+import type { SessionTitleSource } from './session-title.js';
+
 // ── Message types ─────────────────────────────────────────────────────
 
 export interface ContentBlock {
@@ -470,6 +472,10 @@ export interface SessionFilter {
 export interface SessionSummary {
   id: string;
   title: string;
+  /** Where the title came from; absent on legacy rows. */
+  titleSource?: SessionTitleSource;
+  /** "provider/model" route that produced a provider title, when known. */
+  titleModel?: string;
   status: SessionStatus;
   turnCount: number;
   totalCost: number;
@@ -495,6 +501,10 @@ export interface SessionSummary {
 export interface Session {
   id: string;
   title: string;
+  /** Where the title came from; absent on legacy rows. */
+  titleSource?: SessionTitleSource;
+  /** "provider/model" route that produced a provider title, when known. */
+  titleModel?: string;
   status: SessionStatus;
   messages: Message[];
   turnCount: number;

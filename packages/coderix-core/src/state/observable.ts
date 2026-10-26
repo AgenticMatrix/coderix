@@ -27,7 +27,7 @@ export interface Subject<T> extends Observer<T>, Observable<T> {}
 // ── Event types ─────────────────────────────────────────────────────────
 
 export interface EngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title';
   data?: unknown;
   deferred?: unknown;
 }

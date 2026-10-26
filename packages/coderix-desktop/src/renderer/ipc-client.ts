@@ -913,6 +913,21 @@ export function onAgentEvent(callback: (event: AgentLifecycleEvent) => void): ()
   });
 }
 
+export interface SessionTitleUpdate {
+  sessionId: string;
+  title: string;
+  source?: string;
+}
+
+/** Subscribe to engine title updates (fallback + provider refinement). */
+export function onSessionTitleUpdated(callback: (update: SessionTitleUpdate) => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onSessionTitleUpdated(callback);
+}
+
 /** Load a sub-agent's full conversation transcript (core Message[]) from disk. */
 export function loadSubagentTranscript(
   agentId: string,

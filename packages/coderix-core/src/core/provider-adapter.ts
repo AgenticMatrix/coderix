@@ -183,7 +183,7 @@ export function createCallModelFromClient(
   defaultThinking?: Anthropic.MessageCreateParams['thinking'],
 ): (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage> {
   return async function* (params: CallModelParams) {
-    const { system, messages, tools, signal, cacheControl, thinking: thinkingConfig } = params;
+    const { system, messages, tools, signal, cacheControl, thinking: thinkingConfig, maxTokens } = params;
 
     // Convert messages to Anthropic format
     const { system: extraSystem, messages: apiMessages } =
@@ -214,7 +214,7 @@ export function createCallModelFromClient(
     try {
       const stream = await client.messages.create({
         model,
-        max_tokens: 65536,
+        max_tokens: maxTokens ?? 65536,
         system: systemParam,
         messages: apiMessages,
         ...(anthropicTools?.length ? { tools: anthropicTools } : {}),

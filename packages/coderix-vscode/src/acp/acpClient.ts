@@ -328,7 +328,8 @@ export class AcpClient {
       this.send({ type: 'messageComplete', text: this.accumulatedText, sessionId: sid });
       this.currentMessageId = '';
       this.accumulatedText = '';
-      // Set session title from first user input
+      // External ACP sessions have no QueryEngine title pipeline. This label is
+      // display-only for the webview and is never persisted to the session.
       if (!this.titleSent) {
         this.titleSent = true;
         const title = text.length > 50 ? text.slice(0, 50).replace(/[\r\n]+/g, ' ') + '...' : text.replace(/[\r\n]+/g, ' ');

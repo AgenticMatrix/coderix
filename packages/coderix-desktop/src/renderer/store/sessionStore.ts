@@ -24,6 +24,8 @@ export interface SessionState {
   deleteSession: (id: string) => Promise<void>;
   /** Patch a conversation's workspace locally, without reloading the list. */
   setSessionWorkDir: (id: string, workDir: string) => void;
+  /** Patch a conversation's title from an engine title event. */
+  applyTitleUpdate: (id: string, title: string, source?: string) => void;
   setCurrentSessionId: (id: string | null) => void;
   setError: (error: string | null) => void;
 }
@@ -32,6 +34,7 @@ export interface SessionState {
 type RawSessionInfo = {
   id: string;
   title: string;
+  titleSource?: string;
   turnCount: number;
   model: string;
   updatedAt: number;
@@ -50,6 +53,7 @@ function normalizeSession(s: RawSessionInfo): SessionSummary {
   return {
     id: s.id,
     title: s.title,
+    ...(s.titleSource ? { titleSource: s.titleSource } : {}),
     turnCount: s.turnCount,
     model: s.model,
     updatedAt: s.updatedAt,
@@ -242,6 +246,16 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     // with no transcript file yet) untouched.
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === id ? { ...s, workDir } : s)),
+    }));
+  },
+
+  applyTitleUpdate: (id: string, title: string, source?: string) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) => (
+        s.id === id
+          ? { ...s, title, titleSource: source, displayTitle: title }
+          : s
+      )),
     }));
   },
 

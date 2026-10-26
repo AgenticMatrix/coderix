@@ -114,4 +114,20 @@ describe('sessionStore', () => {
     expect(sessions.find((s) => s.id === 'a')?.workDir).toBe('/new/workspace');
     expect(sessions.find((s) => s.id === 'b')?.workDir).toBe('/other');
   });
+
+  it('applyTitleUpdate patches only the matching session', () => {
+    useSessionStore.setState({
+      sessions: [
+        sessionInfo({ id: 'a', title: '旧标题' }),
+        sessionInfo({ id: 'b', title: '另一个会话' }),
+      ],
+    });
+
+    useSessionStore.getState().applyTitleUpdate('a', '登录鉴权排查', 'provider');
+
+    const sessions = useSessionStore.getState().sessions;
+    expect(sessions.find((s) => s.id === 'a')?.title).toBe('登录鉴权排查');
+    expect(sessions.find((s) => s.id === 'a')?.titleSource).toBe('provider');
+    expect(sessions.find((s) => s.id === 'b')?.title).toBe('另一个会话');
+  });
 });

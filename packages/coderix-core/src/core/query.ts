@@ -112,6 +112,8 @@ export interface CallModelParams {
   messages: Message[];
   tools: unknown[];
   signal: AbortSignal;
+  /** Optional per-call output-token cap (defaults to the adapter's 65536). */
+  maxTokens?: number;
   /** When true, annotate the system prompt with cache_control for Anthropic prompt caching. */
   cacheControl?: boolean;
   /** Optional thinking config override. When omitted, `createCallModel` resolves a
