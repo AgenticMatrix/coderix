@@ -855,6 +855,7 @@ export function onTokenUsage(callback: (stats: TokenUsage, sessionId?: string) =
       totalCost?: number;
       currency?: string;
       contextTokens?: number;
+      contextOnly?: boolean;
       sessionId?: string;
     };
 
@@ -866,6 +867,7 @@ export function onTokenUsage(callback: (stats: TokenUsage, sessionId?: string) =
       cost: raw.totalCost,
       currency: raw.currency,
       contextTokens: raw.contextTokens,
+      contextOnly: raw.contextOnly,
     }, raw.sessionId);
   });
 }

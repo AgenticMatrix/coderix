@@ -433,6 +433,8 @@ export interface ResolvedModel {
   inputPrice?: number;
   outputPrice?: number;
   cacheReadPrice?: number;
+  /** Context window size declared by the model entry (undefined when unset). */
+  maxContext?: number;
 }
 
 /**
@@ -473,6 +475,7 @@ export function resolveModelByName(name: string): ResolvedModel | undefined {
       inputPrice: price?.input,
       outputPrice: price?.output,
       cacheReadPrice: price?.cache_read_input,
+      maxContext: price?.max_context,
     };
   };
 

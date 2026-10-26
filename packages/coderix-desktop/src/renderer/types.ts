@@ -46,6 +46,8 @@ export interface TokenUsage {
   currency?: string;
   /** Current context footprint (last call's input + output + cache_read). */
   contextTokens?: number;
+  /** The update only refreshes `contextTokens`; billable totals are unchanged. */
+  contextOnly?: boolean;
 }
 
 // ── Permission Types ──────────────────────────────────────
