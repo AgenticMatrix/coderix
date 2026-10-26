@@ -1177,6 +1177,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     return {
       id: session.id,
       title: session.title,
+      origin: session.origin,
       turnCount: session.turnCount,
       cwd: session.cwd,
       agentType: session.agentType,
@@ -1306,7 +1307,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.SESSION_FORK, async (_event, sessionId: string) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
     const forked = sessionManager.fork({ sessionId });
-    return { id: forked.id, title: forked.title, turnCount: forked.turnCount };
+    return { id: forked.id, title: forked.title, origin: forked.origin, turnCount: forked.turnCount };
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, async (_event, sessionId: string) => {

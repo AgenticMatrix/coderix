@@ -5,6 +5,7 @@
  */
 
 import type { SessionTitleSource } from './session-title.js';
+import type { SessionClient } from './session-lease.js';
 
 // ── Message types ─────────────────────────────────────────────────────
 
@@ -474,6 +475,8 @@ export interface SessionSummary {
   title: string;
   /** Where the title came from; absent on legacy rows. */
   titleSource?: SessionTitleSource;
+  /** Client that created this session; absent on legacy rows. */
+  origin?: SessionClient;
   /** "provider/model" route that produced a provider title, when known. */
   titleModel?: string;
   status: SessionStatus;
@@ -503,6 +506,8 @@ export interface Session {
   title: string;
   /** Where the title came from; absent on legacy rows. */
   titleSource?: SessionTitleSource;
+  /** Client that created this session; absent on legacy rows. */
+  origin?: SessionClient;
   /** "provider/model" route that produced a provider title, when known. */
   titleModel?: string;
   status: SessionStatus;

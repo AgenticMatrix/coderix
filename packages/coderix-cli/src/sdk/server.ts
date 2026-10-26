@@ -106,7 +106,7 @@ export async function startSdkServer(): Promise<void> {
 
   const callModel = createCallModel(config, config.model);
   const toolRegistry = buildToolRegistry();
-  const sessionManager = new SessionManager();
+  const sessionManager = new SessionManager(false, 'cli');
   sessionManager.create({ cwd: process.cwd(), model: config.model });
   const sessionId = sessionManager.getActive()?.id ?? '';
 

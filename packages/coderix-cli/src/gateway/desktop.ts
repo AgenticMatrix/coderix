@@ -313,7 +313,7 @@ export async function startDesktopGateway(
 
   const callModel = createCallModel(config, config.model);
   const toolRegistry = buildToolRegistry();
-  const sessionManager = new SessionManager();
+  const sessionManager = new SessionManager(false, 'desktop');
   sessionManager.create({ cwd, model: config.model });
 
   const settings = loadSettings();

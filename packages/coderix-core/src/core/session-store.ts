@@ -33,6 +33,7 @@ import {
   normalizeSessionTitle,
   type SessionTitleSource,
 } from './session-title.js';
+import type { SessionClient } from './session-lease.js';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -644,6 +645,8 @@ export interface SessionMeta {
   title?: string;
   /** Where {@link title} came from; absent on legacy rows. */
   titleSource?: SessionTitleSource;
+  /** Client that created this session; absent on legacy rows. */
+  origin?: SessionClient;
   /** "provider/model" route that produced a provider title, when known. */
   titleModel?: string;
   /** Last known context token count (input + cache_read) before the most recent LLM call.
@@ -739,6 +742,21 @@ function enqueueSessionMetaWrite(
     })
     .catch(() => {});
   return next;
+}
+
+/**
+ * Wait until every queued meta.json write (in this process) has landed.
+ * Queues are module-level, so this also drains writes issued by per-session
+ * SessionManager instances that share the same session object.
+ */
+export async function flushSessionMetaWrites(): Promise<void> {
+  // New writes can be enqueued while we await; loop until the map settles.
+  for (let pass = 0; pass < 10; pass++) {
+    const pending = Array.from(metaWriteQueues.values());
+    if (pending.length === 0) return;
+    await Promise.allSettled(pending);
+    if (metaWriteQueues.size === 0) return;
+  }
 }
 
 async function writeSessionMetaUnsafe(
