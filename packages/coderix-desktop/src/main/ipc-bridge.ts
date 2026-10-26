@@ -410,6 +410,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         ? resolveModelByName(activeSessionModel)
         : undefined;
 
+    // The claude-code engine needs the model's configured context window to
+    // size its auto-compact threshold; fall back to the global default model's
+    // window when the session's own entry doesn't declare one.
+    const sessionModelMaxContext = sessionResolved?.maxContext ?? 0;
+    const sessionMaxContext =
+      sessionModelMaxContext > 0 ? sessionModelMaxContext : activeConfig.maxContext;
+
     // Remember the currency this session's prices are denominated in so a
     // reloaded session formats its persisted cost with the right symbol
     // instead of silently falling back to USD.
@@ -446,6 +453,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             baseUrl: sessionResolved?.baseUrl ?? activeConfig.baseUrl,
             apiKey: sessionResolved?.apiKey ?? activeConfig.apiKey,
             protocol: sessionResolved?.protocol ?? activeConfig.protocol,
+            maxContext: sessionMaxContext,
+            compactThreshold: activeConfig.compactThreshold,
+            autoCompactEnabled: activeConfig.autoCompactEnabled,
             abortController: controller,
             skills: effectiveSkills,
             customSkillDirs: loadSettings().custom_skill_dirs ?? [],
