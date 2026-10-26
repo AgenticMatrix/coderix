@@ -611,6 +611,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       let claudeAssistantBlocks: ContentBlock[] = [];
       const claudeBlockIndexByStreamIndex = new Map<number, number>();
       const claudeRawInputByStreamIndex = new Map<number, string>();
+      // Last context footprint pushed from a per-call `assistant` message, so
+      // the gauge isn't spammed with identical updates (the SDK emits one
+      // assistant message per content block, all carrying the same usage).
+      let lastContextFootprint = -1;
 
       // Sub-agent trajectory accumulation (claude-code engine only): keyed by the
       // parent Task/Agent tool_use id (`parent_tool_use_id`). Messages produced
@@ -722,6 +726,32 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 }
                 forwardStreamEvent(mainWindow, msg.event, streamSessionId);
               } else if (msg.type === 'assistant' && msg.message) {
+                // Live context footprint. Each SDK `assistant` message carries
+                // the usage of the API call that produced it, so the gauge can
+                // track the *current* context while a long turn is still
+                // streaming — and drop as soon as a compaction lands — instead
+                // of waiting for the turn's terminal `result`. Marked
+                // `contextOnly` so the renderer replaces the reading without
+                // touching the billable session totals accumulated at `result`.
+                if (engine === 'claude-code') {
+                  const callUsage = msg.message.usage as
+                    | { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number }
+                    | undefined;
+                  if (callUsage) {
+                    const footprint =
+                      (callUsage.input_tokens ?? 0) +
+                      (callUsage.output_tokens ?? 0) +
+                      (callUsage.cache_read_input_tokens ?? 0);
+                    if (footprint > 0 && footprint !== lastContextFootprint) {
+                      lastContextFootprint = footprint;
+                      safeSend(mainWindow, IPC_CHANNELS.STATE_TOKEN_USAGE, {
+                        contextTokens: footprint,
+                        contextOnly: true,
+                        sessionId: streamSessionId,
+                      });
+                    }
+                  }
+                }
                 // The `message_stop` stream event (forwarded above) is the
                 // authoritative end-of-turn signal, but it is not the only one:
                 // for the claude-code engine we also fall back to STREAM_DONE
@@ -991,15 +1021,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   // Context footprint is the *last turn's* per-call usage only —
                   // never the accumulated session totals (accumulated cache-read
                   // reaches tens of millions of tokens and is not "context").
+                  // Undefined (not 0) when the turn reported no per-call usage:
+                  // the renderer keeps whatever footprint it already has instead
+                  // of blanking the gauge to 0.
                   const contextTokens = last
                     ? (last.input_tokens ?? 0) + (last.output_tokens ?? 0) + (last.cache_read_input_tokens ?? 0)
-                    : 0;
+                    : undefined;
                   // Persist the footprint alongside the session totals. The
                   // in-process engine writes this from its own turn loop; the
                   // SDK path has to do it here, otherwise a reloaded session
                   // finds no `contextTokens` in meta.json and the ctx gauge reads
                   // 0 until the next turn completes.
-                  if (last) {
+                  if (contextTokens !== undefined) {
                     const session = sessionManager.get(streamSessionId);
                     if (session) session.contextTokens = contextTokens;
                     writeSessionMeta(sessionDir(streamSessionId), { contextTokens }).catch(() => {});

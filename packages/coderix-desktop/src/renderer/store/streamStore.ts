@@ -65,8 +65,13 @@ function emptyTokenUsage(): AggregatedTokenUsage {
 
 function accumulateTokenUsage(
   acc: AggregatedTokenUsage,
-  stats: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number; currency?: string; contextTokens?: number },
+  stats: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; cost?: number; currency?: string; contextTokens?: number; contextOnly?: boolean },
 ): AggregatedTokenUsage {
+  // A live context-footprint update (one per model call) carries no billable
+  // delta — replace the gauge reading and leave the session totals untouched.
+  if (stats.contextOnly) {
+    return { ...acc, contextTokens: stats.contextTokens ?? acc.contextTokens ?? 0 };
+  }
   return {
     inputTokens: (acc.inputTokens ?? 0) + (stats.inputTokens ?? 0),
     outputTokens: (acc.outputTokens ?? 0) + (stats.outputTokens ?? 0),

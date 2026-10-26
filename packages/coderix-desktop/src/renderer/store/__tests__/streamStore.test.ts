@@ -27,11 +27,25 @@ type BlockCb = (block: StreamBlock) => void;
 type DoneCb = (stopReason?: string, sessionId?: string) => void;
 type TurnDoneCb = (sessionId?: string, epoch?: number) => void;
 type ErrorCb = (error: string, code?: string, sessionId?: string, epoch?: number) => void;
+type TokenCb = (
+  stats: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    cost?: number;
+    currency?: string;
+    contextTokens?: number;
+    contextOnly?: boolean;
+  },
+  sessionId?: string,
+) => void;
 
 let blockCb: BlockCb;
 let doneCb: DoneCb;
 let turnDoneCb: TurnDoneCb;
 let errorCb: ErrorCb;
+let tokenCb: TokenCb;
 
 function flushFrame(): void {
   vi.advanceTimersByTime(1);
@@ -62,7 +76,10 @@ describe('streamStore turn lifecycle', () => {
       errorCb = cb as ErrorCb;
       return () => {};
     });
-    vi.mocked(onTokenUsage).mockImplementation(() => () => {});
+    vi.mocked(onTokenUsage).mockImplementation((cb) => {
+      tokenCb = cb as TokenCb;
+      return () => {};
+    });
 
     useChatStore.setState({
       messages: [],
@@ -168,6 +185,24 @@ describe('streamStore turn lifecycle', () => {
 
     vi.advanceTimersByTime(5000);
     expect(useChatStore.getState().isStreaming).toBe(true);
+  });
+
+  it('adopts a live context footprint without touching billable totals', () => {
+    tokenCb({ inputTokens: 10, outputTokens: 5, contextTokens: 42000 }, 's1');
+    expect(useStreamStore.getState().tokenUsage.contextTokens).toBe(42000);
+    expect(useStreamStore.getState().tokenUsage.inputTokens).toBe(10);
+
+    tokenCb({ contextTokens: 48000, contextOnly: true }, 's1');
+    const usage = useStreamStore.getState().tokenUsage;
+    expect(usage.contextTokens).toBe(48000);
+    expect(usage.inputTokens).toBe(10);
+    expect(usage.outputTokens).toBe(5);
+  });
+
+  it('keeps the last footprint when a turn reports none', () => {
+    tokenCb({ contextTokens: 42000, contextOnly: true }, 's1');
+    tokenCb({ inputTokens: 7, outputTokens: 1 }, 's1');
+    expect(useStreamStore.getState().tokenUsage.contextTokens).toBe(42000);
   });
 
   it('clears streaming on an interrupt even for a background session', () => {
