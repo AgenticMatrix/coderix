@@ -921,11 +921,21 @@ export interface SessionTitleUpdate {
 
 /** Subscribe to engine title updates (fallback + provider refinement). */
 export function onSessionTitleUpdated(callback: (update: SessionTitleUpdate) => void): () => void {
-  if (!window.coderixAPI) {
+  const api = window.coderixAPI;
+  if (!api) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
-  return window.coderixAPI.onSessionTitleUpdated(callback);
+  // A running app can pair a hot-reloaded renderer with a preload bundle from
+  // before this API existed. Don't take the whole UI down over a best-effort
+  // title update; restarting the app picks up the new preload.
+  if (typeof api.onSessionTitleUpdated !== 'function') {
+    console.warn(
+      '[IPC] onSessionTitleUpdated is missing from the loaded preload — restart the app to enable live title updates',
+    );
+    return NOOP_UNSUB;
+  }
+  return api.onSessionTitleUpdated(callback);
 }
 
 /** Load a sub-agent's full conversation transcript (core Message[]) from disk. */
