@@ -26,6 +26,7 @@ import { resolveClaudeCodeBaseUrl } from './protocol-gateway/routing.js';
 import { CUSTOM_SKILL_SHIM_DIR, refreshCustomSkillShim } from './skills.js';
 import { listRegisteredPluginDirs } from './plugin-registry.js';
 import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
+import { resolveAutoCompactWindow } from './auto-compact-window.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -126,6 +127,17 @@ export interface ClaudeCodeQueryOptions {
   baseUrl?: string;
   /** Resolved API key / auth token for the active model. */
   apiKey?: string;
+  /**
+   * The model's configured context window (`max_context` from model_list).
+   * The CLI assumes 200K for model ids it doesn't recognise and then refuses to
+   * auto-compact on that assumption, so third-party models need this handed
+   * over explicitly (see `resolveAutoCompactWindow`).
+   */
+  maxContext?: number;
+  /** Ratio (0–1) of `maxContext` at which auto-compaction triggers. Default 0.85. */
+  compactThreshold?: number;
+  /** Whether the CLI may compact automatically. Defaults to true. */
+  autoCompactEnabled?: boolean;
   /**
    * Wire protocol of the active model's endpoint. The `claude` CLI only speaks
    * the Anthropic Messages API, so an `openai` protocol model (e.g. a relay
@@ -373,6 +385,7 @@ function createSpawnFn(
   modelName: string,
   baseUrl: string | undefined,
   apiKey: string,
+  contextLimits: { maxContext?: number; autoCompactWindow?: number } = {},
 ): (options: SpawnOptions) => SpawnedProcess {
   return (options: SpawnOptions): SpawnedProcess => {
     const baseEnv =
@@ -402,6 +415,17 @@ function createSpawnFn(
       env.ANTHROPIC_AUTH_TOKEN = apiKey;
     }
     if (modelName) env.ANTHROPIC_MODEL = modelName;
+
+    // Pin the model's configured context window (the CLI otherwise assumes 200K
+    // for unknown model ids) and an explicit auto-compact window — the latter is
+    // what re-enables proactive compaction, which the CLI skips whenever the
+    // window came from its own default instead of configuration.
+    if (contextLimits.maxContext) {
+      env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(contextLimits.maxContext);
+    }
+    if (contextLimits.autoCompactWindow) {
+      env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(contextLimits.autoCompactWindow);
+    }
 
     const child = spawn(options.command, options.args, {
       cwd: options.cwd,
@@ -516,7 +540,7 @@ function buildReplayPreamble(history: Message[]): string {
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, history, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl } = opts;
+  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, history, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl, maxContext, compactThreshold, autoCompactEnabled } = opts;
 
   // Restore the persisted claude session id + usage (survives a restart) when
   // the in-memory maps have no entry yet, so a resumed conversation keeps its
@@ -604,6 +628,16 @@ export async function* runClaudeCodeQuery(
   const resolvedBaseUrl = baseUrl
     ? resolveClaudeCodeBaseUrl(baseUrl, protocol ?? 'anthropic')
     : undefined;
+  // The CLI silently skips proactive compaction for model ids it doesn't know
+  // (any third-party model), so pin the configured window and an explicit
+  // auto-compact window. See `resolveAutoCompactWindow`.
+  const autoCompactWindow = resolveAutoCompactWindow(maxContext, compactThreshold);
+  if (!autoCompactWindow) {
+    console.warn(
+      '[claude-code] model has no max_context configured — auto-compact stays unavailable ' +
+        '(the CLI assumes a 200K window for unknown model ids and will not compact proactively)',
+    );
+  }
   const options: Options = {
     cwd,
     permissionMode: sdkMode,
@@ -618,8 +652,14 @@ export async function* runClaudeCodeQuery(
     // Drop `user` (~/.claude/settings.json) when a model endpoint is bound so
     // its `env` block can't override the bound baseUrl/apiKey.
     settingSources: resolvedBaseUrl ? ['project'] : ['user', 'project'],
+    // Force the switch on, so a stray `autoCompactEnabled: false` in a project
+    // settings file can't silently disable compaction for this engine.
+    settings: { autoCompactEnabled: autoCompactEnabled ?? true },
     pathToClaudeCodeExecutable,
-    spawnClaudeCodeProcess: createSpawnFn(model ?? '', resolvedBaseUrl, apiKey ?? ''),
+    spawnClaudeCodeProcess: createSpawnFn(model ?? '', resolvedBaseUrl, apiKey ?? '', {
+      maxContext,
+      autoCompactWindow,
+    }),
   };
   if (model) options.model = model;
   if (resume) options.resume = resume;
