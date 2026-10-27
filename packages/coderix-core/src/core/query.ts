@@ -748,6 +748,10 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       // session history over the wire on every API call.
       const apiMessages = windowMessages(messages, contextBudget);
 
+      // The request is going out. Announce it before the first byte so a slow
+      // provider reads as "requesting" rather than as a stalled or empty turn.
+      yield { type: 'stream_event', event: { type: 'request_start' } as StreamEvent };
+
       for await (const event of callModel({
         system: systemText,
         messages: apiMessages,

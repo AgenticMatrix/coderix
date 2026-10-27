@@ -7,7 +7,7 @@
 
 // ── Engine ─────────────────────────────────────────────────────────
 export { QueryEngine } from './core/query-engine.js';
-export type { QueryEngineConfig, QueryEngineEvent } from './core/query-engine.js';
+export type { QueryEngineConfig, QueryEngineEvent, TaskLifecycleEvent } from './core/query-engine.js';
 export { query } from './core/query.js';
 export type { QueryConfig, CallModelParams } from './core/query.js';
 export { ToolRegistry } from './core/tool-registry.js';

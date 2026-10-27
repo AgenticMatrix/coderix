@@ -175,6 +175,14 @@ export function App(): React.ReactElement {
   // ── Stream State (token usage for StatusBar) ────────────────────────────
   const streamCurrentMessage = useStreamStore((s) => s.currentMessage);
   const tokenUsage = useStreamStore((s) => s.tokenUsage);
+  // Primitive selectors: these change on every stream event, so selecting the
+  // maps themselves would re-render App for unrelated sessions too.
+  const requesting = useStreamStore((s) =>
+    sessionId ? s.requestingBySession[sessionId] === true : false,
+  );
+  const runningTaskCount = useStreamStore((s) =>
+    sessionId ? (s.runningTasksBySession[sessionId]?.length ?? 0) : 0,
+  );
 
   // ── Local state ─────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1193,9 +1201,21 @@ export function App(): React.ReactElement {
         currentMessage: streamCurrentMessage,
         messages,
         awaitingUser: pendingQuestion !== null || pendingPermission !== null,
+        hasError: error !== null,
+        requesting,
+        runningTaskCount,
         previous: prevAgentStatusRef.current,
       }),
-    [isStreaming, streamCurrentMessage, messages, pendingQuestion, pendingPermission],
+    [
+      isStreaming,
+      streamCurrentMessage,
+      messages,
+      pendingQuestion,
+      pendingPermission,
+      error,
+      requesting,
+      runningTaskCount,
+    ],
   );
   prevAgentStatusRef.current = agentStatus;
 

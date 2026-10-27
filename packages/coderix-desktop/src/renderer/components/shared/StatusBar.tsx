@@ -47,7 +47,7 @@ export interface StatusBarProps {
   gitAhead?: number;
   gitBehind?: number;
   /** Agent status */
-  agentStatus?: 'idle' | 'thinking' | 'executing' | 'output' | 'waiting' | 'error';
+  agentStatus?: 'idle' | 'requesting' | 'thinking' | 'executing' | 'output' | 'background' | 'waiting' | 'error';
   /** Whether the terminal panel is open */
   terminalOpen?: boolean;
   /** Toggle the terminal panel */
@@ -89,9 +89,11 @@ function formatCostPrecise(cost: number, currency?: string): string {
 
 const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKey: TranslationKey; variant: NonNullable<BadgeProps['variant']> }> = {
   idle: { labelKey: 'status.idle', variant: 'success' },
+  requesting: { labelKey: 'status.requesting', variant: 'info' },
   thinking: { labelKey: 'status.thinking', variant: 'purple' },
   executing: { labelKey: 'status.executing', variant: 'warning' },
   output: { labelKey: 'status.output', variant: 'blue' },
+  background: { labelKey: 'status.background', variant: 'default' },
   waiting: { labelKey: 'status.waiting', variant: 'warning' },
   error: { labelKey: 'status.error', variant: 'danger' },
 };

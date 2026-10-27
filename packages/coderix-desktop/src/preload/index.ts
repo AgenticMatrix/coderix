@@ -79,6 +79,8 @@ const CH = {
   STREAM_DONE: 'stream:done',
   STREAM_TURN_DONE: 'stream:turnDone',
   STREAM_ERROR: 'stream:error',
+  STREAM_PHASE: 'stream:phase',
+  STREAM_TASKS: 'stream:tasks',
   STATE_PERMISSION_REQ: 'state:permissionReq',
   STATE_QUESTION_REQ: 'state:questionReq',
   STATE_TOKEN_USAGE: 'state:tokenUsage',
@@ -218,6 +220,18 @@ interface StreamTurnDone {
   epoch?: number;
 }
 
+interface StreamPhase {
+  type: 'phase';
+  phase: string;
+  sessionId?: string;
+}
+
+interface StreamTasks {
+  type: 'tasks';
+  tasks: unknown[];
+  sessionId?: string;
+}
+
 type StreamEventData =
   | StreamBlockStart
   | StreamBlockDelta
@@ -226,7 +240,9 @@ type StreamEventData =
   | StreamToolResult
   | StreamDone
   | StreamTurnDone
-  | StreamError;
+  | StreamError
+  | StreamPhase
+  | StreamTasks;
 
 // ---------------------------------------------------------------------------
 // Permission request type
@@ -327,6 +343,20 @@ function createEventListener(
             code: (data?.code as string) ?? 'UNKNOWN',
             sessionId: data?.sessionId as string | undefined,
             epoch: data?.epoch as number | undefined,
+          });
+          break;
+        case CH.STREAM_PHASE:
+          callback({
+            type: 'phase',
+            phase: (data?.phase as string) ?? 'requesting',
+            sessionId: data?.sessionId as string | undefined,
+          });
+          break;
+        case CH.STREAM_TASKS:
+          callback({
+            type: 'tasks',
+            tasks: (data?.tasks as unknown[]) ?? [],
+            sessionId: data?.sessionId as string | undefined,
           });
           break;
       }
@@ -1114,6 +1144,8 @@ const coderixAPI = {
         CH.STREAM_DONE,
         CH.STREAM_TURN_DONE,
         CH.STREAM_ERROR,
+        CH.STREAM_PHASE,
+        CH.STREAM_TASKS,
       ],
       callback,
     );

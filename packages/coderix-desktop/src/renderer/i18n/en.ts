@@ -313,9 +313,11 @@ export const en: Record<TranslationKey, string> = {
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': 'Idle',
+  'status.requesting': 'Sending request…',
   'status.thinking': 'Thinking…',
   'status.executing': 'Running tools…',
   'status.output': 'Responding…',
+  'status.background': 'Running in background…',
   'status.waiting': 'Waiting for input…',
   'status.error': 'Error',
   'status.engine': 'Current agent engine',

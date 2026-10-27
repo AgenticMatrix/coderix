@@ -9,8 +9,11 @@ import {
   onStreamBlock,
   onStreamDone,
   onStreamError,
+  onStreamPhase,
+  onStreamTasks,
   onStreamTurnDone,
   onTokenUsage,
+  type RunningTaskSummary,
 } from '../ipc-client.js';
 
 // Stream blocks arrive at high frequency (one IPC message per text delta), and
@@ -43,13 +46,6 @@ function discardPending(sessionId: string): void {
   }
   p.msg = null;
 }
-
-/**
- * Pending "the engine ended without a terminal event" timers, keyed by session.
- * Module-scoped so teardown can cancel them (a stale timer must never mutate a
- * torn-down store).
- */
-const turnEndFallbacks = new Map<string, ReturnType<typeof setTimeout>>();
 
 function emptyTokenUsage(): AggregatedTokenUsage {
   return {
@@ -101,6 +97,16 @@ export interface StreamState {
   /** Aggregated token usage for backgrounded sessions. */
   tokenUsageBySession: Record<string, AggregatedTokenUsage>;
 
+  /**
+   * Sessions waiting on the model: the request was handed over and no token has
+   * come back yet. Cleared by the first content block, so it never overlaps
+   * `thinking` / `output`.
+   */
+  requestingBySession: Record<string, boolean>;
+
+  /** Background tasks still running, keyed by session (empty = none). */
+  runningTasksBySession: Record<string, RunningTaskSummary[]>;
+
   /** Cleanup functions for IPC event listeners */
   _cleanups: Array<() => void>;
 
@@ -138,6 +144,8 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
   currentMessageBySession: {},
   tokenUsage: emptyTokenUsage(),
   tokenUsageBySession: {},
+  requestingBySession: {},
+  runningTasksBySession: {},
   _cleanups: [],
 
   setViewedSession: (id: string | null) => {
@@ -249,12 +257,6 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       return useChatStore.getState().messagesBySession[sessionId] ?? [];
     };
 
-    // Read a session's turn lifecycle flag (flat if viewed, map slot if not).
-    const isSessionStreaming = (sessionId: string): boolean =>
-      sessionId === viewedSession()
-        ? useChatStore.getState().isStreaming
-        : (useChatStore.getState().streamingBySession[sessionId] ?? false);
-
     const currentEpoch = (sessionId: string): number =>
       useChatStore.getState().streamEpochBySession[sessionId] ?? 0;
 
@@ -272,45 +274,20 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       return true;
     };
 
-    // The step ended with a terminal stop reason, so the engine's own `done`
-    // should follow within milliseconds. If it never arrives (a provider that
-    // ends the stream without a terminal event), the turn would otherwise stay
-    // "thinking" until the next message. Treat that unconfirmed stop as the end
-    // of the turn after a grace period. A tool that is still executing keeps the
-    // turn alive — its result may still be coming.
-    const TERMINAL_STOP_REASONS = new Set(['end_turn', 'stop_sequence', 'max_tokens', 'refusal']);
-    const TURN_END_GRACE_MS = 2500;
-
-    const clearTurnEndFallback = (sessionId: string): void => {
-      const timer = turnEndFallbacks.get(sessionId);
-      if (timer === undefined) return;
-      clearTimeout(timer);
-      turnEndFallbacks.delete(sessionId);
+    // "The request is out, nothing has come back yet" — set by the engine's
+    // request-start signal, cleared by the first content block or any terminal
+    // event. Distinct from `isStreaming`, which covers the whole turn.
+    const setRequesting = (sessionId: string, requesting: boolean): void => {
+      if (!sessionId) return;
+      set((s) => {
+        if ((s.requestingBySession[sessionId] ?? false) === requesting) return s;
+        const next = { ...s.requestingBySession };
+        if (requesting) next[sessionId] = true;
+        else delete next[sessionId];
+        return { requestingBySession: next };
+      });
     };
-
-    const lastAssistantHasActiveTool = (sessionId: string): boolean => {
-      const messages = getMessages(sessionId);
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i];
-        if (msg.role !== 'assistant') continue;
-        return msg.blocks.some(
-          (b) => b.type === 'tool_use' && (b.state === 'executing' || b.state === 'pending'),
-        );
-      }
-      return false;
-    };
-
-    const scheduleTurnEndFallback = (sessionId: string): void => {
-      clearTurnEndFallback(sessionId);
-      const timer = setTimeout(() => {
-        turnEndFallbacks.delete(sessionId);
-        if (!isSessionStreaming(sessionId)) return;
-        if (lastAssistantHasActiveTool(sessionId)) return;
-        useChatStore.getState().setSessionStreaming(sessionId || undefined, false);
-        refreshSidebarSession(false, sessionId);
-      }, TURN_END_GRACE_MS);
-      turnEndFallbacks.set(sessionId, timer);
-    };
+    const clearRequesting = (sessionId: string): void => setRequesting(sessionId, false);
 
     // Attach a tool_result to the matching tool_use across a session's committed
     // messages. Returns true when the result found a home.
@@ -358,9 +335,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // session keeps accumulating into its own cache.
       const sid = sessionOf(block.sessionId);
 
-      // New activity means the turn is alive — cancel a pending "the engine
-      // ended without a terminal event" fallback scheduled by message_stop.
-      clearTurnEndFallback(sid);
+      // The model produced something, so the "waiting for the first token"
+      // phase is over.
+      clearRequesting(sid);
 
       // Accumulate against the pending message when a flush is already
       // scheduled (mid-frame), otherwise against the last committed message.
@@ -461,7 +438,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     cleanups.push(unsubBlock);
 
     // ── Stream Done ────────────────────────────────────────
-    const unsubDone = onStreamDone((stopReason?: string, sessionId?: string) => {
+    const unsubDone = onStreamDone((_stopReason?: string, sessionId?: string) => {
       const sid = sessionOf(sessionId);
 
       // Commit any blocks still buffered (the last deltas of the turn may not
@@ -486,11 +463,6 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         useChatStore.getState().commitAssistantMessage(sid || undefined, chatMsg);
         writeCurrent(sid, null);
       }
-      // The final step ended without a tool call — arm the fallback in case the
-      // engine's `done` never arrives. Any further block cancels it.
-      if (stopReason && TERMINAL_STOP_REASONS.has(stopReason)) {
-        scheduleTurnEndFallback(sid);
-      }
       refreshSidebarSession(true, sid);
     });
     cleanups.push(unsubDone);
@@ -504,7 +476,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // Ignore a stale turn's late terminal signal: only the current (or a
       // newer, adopted) epoch may flip streaming off. See acceptTerminalEpoch.
       if (!acceptTerminalEpoch(sid, epoch)) return;
-      clearTurnEndFallback(sid);
+      clearRequesting(sid);
       useChatStore.getState().setSessionStreaming(sid || undefined, false);
       refreshSidebarSession(false, sid);
     });
@@ -517,7 +489,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // Same epoch guard as onStreamTurnDone: a stale turn's late error must not
       // reset the new turn's streaming state after an interrupt-and-resend.
       if (!acceptTerminalEpoch(sid, epoch)) return;
-      clearTurnEndFallback(sid);
+      clearRequesting(sid);
 
       // Drop any buffered partial message for this session's stream.
       discardPending(sid);
@@ -579,6 +551,25 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     });
     cleanups.push(unsubToken);
 
+    // ── Request Phase ──────────────────────────────────────
+    const unsubPhase = onStreamPhase((sessionId?: string) => {
+      setRequesting(sessionOf(sessionId), true);
+    });
+    cleanups.push(unsubPhase);
+
+    // ── Background Tasks ───────────────────────────────────
+    const unsubTasks = onStreamTasks((tasks, sessionId?: string) => {
+      const sid = sessionOf(sessionId);
+      if (!sid) return;
+      set((s) => {
+        const next = { ...s.runningTasksBySession };
+        if (tasks.length === 0) delete next[sid];
+        else next[sid] = tasks;
+        return { runningTasksBySession: next };
+      });
+    });
+    cleanups.push(unsubTasks);
+
     set({ _cleanups: cleanups });
   },
 
@@ -589,8 +580,6 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       discardPending(sid);
     }
     pendingBySession.clear();
-    for (const timer of turnEndFallbacks.values()) clearTimeout(timer);
-    turnEndFallbacks.clear();
     const { _cleanups } = get();
     for (const cleanup of _cleanups) {
       cleanup();

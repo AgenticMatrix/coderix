@@ -309,9 +309,11 @@ export const zh = {
 
   // ── 状态栏 ────────────────────────────────────────────
   'status.idle': '空闲',
+  'status.requesting': '发送请求中…',
   'status.thinking': '思考中…',
   'status.executing': '工具执行中…',
   'status.output': '输出中…',
+  'status.background': '后台执行中…',
   'status.waiting': '等待输入…',
   'status.error': '错误',
   'status.engine': '当前智能体引擎',

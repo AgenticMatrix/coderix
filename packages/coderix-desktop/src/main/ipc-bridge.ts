@@ -32,7 +32,7 @@ import type {
 } from '@coderix/core';
 import type { CoderSettings, ModelItem } from '@coderix/core';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
-import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord } from '@coderix/core';
+import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord, TaskLifecycleEvent } from '@coderix/core';
 import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle } from '@coderix/core';
 import type { McpManager } from '@coderix/core';
 import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '@coderix/core';
@@ -154,6 +154,8 @@ export const IPC_CHANNELS = {
   STREAM_DONE: 'stream:done',
   STREAM_TURN_DONE: 'stream:turnDone',
   STREAM_ERROR: 'stream:error',
+  STREAM_PHASE: 'stream:phase',
+  STREAM_TASKS: 'stream:tasks',
   STATE_PERMISSION_REQ: 'state:permissionReq',
   STATE_QUESTION_REQ: 'state:questionReq',
   STATE_TOKEN_USAGE: 'state:tokenUsage',
@@ -262,6 +264,45 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   }
   const pendingPermissions = new Map<string, PendingPermission>();
   const pendingQuestions = new Map<string, PendingQuestionEntry>();
+
+  // Background tasks per session. The turn's answer can land while a
+  // `run_in_background` command is still running; the renderer needs that to
+  // stay out of "idle" until the last task settles.
+  interface RunningTaskInfo {
+    id: string;
+    type?: string;
+    description?: string;
+    startedAt: number;
+  }
+  const runningTasksBySession = new Map<string, Map<string, RunningTaskInfo>>();
+
+  const publishRunningTasks = (sessionId: string): void => {
+    if (!sessionId) return;
+    const tasks = runningTasksBySession.get(sessionId);
+    safeSend(getMainWindow(windowManager), IPC_CHANNELS.STREAM_TASKS, {
+      sessionId,
+      tasks: tasks ? [...tasks.values()] : [],
+    });
+  };
+
+  const taskStarted = (sessionId: string, task: RunningTaskInfo): void => {
+    if (!sessionId) return;
+    let tasks = runningTasksBySession.get(sessionId);
+    if (!tasks) {
+      tasks = new Map();
+      runningTasksBySession.set(sessionId, tasks);
+    }
+    tasks.set(task.id, task);
+    publishRunningTasks(sessionId);
+  };
+
+  const taskEnded = (sessionId: string, taskId: string): void => {
+    const tasks = runningTasksBySession.get(sessionId);
+    if (!tasks?.delete(taskId)) return;
+    if (tasks.size === 0) runningTasksBySession.delete(sessionId);
+    publishRunningTasks(sessionId);
+  };
+
   let updateListenersBound = false;
   let permissionsState: {
     resolve: ((value: boolean) => void) | null;
@@ -656,7 +697,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
       try {
         for await (const event of engineStream) {
-          if (controller.signal.aborted) break;
+          // Once the turn is aborted, stop consuming content — but still let a
+          // terminal event through: the engine may be reporting *why* it
+          // stopped (e.g. its idle watchdog fired and aborted the same
+          // controller), and dropping that would turn a failure into a silent
+          // user interrupt.
+          if (
+            controller.signal.aborted &&
+            event.type !== 'error' &&
+            event.type !== 'done'
+          ) {
+            break;
+          }
 
           switch (event.type) {
             case 'message': {
@@ -910,11 +962,28 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             }
             case 'error': {
               const err = event.data as { message?: string; code?: string };
+              // An engine-reported error is terminal for the turn; without this
+              // the `finally` below would also publish a turn end.
+              turnEnded = true;
               safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
                 message: sanitizeErrorMessage(err?.message ?? 'Unknown error'),
                 code: err?.code ?? 'UNKNOWN',
                 sessionId: streamSessionId,
               });
+              break;
+            }
+            case 'task': {
+              const task = event.data as TaskLifecycleEvent | undefined;
+              if (task?.action === 'start') {
+                taskStarted(streamSessionId, {
+                  id: task.id,
+                  type: task.type,
+                  description: task.description,
+                  startedAt: Date.now(),
+                });
+              } else if (task?.action === 'end') {
+                taskEnded(streamSessionId, task.id);
+              }
               break;
             }
             case 'cost': {
@@ -1076,7 +1145,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         // completion has already flushed via message_stop, and an aborted turn's
         // buffered text belongs to the message the renderer is about to drop.
         discardStreamBuffer(streamSessionId);
-        if (controller.signal.aborted) {
+        if (!turnEnded && controller.signal.aborted) {
           const mw = getMainWindow(windowManager);
           safeSend(mw, IPC_CHANNELS.STREAM_ERROR, {
             message: 'Query interrupted by user',
@@ -1085,10 +1154,12 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
             epoch: streamEpoch,
           });
         } else if (!turnEnded) {
-          // The stream ended without a terminal event or an error. Publish the
-          // turn end so the renderer can't be left stuck on "thinking" — this
-          // is a last-resort safety net, not the normal completion path.
-          safeSend(mainWindow, IPC_CHANNELS.STREAM_TURN_DONE, {
+          // The stream ended without a terminal event or an error. Reporting
+          // that as a completed turn is how a stalled provider used to look
+          // exactly like a finished answer — surface it as a failure instead.
+          safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
+            message: '连接中断：本轮没有收到结束信号，请重试',
+            code: 'TURN_INCOMPLETE',
             sessionId: streamSessionId,
             epoch: streamEpoch,
           });
@@ -2621,6 +2692,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       case 'message_start':
         // Message start — could be used to reset UI state
         break;
+      case 'request_start': {
+        // The request is out but nothing has come back yet. Both engines emit
+        // this (the in-process loop directly, the SDK via `system/status`), so
+        // the renderer can tell "waiting on the model" from "stalled".
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_PHASE, {
+          phase: 'requesting',
+          sessionId,
+        });
+        break;
+      }
       case 'message_delta': {
         // Message delta — forward as delta event, and remember the turn's
         // stop reason so `message_stop` can be forwarded with the real value.
@@ -2798,10 +2879,31 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // Forward agent_register / agent_update / agent_remove from the shared
   // EventBus to the renderer so it can render live sub-agent status in the
-  // side pane. Other tool-request kinds (background tasks) are not rendered.
+  // side pane, and background_task_* so the status bar can show a background
+  // task that outlives the turn.
   const unsubAgentEvents = config.eventBus
     ? config.eventBus.toolRequests.subscribe({
         next(req: ToolRequestEvent) {
+          if (req.type === 'background_task_update' || req.type === 'background_task_remove') {
+            const sid = req.sessionId;
+            if (!sid) return;
+            if (req.type === 'background_task_remove') {
+              taskEnded(sid, req.taskId);
+              return;
+            }
+            const task = req.task as { status?: string; type?: string; description?: string };
+            if (task.status === 'running') {
+              taskStarted(sid, {
+                id: req.taskId,
+                type: task.type,
+                description: task.description,
+                startedAt: Date.now(),
+              });
+            } else {
+              taskEnded(sid, req.taskId);
+            }
+            return;
+          }
           if (
             req.type !== 'agent_register' &&
             req.type !== 'agent_update' &&

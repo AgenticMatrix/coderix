@@ -337,6 +337,52 @@ export function onStreamError(callback: (error: string, code?: string, sessionId
   });
 }
 
+/**
+ * Subscribe to stream phase changes (currently only `requesting`: a request
+ * was handed to the model and no tokens have come back yet).
+ * Returns an unsubscribe function.
+ */
+export function onStreamPhase(callback: (sessionId?: string) => void): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'phase') {
+      callback(event.sessionId as string | undefined);
+    }
+  });
+}
+
+export interface RunningTaskSummary {
+  id: string;
+  type?: string;
+  description?: string;
+  startedAt: number;
+}
+
+/**
+ * Subscribe to the running background-task list for a session. The main process
+ * always sends the complete list, so the callback can replace its state.
+ * Returns an unsubscribe function.
+ */
+export function onStreamTasks(
+  callback: (tasks: RunningTaskSummary[], sessionId?: string) => void,
+): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'tasks') {
+      callback(
+        (event.tasks as RunningTaskSummary[]) ?? [],
+        event.sessionId as string | undefined,
+      );
+    }
+  });
+}
+
 // ===========================================================================
 //  Session Management
 // ===========================================================================
