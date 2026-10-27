@@ -18,6 +18,7 @@ import { SpeculationBlockRenderer } from './blocks/SpeculationBlockRenderer.js';
 import { CompletionBoundaryRenderer } from './blocks/CompletionBoundaryRenderer.js';
 import { ThinkingBlockRenderer } from './ThinkingBlockRenderer.js';
 import { collapseToolGroups } from './collapseToolGroups.js';
+import { settledToolsFirst } from './blockOrder.js';
 import { CompactSummary } from '../../components/CompactSummary.js';
 import { CollapsedGroupRenderer } from './CollapsedGroupRenderer.js';
 import type { CollapsedGroup } from './collapseToolGroups.js';
@@ -462,7 +463,9 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
                 }
                 return true;
               });
-              const groupedBlocks = collapseToolGroups(visibleBlocks as unknown as Array<{ type: string; toolName?: string; [key: string]: unknown }>);
+              // Finished tool calls float above running ones; see blockOrder.ts.
+              const orderedBlocks = settledToolsFirst(visibleBlocks);
+              const groupedBlocks = collapseToolGroups(orderedBlocks as unknown as Array<{ type: string; toolName?: string; [key: string]: unknown }>);
               return groupedBlocks.map((item, idx) => {
                 // Check for collapsed group
                 if ((item as CollapsedGroup).blocks) {
