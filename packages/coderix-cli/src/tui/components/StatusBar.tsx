@@ -8,12 +8,12 @@ import {
 } from '@coderix/tui';
 
 import type { TokenUsage } from '../../types.js';
+import { statusPhaseOf, phaseDetail, type AgentPhase } from '../agent-phase.js';
 
 interface StatusBarProps {
   model: string;
-  /** Current activity phase: busy (main agent streaming/thinking/executing),
-   *  wait (sub-agents or background tools running), idle (nothing active). */
-  statusPhase: 'busy' | 'wait' | 'idle';
+  /** What the agent is doing right now (busy.* / wait.* / idle). */
+  agentPhase: AgentPhase;
   isFrozen?: boolean;
   error: string | null;
   /** Total character count of all messages (for context estimation). */
@@ -110,8 +110,11 @@ function ContextBar({ used, max }: { used: number; max: number }) {
 
 /**
  * Bottom status bar showing:
- *   ◉ busy ╎ ctx ▰▰▰▰░░░░ 40% 3.2K/128K ╎ 0.0042$ ╎ 12m 34s ╎ ⏲ 3s ╎
+ *   ◉ busy streaming ╎ ctx ▰▰▰▰░░░░ 40% 3.2K/128K ╎ 0.0042$ ╎ 12m 34s ╎ ⏲ 3s ╎
  *   model: xxx ╎ mem 30M ╎ procs 4 ╎ ctrl+C to interrupt
+ *
+ * The phase badge spells out why: busy streaming / thinking / executing /
+ * compacting, and wait llm / tool / background.
  *
  * ctx = cache_read + cache_creation + output + input (real API tokens).
  * Mem = total RSS memory of Coderix process tree (main + sub-agents + tool subprocesses).
@@ -125,13 +128,20 @@ function ContextBar({ used, max }: { used: number; max: number }) {
  * producing a stack of stale status bars. Take new glyphs from
  * `safe-glyphs.ts`, never from the ambiguous-width box-drawing block.
  */
-export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, exitHint, processMemory, processCount }: StatusBarProps) {
+export const StatusBar = memo(function StatusBar({ model, agentPhase, isFrozen, error, totalChars, inputTokens, outputTokens, realUsage, accumulatedCost, currency, maxContext, compactThreshold, exitHint, processMemory, processCount }: StatusBarProps) {
   const sessionStartRef = useRef(Date.now());
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [responseSeconds, setResponseSeconds] = useState(0);
   const streamStartRef = useRef<number | null>(null);
 
-  const isStreaming = statusPhase === 'busy';
+  const statusPhase = statusPhaseOf(agentPhase);
+  const detail = phaseDetail(agentPhase);
+  // The response timer measures one model step (it restarts on every
+  // message_start), so tool execution must not keep it running.
+  const isStreaming =
+    agentPhase === 'busy.streaming' ||
+    agentPhase === 'busy.thinking' ||
+    agentPhase === 'busy.compacting';
 
   // Track turn start/stop
   useEffect(() => {
@@ -194,9 +204,13 @@ export const StatusBar = memo(function StatusBar({ model, statusPhase, isFrozen,
       ) : isFrozen ? (
         <Text color="ansi:yellow">⏸ paused</Text>
       ) : statusPhase === 'busy' ? (
-        <Text color="ansi:red">◉ busy</Text>
+        <Text color="ansi:red">
+          ◉ busy{detail ? <Text dimColor> {detail}</Text> : null}
+        </Text>
       ) : statusPhase === 'wait' ? (
-        <Text color="ansi:yellow">{PHASE_WAIT} wait</Text>
+        <Text color="ansi:yellow">
+          {PHASE_WAIT} wait{detail ? <Text dimColor> {detail}</Text> : null}
+        </Text>
       ) : (
         <Text color="ansi:green">{PHASE_IDLE} idle</Text>
       )}

@@ -2,9 +2,22 @@ import { useRef } from 'react';
 import { useInput } from '@coderix/tui';
 
 import type { Message, ChatAction } from '../../types.js';
+import { statusPhaseOf, type AgentPhase } from '../agent-phase.js';
 import { expandPasteMarkers } from './useChatReducer.js';
 import { getSubAgentRegistry } from '@coderix/core';
 import { listCommandNames } from '../../commands/index.js';
+
+/**
+ * Phases where the model itself is producing, so Ctrl+C interrupts the turn
+ * (and undoes it when nothing has run yet). Every other non-idle phase — an
+ * executing tool, or any wait — must kill sub-agents and background tools
+ * first, which is a different action.
+ */
+const MODEL_PRODUCING = new Set<AgentPhase>([
+  'busy.streaming',
+  'busy.thinking',
+  'busy.compacting',
+]);
 
 function getCycleGroup(inputName: string, allCmds: string[]): string[] {
   for (let len = inputName.length; len >= 1; len--) {
@@ -17,7 +30,8 @@ function getCycleGroup(inputName: string, allCmds: string[]): string[] {
 export interface InputHandlerDeps {
   inputText: string;
   cursorPosition: number;
-  statusPhase: 'busy' | 'wait' | 'idle';
+  /** What the agent is doing right now — drives the Ctrl+C tiers. */
+  agentPhase: AgentPhase;
   messages: Message[];
   dispatch: React.Dispatch<ChatAction>;
   onSend: (text: string) => void;
@@ -72,7 +86,7 @@ export interface InputHandlerDeps {
 export function useInputHandler({
   inputText,
   cursorPosition: _cp,
-  statusPhase,
+  agentPhase,
   messages,
   dispatch,
   onSend,
@@ -98,8 +112,8 @@ export function useInputHandler({
   inputRef.current = inputText;
   const cursorRef = useRef(_cp);
   cursorRef.current = _cp;
-  const statusRef = useRef(statusPhase);
-  statusRef.current = statusPhase;
+  const phaseRef = useRef(agentPhase);
+  phaseRef.current = agentPhase;
   const blockedRef = useRef(blocked);
   blockedRef.current = blocked;
   const killRef = useRef(onKillAll);
@@ -132,10 +146,10 @@ export function useInputHandler({
         // leave the tool stuck in executing state.
         if (blockedRef.current) return;
 
-        // Tier 1: busy (main agent streaming/thinking) → interrupt it.
+        // Tier 1: busy (main agent streaming/thinking/compacting) → interrupt it.
         // If no tools have been executed yet, undo the turn and restore
         // the user's input so they can edit and re-submit.
-        if (statusRef.current === 'busy') {
+        if (MODEL_PRODUCING.has(phaseRef.current)) {
           interruptRef.current();
           // Check if any tool_use blocks exist after the last user message
           let hasTools = false;
@@ -155,8 +169,8 @@ export function useInputHandler({
           dispatch({ type: hasTools ? 'INTERRUPT' : 'INTERRUPT_AND_UNDO' });
           return;
         }
-        // Tier 2: wait (sub-agents / background tools) → kill them all
-        if (statusRef.current === 'wait') {
+        // Tier 2: tools/agents running, or waiting on any of them → kill them all
+        if (statusPhaseOf(phaseRef.current) !== 'idle') {
           killRef.current();
           dispatch({ type: 'INTERRUPT' });
           return;

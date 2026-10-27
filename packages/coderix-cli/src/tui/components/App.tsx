@@ -24,6 +24,7 @@ import { CommandHint } from './CommandHint.js';
 import { VirtualMessageList } from './VirtualMessageList.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { splitTranscript, shouldFlush, initialEpoch, advanceEpoch } from './transcript-commit.js';
+import { deriveAgentPhase, type AgentPhase } from '../agent-phase.js';
 import { useChatReducer, convertTranscriptToMessages } from '../hooks/useChatReducer.js';;
 import { useAgentBridge } from '../hooks/useAgentBridge.js';;
 import { useSubAgentBridge } from '../hooks/useSubAgentBridge.js';;
@@ -524,40 +525,60 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     viewedAgentId == null || agentsRef.current[viewedAgentId]?.status === 'running';
 
   // ── Status bar phase ──────────────────────────────────────────
-  // busy: main agent is active (streaming / thinking / sync tool execution)
-  // wait: sub-agents or background tools are running
+  // busy: the agent is producing (streaming / thinking / executing a tool /
+  //       compacting)
+  // wait: the agent is waiting on something (the LLM's first token, a tool
+  //       call that has not started producing, or a background task)
   // idle: nothing active
-  const statusPhase = useMemo<'busy' | 'wait' | 'idle'>(() => {
-    if (state.error) return 'idle';
-    // Busy: compacting is always busy
-    if (state.isCompacting) return 'busy';
-    // Busy: ONLY when main agent API is actively streaming.
-    // Use mainStreaming when in sub-agent view (isStreaming conflates both agents).
-    const mainActive = state.subAgentView ? state.mainStreaming : state.isStreaming;
-    if (mainActive) return 'busy';
-    // Wait: check MAIN agent's messages for pending tools
+  const runningBackgroundTasks = useAppState(
+    (s) => Object.values(s.backgroundTasks).filter((t) => t.status === 'running').length,
+  );
+
+  const agentPhase = useMemo<AgentPhase>(() => {
     const lastMsg = mainMessages[mainMessages.length - 1];
-    const hasActiveTools =
-      lastMsg?.blocks.some(
-        (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
-      ) ?? false;
-    if (hasActiveTools) return 'wait';
-    // Wait: sub-agents running
+    const lastAssistant = [...mainMessages].reverse().find((m) => m.role === 'assistant');
+    const lastBlock = lastAssistant?.blocks[lastAssistant.blocks.length - 1];
+
+    // A foreground sub-agent is effectively a running tool call; a background
+    // one outlives the turn and belongs to `wait.background`.
+    let runningForegroundAgents = 0;
+    let runningBackgroundAgents = 0;
     for (const agent of Object.values(agentsRef.current)) {
-      if (agent.status === 'running') return 'wait';
+      if (agent.status !== 'running') continue;
+      if (agent.outputPath) runningBackgroundAgents++;
+      else runningForegroundAgents++;
     }
-    // Between LLM calls (tools settling, next call not started yet) the turn
-    // has NOT finished responding — stay 'wait' instead of flipping to idle.
-    // A dead turn (viewed sub-agent no longer running, so nothing can still
-    // arrive) falls through to idle, staying consistent with currentPhase.
-    if (state.turnStatus === 'running' && viewedAgentRunning) return 'wait';
-    return 'idle';
-  }, [state.error, state.isCompacting, state.isStreaming, state.mainStreaming, mainMessages, agentTick, state.turnStatus, viewedAgentRunning]);
+
+    return deriveAgentPhase({
+      error: state.error,
+      isCompacting: state.isCompacting,
+      // `isStreaming` conflates the main agent with the sub-agent in view; pin
+      // it to the main agent so the bar describes the conversation, not the view.
+      isStreaming: state.subAgentView ? state.mainStreaming : state.isStreaming,
+      thinkingInProgress: lastBlock?.type === 'thinking',
+      turnStatus: state.turnStatus,
+      turnAlive: viewedAgentRunning,
+      lastMessage: lastMsg,
+      runningForegroundAgents,
+      runningBackgroundAgents,
+      runningBackgroundTasks,
+    });
+  }, [
+    state.error,
+    state.isCompacting,
+    state.isStreaming,
+    state.mainStreaming,
+    state.turnStatus,
+    mainMessages,
+    agentTick,
+    viewedAgentRunning,
+    runningBackgroundTasks,
+  ]);
 
   useInputHandler({
     inputText: state.inputText,
     cursorPosition: state.cursorPosition,
-    statusPhase,
+    agentPhase,
     messages: state.messages,
     dispatch,
     onSend: handleSend,
@@ -1524,7 +1545,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
 
         <StatusBar
             model={state.model}
-            statusPhase={statusPhase}
+            agentPhase={agentPhase}
             isFrozen={state.isFrozen}
             error={state.error}
             totalChars={stats.totalChars}
