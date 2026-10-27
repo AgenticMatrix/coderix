@@ -108,6 +108,7 @@ function emitTaskUpdate(
   emit: ((req: ToolRequestEvent) => void) | undefined,
   taskId: string,
   task: TrackedTask,
+  sessionId?: string,
 ): void {
   if (!emit) return;
   emit({
@@ -115,6 +116,7 @@ function emitTaskUpdate(
     taskId,
     task: task as unknown as Record<string, unknown>,
     requestId: nextRequestId(),
+    sessionId,
   });
 }
 
@@ -565,7 +567,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
           stderr: result.collector.stderr,
         }),
       });
-      emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask);
+      emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask, opts.sessionId);
 
       // Diagnostic: does the backgrounded process tree hold a terminal fd?
       void diagnoseBackgroundStdio(result.pid, `run_in_background bash (task_id=${taskId})`);
@@ -580,7 +582,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
           status: newStatus,
           finishedAt: Date.now(),
           result: fullOutput,
-        });
+        }, opts.sessionId);
         notifyTaskCompletion(taskId);
         result.child.unref();
       });
@@ -638,7 +640,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
           stderr: result.collector?.stderr ?? '',
         }),
       });
-      emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask);
+      emitTaskUpdate(opts.emitToolRequest, taskId, trackedTask, opts.sessionId);
 
       // Diagnostic: does the auto-backgrounded process tree hold a terminal fd?
       void diagnoseBackgroundStdio(result.pid, `auto-backgrounded bash (task_id=${taskId})`);
@@ -652,7 +654,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
           status: newStatus,
           finishedAt: Date.now(),
           result: fullOutput,
-        });
+        }, opts.sessionId);
         notifyTaskCompletion(taskId);
         result.child.unref();
       });

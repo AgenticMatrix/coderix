@@ -27,14 +27,14 @@ export interface Subject<T> extends Observer<T>, Observable<T> {}
 // ── Event types ─────────────────────────────────────────────────────────
 
 export interface EngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title' | 'task';
   data?: unknown;
   deferred?: unknown;
 }
 
 export type ToolRequestEvent =
-  | { type: 'background_task_update'; taskId: string; task: Record<string, unknown>; requestId: string }
-  | { type: 'background_task_remove'; taskId: string; requestId: string }
+  | { type: 'background_task_update'; taskId: string; task: Record<string, unknown>; requestId: string; sessionId?: string }
+  | { type: 'background_task_remove'; taskId: string; requestId: string; sessionId?: string }
   | { type: 'agent_register'; agentId: string; agent: Record<string, unknown>; requestId: string }
   | { type: 'agent_update'; agentId: string; agent: Record<string, unknown>; requestId: string }
   | { type: 'agent_remove'; agentId: string; requestId: string };

@@ -5,6 +5,8 @@ vi.mock('../../ipc-client.js', () => ({
   onStreamBlock: vi.fn(),
   onStreamDone: vi.fn(),
   onStreamError: vi.fn(),
+  onStreamPhase: vi.fn(),
+  onStreamTasks: vi.fn(),
   onStreamTurnDone: vi.fn(),
   onTokenUsage: vi.fn(),
   listSessions: vi.fn(),
@@ -17,8 +19,11 @@ import {
   onStreamBlock,
   onStreamDone,
   onStreamError,
+  onStreamPhase,
+  onStreamTasks,
   onStreamTurnDone,
   onTokenUsage,
+  type RunningTaskSummary,
 } from '../../ipc-client.js';
 import { useChatStore } from '../chatStore.js';
 import { useStreamStore } from '../streamStore.js';
@@ -46,6 +51,8 @@ let doneCb: DoneCb;
 let turnDoneCb: TurnDoneCb;
 let errorCb: ErrorCb;
 let tokenCb: TokenCb;
+let phaseCb: (sessionId?: string) => void;
+let tasksCb: (tasks: RunningTaskSummary[], sessionId?: string) => void;
 
 function flushFrame(): void {
   vi.advanceTimersByTime(1);
@@ -80,6 +87,14 @@ describe('streamStore turn lifecycle', () => {
       tokenCb = cb as TokenCb;
       return () => {};
     });
+    vi.mocked(onStreamPhase).mockImplementation((cb) => {
+      phaseCb = cb;
+      return () => {};
+    });
+    vi.mocked(onStreamTasks).mockImplementation((cb) => {
+      tasksCb = cb;
+      return () => {};
+    });
 
     useChatStore.setState({
       messages: [],
@@ -104,6 +119,8 @@ describe('streamStore turn lifecycle', () => {
         contextTokens: 0,
       },
       tokenUsageBySession: {},
+      requestingBySession: {},
+      runningTasksBySession: {},
       _cleanups: [],
     });
     useStreamStore.getState().startListening();
@@ -148,20 +165,22 @@ describe('streamStore turn lifecycle', () => {
     expect(useChatStore.getState().streamEpochBySession.s1).toBe(3);
   });
 
-  it('ends the turn when a terminal step is never followed by done', () => {
+  it('stays in the turn when a terminal step is never followed by done', () => {
     useChatStore.getState().sendMessage('hi');
     useChatStore.getState().setStreamEpoch('s1', 1);
 
     blockCb({ type: 'text', content: 'answer', state: 'done', sessionId: 's1' });
     flushFrame();
     doneCb('end_turn', 's1');
-    expect(useChatStore.getState().isStreaming).toBe(true);
 
-    vi.advanceTimersByTime(2600);
-    expect(useChatStore.getState().isStreaming).toBe(false);
+    // message_stop only commits the step. Ending the turn is the engine's job
+    // (or, when it ends silently, the main process's TURN_INCOMPLETE error) —
+    // the renderer must not invent an idle state on a timer any more.
+    vi.advanceTimersByTime(5000);
+    expect(useChatStore.getState().isStreaming).toBe(true);
   });
 
-  it('does not end the turn early when another step starts', () => {
+  it('does not end the turn when another step starts', () => {
     useChatStore.getState().sendMessage('hi');
     useChatStore.getState().setStreamEpoch('s1', 1);
 
@@ -169,7 +188,7 @@ describe('streamStore turn lifecycle', () => {
     flushFrame();
     doneCb('end_turn', 's1');
 
-    // The engine starts another step (e.g. after a tool) before the grace ends.
+    // The engine starts another step (e.g. after a tool).
     blockCb({ type: 'thinking', content: 'more', state: 'pending', sessionId: 's1' });
     vi.advanceTimersByTime(5000);
     expect(useChatStore.getState().isStreaming).toBe(true);
@@ -185,6 +204,27 @@ describe('streamStore turn lifecycle', () => {
 
     vi.advanceTimersByTime(5000);
     expect(useChatStore.getState().isStreaming).toBe(true);
+  });
+
+  it('marks a session requesting until its first block arrives', () => {
+    useChatStore.getState().sendMessage('hi');
+
+    phaseCb('s1');
+    expect(useStreamStore.getState().requestingBySession.s1).toBe(true);
+
+    blockCb({ type: 'thinking', content: 'hm', state: 'pending', sessionId: 's1' });
+    expect(useStreamStore.getState().requestingBySession.s1).toBeUndefined();
+  });
+
+  it('tracks the running background task list per session', () => {
+    const tasks: RunningTaskSummary[] = [
+      { id: 'bash-1', type: 'bash', description: 'npm test', startedAt: 1 },
+    ];
+    tasksCb(tasks, 's1');
+    expect(useStreamStore.getState().runningTasksBySession.s1).toHaveLength(1);
+
+    tasksCb([], 's1');
+    expect(useStreamStore.getState().runningTasksBySession.s1).toBeUndefined();
   });
 
   it('adopts a live context footprint without touching billable totals', () => {

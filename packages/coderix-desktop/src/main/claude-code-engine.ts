@@ -427,6 +427,11 @@ function createSpawnFn(
       env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(contextLimits.autoCompactWindow);
     }
 
+    // The CLI only pushes lifecycle `system` messages (status / task started /
+    // task notification) when this is set; without it the host cannot tell
+    // "request sent, waiting for the model" apart from "idle".
+    env.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS = '1';
+
     const child = spawn(options.command, options.args, {
       cwd: options.cwd,
       env,
@@ -687,12 +692,17 @@ export async function* runClaudeCodeQuery(
   // The idle watchdog is defined before the hooks so AskUserQuestion's
   // PreToolUse hook can keep it alive while the question waits for an answer.
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  // A fired watchdog aborts the same controller a user stop uses, so remember
+  // why the abort happened — a hang must surface as an error, not as a silent
+  // "user interrupted the turn".
+  let idleTimedOut = false;
   const resetIdleTimer = (): void => {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       console.error(
         `[claude-code] turn idle for ${TURN_IDLE_TIMEOUT_MS}ms — aborting (possible hang)`,
       );
+      idleTimedOut = true;
       abortController.abort();
     }, TURN_IDLE_TIMEOUT_MS);
   };
@@ -788,6 +798,13 @@ export async function* runClaudeCodeQuery(
           yield { type: 'message', data: { type: 'user', message: msg.message, parentToolUseId: msg.parent_tool_use_id } };
           break;
         case 'result':
+          // The turn is settled — stop the watchdog so it can't fire while the
+          // host is still persisting this result and turn a success into an
+          // error.
+          if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = null;
+          }
           // Mirror the init guard: only persist the session id when it's the one
           // we actually resumed (or there was no resume), so a failed resume
           // doesn't overwrite the recoverable on-disk mapping.
@@ -844,14 +861,75 @@ export async function* runClaudeCodeQuery(
             };
           }
           break;
+        case 'system':
+          // Lifecycle notifications the status bar needs. Everything else on
+          // `system` (init, hooks, plugins, commands) is not rendered here.
+          if (msg.subtype === 'status') {
+            // "Request is out, no tokens yet". The CLI reports the end of the
+            // request as `status: null`, which needs no action: the first
+            // content block or the terminal event supersedes it.
+            if (msg.status === 'requesting') {
+              yield {
+                type: 'message',
+                data: { type: 'stream_event', event: { type: 'request_start' } },
+              };
+            }
+          } else if (msg.subtype === 'task_started') {
+            yield {
+              type: 'task',
+              data: {
+                action: 'start',
+                id: msg.task_id,
+                type: msg.task_type ?? msg.subagent_type ?? 'task',
+                description: msg.description,
+              },
+            };
+          } else if (msg.subtype === 'task_notification') {
+            yield {
+              type: 'task',
+              data: { action: 'end', id: msg.task_id, status: msg.status },
+            };
+          } else if (msg.subtype === 'task_updated') {
+            const status = msg.patch?.status;
+            if (status && status !== 'running' && status !== 'pending') {
+              yield {
+                type: 'task',
+                data: { action: 'end', id: msg.task_id, status },
+              };
+            }
+          }
+          break;
         default:
-          // system notifications, status, tool progress, etc. — ignored.
+          // status, tool progress, etc. — ignored.
           break;
       }
     }
+    // The SDK usually throws on abort, but a stream that simply ends after the
+    // watchdog fired must still be reported rather than looking like a
+    // completed turn.
+    if (idleTimedOut) {
+      yield {
+        type: 'error',
+        data: {
+          message: `模型在 ${Math.round(TURN_IDLE_TIMEOUT_MS / 1000)} 秒内没有任何响应，已中止本次请求`,
+          code: 'IDLE_TIMEOUT',
+        },
+      };
+    }
   } catch (err) {
-    // An interrupt (user stop, or the idle timeout above) surfaces as the abort
-    // signal firing — not an error.
+    // The watchdog aborted a turn that produced nothing for far too long. That
+    // is a failure, not an interrupt — report it so the turn doesn't just stop.
+    if (idleTimedOut) {
+      yield {
+        type: 'error',
+        data: {
+          message: `模型在 ${Math.round(TURN_IDLE_TIMEOUT_MS / 1000)} 秒内没有任何响应，已中止本次请求`,
+          code: 'IDLE_TIMEOUT',
+        },
+      };
+      return;
+    }
+    // An interrupt (user stop) surfaces as the abort signal firing — not an error.
     if (abortController.signal.aborted) return;
     throw err;
   } finally {

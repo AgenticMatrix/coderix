@@ -112,9 +112,19 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title' | 'task';
   data?: unknown;
   deferred?: DeferredPermission | DeferredQuestion;
+}
+
+/** A background task lifecycle change reported by an engine. */
+export interface TaskLifecycleEvent {
+  action: 'start' | 'end';
+  id: string;
+  type?: string;
+  description?: string;
+  /** Terminal status for `action: 'end'`. */
+  status?: string;
 }
 
 // ---------------------------------------------------------------------------

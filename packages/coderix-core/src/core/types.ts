@@ -144,6 +144,15 @@ export interface CostUpdateEvent {
   totalCost: number;
 }
 
+/**
+ * Emitted before each call to the model. It carries no payload: it exists so
+ * consumers can show "request sent, no tokens yet" instead of guessing from the
+ * absence of content (which is indistinguishable from a stalled turn).
+ */
+export interface RequestStartEvent {
+  type: 'request_start';
+}
+
 export type StreamEvent =
   | ContentBlockStartEvent
   | ContentBlockDeltaEvent
@@ -152,7 +161,8 @@ export type StreamEvent =
   | MessageDeltaEvent
   | MessageStopEvent
   | PingEvent
-  | CostUpdateEvent;
+  | CostUpdateEvent
+  | RequestStartEvent;
 
 // ── Query message (yielded by agent loop) ─────────────────────────────
 
