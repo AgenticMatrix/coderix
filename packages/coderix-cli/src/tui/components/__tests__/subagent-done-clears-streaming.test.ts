@@ -68,9 +68,11 @@ describe('sub-agent done without message_stop', () => {
 
     // The thinking block was finalized (the message carries a duration, which
     // is what App.tsx's findLatestThinking reads) so it cannot be mistaken
-    // for an in-progress one.
+    // for an in-progress one. The duration is a Date.now() difference, so it
+    // can legitimately be 0 when the actions land in the same millisecond —
+    // what matters is that the field was written at all.
     const last = state.messages[state.messages.length - 1]!;
-    expect(last.thinkingDuration).toBeGreaterThan(0);
+    expect(last.thinkingDuration).toBeGreaterThanOrEqual(0);
   });
 
   it('keeps the streaming flag live across a tool turn until the engine says done', () => {
