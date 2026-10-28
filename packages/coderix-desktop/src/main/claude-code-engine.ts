@@ -27,6 +27,7 @@ import { CUSTOM_SKILL_SHIM_DIR, refreshCustomSkillShim } from './skills.js';
 import { listRegisteredPluginDirs } from './plugin-registry.js';
 import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { resolveAutoCompactWindow } from './auto-compact-window.js';
+import { createTurnIdleWatchdog, TURN_IDLE_TIMEOUT_MS } from './turn-idle-watchdog.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -95,17 +96,6 @@ function persistSessionState(
  * the ipc-bridge would otherwise accumulate into inflated totals).
  */
 const previousUsageBySession = new Map<string, PersistedUsage>();
-
-/**
- * Idle timeout for a Claude Code turn. The spawned `claude` CLI streams events
- * continuously while it runs (thinking deltas, tool progress, text), so a
- * genuinely silent stream means the subprocess is wedged (a hung model call,
- * a dead gateway, a stalled lock). Without this the `for await` loop above the
- * engine would block forever and the UI would spin indefinitely. Mirrors
- * agentstation-app's `TURN_IDLE_TIMEOUT_MS`; the timer resets on every event so
- * slow-but-progressing turns (long tool runs, extended thinking) are unaffected.
- */
-const TURN_IDLE_TIMEOUT_MS = 180_000;
 
 export interface ClaudeCodeQueryOptions {
   prompt: string;
@@ -223,12 +213,11 @@ function buildAskUserQuestionHook(
     // Wait for the host to answer (or the turn to be aborted).
     const byHeader = await new Promise<Record<string, string | string[]>>((resolve) => {
       let settled = false;
-      // The SDK emits no stream messages while the hook waits for the answer, so
-      // the turn's idle watchdog (which is only reset on each stream message)
-      // would otherwise fire TURN_IDLE_TIMEOUT_MS after the question is asked and
-      // abort the turn mid-question — leaving the AskUserQuestion tool_use stuck
-      // in "executing" with no tool_result. Keep the watchdog alive until the
-      // answer arrives (or the turn is genuinely aborted).
+      // The SDK emits no stream messages while the hook waits for the answer.
+      // The watchdog is normally suspended during tool execution, so this is a
+      // safety net for the case where the tool_use was never observed as an
+      // assistant response — otherwise the turn would abort mid-question,
+      // leaving the AskUserQuestion tool_use stuck in "executing".
       const keepalive = setInterval(() => resetIdleTimer(), 60_000);
       const done = (v: Record<string, string | string[]>): void => {
         if (settled) return;
@@ -689,28 +678,21 @@ export async function* runClaudeCodeQuery(
   }
   if (plugins.length > 0) options.plugins = plugins;
   const preToolUseHooks: HookCallbackMatcher[] = [];
-  // The idle watchdog is defined before the hooks so AskUserQuestion's
-  // PreToolUse hook can keep it alive while the question waits for an answer.
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-  // A fired watchdog aborts the same controller a user stop uses, so remember
-  // why the abort happened — a hang must surface as an error, not as a silent
-  // "user interrupted the turn".
-  let idleTimedOut = false;
-  const resetIdleTimer = (): void => {
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-      console.error(
-        `[claude-code] turn idle for ${TURN_IDLE_TIMEOUT_MS}ms — aborting (possible hang)`,
-      );
-      idleTimedOut = true;
-      abortController.abort();
-    }, TURN_IDLE_TIMEOUT_MS);
-  };
-  resetIdleTimer();
+  // A fired watchdog aborts the same controller a user stop uses, so the
+  // watchdog's `fired` flag is what tells the two apart — a hang must surface
+  // as an error, not as a silent "user interrupted the turn".
+  const idleWatchdog = createTurnIdleWatchdog(() => {
+    console.error(
+      `[claude-code] no model response for ${TURN_IDLE_TIMEOUT_MS}ms — aborting (possible hang)`,
+    );
+    abortController.abort();
+  });
   if (onAskUserQuestion) {
     preToolUseHooks.push({
       matcher: 'AskUserQuestion',
-      hooks: [buildAskUserQuestionHook(onAskUserQuestion, abortController, resetIdleTimer)],
+      hooks: [
+        buildAskUserQuestionHook(onAskUserQuestion, abortController, () => idleWatchdog.keepAlive()),
+      ],
     });
     console.log('[AskUserQuestion] registered PreToolUse hook (matcher: AskUserQuestion)');
   } else {
@@ -768,7 +750,10 @@ export async function* runClaudeCodeQuery(
 
   try {
     for await (const msg of stream) {
-      resetIdleTimer();
+      // Update the watchdog before resetting it: a message that ends the
+      // model's request (or reports tool/background work) must not keep the
+      // deadline armed.
+      idleWatchdog.observe(msg);
       // Remember the Claude Code session id for the next turn.
       if (msg.type === 'system' && msg.subtype === 'init') {
         // Verify a requested resume actually took effect. If the CLI reports a
@@ -810,10 +795,7 @@ export async function* runClaudeCodeQuery(
           // The turn is settled — stop the watchdog so it can't fire while the
           // host is still persisting this result and turn a success into an
           // error.
-          if (idleTimer) {
-            clearTimeout(idleTimer);
-            idleTimer = null;
-          }
+          idleWatchdog.dispose();
           // Mirror the init guard: only persist the session id when it's the one
           // we actually resumed (or there was no resume), so a failed resume
           // doesn't overwrite the recoverable on-disk mapping.
@@ -928,7 +910,7 @@ export async function* runClaudeCodeQuery(
     // The SDK usually throws on abort, but a stream that simply ends after the
     // watchdog fired must still be reported rather than looking like a
     // completed turn.
-    if (idleTimedOut) {
+    if (idleWatchdog.fired) {
       yield {
         type: 'error',
         data: {
@@ -940,7 +922,7 @@ export async function* runClaudeCodeQuery(
   } catch (err) {
     // The watchdog aborted a turn that produced nothing for far too long. That
     // is a failure, not an interrupt — report it so the turn doesn't just stop.
-    if (idleTimedOut) {
+    if (idleWatchdog.fired) {
       yield {
         type: 'error',
         data: {
@@ -954,7 +936,7 @@ export async function* runClaudeCodeQuery(
     if (abortController.signal.aborted) return;
     throw err;
   } finally {
-    if (idleTimer) clearTimeout(idleTimer);
+    idleWatchdog.dispose();
   }
 }
 
