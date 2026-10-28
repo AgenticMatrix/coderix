@@ -1,10 +1,9 @@
 import { Box, Text, ARROW_UP, ARROW_DOWN } from '@coderix/tui';
 import type { Color } from '@coderix/tui';
 import { useState, useEffect } from 'react';
+import { agentPhaseLabel, type AgentPhase } from '../agent-phase.js';
 
 const SPINNER_FRAMES = ['∙', '✢', '✱', '✶', '✻', '✽'];
-
-export type ActivityPhase = 'idle' | 'thinking' | 'executing' | 'streaming' | 'compacting';
 
 function SpinnerGlyph({ active }: { active: boolean }) {
   const [frame, setFrame] = useState(0);
@@ -29,7 +28,9 @@ function formatTime(ms: number): string {
   if (s < 60) return `${s.toFixed(0)}s`;
   const m = Math.floor(s / 60);
   const rs = Math.floor(s % 60);
-  return `${m}m ${rs}s`;
+  // A background task can hold this line well past the hour mark.
+  if (m < 60) return `${m}m ${rs}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 function formatTokens(n: number): string {
@@ -65,16 +66,8 @@ export function ShimmerText({ text, color = '#FFFFFF', active = true }: { text: 
   );
 }
 
-const PHASE_NAMES: Record<ActivityPhase, string> = {
-  idle: '',
-  thinking: 'Thinking',
-  executing: 'Executing',
-  streaming: 'Streaming',
-  compacting: 'Compacting conversation',
-};
-
 export interface ActivityLineProps {
-  phase: ActivityPhase;
+  phase: AgentPhase;
   /** Elapsed ms since the turn started. */
   turnElapsed: number;
   /** Cumulative output tokens this turn (main + sub-agents via EventBus). */
@@ -114,10 +107,14 @@ function ProgressBar({ progressText }: { progressText: string }) {
 }
 
 /**
- * Activity line in Claude Code style:
+ * Activity line in Claude Code style. This is the only place the fine-grained
+ * phase is spelled out — the status bar below only shows `busy` / `wait`:
  *   ✽ Thinking… (20s · ↓ 743 tokens)
  *   ✽ Executing… (53s · ↓ 898 tokens)
  *   ✽ Streaming… (25s · ↑ 1.2k tokens)
+ *   ✽ Waiting for LLM response… (12s)
+ *   ✽ Waiting for tool… (3s)
+ *   ✽ Background task running… (1m 4s)
  *   ✦ Interrupted… (↓ 2.2k tokens, 2m 10s)   ← yellow, after Ctrl+C
  *   ● Done… (↓ 2.2k tokens, 2m 10s since last input)   ← gray, stays after completion
  */
@@ -157,7 +154,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
   }
 
   // ── Compacting phase — spinner + progress bar ──────────────────
-  if (phase === 'compacting') {
+  if (phase === 'busy.compacting') {
     const timeStr = formatTime(turnElapsed);
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -165,7 +162,7 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
           <SpinnerGlyph active={true} />
           <Box flexDirection="column" flexGrow={1}>
             <Text>
-              <Text color="#A855F7">{PHASE_NAMES[phase]}...</Text>
+              <Text color="#A855F7">{agentPhaseLabel(phase)}...</Text>
               <Text dimColor> ({timeStr})</Text>
             </Text>
           </Box>
@@ -176,16 +173,34 @@ export function ActivityLine({ phase, turnElapsed, turnOutputTokens, completed, 
   }
 
   const timeStr = formatTime(turnElapsed);
-  const phaseName = PHASE_NAMES[phase];
+  const label = agentPhaseLabel(phase);
+  if (label == null) return null;
+
+  // Waiting: no token has arrived for this step yet, so counting tokens here
+  // would just read `↓ 0 tokens`. The elapsed time is the whole story.
+  if (phase.startsWith('wait.')) {
+    return (
+      <Box flexDirection="row" marginBottom={1}>
+        <SpinnerGlyph active={true} />
+        <Box flexDirection="column" flexGrow={1}>
+          <Text>
+            <Text color="#A855F7">{label}...</Text>
+            <Text dimColor> ({timeStr})</Text>
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
   const tokenStr = formatTokens(turnOutputTokens);
-  const arrow = phase === 'streaming' ? ARROW_UP : ARROW_DOWN;
+  const arrow = phase === 'busy.streaming' ? ARROW_UP : ARROW_DOWN;
 
   return (
     <Box flexDirection="row" marginBottom={1}>
       <SpinnerGlyph active={true} />
       <Box flexDirection="column" flexGrow={1}>
         <Text>
-          <ShimmerText text={`${phaseName}...`} active={phase === 'thinking'} color="#A855F7" />
+          <ShimmerText text={`${label}...`} active={phase === 'busy.thinking'} color="#A855F7" />
           <Text dimColor> ({timeStr} ∙ {arrow} {tokenStr} tokens)</Text>
         </Text>
       </Box>

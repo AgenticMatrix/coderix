@@ -112,8 +112,25 @@ export function statusPhaseOf(phase: AgentPhase): StatusPhase {
   return phase.startsWith('busy.') ? 'busy' : 'wait';
 }
 
-/** The sub-state label shown next to the coarse phase, e.g. `streaming`. */
-export function phaseDetail(phase: AgentPhase): string | null {
-  const dot = phase.indexOf('.');
-  return dot === -1 ? null : phase.slice(dot + 1);
+/**
+ * The activity label for the detail line above the prompt.
+ *
+ * The status bar only ever renders the coarse phase (`busy` / `wait` / `idle`);
+ * the reason lives here, so both halves of the screen draw their wording from
+ * this one table instead of keeping a vocabulary each.
+ */
+const AGENT_PHASE_LABELS: Record<AgentPhase, string | null> = {
+  idle: null,
+  'busy.thinking': 'Thinking',
+  'busy.executing': 'Executing',
+  'busy.streaming': 'Streaming',
+  'busy.compacting': 'Compacting conversation',
+  'wait.llm': 'Waiting for LLM response',
+  'wait.tool': 'Waiting for tool',
+  'wait.background': 'Background task running',
+};
+
+/** Label for the activity line, or null when there is nothing to show. */
+export function agentPhaseLabel(phase: AgentPhase): string | null {
+  return AGENT_PHASE_LABELS[phase];
 }

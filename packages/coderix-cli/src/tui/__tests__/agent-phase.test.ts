@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   deriveAgentPhase,
   statusPhaseOf,
-  phaseDetail,
+  agentPhaseLabel,
   type AgentPhaseInput,
 } from '../agent-phase.js';
 import type { Message, ToolUseState } from '../../types.js';
@@ -125,9 +125,14 @@ describe('phase helpers', () => {
     expect(statusPhaseOf('wait.background')).toBe('wait');
   });
 
-  it('extracts the sub-state label', () => {
-    expect(phaseDetail('idle')).toBeNull();
-    expect(phaseDetail('busy.thinking')).toBe('thinking');
-    expect(phaseDetail('wait.background')).toBe('background');
+  it('labels every non-idle phase for the activity line', () => {
+    expect(agentPhaseLabel('idle')).toBeNull();
+    expect(agentPhaseLabel('busy.thinking')).toBe('Thinking');
+    expect(agentPhaseLabel('busy.executing')).toBe('Executing');
+    expect(agentPhaseLabel('busy.streaming')).toBe('Streaming');
+    expect(agentPhaseLabel('busy.compacting')).toBe('Compacting conversation');
+    expect(agentPhaseLabel('wait.llm')).toBe('Waiting for LLM response');
+    expect(agentPhaseLabel('wait.tool')).toBe('Waiting for tool');
+    expect(agentPhaseLabel('wait.background')).toBe('Background task running');
   });
 });

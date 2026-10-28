@@ -4,12 +4,12 @@ import type { ScrollBoxHandle, DOMElement } from '@coderix/tui';
 import { useTerminalSize } from '@coderix/tui';
 
 import type { QueryEngine } from '@coderix/core';
-import type { AppConfig, Message, ContentBlock, ThinkingBlock, TokenUsage } from '../../types.js';
+import type { AppConfig, Message, ContentBlock, TokenUsage } from '../../types.js';
 import { getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, summarizeSessionTitle, createCallModel, resolveModelByName } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
 import { MessageBubble } from './MessageBubble.js';
-import { ActivityLine, type ActivityPhase } from './ThinkingBlockRenderer.js';
+import { ActivityLine } from './ThinkingBlockRenderer.js';
 import { InputBox } from './InputBox.js';
 import { StatusBar } from './StatusBar.js';
 import { ApprovalPrompt } from './ApprovalPrompt.js';
@@ -55,20 +55,6 @@ interface AppProps {
   getSessionMcpServers?: () => string[];
   /** Set the MCP server names enabled for the active session (rebuilds tools). */
   setSessionMcpServers?: (names: string[]) => void;
-}
-
-/** Find the most recent thinking block across all messages. */
-function findLatestThinking(messages: Message[]): { block: ThinkingBlock; duration?: number; tokens?: number } | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role === 'assistant') {
-      const thinkingBlock = msg.blocks.find((b): b is ThinkingBlock => b.type === 'thinking');
-      if (thinkingBlock) {
-        return { block: thinkingBlock, duration: msg.thinkingDuration, tokens: msg.thinkingTokens ?? Math.round(thinkingBlock.content.length / 4) };
-      }
-    }
-  }
-  return null;
 }
 
 async function restoreSessionAgents(sessionManager: SessionManager): Promise<void> {
@@ -519,7 +505,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   // In a sub-agent view, the viewed agent's registry status is ground truth
   // for "something is still running". A turn whose flags say streaming but
   // whose agent is no longer running is dead — nothing can still arrive.
-  // (Defined here so both statusPhase and currentPhase can use it.)
+  // (Defined here so the phase derivation can use it.)
   const viewedAgentId = state.subAgentView?.agentId ?? null;
   const viewedAgentRunning =
     viewedAgentId == null || agentsRef.current[viewedAgentId]?.status === 'running';
@@ -574,6 +560,8 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     viewedAgentRunning,
     runningBackgroundTasks,
   ]);
+
+  const isPhaseIdle = agentPhase === 'idle';
 
   useInputHandler({
     inputText: state.inputText,
@@ -865,59 +853,6 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     }
   }, [state.isCompacting]);
 
-  // ── Turn-level phase detection ────────────────────────────────
-  // thinking: latest thinking block is still in progress (no duration)
-  // executing: last message has active tools or running sub-agents
-  // streaming: assistant text is arriving
-  // idle: no activity
-  const latestThinking = useMemo(() => findLatestThinking(displayMessages), [displayMessages]);
-
-  // ── LLM liveness ─────────────────────────────────────────────
-  // `isStreaming` is set on message_start and cleared on message_stop /
-  // FINISH_ASSISTANT_RESPONSE / INTERRUPT / error. Two stale cases survive
-  // past the real end of a turn, and neither may render as live activity:
-  //   1. The engine emitted `done` (turnStatus 'idle') without a message_stop —
-  //      the flag is simply never reset.
-  //   2. A sub-agent turn ended silently (abort without INTERRUPT) — the
-  //      viewed agent is no longer running, so nothing can still arrive.
-  // In both cases the turn is dead: the ActivityLine must show Done, not
-  // Streaming…/Thinking….
-  const llmOutputting = state.isStreaming && viewedAgentRunning && state.turnStatus === 'running';
-
-  // Last computed phase — used to bridge the gaps BETWEEN LLM calls within
-  // one turn (after a message_stop, while tools settle and the next call has
-  // not started yet).  Until the engine emits `done` (turnStatus 'idle'), the
-  // phase must NOT fall through to idle, otherwise the ActivityLine would
-  // flash a premature "Done…" between two model calls.
-  const prevPhaseRef = useRef<ActivityPhase>('idle');
-  const currentPhase = useMemo<ActivityPhase>(() => {
-    if (state.error) return 'idle';
-    if (state.isCompacting) return 'compacting';
-    // Only treat an unfinished thinking block as active thinking when the
-    // LLM is actually still outputting. Otherwise the block is stale (the
-    // turn ended without finalizing it) and we fall through so the
-    // ActivityLine can show Done/Interrupted.
-    if (latestThinking && latestThinking.duration == null && llmOutputting) return 'thinking';
-    // Background tools / sub-agents still running — must NOT show Done.
-    const lastMsg = state.messages[state.messages.length - 1];
-    const hasActive =
-      lastMsg?.blocks.some(
-        (b) => b.type === 'tool_use' && (b.state === 'pending' || b.state === 'executing'),
-      ) ?? false;
-    if (hasActive) return 'executing';
-    for (const agent of Object.values(agentsRef.current)) {
-      if (agent.status === 'running') return 'executing';
-    }
-    if (llmOutputting) return 'streaming';
-    // The model has not finished responding (engine `done` not yet received)
-    // and the turn is still alive — keep the current phase unchanged instead
-    // of showing a premature Done. A dead turn (no process running at all)
-    // falls through to idle.
-    if (state.turnStatus === 'running' && viewedAgentRunning) return prevPhaseRef.current;
-    return 'idle';
-  }, [state.error, state.isCompacting, latestThinking, state.messages, llmOutputting, agentTick, state.turnStatus, viewedAgentRunning]);
-  prevPhaseRef.current = currentPhase;
-
   // Turn elapsed timer — starts on new user message, runs continuously until next user message
   // Uses mainMessages (not state.messages) so the timer doesn't reset when
   // switching between main agent and sub-agent views.
@@ -948,15 +883,19 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   //   - turnStartedAt > 0: a user message was sent this session (ADD_USER_MESSAGE
   //     stamps it; LOAD_CHAT does not, so initial load and resume stay 0).
   //   - turnStatus === 'idle': the engine emitted `done` for this turn. Without it the
-  //     brief window between ADD_USER_MESSAGE and the first message_start (where
-  //     currentPhase is still 'idle') would flash a premature "Done (0 tokens)".
+  //     brief window between ADD_USER_MESSAGE and the first message_start would
+  //     flash a premature "Done (0 tokens)".
+  // The value is captured when the TURN ends, not when the activity line reaches
+  // idle: a background task can hold `agentPhase` at `wait.background` for
+  // minutes afterwards, and the line must not then report that whole wait as
+  // the turn's duration.
   // Elapsed is computed directly from turnStartRef rather than turnElapsedRef:
   // turnElapsedRef is only refreshed by the 1s interval (during the active phase)
   // and by the timer effect's idle branch (which runs AFTER this effect), so a
   // turn finishing before the first tick read a stale 0, never set completedTurn,
   // and left the sticky ActivityLine snapshot stuck on "✽ Streaming…" forever.
   useEffect(() => {
-    if (currentPhase === 'idle' && state.turnStatus === 'idle' && state.turnStartedAt > 0) {
+    if (state.turnStatus === 'idle' && state.turnStartedAt > 0) {
       const elapsed = Date.now() - turnStartRef.current;
       if (elapsed > 0) {
         setCompletedTurn({
@@ -967,14 +906,14 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     } else {
       setCompletedTurn(null);
     }
-  }, [currentPhase === 'idle', state.turnStatus, state.turnStartedAt, state.turnOutputTokens]);
+  }, [state.turnStatus, state.turnStartedAt, state.turnOutputTokens]);
 
   // Elapsed timer — stops completely when idle, ticks at 1s when active.
   // Only calls setState when the displayed second changes to minimize re-renders.
   const lastDisplayedSecond = useRef(-1);
 
   useEffect(() => {
-    if (currentPhase === 'idle') {
+    if (isPhaseIdle) {
       // Capture final elapsed for completedTurn, but don't keep ticking
       turnElapsedRef.current = Date.now() - turnStartRef.current;
       return;
@@ -993,7 +932,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     }, 1000);
 
     return () => clearInterval(id);
-  }, [currentPhase]);
+  }, [isPhaseIdle]);
 
   // Count new messages arrived while frozen
   const frozenNewCount = state.isFrozen && state.isStreaming
@@ -1415,9 +1354,9 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
             showing the cached snapshot prevents a layout jump. */}
         <OffscreenFreeze frozen={state.isFrozen}>
           {!state.isFrozen && (() => {
-            const activityElement = (currentPhase !== 'idle' || completedTurn != null) ? (
+            const activityElement = (!isPhaseIdle || completedTurn != null) ? (
               <ActivityLine
-                phase={currentPhase}
+                phase={agentPhase}
                 turnElapsed={turnElapsed}
                 turnOutputTokens={state.turnOutputTokens}
                 completed={completedTurn}
