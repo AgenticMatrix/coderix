@@ -11,6 +11,8 @@ export interface ChatState {
   streamingContent: string;
   sessionId: string | null;
   error: string | null;
+  /** The last turn was stopped by the user and nothing has started since. */
+  interrupted: boolean;
 
   // Backgrounded sessions' state. A session's transcript is stored here only
   // while it is *not* the viewed session; on switch-in it is popped into the
@@ -25,6 +27,8 @@ export interface ChatState {
   // Actions
   sendMessage: (content: string) => Promise<void>;
   interruptStream: (sessionId?: string) => void;
+  /** Drop the interrupt marker — a turn that finished on its own wins. */
+  clearInterrupted: (sessionId?: string) => void;
   clearMessages: () => void;
   setSessionId: (id: string | null) => boolean;
   setError: (error: string | null) => void;
@@ -90,6 +94,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   streamingContent: '',
   sessionId: null,
   error: null,
+  interrupted: false,
   messagesBySession: {},
   streamingBySession: {},
   streamEpochBySession: {},
@@ -110,6 +115,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       messages: [...state.messages, userMsg],
       isStreaming: true,
       error: null,
+      interrupted: false,
       streamEpochBySession: sessionId
         ? {
             ...state.streamEpochBySession,
@@ -128,11 +134,20 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       }));
       return;
     }
-    set({ isStreaming: false, streamingContent: '' });
+    // Only a live turn can be interrupted. Pressing stop while idle must not
+    // leave an "Interrupted" badge on a session that was never running.
+    const marker = get().isStreaming || get().interrupted;
+    set({ isStreaming: false, streamingContent: '', interrupted: marker });
+  },
+
+  clearInterrupted: (sessionId?: string) => {
+    const viewed = get().sessionId;
+    if (resolveTarget(sessionId, viewed) !== viewed) return;
+    if (get().interrupted) set({ interrupted: false });
   },
 
   clearMessages: () => {
-    set({ messages: [], streamingContent: '', error: null });
+    set({ messages: [], streamingContent: '', error: null, interrupted: false });
   },
 
   setSessionId: (id: string | null) => {
@@ -169,6 +184,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       isStreaming: nextStreaming,
       streamingContent: '',
       error: null,
+      interrupted: false,
       messagesBySession,
       streamingBySession,
     });
@@ -176,7 +192,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   setError: (error: string | null) => {
-    set({ error, isStreaming: false });
+    set({ error, isStreaming: false, interrupted: false });
   },
 
   commitAssistantMessage: (sessionId, message) => {

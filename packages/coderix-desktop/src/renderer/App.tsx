@@ -149,6 +149,7 @@ export function App(): React.ReactElement {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const error = useChatStore((s) => s.error);
+  const interrupted = useChatStore((s) => s.interrupted);
   const setSessionId = useChatStore((s) => s.setSessionId);
   const sessionId = useChatStore((s) => s.sessionId);
 
@@ -182,6 +183,17 @@ export function App(): React.ReactElement {
   );
   const runningTaskCount = useStreamStore((s) =>
     sessionId ? (s.runningTasksBySession[sessionId]?.length ?? 0) : 0,
+  );
+  const compacting = useStreamStore((s) =>
+    sessionId ? s.compactingBySession[sessionId] === true : false,
+  );
+  // Sub-agents outlive the turn exactly like background tasks. A foreground
+  // agent cannot: its spawn tool call is awaited by the turn that started it,
+  // so anything still running once the turn is over is background work. The
+  // agent store is not session-scoped (the side pane shows every agent), so
+  // this counts running agents globally.
+  const runningAgentCount = useSubagentStore(
+    (s) => Object.values(s.agents).filter((a) => a.status === 'running').length,
   );
 
   // ── Local state ─────────────────────────────────────────────────────────
@@ -1201,9 +1213,12 @@ export function App(): React.ReactElement {
         currentMessage: streamCurrentMessage,
         messages,
         awaitingUser: pendingQuestion !== null || pendingPermission !== null,
+        compacting,
+        interrupted,
         hasError: error !== null,
         requesting,
         runningTaskCount,
+        runningAgentCount,
         previous: prevAgentStatusRef.current,
       }),
     [
@@ -1212,9 +1227,12 @@ export function App(): React.ReactElement {
       messages,
       pendingQuestion,
       pendingPermission,
+      compacting,
+      interrupted,
       error,
       requesting,
       runningTaskCount,
+      runningAgentCount,
     ],
   );
   prevAgentStatusRef.current = agentStatus;

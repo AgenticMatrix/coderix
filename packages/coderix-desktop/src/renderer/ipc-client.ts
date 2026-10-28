@@ -383,6 +383,27 @@ export function onStreamTasks(
   });
 }
 
+/**
+ * Subscribe to context-compaction progress.
+ *
+ * true from the engine's compaction start until it reports completion; the
+ * main process also clears it when the turn winds down, so a failed
+ * compaction cannot leave the badge stuck.
+ */
+export function onStreamCompact(
+  callback: (compacting: boolean, sessionId?: string) => void,
+): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'compact') {
+      callback(event.compacting === true, event.sessionId as string | undefined);
+    }
+  });
+}
+
 // ===========================================================================
 //  Session Management
 // ===========================================================================

@@ -757,6 +757,15 @@ export async function* runClaudeCodeQuery(
   // whole-session aggregate.
   let lastTurnUsage: unknown = undefined;
 
+  // The SDK reports compaction only as a lifecycle status, so the transitions
+  // have to be turned into start/end events here. Without this the desktop
+  // badge sits on "sending request" for however long the summary takes.
+  let sdkCompacting = false;
+  const compactionEvent = (compacting: boolean) => ({
+    type: 'compact_progress' as const,
+    data: { status: compacting ? 'started' : 'completed', step: 'llm_summarize' },
+  });
+
   try {
     for await (const msg of stream) {
       resetIdleTimer();
@@ -868,6 +877,18 @@ export async function* runClaudeCodeQuery(
             // "Request is out, no tokens yet". The CLI reports the end of the
             // request as `status: null`, which needs no action: the first
             // content block or the terminal event supersedes it.
+            // Compaction runs with no blocks of its own, so its start and end
+            // are the only evidence the renderer gets. Any status that is not
+            // compacting means it is over (requesting, or null).
+            if (msg.status === 'compacting') {
+              if (!sdkCompacting) {
+                sdkCompacting = true;
+                yield compactionEvent(true);
+              }
+            } else if (sdkCompacting) {
+              sdkCompacting = false;
+              yield compactionEvent(false);
+            }
             if (msg.status === 'requesting') {
               yield {
                 type: 'message',

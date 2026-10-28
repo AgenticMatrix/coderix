@@ -156,6 +156,7 @@ export const IPC_CHANNELS = {
   STREAM_ERROR: 'stream:error',
   STREAM_PHASE: 'stream:phase',
   STREAM_TASKS: 'stream:tasks',
+  STREAM_COMPACT: 'stream:compact',
   STATE_PERMISSION_REQ: 'state:permissionReq',
   STATE_QUESTION_REQ: 'state:questionReq',
   STATE_TOKEN_USAGE: 'state:tokenUsage',
@@ -668,6 +669,46 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       const subagentTranscripts = new Map<string, Message[]>();
       const subagentMeta = new Map<string, { agentType?: string; description?: string }>();
 
+      // Push every tracked sub-agent to its final state. A turn that ends
+      // without a done event — abort, provider failure, idle watchdog — never
+      // reaches the completion branch, and a sub-agent left at "running" makes
+      // the status bar report background work forever.
+      const settleClaudeSubagents = async (
+        finalStatus: 'done' | 'stopped',
+        persist: boolean,
+      ): Promise<void> => {
+        for (const [agentId, transcript] of subagentTranscripts) {
+          const meta = subagentMeta.get(agentId);
+          safeSend(
+            mainWindow,
+            IPC_CHANNELS.AGENT_UPDATE,
+            normalizeSubAgentEvent({
+              type: 'agent_update',
+              agentId,
+              agent: {
+                id: agentId,
+                toolUseId: agentId,
+                agentType: meta?.agentType,
+                description: meta?.description,
+                status: finalStatus,
+                finishedAt: Date.now(),
+                transcript,
+              },
+            }),
+          );
+          if (!persist) continue;
+          // Persist the transcript to the Coderix session store keyed by the
+          // tool_use id (=== parent_tool_use_id) so a cold reload (app restart)
+          // can recover it via getAgentTranscript — the claude-code sub-agent id
+          // on disk differs from the tool_use id.
+          try {
+            await saveAgentTranscript(agentId, transcript, sessionDir(streamSessionId));
+          } catch { /* best-effort persistence */ }
+        }
+        subagentTranscripts.clear();
+        subagentMeta.clear();
+      };
+
       // Persist one completed LLM call (an assistant message with its thinking /
       // tool_use / text blocks) to the session store the moment it finishes,
       // rather than batching every call until the whole turn ends. Persisting per
@@ -995,6 +1036,17 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               safeSend(mainWindow, IPC_CHANNELS.STATE_COMPACT, event.data);
               break;
             }
+            case 'compact_progress': {
+              // Compaction is a long, silent stretch — this is the only signal
+              // the renderer gets while it runs. `compact` above only describes
+              // the finished boundary.
+              const prog = event.data as { status?: string } | undefined;
+              safeSend(mainWindow, IPC_CHANNELS.STREAM_COMPACT, {
+                compacting: prog?.status !== 'completed',
+                sessionId: streamSessionId,
+              });
+              break;
+            }
             case 'done': {
               // Query complete. The Coderix engine persists messages inside
               // submitMessage(); the Claude Code engine hands its final result
@@ -1002,35 +1054,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               if (engine === 'claude-code') {
                 // Mark all accumulated sub-agents done now that the turn ended,
                 // so their side-pane status flips from "正在工作…" to "已工作".
-                for (const [agentId, transcript] of subagentTranscripts) {
-                  const meta = subagentMeta.get(agentId);
-                  safeSend(
-                    mainWindow,
-                    IPC_CHANNELS.AGENT_UPDATE,
-                    normalizeSubAgentEvent({
-                      type: 'agent_update',
-                      agentId,
-                      agent: {
-                        id: agentId,
-                        toolUseId: agentId,
-                        agentType: meta?.agentType,
-                        description: meta?.description,
-                        status: 'done',
-                        finishedAt: Date.now(),
-                        transcript,
-                      },
-                    }),
-                  );
-                  // Persist the transcript to the Coderix session store keyed by
-                  // the tool_use id (=== parent_tool_use_id) so a cold reload
-                  // (app restart) can recover it via getAgentTranscript — the
-                  // claude-code sub-agent id on disk differs from the tool_use id.
-                  try {
-                    await saveAgentTranscript(agentId, transcript, sessionDir(streamSessionId));
-                  } catch { /* best-effort persistence */ }
-                }
-                subagentTranscripts.clear();
-                subagentMeta.clear();
+                await settleClaudeSubagents('done', true);
                 const data = event.data as {
                   sessionId?: string;
                   result?: string;
@@ -1145,6 +1169,16 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         // completion has already flushed via message_stop, and an aborted turn's
         // buffered text belongs to the message the renderer is about to drop.
         discardStreamBuffer(streamSessionId);
+        // A turn can end without the compaction's final `completed` progress
+        // (error, abort, provider failure). Clear the flag unconditionally so
+        // the badge can never be left stuck on "compacting".
+        safeSend(getMainWindow(windowManager), IPC_CHANNELS.STREAM_COMPACT, {
+          compacting: false,
+          sessionId: streamSessionId,
+        });
+        // Same reasoning for sub-agents: only the done branch settles them, so
+        // an aborted or failed turn would leave them running forever.
+        await settleClaudeSubagents('stopped', false);
         if (!turnEnded && controller.signal.aborted) {
           const mw = getMainWindow(windowManager);
           safeSend(mw, IPC_CHANNELS.STREAM_ERROR, {

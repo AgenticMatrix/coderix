@@ -52,4 +52,13 @@ describe('StatusBar stats pills', () => {
     const html = render({ turnCount: 0, stepCount: 0 });
     expect(html).not.toContain(' 轮 · ');
   });
+
+  it('renders a badge for every phase the agent can report', () => {
+    // Each of these has its own labelKey/variant entry; a missing one renders
+    // nothing at all, which is how a new state silently loses its badge.
+    expect(render({ agentStatus: 'compacting' })).toContain('压缩上下文中…');
+    expect(render({ agentStatus: 'interrupted' })).toContain('已中断');
+    expect(render({ agentStatus: 'background' })).toContain('后台执行中…');
+    expect(render({ agentStatus: 'waiting' })).toContain('等待输入…');
+  });
 });

@@ -8,6 +8,7 @@ import { useSessionStore } from './sessionStore.js';
 import {
   onStreamBlock,
   onStreamDone,
+  onStreamCompact,
   onStreamError,
   onStreamPhase,
   onStreamTasks,
@@ -107,6 +108,9 @@ export interface StreamState {
   /** Background tasks still running, keyed by session (empty = none). */
   runningTasksBySession: Record<string, RunningTaskSummary[]>;
 
+  /** Sessions compacting their context right now (absent = not compacting). */
+  compactingBySession: Record<string, boolean>;
+
   /** Cleanup functions for IPC event listeners */
   _cleanups: Array<() => void>;
 
@@ -146,6 +150,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
   tokenUsageBySession: {},
   requestingBySession: {},
   runningTasksBySession: {},
+  compactingBySession: {},
   _cleanups: [],
 
   setViewedSession: (id: string | null) => {
@@ -478,6 +483,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       if (!acceptTerminalEpoch(sid, epoch)) return;
       clearRequesting(sid);
       useChatStore.getState().setSessionStreaming(sid || undefined, false);
+      // A turn that reached its own terminal done was not cut short, even if a
+      // stop click landed a moment earlier.
+      useChatStore.getState().clearInterrupted(sid || undefined);
       refreshSidebarSession(false, sid);
     });
     cleanups.push(unsubTurnDone);
@@ -499,6 +507,10 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // an error banner.
       if (code === 'INTERRUPTED') {
         writeCurrent(sid, null);
+        // Record the marker before the streaming flag drops: interruptStream
+        // only marks a turn it saw running. (The abort can also be reported
+        // here rather than by the local stop handler, e.g. another window.)
+        useChatStore.getState().interruptStream(sid || undefined);
         useChatStore.getState().setSessionStreaming(sid || undefined, false);
         // Complete any committed tool_use still marked "executing"/"pending".
         // A tool whose result was never attached (e.g. an answered AskUserQuestion
@@ -569,6 +581,20 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       });
     });
     cleanups.push(unsubTasks);
+
+    // ── Context Compaction ─────────────────────────────────
+    const unsubCompact = onStreamCompact((compacting, sessionId?: string) => {
+      const sid = sessionOf(sessionId);
+      if (!sid) return;
+      set((s) => {
+        if ((s.compactingBySession[sid] ?? false) === compacting) return s;
+        const next = { ...s.compactingBySession };
+        if (compacting) next[sid] = true;
+        else delete next[sid];
+        return { compactingBySession: next };
+      });
+    });
+    cleanups.push(unsubCompact);
 
     set({ _cleanups: cleanups });
   },

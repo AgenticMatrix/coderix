@@ -47,7 +47,7 @@ export interface StatusBarProps {
   gitAhead?: number;
   gitBehind?: number;
   /** Agent status */
-  agentStatus?: 'idle' | 'requesting' | 'thinking' | 'executing' | 'output' | 'background' | 'waiting' | 'error';
+  agentStatus?: 'idle' | 'requesting' | 'thinking' | 'executing' | 'output' | 'compacting' | 'background' | 'waiting' | 'interrupted' | 'error';
   /** Whether the terminal panel is open */
   terminalOpen?: boolean;
   /** Toggle the terminal panel */
@@ -93,8 +93,10 @@ const statusConfig: Record<NonNullable<StatusBarProps['agentStatus']>, { labelKe
   thinking: { labelKey: 'status.thinking', variant: 'purple' },
   executing: { labelKey: 'status.executing', variant: 'warning' },
   output: { labelKey: 'status.output', variant: 'blue' },
+  compacting: { labelKey: 'status.compacting', variant: 'purple' },
   background: { labelKey: 'status.background', variant: 'default' },
   waiting: { labelKey: 'status.waiting', variant: 'warning' },
+  interrupted: { labelKey: 'status.interrupted', variant: 'default' },
   error: { labelKey: 'status.error', variant: 'danger' },
 };
 
