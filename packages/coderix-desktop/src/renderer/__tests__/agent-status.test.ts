@@ -183,6 +183,102 @@ describe('deriveAgentStatus', () => {
     ).toBe('error');
   });
 
+  it('reports compacting while the turn summarises itself', () => {
+    // Compaction emits no blocks, so without the flag the badge would read
+    // "sending request" for however long the summary takes.
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: null,
+        messages: [],
+        compacting: true,
+      }),
+    ).toBe('compacting');
+  });
+
+  it('lets compacting outrank in-flight work but not a failure', () => {
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: { blocks: [toolUse('executing')] },
+        messages: [],
+        compacting: true,
+      }),
+    ).toBe('compacting');
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: null,
+        messages: [],
+        compacting: true,
+        hasError: true,
+      }),
+    ).toBe('error');
+  });
+
+  it('returns to the live badge once compaction settles', () => {
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: { blocks: [text('resumed')] },
+        messages: [],
+        compacting: false,
+      }),
+    ).toBe('output');
+  });
+
+  it('reports interrupted after the user stops a turn', () => {
+    expect(
+      deriveAgentStatus({
+        isStreaming: false,
+        currentMessage: null,
+        messages: [assistant([{ type: 'text', content: 'half', state: 'done' }])],
+        interrupted: true,
+      }),
+    ).toBe('interrupted');
+  });
+
+  it('drops the interrupted badge while a new turn streams', () => {
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: { blocks: [text('next')] },
+        messages: [],
+        interrupted: true,
+      }),
+    ).toBe('output');
+  });
+
+  it('counts a background sub-agent as background, not idle', () => {
+    const base = {
+      isStreaming: false,
+      currentMessage: null,
+      messages: [assistant([{ type: 'text', content: 'done', state: 'done' }])],
+    };
+    expect(deriveAgentStatus({ ...base, runningAgentCount: 1 })).toBe('background');
+    expect(deriveAgentStatus({ ...base, runningAgentCount: 0 })).toBe('idle');
+  });
+
+  it('does not call a tool or system block "thinking"', () => {
+    const toolResult: StreamBlock = { type: 'tool_result', content: 'ok', state: 'done' };
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: { blocks: [toolResult] },
+        messages: [],
+        previous: 'output',
+      }),
+    ).toBe('output');
+    expect(
+      deriveAgentStatus({
+        isStreaming: true,
+        currentMessage: { blocks: [toolResult] },
+        messages: [],
+        previous: 'idle',
+      }),
+    ).toBe('requesting');
+  });
+
   it('ignores a tool that already finished or errored', () => {
     expect(
       deriveAgentStatus({

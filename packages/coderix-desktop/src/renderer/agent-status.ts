@@ -8,8 +8,10 @@ export type AgentStatus =
   | 'thinking'
   | 'executing'
   | 'output'
+  | 'compacting'
   | 'background'
   | 'waiting'
+  | 'interrupted'
   | 'error';
 
 export interface AgentStatusInput {
@@ -21,6 +23,13 @@ export interface AgentStatusInput {
   messages: ChatMessage[];
   /** A permission or AskUserQuestion prompt is open — the agent is blocked on the user. */
   awaitingUser?: boolean;
+  /**
+   * Context compaction is running. It blocks the turn and can last minutes, so
+   * it outranks every in-flight signal.
+   */
+  compacting?: boolean;
+  /** The user stopped the previous turn and nothing has started since. */
+  interrupted?: boolean;
   /** The last turn failed — show it instead of pretending the session is idle. */
   hasError?: boolean;
   /**
@@ -30,12 +39,30 @@ export interface AgentStatusInput {
   requesting?: boolean;
   /** Background tasks still running for this session. */
   runningTaskCount?: number;
+  /** Background sub-agents still running (they outlive the turn too). */
+  runningAgentCount?: number;
   /** Which status was showing before this render (bridges gaps between model steps). */
   previous?: AgentStatus;
 }
 
 function isActiveTool(block: StreamBlock): boolean {
   return block.type === 'tool_use' && (block.state === 'pending' || block.state === 'executing');
+}
+
+/**
+ * Keep an active phase across the gap between two model steps. Anything else
+ * (idle, a finished turn, a failure) means a request is out and nothing has
+ * come back yet.
+ */
+function holdPrevious(previous: AgentStatus): AgentStatus {
+  switch (previous) {
+    case 'thinking':
+    case 'executing':
+    case 'output':
+      return previous;
+    default:
+      return 'requesting';
+  }
 }
 
 /**
@@ -52,20 +79,30 @@ function isActiveTool(block: StreamBlock): boolean {
  * gap the block list is empty, so the committed transcript is checked for
  * still-running tools, and the previous phase is kept while a step is between
  * requests.
+ *
+ * Three states are not derivable from the blocks at all and arrive as inputs:
+ * `compacting` (a turn can spend minutes summarising itself, emitting no
+ * blocks), `interrupted` (the turn is over but the user stopped it rather than
+ * letting it finish), and `runningAgentCount` (background sub-agents outlive
+ * the turn the same way background tasks do).
  */
 export function deriveAgentStatus({
   isStreaming,
   currentMessage,
   messages,
   awaitingUser = false,
+  compacting = false,
+  interrupted = false,
   hasError = false,
   requesting = false,
   runningTaskCount = 0,
+  runningAgentCount = 0,
   previous = 'idle',
 }: AgentStatusInput): AgentStatus {
   // A failure outranks everything: whatever the blocks say, the turn did not
   // produce a usable answer.
   if (hasError) return 'error';
+  if (compacting) return 'compacting';
   if (awaitingUser) return 'waiting';
 
   const blocks = currentMessage?.blocks ?? [];
@@ -82,16 +119,24 @@ export function deriveAgentStatus({
     // wins, so a late request-start can never mask tokens that already arrived.
     if (!last && requesting) return 'requesting';
 
-    if (last) return last.type === 'text' ? 'output' : 'thinking';
+    if (last) {
+      if (last.type === 'text') return 'output';
+      if (last.type === 'thinking') return 'thinking';
+      // tool_use / tool_result / system are step boundaries, not a thought —
+      // they used to be reported as "thinking".
+      return holdPrevious(previous);
+    }
 
     // Between model steps with no explicit request signal (older engines, or a
     // few milliseconds before the signal arrives). Never regress to "idle".
-    return previous === 'idle' || previous === 'waiting' || previous === 'background'
-      ? 'requesting'
-      : previous;
+    return holdPrevious(previous);
   }
 
-  // The turn is over. A background task keeps the session busy even though the
+  // The turn is over. An interrupt is the most recent thing that happened, so
+  // it answers "why did this stop?" better than the work still running behind.
+  if (interrupted) return 'interrupted';
+
+  // A background task or sub-agent keeps the session busy even though the
   // answer already landed.
-  return runningTaskCount > 0 ? 'background' : 'idle';
+  return runningTaskCount + runningAgentCount > 0 ? 'background' : 'idle';
 }

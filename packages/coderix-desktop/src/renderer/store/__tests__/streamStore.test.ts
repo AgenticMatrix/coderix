@@ -3,6 +3,7 @@ import type { StreamBlock } from '../../types.js';
 
 vi.mock('../../ipc-client.js', () => ({
   onStreamBlock: vi.fn(),
+  onStreamCompact: vi.fn(),
   onStreamDone: vi.fn(),
   onStreamError: vi.fn(),
   onStreamPhase: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('../../ipc-client.js', () => ({
 
 import {
   onStreamBlock,
+  onStreamCompact,
   onStreamDone,
   onStreamError,
   onStreamPhase,
@@ -53,6 +55,7 @@ let errorCb: ErrorCb;
 let tokenCb: TokenCb;
 let phaseCb: (sessionId?: string) => void;
 let tasksCb: (tasks: RunningTaskSummary[], sessionId?: string) => void;
+let compactCb: (compacting: boolean, sessionId?: string) => void;
 
 function flushFrame(): void {
   vi.advanceTimersByTime(1);
@@ -95,6 +98,10 @@ describe('streamStore turn lifecycle', () => {
       tasksCb = cb;
       return () => {};
     });
+    vi.mocked(onStreamCompact).mockImplementation((cb) => {
+      compactCb = cb;
+      return () => {};
+    });
 
     useChatStore.setState({
       messages: [],
@@ -102,6 +109,7 @@ describe('streamStore turn lifecycle', () => {
       streamingContent: '',
       sessionId: 's1',
       error: null,
+      interrupted: false,
       messagesBySession: {},
       streamingBySession: {},
       streamEpochBySession: {},
@@ -121,6 +129,7 @@ describe('streamStore turn lifecycle', () => {
       tokenUsageBySession: {},
       requestingBySession: {},
       runningTasksBySession: {},
+      compactingBySession: {},
       _cleanups: [],
     });
     useStreamStore.getState().startListening();
@@ -225,6 +234,45 @@ describe('streamStore turn lifecycle', () => {
 
     tasksCb([], 's1');
     expect(useStreamStore.getState().runningTasksBySession.s1).toBeUndefined();
+  });
+
+  it('tracks context compaction per session', () => {
+    compactCb(true, 's1');
+    expect(useStreamStore.getState().compactingBySession.s1).toBe(true);
+
+    compactCb(false, 's1');
+    expect(useStreamStore.getState().compactingBySession.s1).toBeUndefined();
+  });
+
+  it('drops the interrupt marker when the turn finishes on its own', () => {
+    useChatStore.setState({ isStreaming: true });
+    errorCb('Query interrupted by user', 'INTERRUPTED', 's1', 1);
+    expect(useChatStore.getState().interrupted).toBe(true);
+
+    turnDoneCb('s1', 1);
+    expect(useChatStore.getState().interrupted).toBe(false);
+  });
+
+  it('does not mark an interrupt when nothing was running', () => {
+    useChatStore.getState().interruptStream('s1');
+    expect(useChatStore.getState().interrupted).toBe(false);
+    expect(useChatStore.getState().isStreaming).toBe(false);
+  });
+
+  it('leaves the viewed session alone when another session aborts', () => {
+    useChatStore.setState({ sessionId: 's2' });
+    errorCb('Query interrupted by user', 'INTERRUPTED', 's1', 1);
+    expect(useChatStore.getState().interrupted).toBe(false);
+  });
+
+  it('marks the viewed session interrupted when the engine reports an abort', () => {
+    useChatStore.setState({ isStreaming: true });
+    errorCb('Query interrupted by user', 'INTERRUPTED', 's1', 1);
+    expect(useChatStore.getState().interrupted).toBe(true);
+
+    // A new turn clears the marker with the error.
+    useChatStore.getState().sendMessage('next');
+    expect(useChatStore.getState().interrupted).toBe(false);
   });
 
   it('adopts a live context footprint without touching billable totals', () => {

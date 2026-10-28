@@ -81,6 +81,7 @@ const CH = {
   STREAM_ERROR: 'stream:error',
   STREAM_PHASE: 'stream:phase',
   STREAM_TASKS: 'stream:tasks',
+  STREAM_COMPACT: 'stream:compact',
   STATE_PERMISSION_REQ: 'state:permissionReq',
   STATE_QUESTION_REQ: 'state:questionReq',
   STATE_TOKEN_USAGE: 'state:tokenUsage',
@@ -232,6 +233,13 @@ interface StreamTasks {
   sessionId?: string;
 }
 
+interface StreamCompact {
+  type: 'compact';
+  /** True while context compaction runs, false when it settles or the turn ends. */
+  compacting: boolean;
+  sessionId?: string;
+}
+
 type StreamEventData =
   | StreamBlockStart
   | StreamBlockDelta
@@ -242,7 +250,8 @@ type StreamEventData =
   | StreamTurnDone
   | StreamError
   | StreamPhase
-  | StreamTasks;
+  | StreamTasks
+  | StreamCompact;
 
 // ---------------------------------------------------------------------------
 // Permission request type
@@ -356,6 +365,13 @@ function createEventListener(
           callback({
             type: 'tasks',
             tasks: (data?.tasks as unknown[]) ?? [],
+            sessionId: data?.sessionId as string | undefined,
+          });
+          break;
+        case CH.STREAM_COMPACT:
+          callback({
+            type: 'compact',
+            compacting: data?.compacting === true,
             sessionId: data?.sessionId as string | undefined,
           });
           break;
@@ -1132,6 +1148,9 @@ const coderixAPI = {
    *   - { type: 'toolResult', toolUseId, result }
    *   - { type: 'done', stopReason, usage?, model? }
    *   - { type: 'error', message, code }
+   *   - { type: 'phase', phase: 'requesting' }
+   *   - { type: 'tasks', tasks }
+   *   - { type: 'compact', compacting }
    */
   onStreamEvent(callback: (event: StreamEventData) => void): () => void {
     return createEventListener(
@@ -1146,6 +1165,7 @@ const coderixAPI = {
         CH.STREAM_ERROR,
         CH.STREAM_PHASE,
         CH.STREAM_TASKS,
+        CH.STREAM_COMPACT,
       ],
       callback,
     );
