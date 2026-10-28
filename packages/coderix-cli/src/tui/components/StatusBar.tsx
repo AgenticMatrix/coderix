@@ -8,7 +8,7 @@ import {
 } from '@coderix/tui';
 
 import type { TokenUsage } from '../../types.js';
-import { statusPhaseOf, phaseDetail, type AgentPhase } from '../agent-phase.js';
+import { statusPhaseOf, type AgentPhase } from '../agent-phase.js';
 
 interface StatusBarProps {
   model: string;
@@ -110,11 +110,13 @@ function ContextBar({ used, max }: { used: number; max: number }) {
 
 /**
  * Bottom status bar showing:
- *   ◉ busy streaming ╎ ctx ▰▰▰▰░░░░ 40% 3.2K/128K ╎ 0.0042$ ╎ 12m 34s ╎ ⏲ 3s ╎
+ *   ◉ busy ╎ ctx ▰▰▰▰░░░░ 40% 3.2K/128K ╎ 0.0042$ ╎ 12m 34s ╎ ⏲ 3s ╎
  *   model: xxx ╎ mem 30M ╎ procs 4 ╎ ctrl+C to interrupt
  *
- * The phase badge spells out why: busy streaming / thinking / executing /
- * compacting, and wait llm / tool / background.
+ * The phase badge stays coarse — `busy` / `wait` / `idle` only. What the agent
+ * is actually doing (streaming, thinking, executing, waiting for the LLM, …)
+ * is spelled out by the ActivityLine above the prompt; both read the same
+ * `AgentPhase`, so the two never disagree.
  *
  * ctx = cache_read + cache_creation + output + input (real API tokens).
  * Mem = total RSS memory of Coderix process tree (main + sub-agents + tool subprocesses).
@@ -135,7 +137,6 @@ export const StatusBar = memo(function StatusBar({ model, agentPhase, isFrozen, 
   const streamStartRef = useRef<number | null>(null);
 
   const statusPhase = statusPhaseOf(agentPhase);
-  const detail = phaseDetail(agentPhase);
   // The response timer measures one model step (it restarts on every
   // message_start), so tool execution must not keep it running.
   const isStreaming =
@@ -204,13 +205,9 @@ export const StatusBar = memo(function StatusBar({ model, agentPhase, isFrozen, 
       ) : isFrozen ? (
         <Text color="ansi:yellow">⏸ paused</Text>
       ) : statusPhase === 'busy' ? (
-        <Text color="ansi:red">
-          ◉ busy{detail ? <Text dimColor> {detail}</Text> : null}
-        </Text>
+        <Text color="ansi:red">◉ busy</Text>
       ) : statusPhase === 'wait' ? (
-        <Text color="ansi:yellow">
-          {PHASE_WAIT} wait{detail ? <Text dimColor> {detail}</Text> : null}
-        </Text>
+        <Text color="ansi:yellow">{PHASE_WAIT} wait</Text>
       ) : (
         <Text color="ansi:green">{PHASE_IDLE} idle</Text>
       )}

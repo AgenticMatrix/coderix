@@ -7,12 +7,13 @@ import { StatusBar } from '../StatusBar.js';
 import type { AgentPhase } from '../../agent-phase.js';
 
 /**
- * STATUS BAR BADGE: the coarse phase plus why.
+ * STATUS BAR BADGE: the coarse phase only.
  *
- * `idle` / `busy` / `wait` alone are not actionable — "wait" hides whether the
- * model is thinking about the request or a background command is still
- * running. These render the real bar and read the badge off the emulated
- * screen, so a label that only exists in the prop plumbing cannot pass.
+ * `busy` / `wait` / `idle` is all this row is allowed to say about the phase.
+ * The reason — streaming, thinking, waiting for the LLM, a background task —
+ * belongs to the ActivityLine above the prompt, so that the two lines never
+ * spell out the same thing twice. These render the real bar and read the badge
+ * off the emulated screen.
  */
 
 const COLS = 160;
@@ -74,20 +75,20 @@ describe('status bar badge', () => {
     expect(await renderBadge('idle')).toContain('idle');
   });
 
-  it('spells out what the model is producing', async () => {
-    expect(await renderBadge('busy.streaming')).toContain('busy streaming');
-    expect(await renderBadge('busy.thinking')).toContain('busy thinking');
-    expect(await renderBadge('busy.compacting')).toContain('busy compacting');
+  it('collapses every producing phase to plain busy', async () => {
+    for (const phase of ['busy.streaming', 'busy.thinking', 'busy.executing', 'busy.compacting'] as const) {
+      const row = await renderBadge(phase);
+      expect(row).toContain('busy');
+      expect(row).not.toContain(phase.slice('busy.'.length));
+    }
   });
 
-  it('treats a running tool as busy', async () => {
-    expect(await renderBadge('busy.executing')).toContain('busy executing');
-  });
-
-  it('spells out what the agent is waiting on', async () => {
-    expect(await renderBadge('wait.llm')).toContain('wait llm');
-    expect(await renderBadge('wait.tool')).toContain('wait tool');
-    expect(await renderBadge('wait.background')).toContain('wait background');
+  it('collapses every waiting phase to plain wait', async () => {
+    for (const phase of ['wait.llm', 'wait.tool', 'wait.background'] as const) {
+      const row = await renderBadge(phase);
+      expect(row).toContain('wait');
+      expect(row).not.toContain(phase.slice('wait.'.length));
+    }
   });
 
   it('keeps the badge single-line', async () => {
