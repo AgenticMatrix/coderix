@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { execSync, spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, normalize, relative, isAbsolute, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
@@ -3328,18 +3328,24 @@ function forgetProject(path: string): string[] {
  *
  * `recent_projects.json` is the persistence source, but it accumulates noise —
  * the app's own launch directory (`process.cwd()`, e.g. `packages/coderix-desktop`
- * in dev), a stale legacy base from an older app (`~/.agentstation/apps`), the
- * filesystem root, etc. Restore only the default-workspace base dir; external
- * projects are reopened explicitly through the library, and anything
- * unrecognized falls back to the default-workspace base.
+ * in dev), the filesystem root, entries that no longer exist. Skip those and
+ * return the newest real directory. Projects live anywhere on disk, so
+ * restricting the result to the default-workspace base would reopen that base
+ * on every restart instead of the project the user was actually in.
  */
 export function getLastWorkspace(): string | undefined {
   const launchDir = resolve(process.cwd());
   for (const p of readRecentProjects()) {
-    if (!p || !existsSync(p)) continue;
-    if (resolve(p) === launchDir) continue;
-    if (!isDefaultWorkspaceContext(p)) continue;
-    return p;
+    if (!p) continue;
+    const dir = resolve(p);
+    if (dir === launchDir) continue;
+    if (dirname(dir) === dir) continue; // filesystem root
+    try {
+      if (!statSync(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    return dir;
   }
   return undefined;
 }
