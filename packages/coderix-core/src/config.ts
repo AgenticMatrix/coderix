@@ -169,7 +169,7 @@ export interface CoderSettings {
   engine?: AgentEngine;
   /** Custom Claude Code skill directories (each a folder of `<name>/SKILL.md`). */
   custom_skill_dirs?: string[];
-  /** Default workspace base dir — new conversations get a hash subdir under it. */
+  /** Default workspace base dir for new conversations (see resolveDefaultWorkspaceDir). */
   default_workspace_dir?: string;
 }
 
@@ -249,6 +249,25 @@ export function loadSettings(): CoderSettings {
   } catch {
     return {};
   }
+}
+
+/** Platform default base directory for new conversations. */
+export function platformDefaultWorkspaceDir(): string {
+  return join(homedir(), 'Documents', 'coderix');
+}
+
+/**
+ * The configured default workspace base dir, or the platform default when the
+ * setting is empty. Expands a leading `~`. Does not create the directory.
+ *
+ * This is the fallback for a session whose persisted workspace is missing: the
+ * process's launch directory is never a valid substitute (for the desktop app
+ * it is the app bundle dir, for a spawned CLI it is wherever the parent was).
+ */
+export function resolveDefaultWorkspaceDir(settings: CoderSettings = loadSettings()): string {
+  const configured = settings.default_workspace_dir?.trim();
+  if (!configured) return platformDefaultWorkspaceDir();
+  return configured.replace(/^~(?=$|[\\/])/, homedir());
 }
 
 /**

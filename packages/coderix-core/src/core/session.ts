@@ -66,6 +66,7 @@ import {
   startLeaseHeartbeat,
   type SessionClient,
 } from './session-lease.js';
+import { resolveDefaultWorkspaceDir } from '../config.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1633,7 +1634,12 @@ export class SessionManager {
         currency: meta?.currency,
         createdAt: now,
         updatedAt: now,
-        cwd: meta?.workDir ?? process.cwd(),
+        // A session that never persisted a workspace (interrupted first write,
+        // corrupt meta) must not adopt the process's launch directory — for the
+        // desktop that is the app bundle dir, which then makes the next Claude
+        // Code resume look in the wrong project dir. Fall back to the user's
+        // default workspace instead.
+        cwd: meta?.workDir ?? resolveDefaultWorkspaceDir(),
         model: meta?.model ?? 'unknown',
         provider: 'anthropic',
         skills: meta?.skills ?? [],

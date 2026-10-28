@@ -14,8 +14,8 @@
 
 import { query as claudeQuery, getSubagentMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess, SdkPluginConfig } from '@anthropic-ai/claude-agent-sdk';
-import type { QueryEngineEvent, Message } from '@coderix/core';
-import { PermissionMode } from '@coderix/core';
+import type { QueryEngineEvent, Message } from '../../../../packages/coderix-core/src/index.js';
+import { PermissionMode } from '../../../../packages/coderix-core/src/index.js';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
