@@ -690,6 +690,36 @@ export function readSessionMeta(sessionDir: string): SessionMeta | null {
 }
 
 /**
+ * Serialize `meta.json` writes across processes, not just within one.
+ *
+ * A lock file is used instead of locking meta.json itself: readers parse
+ * meta.json directly, so the lock target must never be a JSON document.
+ * Stale locks are reclaimed after 10s (a write holds it for sub-milliseconds).
+ */
+async function withMetaWriteLock<T>(sessionDir: string, fn: () => Promise<T>): Promise<T> {
+  const lockTarget = join(sessionDir, '.meta.lock');
+  try {
+    await writeFile(lockTarget, '', { flag: 'wx', mode: 0o600 });
+  } catch {
+    /* already created by an earlier writer */
+  }
+  const release = await lockfile.lock(lockTarget, {
+    realpath: false,
+    // Writes hold the lock for sub-milliseconds, so a 5s-old lock means the
+    // holder died (or is wedged). Retries outlast `stale` so a crashed writer's
+    // lock is reclaimed rather than making the next write fail.
+    stale: 5_000,
+    update: 2_500,
+    retries: { retries: 60, minTimeout: 5, maxTimeout: 100 },
+  });
+  try {
+    return await fn();
+  } finally {
+    await release().catch(() => {});
+  }
+}
+
+/**
  * Per-directory write queues — serialize `writeSessionMeta` calls targeting the
  * same session so their read-modify-write cycles can't interleave. Concurrent
  * fire-and-forget writes (setCwd + addMessage first-write + title + contextLength
@@ -765,19 +795,65 @@ async function writeSessionMetaUnsafe(
   createDir: boolean,
 ): Promise<void> {
   const metaPath = sessionMetaPath(sessionDir);
-  const { mkdir, writeFile } = await import('node:fs/promises');
-
-  // Merge with existing meta so partial writes (e.g. title-only)
-  // don't clobber other fields like contextLength.
-  const existing = readSessionMeta(sessionDir);
-  const merged = { ...existing, ...meta };
 
   if (createDir) {
     await mkdir(sessionDir, { recursive: true, mode: 0o700 });
   } else if (!existsSync(sessionDir)) {
     return;
   }
-  await writeFile(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+
+  try {
+    await withMetaWriteLock(sessionDir, async () => {
+      const existed = existsSync(metaPath);
+      // Merge with existing meta so partial writes (e.g. title-only)
+      // don't clobber other fields like contextLength.
+      const existing = readSessionMeta(sessionDir);
+
+      // The file exists but isn't usable JSON (a writer that predates the atomic
+      // write below, or a manually damaged file). Merging `{ ...null, ...patch }`
+      // would rewrite the file as *only* this patch and permanently drop workDir,
+      // title and usage — that is how conversations lost their workspace. Refuse
+      // patch-only writes and let the next full session snapshot (which carries
+      // workDir) rebuild the file.
+      if (existed && existing === null) {
+        if (!meta.workDir) {
+          console.error(
+            `[session-store] meta.json in ${sessionDir} is unreadable — skipping partial write ` +
+              `(${Object.keys(meta).join(', ')}); a full session save will rebuild it`,
+          );
+          return;
+        }
+        // A full snapshot is about to replace the damaged bytes. Keep them: the
+        // real workspace path is often still readable inside the corruption
+        // (e.g. in the tail of a spliced document), and the snapshot carries the
+        // fallback workspace rather than the one the conversation actually used.
+        await rename(metaPath, `${metaPath}.corrupt`).catch(() => {});
+      }
+
+      const merged = { ...existing, ...meta };
+
+      // Write-then-rename: a concurrent reader never observes a truncated file,
+      // and an interleaved writer can only replace the whole document instead of
+      // splicing its bytes into the middle of ours.
+      const tmpPath = `${metaPath}.${process.pid}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(tmpPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+        await rename(tmpPath, metaPath);
+      } catch (err) {
+        await unlink(tmpPath).catch(() => {});
+        throw err;
+      }
+    });
+  } catch (err) {
+    // Best-effort write path: callers fire-and-forget. Log instead of dropping
+    // silently — a lock held by a crashed process (reclaimed after `stale`) or a
+    // full disk would otherwise swallow the update without a trace.
+    console.error(
+      `[session-store] failed to write meta.json in ${sessionDir} ` +
+        `(${Object.keys(meta).join(', ')}):`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

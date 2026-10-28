@@ -29,13 +29,13 @@ import type {
   CompletionUsage,
   ContentBlock,
   Message,
-} from '@coderix/core';
-import type { CoderSettings, ModelItem } from '@coderix/core';
-import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '@coderix/core';
-import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord, TaskLifecycleEvent } from '@coderix/core';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle } from '@coderix/core';
-import type { McpManager } from '@coderix/core';
-import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '@coderix/core';
+} from '../../../../packages/coderix-core/src/index.js';
+import type { CoderSettings, ModelItem } from '../../../../packages/coderix-core/src/index.js';
+import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '../../../../packages/coderix-core/src/index.js';
+import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord, TaskLifecycleEvent } from '../../../../packages/coderix-core/src/index.js';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle, platformDefaultWorkspaceDir, resolveDefaultWorkspaceDir } from '../../../../packages/coderix-core/src/index.js';
+import type { McpManager } from '../../../../packages/coderix-core/src/index.js';
+import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '../../../../packages/coderix-core/src/index.js';
 import { runClaudeCodeQuery, getClaudeSessionId, getClaudeCumulativeUsage, loadClaudeSubagentTranscript } from './claude-code-engine.js';
 import { normalizeSubAgentEvent } from './subagent-events.js';
 import { claudeCodeRuntimeStatus, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
@@ -3254,15 +3254,9 @@ function previewMatchLine(content: string, idx: number): string {
 // Default workspace — base directory
 // ---------------------------------------------------------------------------
 
-/** Platform default base directory for new conversations. */
-function platformDefaultWorkspaceDir(): string {
-  return join(homedir(), 'Documents', 'coderix');
-}
-
 /** The persisted (or platform-default) base directory, created if missing. */
 export function getDefaultWorkspaceDir(): string {
-  const configured = loadSettings().default_workspace_dir?.trim();
-  const base = configured || platformDefaultWorkspaceDir();
+  const base = resolveDefaultWorkspaceDir();
   if (!existsSync(base)) mkdirSync(base, { recursive: true });
   return base;
 }

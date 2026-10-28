@@ -33,7 +33,11 @@ import { startProtocolGateway } from './protocol-gateway/server.js';
 import { installCli, bootstrapConfig } from './cli-installer.js';
 import { autoInstallClaudeCodeOnBoot } from './claude-code-runtime.js';
 
-// Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite)
+// Direct imports from core package source — avoid @coderix/core bundle (pulls in node:sqlite).
+// Every main-process module must import core this way. Mixing in the
+// `@coderix/core` package specifier bundles a SECOND copy of core, and with it a
+// second set of module-level write queues — the two copies then race on the same
+// meta.json (this is what corrupted session workspaces).
 import { QueryEngine } from '../../../../packages/coderix-core/src/core/query-engine.js';
 import type { QueryEngineConfig } from '../../../../packages/coderix-core/src/core/query-engine.js';
 import type { Session, ToolContext, ToolExecutionResult } from '../../../../packages/coderix-core/src/core/types.js';

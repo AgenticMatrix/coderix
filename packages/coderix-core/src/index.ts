@@ -248,7 +248,7 @@ export { runComputerUseMcpServer } from './mcp/builtin/computer-use-mcp/index.js
 export { runDemoMcpServer, createDemoMcpServer, DEMO_TOOLS } from './mcp/builtin/demo-mcp/index.js';
 
 // ── Config ─────────────────────────────────────────────────────────
-export { loadSettings, saveSettings, loadConfig, loadDesktopConfig, inferProvider, getMaxToolConcurrency, detectProtocol, resolvePermissionMode, resolveModelByName } from './config.js';
+export { loadSettings, saveSettings, loadConfig, loadDesktopConfig, inferProvider, getMaxToolConcurrency, detectProtocol, resolvePermissionMode, resolveModelByName, platformDefaultWorkspaceDir, resolveDefaultWorkspaceDir } from './config.js';
 export type {
   CoderSettings, AppConfig, ModelItem, ModelEntry, ModelPrice,
   WebSearchConfig, WebBridgeConfig, PermissionRuleEntry, AgentEngine, ResolvedModel,

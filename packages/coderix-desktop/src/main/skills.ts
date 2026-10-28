@@ -37,7 +37,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { loadSettings, saveSettings } from '@coderix/core';
+import { loadSettings, saveSettings } from '../../../../packages/coderix-core/src/index.js';
 import { listRegisteredPluginDirs } from './plugin-registry.js';
 
 export interface SkillInfo {
