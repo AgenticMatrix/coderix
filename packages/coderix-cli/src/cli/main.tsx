@@ -139,14 +139,14 @@ async function runPrintMode(queryText: string): Promise<void> {
   const { createCallModel } = await import('@coderix/core');
   const callModel = createCallModel(config, config.model);
   const { SessionManager } = await import('@coderix/core');
-  const sm = new SessionManager(false, 'cli'); sm.create({ cwd: process.cwd(), model: config.model });
+  const sm = new SessionManager(false, 'cli'); sm.create({ cwd: process.cwd(), model: config.model, currency: config.currency });
   const { QueryEngine } = await import('@coderix/core');
   const { PermissionMode } = await import('@coderix/core');
   const { createToolRegistry, createAgentRuntime } = await import('@coderix/core');
   const settings = loadSettings();
   const mcpPlugins = await initMcpAndGetPlugins(process.cwd());
   const agentRuntime = await createAgentRuntime(process.cwd());
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: createToolRegistry({ extraPlugins: mcpPlugins }), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: agentRuntime.subAgentRegistry, systemPromptAssembler: agentRuntime.systemPromptAssembler, agentRegistry: agentRuntime.agentRegistry, settings, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: createToolRegistry({ extraPlugins: mcpPlugins }), sessionManager: sm, callModel, model: config.model, inputPrice: config.inputPrice, outputPrice: config.outputPrice, cacheReadPrice: config.cacheReadPrice, currency: config.currency, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry: agentRuntime.subAgentRegistry, systemPromptAssembler: agentRuntime.systemPromptAssembler, agentRegistry: agentRuntime.agentRegistry, settings, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init(); engine.setPermissionMode(PermissionMode.AUTO);
   let fullText = '';
   for await (const event of engine.submitMessage(queryText)) {
@@ -380,6 +380,7 @@ async function main(): Promise<void> {
   const sm = new SessionManager(false, 'cli');
   let initialMessages: any[] | null = null;
   let initialTokenUsage: any = undefined;
+  let initialTotalCost: number | undefined;
   let showSessionPicker = false;
   let hasPreloadedSession = false;
 
@@ -403,6 +404,7 @@ async function main(): Promise<void> {
             cacheCreationInputTokens: 0,
             cacheReadInputTokens: 0,
           };
+          initialTotalCost = session.totalCost;
           hasPreloadedSession = true;
         }
       } catch { /* no sessions exist, fall through to create new */ }
@@ -434,6 +436,7 @@ async function main(): Promise<void> {
             cacheCreationInputTokens: 0,
             cacheReadInputTokens: 0,
           };
+            initialTotalCost = session.totalCost;
             hasPreloadedSession = true;
           }
         }
@@ -456,6 +459,7 @@ async function main(): Promise<void> {
             cacheCreationInputTokens: 0,
             cacheReadInputTokens: 0,
           };
+          initialTotalCost = session.totalCost;
           hasPreloadedSession = true;
         }
       } catch (e) {
@@ -467,7 +471,7 @@ async function main(): Promise<void> {
 
   // Only create a new session if no session was loaded via resume
   if (!hasPreloadedSession) {
-    sm.create({ cwd: process.cwd(), model: config.model });
+    sm.create({ cwd: process.cwd(), model: config.model, currency: config.currency });
   }
   // ── Create unified AppState store ──────────────────────────────────
   const { QueryEngine } = await import('@coderix/core');
@@ -538,7 +542,7 @@ async function main(): Promise<void> {
   const { createEventBus } = await import('@coderix/core');
   const eventBus = createEventBus();
 
-  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: createToolRegistry({ extraPlugins: mcpPluginsTui }), sessionManager: sm, callModel, model: config.model, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: agentRuntime.systemPromptAssembler, agentRegistry, settings, eventBus, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
+  const engine = new QueryEngine({ cwd: process.cwd(), toolRegistry: createToolRegistry({ extraPlugins: mcpPluginsTui }), sessionManager: sm, callModel, model: config.model, inputPrice: config.inputPrice, outputPrice: config.outputPrice, cacheReadPrice: config.cacheReadPrice, currency: config.currency, maxToolConcurrency: getMaxToolConcurrency(settings), subAgentRegistry, systemPromptAssembler: agentRuntime.systemPromptAssembler, agentRegistry, settings, eventBus, maxContext: config.maxContext, briefMode: config.briefMode, autoCompactEnabled: config.autoCompactEnabled, compactThreshold: config.compactThreshold });
   await engine.init();
   engine.setPermissionMode((settings.default_permission_mode as PermissionMode) || 'ask');
 
@@ -587,7 +591,7 @@ async function main(): Promise<void> {
   const { AppStateProvider } = await import('../state/AppStateContext.js');
   const { waitUntilExit, unmount } = renderSync(
     <AppStateProvider store={appStore}>
-      <App config={config} engine={engine} store={appStore} sessionManager={sm} getSessionMcpServers={getSessionMcpServers} setSessionMcpServers={setSessionMcpServers} initialMessages={initialMessages} initialTokenUsage={initialTokenUsage} showSessionPicker={showSessionPicker} onExit={() => unmount()} />
+      <App config={config} engine={engine} store={appStore} sessionManager={sm} getSessionMcpServers={getSessionMcpServers} setSessionMcpServers={setSessionMcpServers} initialMessages={initialMessages} initialTokenUsage={initialTokenUsage} initialTotalCost={initialTotalCost} showSessionPicker={showSessionPicker} onExit={() => unmount()} />
     </AppStateProvider>,
     { exitOnCtrlC: false, patchConsole: true },
   );

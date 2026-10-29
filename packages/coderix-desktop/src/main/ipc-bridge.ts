@@ -958,6 +958,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // Persist the same delta the renderer just accumulated. Without
               // this, a reopened session finds an all-zero meta snapshot and
               // the status bar loses its token/cache figures until the next turn.
+              // The engine itself adds and persists the turn cost (see
+              // query.ts), so the bridge must not add it again here.
               try {
                 sessionManager.updateUsage(streamSessionId, {
                   inputTokens: usage.input_tokens ?? 0,
@@ -965,7 +967,6 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
                   cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
                 });
-                if (usage.totalCost) sessionManager.addCost(streamSessionId, usage.totalCost);
                 const usageSession = sessionManager.get(streamSessionId);
                 if (usageSession) sessionManager.saveSession(usageSession);
               } catch { /* best-effort — a failed persist only affects reloads */ }
@@ -1088,10 +1089,15 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 const outputPrice = sessionResolved?.outputPrice ?? activeConfig.outputPrice ?? 0;
                 const cacheReadPrice = sessionResolved?.cacheReadPrice ?? activeConfig.cacheReadPrice ?? 0;
                 const currency = sessionResolved?.currency ?? activeSession?.currency ?? activeConfig.currency ?? 'USD';
-                const turnCost =
+                const pricedTurnCost =
                   (inputTokens / 1_000_000) * inputPrice +
                   (outputTokens / 1_000_000) * outputPrice +
                   (cacheReadTokens / 1_000_000) * cacheReadPrice;
+                // A provider aggregate that shrank would otherwise yield a
+                // negative delta; cost is monotonic, so never subtract.
+                const turnCost = Number.isFinite(pricedTurnCost) && pricedTurnCost > 0
+                  ? pricedTurnCost
+                  : 0;
                 if (data.usage) {
                   try {
                     sessionManager.addCost(streamSessionId, turnCost);
@@ -1104,8 +1110,8 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                       cacheCreationInputTokens: data.usage.cache_creation_input_tokens ?? 0,
                       cacheReadInputTokens: cacheReadTokens,
                     });
-                    // addCost only mutates the in-memory session; persist the
-                    // running total so a reloaded session doesn't reset to zero.
+                    // addCost/updateUsage already persist meta.json; saveSession
+                    // still runs for the title/metadata snapshot.
                     const session = sessionManager.get(streamSessionId);
                     if (session) sessionManager.saveSession(session);
                   } catch { /* ignore */ }

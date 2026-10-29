@@ -472,6 +472,10 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
   const engine = new QueryEngine({
     cwd,
     model,
+    inputPrice: override?.inputPrice ?? appConfig.inputPrice,
+    outputPrice: override?.outputPrice ?? appConfig.outputPrice,
+    cacheReadPrice: override?.cacheReadPrice ?? appConfig.cacheReadPrice,
+    currency: override?.currency ?? appConfig.currency,
     sessionManager: perSessionManager,
     toolRegistry,
     callModel,

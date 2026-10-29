@@ -76,6 +76,10 @@ function currencySymbol(currency?: string): string {
 
 function formatCost(cost: number, currency?: string): string {
   const sym = currencySymbol(currency);
+  // Zero is a real, reportable value (a model priced at 0, or a conversation
+  // that has not spent anything yet) — render it instead of hiding it behind
+  // the "<0.01" placeholder.
+  if (!(cost > 0)) return `${sym}0.00`;
   if (cost >= 0.01) return `${sym}${cost.toFixed(2)}`;
   return `<${sym}0.01`;
 }
@@ -83,7 +87,8 @@ function formatCost(cost: number, currency?: string): string {
 /** Full precision (up to 4 decimals) for the cost row in the detail dialog. */
 function formatCostPrecise(cost: number, currency?: string): string {
   const sym = currencySymbol(currency);
-  const fixed = cost.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  const safe = Math.max(0, Number.isFinite(cost) ? cost : 0);
+  const fixed = safe.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
   return `${sym}${fixed || '0'}`;
 }
 

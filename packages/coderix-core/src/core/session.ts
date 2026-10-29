@@ -498,7 +498,7 @@ export class SessionManager {
       cacheReadInputTokens,
       totalTokens: inputTokens + outputTokens + cacheCreationInputTokens + cacheReadInputTokens,
     };
-    cached.totalCost = Math.max(cached.totalCost, fresh.totalCost);
+    cached.totalCost = Math.max(0, cached.totalCost, fresh.totalCost);
     cached.currency = fresh.currency;
     cached.cwd = fresh.cwd;
     cached.model = fresh.model;
@@ -837,6 +837,9 @@ export class SessionManager {
           };
           if (session.titleSource) bootMeta.titleSource = session.titleSource;
           if (session.origin) bootMeta.origin = session.origin;
+          // Record the currency alongside the model so a resumed session prices
+          // and formats its saved cost the same way it did when recorded.
+          if (session.currency) bootMeta.currency = session.currency;
           writeSessionMeta(dir, bootMeta).catch(() => {});
         }
 
@@ -878,19 +881,23 @@ export class SessionManager {
     const usage = typeof sessionIdOrUsage === 'string'
       ? (maybeUsage as Partial<TokenUsageSummary>)
       : sessionIdOrUsage;
-    if (usage.inputTokens) session.tokenUsage.inputTokens += usage.inputTokens;
-    if (usage.outputTokens) session.tokenUsage.outputTokens += usage.outputTokens;
-    if (usage.cacheCreationInputTokens)
-      session.tokenUsage.cacheCreationInputTokens =
-        (session.tokenUsage.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
-    if (usage.cacheReadInputTokens)
-      session.tokenUsage.cacheReadInputTokens =
-        (session.tokenUsage.cacheReadInputTokens ?? 0) + usage.cacheReadInputTokens;
+    // Counters only ever grow. A caller that derives a delta from a provider's
+    // cumulative aggregate can go negative when that aggregate resets (session
+    // recreation, restart); accepting it would erase real usage.
+    const positive = (value: number | undefined): number =>
+      typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+    session.tokenUsage.inputTokens += positive(usage.inputTokens);
+    session.tokenUsage.outputTokens += positive(usage.outputTokens);
+    session.tokenUsage.cacheCreationInputTokens =
+      (session.tokenUsage.cacheCreationInputTokens ?? 0) + positive(usage.cacheCreationInputTokens);
+    session.tokenUsage.cacheReadInputTokens =
+      (session.tokenUsage.cacheReadInputTokens ?? 0) + positive(usage.cacheReadInputTokens);
     session.tokenUsage.totalTokens =
       session.tokenUsage.inputTokens +
       session.tokenUsage.outputTokens +
       (session.tokenUsage.cacheCreationInputTokens ?? 0) +
       (session.tokenUsage.cacheReadInputTokens ?? 0);
+    this.persistUsageAndCost(session);
   }
 
   /**
@@ -905,8 +912,34 @@ export class SessionManager {
     const cost = typeof sessionIdOrCost === 'string'
       ? (maybeCost as number)
       : sessionIdOrCost;
-    session.totalCost += cost;
+    // Cost is monotonic: a provider/SDK aggregate reset must never produce a
+    // negative turn delta that shrinks (or negates) the session total.
+    if (typeof cost !== 'number' || !Number.isFinite(cost) || cost <= 0) return;
+    // 8 decimals keeps sub-cent amounts exact enough without accumulating
+    // binary-float noise across hundreds of turns.
+    session.totalCost = Math.round((session.totalCost + cost) * 1e8) / 1e8;
+    // Persist immediately — the running total is what a restarted client reads
+    // back, so it must not depend on a later turn to reach disk.
+    this.persistUsageAndCost(session);
   }
+
+  /**
+   * Write the session's cumulative usage and cost to meta.json.
+   *
+   * Both are updated independently (tokens on every model call, cost alongside
+   * them) and are read back on resume, so each update must land on disk rather
+   * than waiting for the next appendMetadata/saveSession.
+   */
+  private persistUsageAndCost(session: Session): void {
+    if (this.diskless) return;
+    const meta: SessionMeta = {
+      totalCost: session.totalCost,
+      tokenUsage: session.tokenUsage,
+    };
+    if (session.currency) meta.currency = session.currency;
+    writeSessionMeta(getSessionDir(session.id), meta).catch(() => {});
+  }
+
 
   /**
    * Add a file to the modified-files list.
@@ -1245,7 +1278,7 @@ export class SessionManager {
       titleModel: meta?.titleModel,
       status: 'active' as const,
       turnCount: approxTurns,
-      totalCost: 0,
+      totalCost: Math.max(0, meta?.totalCost ?? 0),
       createdAt: mtime,
       updatedAt: mtime,
       model: meta?.model ?? 'unknown',
@@ -1255,6 +1288,9 @@ export class SessionManager {
       workDir: meta?.workDir,
       agentType: meta?.agentType,
       pluginId: meta?.pluginId,
+      tokenUsage: meta?.tokenUsage,
+      currency: meta?.currency,
+      contextTokens: meta?.contextTokens,
       busy: inspectLease(dir).busy,
     };
   }
@@ -1288,7 +1324,7 @@ export class SessionManager {
       titleModel: session.titleModel,
       status: session.status,
       turnCount: session.turnCount,
-      totalCost: session.totalCost,
+      totalCost: Math.max(0, session.totalCost),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       model: session.model,
@@ -1298,6 +1334,9 @@ export class SessionManager {
       workDir: session.cwd,
       agentType: session.agentType,
       pluginId: session.pluginId,
+      tokenUsage: session.tokenUsage,
+      currency: session.currency,
+      contextTokens: session.contextTokens,
       busy: this.isBusy(session.id),
     };
   }
@@ -1630,7 +1669,7 @@ export class SessionManager {
         status: 'active',
         messages,
         turnCount: messages.filter((m) => m.role === 'assistant').length,
-        totalCost: meta?.totalCost ?? 0,
+        totalCost: Math.max(0, meta?.totalCost ?? 0),
         currency: meta?.currency,
         createdAt: now,
         updatedAt: now,

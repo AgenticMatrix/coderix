@@ -47,6 +47,8 @@ interface AppProps {
   initialMessages?: Message[] | null;
   /** Pre-loaded token usage from a resumed session (--resume / --continue). */
   initialTokenUsage?: TokenUsage;
+  /** Pre-loaded cumulative cost from a resumed session (--resume / --continue). */
+  initialTotalCost?: number;
   /** When true, show the session picker on mount (--resume with no value). */
   showSessionPicker?: boolean;
   /** Called when the user exits (double Ctrl+C). Uses Ink unmount for clean teardown. */
@@ -123,7 +125,7 @@ async function restoreSessionAgents(sessionManager: SessionManager): Promise<voi
   }
 }
 
-export function App({ config, engine, store, sessionManager, getSessionMcpServers, setSessionMcpServers, initialMessages, initialTokenUsage, showSessionPicker, onExit: onExitProp }: AppProps) {
+export function App({ config, engine, store, sessionManager, getSessionMcpServers, setSessionMcpServers, initialMessages, initialTokenUsage, initialTotalCost, showSessionPicker, onExit: onExitProp }: AppProps) {
   const [state, dispatch] = useChatReducer(config.model, config.inputPrice, config.outputPrice, config.cacheReadPrice);
 
   const setAppState = useSetAppState();
@@ -182,7 +184,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0 && !hasLoadedInitialRef.current) {
       hasLoadedInitialRef.current = true;
-      dispatch({ type: 'LOAD_CHAT', messages: initialMessages, turns: [], isStreaming: false, tokenUsage: initialTokenUsage });
+      dispatch({ type: 'LOAD_CHAT', messages: initialMessages, turns: [], isStreaming: false, tokenUsage: initialTokenUsage, accumulatedCost: initialTotalCost });
     }
   }, [initialMessages]);
 
@@ -722,7 +724,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
           }],
           timestamp: base + msgs.length,
         });
-        dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false, tokenUsage: {
+        dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false, accumulatedCost: session.totalCost, tokenUsage: {
           // ctx bar = input+output+cache_read; seed with last turn's contextTokens (tokenUsage is cumulative)
           inputTokens: session.contextTokens ?? 0,
           outputTokens: 0,
@@ -1437,7 +1439,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
                 await restoreSessionAgents(sessionManager);
                 if (session && session.messages.length > 0) {
                   const msgs = convertTranscriptToMessages(session.messages);
-                  dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false, tokenUsage: {
+                  dispatch({ type: 'LOAD_CHAT', messages: msgs, turns: [], isStreaming: false, accumulatedCost: session.totalCost, tokenUsage: {
                     // ctx bar = input+output+cache_read; seed with last turn's contextTokens (tokenUsage is cumulative)
                     inputTokens: session.contextTokens ?? 0,
                     outputTokens: 0,

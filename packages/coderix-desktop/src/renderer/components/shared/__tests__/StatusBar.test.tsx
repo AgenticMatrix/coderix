@@ -53,6 +53,25 @@ describe('StatusBar stats pills', () => {
     expect(html).not.toContain(' 轮 · ');
   });
 
+  it('renders a zero total instead of hiding the cost pill', () => {
+    // A zero-priced model still has a cost; hiding the pill made those
+    // conversations look like they had no spend at all.
+    const html = render({ cost: 0, currency: 'CNY' });
+    expect(html).toContain('¥0.00');
+    expect(html).not.toContain('&lt;¥0.01');
+  });
+
+  it('renders sub-cent spend as a "<0.01" placeholder', () => {
+    const html = render({ cost: 0.004, currency: 'CNY' });
+    expect(html).toContain('&lt;¥0.01');
+  });
+
+  it('never renders a negative legacy total', () => {
+    const html = render({ cost: -1.5, currency: 'CNY' });
+    expect(html).toContain('¥0.00');
+    expect(html).not.toContain('-¥');
+  });
+
   it('renders a badge for every phase the agent can report', () => {
     // Each of these has its own labelKey/variant entry; a missing one renders
     // nothing at all, which is how a new state silently loses its badge.

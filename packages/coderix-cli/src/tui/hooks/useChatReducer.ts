@@ -935,6 +935,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         turns: action.turns,
         isStreaming: action.isStreaming ?? false,
         tokenUsage: action.tokenUsage ?? state.tokenUsage,
+        // Restored sessions carry their saved running total; without this a
+        // resumed conversation starts its cost display at zero.
+        accumulatedCost: action.accumulatedCost ?? state.accumulatedCost,
       };
 
     case 'SHOW_APPROVAL':
