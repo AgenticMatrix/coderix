@@ -44,7 +44,7 @@ import {
   type SessionTitleUpdate,
 } from './session-title.js';
 import type { CoderSettings, ModelItem, ModelEntry } from '../config.js';
-import { loadSettings, saveSettings } from '../config.js';
+import { loadSettings, saveSettings, resolveModelByName } from '../config.js';
 import type { ToolResult } from '../tools/types.js';
 import type { EventBus } from '../state/observable.js';
 import type { CoreState } from '../state/core-state.js';
@@ -84,6 +84,13 @@ export interface QueryEngineConfig {
   customSystemPrompt?: string;
   appendSystemPrompt?: string;
   model?: string;
+  /** Per-1M-token prices used to cost each turn. Explicit values win; when a
+   *  value is omitted it is read from the model's entry in settings.json. */
+  inputPrice?: number;
+  outputPrice?: number;
+  cacheReadPrice?: number;
+  /** Currency code recorded with the cost (e.g. "USD", "CNY"). */
+  currency?: string;
   /** Max concurrent tool executions (default: 32). */
   maxToolConcurrency?: number;
   callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
@@ -187,6 +194,24 @@ export class QueryEngine {
     // (it represents the effective context window the model actually uses).
     if (config.maxContext && config.maxContext > 0) {
       this.config.contextBudget = config.maxContext;
+    }
+
+    // Resolve per-token pricing once so every turn is costed the same way the
+    // client displays it. Callers that already know the model's price pass it
+    // explicitly; otherwise read it from the model's settings entry.
+    if (
+      this.config.inputPrice === undefined ||
+      this.config.outputPrice === undefined ||
+      this.config.cacheReadPrice === undefined
+    ) {
+      const resolvedPricing = this.config.model
+        ? resolveModelByName(this.config.model)
+        : undefined;
+      this.config.inputPrice = this.config.inputPrice ?? resolvedPricing?.inputPrice ?? 0;
+      this.config.outputPrice = this.config.outputPrice ?? resolvedPricing?.outputPrice ?? 0;
+      this.config.cacheReadPrice =
+        this.config.cacheReadPrice ?? resolvedPricing?.cacheReadPrice ?? 0;
+      this.config.currency = this.config.currency ?? resolvedPricing?.currency;
     }
 
     // Load permission rules from settings
@@ -581,6 +606,10 @@ export class QueryEngine {
       autoCompactEnabled,
       maxToolConcurrency: this.config.maxToolConcurrency,
       callModel: this.config.callModel,
+      inputPrice: this.config.inputPrice ?? 0,
+      outputPrice: this.config.outputPrice ?? 0,
+      cacheReadPrice: this.config.cacheReadPrice ?? 0,
+      currency: this.config.currency,
       hookManager: this.config.hookManager,
       subAgentRegistry: this.config.subAgentRegistry,
       systemPromptAssembler: this.config.systemPromptAssembler,

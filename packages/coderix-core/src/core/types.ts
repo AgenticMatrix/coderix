@@ -492,6 +492,12 @@ export interface SessionSummary {
   status: SessionStatus;
   turnCount: number;
   totalCost: number;
+  /** Cumulative token usage recorded for this session (persisted in meta.json). */
+  tokenUsage?: TokenUsageSummary;
+  /** Currency code of {@link totalCost} (e.g. "USD", "CNY"). */
+  currency?: string;
+  /** Real context footprint (most recent call's input + output + cache_read). */
+  contextTokens?: number;
   createdAt: Date;
   updatedAt: Date;
   model: string;

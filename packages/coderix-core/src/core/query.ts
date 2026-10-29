@@ -83,6 +83,14 @@ export interface QueryConfig {
   /** Max concurrent tool executions (default: 32). */
   maxToolConcurrency?: number;
   callModel: (params: CallModelParams) => AsyncGenerator<StreamEvent | AssistantMessage>;
+  /** Per-1M-token price for uncached prompt tokens (from the model's config). */
+  inputPrice?: number;
+  /** Per-1M-token price for output tokens. */
+  outputPrice?: number;
+  /** Per-1M-token price for cache-read tokens. */
+  cacheReadPrice?: number;
+  /** Currency code recorded alongside the cost (e.g. "USD", "CNY"). */
+  currency?: string;
   /** Optional HookManager for lifecycle hook execution */
   hookManager?: HookManager;
   /** SubAgentRegistry for tracking spawned sub-agents */
@@ -429,6 +437,10 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     autoCompactEnabled,
     maxToolConcurrency = 32,
     callModel,
+    inputPrice = 0,
+    outputPrice = 0,
+    cacheReadPrice = 0,
+    currency,
     hookManager,
     agentRegistry,
     agentRole,
@@ -1279,10 +1291,24 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       yield { type: 'assistant', message: msg };
     }
 
-    // Track cost
-    totalCost += usage.totalCost ?? 0;
-    if (usage.totalCost) {
+    // Price this model call from the model's configured per-token prices. The
+    // adapters do not report a cost, so relying on `usage.totalCost` left the
+    // in-process engine recording nothing at all for every turn.
+    const pricedCost =
+      ((usage.input_tokens ?? 0) / 1_000_000) * inputPrice +
+      ((usage.output_tokens ?? 0) / 1_000_000) * outputPrice +
+      ((usage.cache_read_input_tokens ?? 0) / 1_000_000) * cacheReadPrice;
+    // Keep the provider's own figure when it has one and the config prices are
+    // unset — a model with no price configured should not silently zero out a
+    // provider-reported cost.
+    const turnCost = pricedCost > 0 ? pricedCost : (usage.totalCost ?? 0);
+    if (turnCost > 0) {
+      totalCost += turnCost;
+      // Carry the turn cost on the yielded usage so every client (CLI, desktop)
+      // renders the same amount the session just persisted.
+      usage.totalCost = turnCost;
       yield { type: 'stream_event', event: { type: 'cost_update', totalCost } };
+      if (currency) sessionManager.setCurrency(config.sessionId, currency);
     }
 
     sessionManager.updateUsage({
@@ -1291,7 +1317,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       cacheCreationInputTokens: usage.cache_creation_input_tokens,
       cacheReadInputTokens: usage.cache_read_input_tokens,
     });
-    if (usage.totalCost) sessionManager.addCost(usage.totalCost);
+    if (turnCost > 0) sessionManager.addCost(turnCost);
 
     // Yield a first-class per-turn usage delta. Consumers (e.g. the desktop
     // bridge) accumulate these deltas into session totals and use the latest

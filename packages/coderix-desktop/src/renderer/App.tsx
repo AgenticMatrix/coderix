@@ -1364,7 +1364,10 @@ export function App(): React.ReactElement {
           turnCount: sessionStats.turns,
           stepCount: sessionStats.steps,
           toolCallCount: sessionStats.toolCalls,
-          cost: tokenUsage.totalCost || undefined,
+          // Always pass a number: `0` is a valid total (a zero-priced model or
+          // a session that has not spent anything yet), and converting it to
+          // `undefined` hid the whole cost pill for those conversations.
+          cost: tokenUsage.totalCost ?? 0,
           currency: tokenUsage.currency || undefined,
           gitBranch: gitBranch || undefined,
           gitAhead: gitAhead || undefined,

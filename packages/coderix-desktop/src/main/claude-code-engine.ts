@@ -828,13 +828,21 @@ export async function* runClaudeCodeQuery(
               cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
               cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
             };
-            const prev = previousUsageBySession.get(sessionId);
+            // A delta is only meaningful against the same SDK session. When the
+            // SDK started a new session (no resumable id, a stale id, or a
+            // different id than we resumed), its aggregate begins at zero again
+            // and the persisted baseline belongs to the old session — using it
+            // would emit a large negative delta and corrupt the saved cost.
+            const sessionRestarted = !resume || msg.session_id !== resume;
+            const prev = sessionRestarted ? undefined : previousUsageBySession.get(sessionId);
             const deltaUsage = prev
               ? {
-                  input_tokens: cur.input_tokens - prev.input_tokens,
-                  output_tokens: cur.output_tokens - prev.output_tokens,
-                  cache_creation_input_tokens: cur.cache_creation_input_tokens - prev.cache_creation_input_tokens,
-                  cache_read_input_tokens: cur.cache_read_input_tokens - prev.cache_read_input_tokens,
+                  // Clamp: a provider-side aggregate can shrink (compaction, a
+                  // reset) and a negative delta must never reduce totals.
+                  input_tokens: Math.max(0, cur.input_tokens - prev.input_tokens),
+                  output_tokens: Math.max(0, cur.output_tokens - prev.output_tokens),
+                  cache_creation_input_tokens: Math.max(0, cur.cache_creation_input_tokens - prev.cache_creation_input_tokens),
+                  cache_read_input_tokens: Math.max(0, cur.cache_read_input_tokens - prev.cache_read_input_tokens),
                 }
               : cur;
             previousUsageBySession.set(sessionId, cur);
