@@ -111,6 +111,13 @@ export interface StreamState {
   /** Sessions compacting their context right now (absent = not compacting). */
   compactingBySession: Record<string, boolean>;
 
+  /**
+   * Sessions blocked on a user prompt (permission / AskUserQuestion). Owned by
+   * the renderer because the prompt lives here, but kept per session so a
+   * backgrounded conversation can show "waiting" in the sidebar.
+   */
+  awaitingUserBySession: Record<string, boolean>;
+
   /** Cleanup functions for IPC event listeners */
   _cleanups: Array<() => void>;
 
@@ -125,6 +132,9 @@ export interface StreamState {
   /** Hydrate the viewed session's token usage from a persisted snapshot (loaded
    *  from disk when a cold session is opened). */
   hydrateTokenUsage: (usage: AggregatedTokenUsage) => void;
+  /** Mark a session as blocked on a user prompt (or clear it on resolution).
+   *  Defaults to the viewed session when the id is omitted. */
+  setAwaitingUser: (sessionId: string | undefined, awaiting: boolean) => void;
 }
 
 /**
@@ -151,6 +161,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
   requestingBySession: {},
   runningTasksBySession: {},
   compactingBySession: {},
+  awaitingUserBySession: {},
   _cleanups: [],
 
   setViewedSession: (id: string | null) => {
@@ -181,6 +192,18 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
   hydrateTokenUsage: (usage: AggregatedTokenUsage) => {
     set({ tokenUsage: usage });
+  },
+
+  setAwaitingUser: (sessionId: string | undefined, awaiting: boolean) => {
+    const sid = sessionId || useChatStore.getState().sessionId || '';
+    if (!sid) return;
+    set((s) => {
+      if ((s.awaitingUserBySession[sid] ?? false) === awaiting) return s;
+      const next = { ...s.awaitingUserBySession };
+      if (awaiting) next[sid] = true;
+      else delete next[sid];
+      return { awaitingUserBySession: next };
+    });
   },
 
   startListening: () => {
@@ -293,6 +316,13 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       });
     };
     const clearRequesting = (sessionId: string): void => setRequesting(sessionId, false);
+
+    // The prompt components clear this explicitly when the user resolves the
+    // prompt; a terminal stream event is the safety net for a turn that ends
+    // (abort / error / done) while a prompt is still recorded as open.
+    const clearAwaitingUser = (sessionId: string): void => {
+      get().setAwaitingUser(sessionId, false);
+    };
 
     // Attach a tool_result to the matching tool_use across a session's committed
     // messages. Returns true when the result found a home.
@@ -482,6 +512,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // newer, adopted) epoch may flip streaming off. See acceptTerminalEpoch.
       if (!acceptTerminalEpoch(sid, epoch)) return;
       clearRequesting(sid);
+      clearAwaitingUser(sid);
       useChatStore.getState().setSessionStreaming(sid || undefined, false);
       // A turn that reached its own terminal done was not cut short, even if a
       // stop click landed a moment earlier.
@@ -498,6 +529,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // reset the new turn's streaming state after an interrupt-and-resend.
       if (!acceptTerminalEpoch(sid, epoch)) return;
       clearRequesting(sid);
+      clearAwaitingUser(sid);
 
       // Drop any buffered partial message for this session's stream.
       discardPending(sid);

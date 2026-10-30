@@ -387,6 +387,8 @@ export function App(): React.ReactElement {
 
       // A backgrounded session's prompt is stashed and shown when that session
       // is selected; only the viewed session's prompt shows immediately.
+      const promptSessionId = req.sessionId ?? useChatStore.getState().sessionId ?? '';
+      useStreamStore.getState().setAwaitingUser(promptSessionId, true);
       if (req.sessionId && req.sessionId !== useChatStore.getState().sessionId) {
         backgroundedPermissions.current.set(req.sessionId, req);
         return;
@@ -404,6 +406,8 @@ export function App(): React.ReactElement {
     if (!window.coderixAPI?.onQuestionRequest) return;
     const unsub = window.coderixAPI.onQuestionRequest((req: QuestionRequest) => {
       console.log('[App] Question received:', req.toolName, req.questions?.length, 'questions');
+      const promptSessionId = req.sessionId ?? useChatStore.getState().sessionId ?? '';
+      useStreamStore.getState().setAwaitingUser(promptSessionId, true);
       if (req.sessionId && req.sessionId !== useChatStore.getState().sessionId) {
         backgroundedQuestions.current.set(req.sessionId, req);
         return;

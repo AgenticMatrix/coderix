@@ -2,6 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { List, Folder, ChevronRight, Monitor, Terminal } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore.js';
+import { useChatStore } from '../../store/chatStore.js';
+import { useStreamStore } from '../../store/streamStore.js';
+import { deriveSessionListStatus, type SessionListStatus } from '../../session-status.js';
 import { useT, formatRelativeTime } from '../../i18n/index.js';
 import type { SessionSummary } from '../../store/types.js';
 
@@ -52,6 +55,54 @@ export function SessionOriginBadge({
   return null;
 }
 
+/** Live busy / wait / idle dot shown at the bottom-right of a conversation row. */
+export function SessionStatusBadge({
+  status,
+}: {
+  status: SessionListStatus;
+}): React.ReactElement {
+  const t = useT();
+  const meta =
+    status === 'busy'
+      ? {
+          labelKey: 'session.status.busy' as const,
+          hintKey: 'session.status.busyHint' as const,
+          dot: 'bg-[var(--color-blue)]',
+          text: 'text-[var(--color-blue)]',
+        }
+      : status === 'wait'
+        ? {
+            labelKey: 'session.status.wait' as const,
+            hintKey: 'session.status.waitHint' as const,
+            dot: 'bg-[var(--color-warning)]',
+            text: 'text-[var(--color-warning)]',
+          }
+        : {
+            labelKey: 'session.status.idle' as const,
+            hintKey: 'session.status.idleHint' as const,
+            dot: 'bg-[var(--color-text-tertiary)]',
+            text: 'text-[var(--color-text-tertiary)]',
+          };
+  const hint = t(meta.hintKey);
+
+  return (
+    <span
+      className={`flex-shrink-0 inline-flex items-center gap-1 text-[10px] leading-none ${meta.text}`}
+      title={hint}
+      aria-label={hint}
+      role="status"
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${meta.dot} ${
+          status === 'idle' ? '' : 'animate-pulse'
+        }`}
+        aria-hidden="true"
+      />
+      <span>{t(meta.labelKey)}</span>
+    </span>
+  );
+}
+
 export function SessionList({
   activeSessionId,
   onSessionSelect,
@@ -61,6 +112,16 @@ export function SessionList({
   const sessions = useSessionStore((s) => s.sessions);
   const isLoading = useSessionStore((s) => s.isLoading);
   const deleteSession = useSessionStore((s) => s.deleteSession);
+  // Live status sources. The viewed session keeps its streaming flag in the
+  // flat slot; backgrounded sessions keep theirs (and all stream phases) in the
+  // per-session maps.
+  const viewedSessionId = useChatStore((s) => s.sessionId);
+  const viewedStreaming = useChatStore((s) => s.isStreaming);
+  const streamingBySession = useChatStore((s) => s.streamingBySession);
+  const requestingBySession = useStreamStore((s) => s.requestingBySession);
+  const runningTasksBySession = useStreamStore((s) => s.runningTasksBySession);
+  const compactingBySession = useStreamStore((s) => s.compactingBySession);
+  const awaitingUserBySession = useStreamStore((s) => s.awaitingUserBySession);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('flat');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -121,6 +182,15 @@ export function SessionList({
 
   const renderSession = (session: SessionSummary, indented = false): React.ReactElement => {
     const isActive = session.id === activeSessionId;
+    const isViewed = session.id === (viewedSessionId ?? activeSessionId);
+    const status = deriveSessionListStatus({
+      streaming: isViewed ? viewedStreaming : Boolean(streamingBySession[session.id]),
+      awaitingUser: Boolean(awaitingUserBySession[session.id]),
+      compacting: Boolean(compactingBySession[session.id]),
+      requesting: Boolean(requestingBySession[session.id]),
+      runningTaskCount: runningTasksBySession[session.id]?.length ?? 0,
+      leaseBusy: session.busy,
+    });
     return (
       <motion.button
         key={session.id}
@@ -151,11 +221,12 @@ export function SessionList({
               {session.title}
             </div>
             <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
+              <SessionOriginBadge origin={session.origin} />
               <span>{formatRelativeTime(session.updatedAt)}</span>
               <span>·</span>
               <span>{t('session.turns', { n: session.turnCount })}</span>
               <span className="ml-auto inline-flex items-center">
-                <SessionOriginBadge origin={session.origin} />
+                <SessionStatusBadge status={status} />
               </span>
             </div>
           </div>

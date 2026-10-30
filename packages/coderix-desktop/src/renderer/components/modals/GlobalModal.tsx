@@ -4,6 +4,7 @@ import { X, AlertTriangle, Wrench } from 'lucide-react';
 import type { PermissionRequest } from '../../types';
 import { approvePermission, approvePermissionSession, approvePermissionAlways, denyPermission } from '../../ipc-client';
 import { useT } from '../../i18n/index.js';
+import { useStreamStore } from '../../store/streamStore.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,6 +105,7 @@ function PermissionModal({
       console.error('[PermissionModal] Failed to approve:', err);
     } finally {
       setProcessing(null);
+      useStreamStore.getState().setAwaitingUser(pending.request.sessionId, false);
       onResolved();
     }
   }, [pending, onResolved]);
@@ -117,6 +119,7 @@ function PermissionModal({
       console.error('[PermissionModal] Failed to approve session:', err);
     } finally {
       setProcessing(null);
+      useStreamStore.getState().setAwaitingUser(pending.request.sessionId, false);
       onResolved();
     }
   }, [pending, onResolved]);
@@ -130,6 +133,7 @@ function PermissionModal({
       console.error('[PermissionModal] Failed to approve always:', err);
     } finally {
       setProcessing(null);
+      useStreamStore.getState().setAwaitingUser(pending.request.sessionId, false);
       onResolved();
     }
   }, [pending, onResolved]);
@@ -143,6 +147,7 @@ function PermissionModal({
       console.error('[PermissionModal] Failed to deny:', err);
     } finally {
       setProcessing(null);
+      useStreamStore.getState().setAwaitingUser(pending.request.sessionId, false);
       onResolved();
     }
   }, [pending, onResolved]);
