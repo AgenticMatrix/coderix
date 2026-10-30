@@ -8,6 +8,7 @@ import {
   denyPermission,
 } from '../../ipc-client';
 import { useT } from '../../i18n/index.js';
+import { useStreamStore } from '../../store/streamStore.js';
 
 export interface PermissionPromptProps {
   request: PermissionRequest;
@@ -47,10 +48,11 @@ export function PermissionPrompt({
         console.error('[PermissionPrompt] Failed:', err);
       } finally {
         setProcessing(null);
+        useStreamStore.getState().setAwaitingUser(request.sessionId, false);
         onResolved();
       }
     },
-    [request.id, onResolved],
+    [request.id, request.sessionId, onResolved],
   );
 
   useEffect(() => {

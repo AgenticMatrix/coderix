@@ -167,6 +167,12 @@ export const en: Record<TranslationKey, string> = {
   'session.ungrouped': 'Ungrouped',
   'session.origin.desktop': 'Desktop',
   'session.origin.cli': 'CLI',
+  'session.status.busy': 'Busy',
+  'session.status.wait': 'Waiting',
+  'session.status.idle': 'Idle',
+  'session.status.busyHint': 'This conversation is running',
+  'session.status.waitHint': 'This conversation is waiting for your input',
+  'session.status.idleHint': 'This conversation is idle',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '{n} answers needed',

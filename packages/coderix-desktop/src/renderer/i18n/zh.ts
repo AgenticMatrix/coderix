@@ -163,6 +163,12 @@ export const zh = {
   'session.ungrouped': '未分组',
   'session.origin.desktop': '桌面',
   'session.origin.cli': 'CLI',
+  'session.status.busy': '忙碌',
+  'session.status.wait': '等待',
+  'session.status.idle': '空闲',
+  'session.status.busyHint': '该对话正在运行',
+  'session.status.waitHint': '该对话正在等待你的输入',
+  'session.status.idleHint': '该对话空闲',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '需要你补充 {n} 个回答',

@@ -3,6 +3,7 @@ import { MessageSquare, X, Check } from 'lucide-react';
 import type { QuestionRequest } from '../../types';
 import { answerQuestion } from '../../ipc-client';
 import { useT } from '../../i18n/index.js';
+import { useStreamStore } from '../../store/streamStore.js';
 
 interface QuestionPromptProps {
   request: QuestionRequest;
@@ -45,9 +46,10 @@ export function QuestionPrompt({ request, onResolved }: QuestionPromptProps): Re
       console.error('[QuestionPrompt] Failed:', err);
     } finally {
       setSubmitting(false);
+      useStreamStore.getState().setAwaitingUser(request.sessionId, false);
       onResolved();
     }
-  }, [answers, onResolved, request.toolUseId]);
+  }, [answers, onResolved, request.toolUseId, request.sessionId]);
 
   const handleDismiss = useCallback(() => {
     void handleSubmit();
