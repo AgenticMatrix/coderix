@@ -18,10 +18,14 @@ import type {
 import type { CallModelParams } from './query.js';
 import { normalizeMessagesForAPI } from './message-normalizer.js';
 import { detectProtocol } from '../config.js';
+import { isValidBase64Image } from '../utils/image-validation.js';
 import { createCallModelFromOpenAI, type CallModelConfig } from './openai-adapter.js';
 
 export { createCallModelFromOpenAI } from './openai-adapter.js';
 export type { CallModelConfig } from './openai-adapter.js';
+
+/** Stand-in for an inline image the provider cannot decode. */
+const CORRUPT_IMAGE_TEXT = '[图片数据已损坏，已跳过]';
 
 // ---------------------------------------------------------------------------
 // Message conversion: core/types.ts → Anthropic API format
@@ -38,7 +42,7 @@ interface AnthropicRequest {
  * as the system parameter. User/assistant messages are converted
  * to Anthropic content block arrays or strings.
  */
-function toAnthropicMessages(
+export function toAnthropicMessages(
   messages: Array<{ role: string; content: string | ContentBlock[] }>,
 ): AnthropicRequest {
   // Normalize messages before API conversion (merge, hoist, smoosh, pair repair)
@@ -90,6 +94,11 @@ function toAnthropicMessages(
             } else if (Array.isArray(block.content)) {
               resultContent = block.content.map((sub: ContentBlock) => {
                 if (sub.type === 'image' && sub.source) {
+                  // A corrupt (e.g. truncated-download) image in stored history
+                  // makes the provider reject the whole request; skip it instead.
+                  if (!isValidBase64Image(sub.source.media_type, sub.source.data ?? '')) {
+                    return { type: 'text', text: CORRUPT_IMAGE_TEXT } as Anthropic.TextBlockParam;
+                  }
                   return {
                     type: 'image',
                     source: {
@@ -114,6 +123,10 @@ function toAnthropicMessages(
           break;
         case 'image':
           if (block.source) {
+            if (!isValidBase64Image(block.source.media_type, block.source.data ?? '')) {
+              content.push({ type: 'text', text: CORRUPT_IMAGE_TEXT });
+              break;
+            }
             content.push({
               type: 'image',
               source: {

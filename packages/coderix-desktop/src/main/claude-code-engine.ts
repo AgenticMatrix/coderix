@@ -28,6 +28,12 @@ import { listRegisteredPluginDirs } from './plugin-registry.js';
 import { findClaudeCodeBinary, ensureClaudeCodeInstalled } from './claude-code-runtime.js';
 import { resolveAutoCompactWindow } from './auto-compact-window.js';
 import { createTurnIdleWatchdog, TURN_IDLE_TIMEOUT_MS } from './turn-idle-watchdog.js';
+import {
+  findClaudeSessionFile,
+  isUnsupportedImageApiError,
+  repairClaudeSessionImagesOnce,
+  repairInvalidImagesInSessionFile,
+} from './claude-session-image-repair.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -531,7 +537,7 @@ function buildReplayPreamble(history: Message[]): string {
   return lines.join('\n').trim();
 }
 
-export async function* runClaudeCodeQuery(
+async function* runClaudeCodeQueryOnce(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
   const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, history, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl, maxContext, compactThreshold, autoCompactEnabled } = opts;
@@ -577,6 +583,28 @@ export async function* runClaudeCodeQuery(
       // Best-effort: if the lookup itself fails (permissions, SDK change), keep
       // the resume id — the init-verification below still catches a real miss.
       console.warn('[claude-code] could not verify resume session; proceeding with resume', err);
+    }
+  }
+
+  // A replayed image that no longer decodes makes the provider reject the
+  // whole request (400 unsupported image) on every turn. Validate the resumed
+  // transcript before spending a call — the bad block is replaced with a text
+  // placeholder, which keeps the tool_result/tool_use pairing intact. Scanned
+  // once per session per process; images added later are covered by the retry
+  // path in `runClaudeCodeQuery`.
+  if (resume) {
+    try {
+      const sessionFile = findClaudeSessionFile(resume, cwd);
+      if (sessionFile) {
+        const { repaired, backupPath } = repairClaudeSessionImagesOnce(sessionFile);
+        if (repaired > 0) {
+          console.warn(
+            `[claude-code] removed ${repaired} corrupt image block(s) from ${sessionFile} (backup: ${backupPath}) — continuing without them`,
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[claude-code] preflight image repair failed; resuming as-is', err);
     }
   }
 
@@ -945,6 +973,146 @@ export async function* runClaudeCodeQuery(
     throw err;
   } finally {
     idleWatchdog.dispose();
+  }
+}
+
+/** Text of an assistant message that contains only text blocks, else null. */
+function assistantTextOf(ev: QueryEngineEvent): string | null {
+  if (ev.type !== 'message') return null;
+  const data = ev.data as { type?: string; message?: { content?: unknown } } | undefined;
+  if (data?.type !== 'assistant') return null;
+  const content = data.message?.content;
+  if (!Array.isArray(content)) return null;
+  const texts: string[] = [];
+  for (const block of content) {
+    const b = block as { type?: string; text?: unknown };
+    if (!b || b.type !== 'text' || typeof b.text !== 'string') return null;
+    texts.push(b.text);
+  }
+  return texts.join('\n');
+}
+
+/** The CLI renders a rejected request as a plain-text assistant message. */
+function isApiErrorAssistantEvent(ev: QueryEngineEvent): boolean {
+  const text = assistantTextOf(ev);
+  return text !== null && isUnsupportedImageApiError(text);
+}
+
+/**
+ * Events the UI can't take back (completed text, tool calls/results). A retry
+ * is only safe while the failed attempt produced none of them; partial stream
+ * deltas are ignored because a request rejected up front yields no model text.
+ */
+function isSubstantiveEvent(ev: QueryEngineEvent): boolean {
+  if (ev.type === 'task') return true;
+  if (ev.type !== 'message') return false;
+  const data = ev.data as { type?: string } | undefined;
+  return data?.type === 'assistant' || data?.type === 'user';
+}
+
+/**
+ * Replace corrupt image blocks in the CLI's transcript for this session.
+ * Returns true when something was actually repaired (and a retry is worthwhile).
+ */
+function repairCorruptSessionImages(opts: ClaudeCodeQueryOptions): boolean {
+  const claudeSessionId =
+    getClaudeSessionId(opts.sessionId)
+    ?? loadPersistedSessionStates().get(opts.sessionId)?.claudeSessionId;
+  const sessionFile = claudeSessionId
+    ? findClaudeSessionFile(claudeSessionId, opts.cwd)
+    : null;
+  if (!sessionFile) return false;
+  try {
+    const fix = repairInvalidImagesInSessionFile(sessionFile);
+    if (fix.repaired > 0) {
+      console.warn(
+        `[claude-code] turn failed on a corrupt image; removed ${fix.repaired} block(s) ` +
+          `from ${sessionFile} (backup: ${fix.backupPath}) — retrying once`,
+      );
+      return true;
+    }
+  } catch (err) {
+    console.warn('[claude-code] image repair after API error failed', err);
+  }
+  return false;
+}
+
+/**
+ * Run a turn, repairing corrupt transcript images and retrying once.
+ *
+ * A corrupt image block in the resumed session makes the provider reject the
+ * request before the model runs, and the CLI replays that block every turn —
+ * so retrying without repair reproduces the same 400. On the first such
+ * failure we replace the bad block(s) with text and re-run the same prompt
+ * (the failed request produced no model turn, so nothing is duplicated).
+ */
+export async function* runClaudeCodeQuery(
+  opts: ClaudeCodeQueryOptions,
+): AsyncGenerator<QueryEngineEvent> {
+  let repaired = false;
+  for (;;) {
+    const heldErrorMessages: QueryEngineEvent[] = [];
+    // A successful answer that merely quotes the provider's error text is held
+    // too; buffer the terminal event so it isn't emitted before that answer.
+    const heldTerminal: QueryEngineEvent[] = [];
+    let heldErrorText: string | null = null;
+    let substantive = false;
+    let retry = false;
+
+    try {
+      for await (const ev of runClaudeCodeQueryOnce(opts)) {
+        if (isApiErrorAssistantEvent(ev)) {
+          // Hold the provider's error text back: if the repair lets us retry it
+          // should never reach the transcript.
+          heldErrorMessages.push(ev);
+          heldErrorText = assistantTextOf(ev);
+          continue;
+        }
+        if (isSubstantiveEvent(ev)) substantive = true;
+        if (ev.type === 'error') {
+          const data = ev.data as { message?: unknown } | undefined;
+          const errorText =
+            typeof data?.message === 'string' && isUnsupportedImageApiError(data.message)
+              ? data.message
+              : heldErrorText;
+          if (!repaired && !substantive && errorText && isUnsupportedImageApiError(errorText)) {
+            if (repairCorruptSessionImages(opts)) {
+              repaired = true;
+              retry = true;
+              break;
+            }
+          }
+          yield ev;
+          yield* heldErrorMessages;
+          yield* heldTerminal;
+          return;
+        }
+        if (ev.type === 'done' && heldErrorMessages.length > 0) {
+          heldTerminal.push(ev);
+          continue;
+        }
+        yield ev;
+      }
+    } catch (err) {
+      // Some SDK versions throw instead of yielding a terminal `result`.
+      const message = err instanceof Error ? err.message : String(err);
+      if (
+        !repaired &&
+        !substantive &&
+        isUnsupportedImageApiError(message) &&
+        repairCorruptSessionImages(opts)
+      ) {
+        repaired = true;
+        retry = true;
+      } else {
+        throw err;
+      }
+    }
+
+    if (retry) continue;
+    yield* heldErrorMessages;
+    yield* heldTerminal;
+    return;
   }
 }
 
