@@ -263,6 +263,12 @@ export { IS_WINDOWS, IS_MACOS, onShutdownSignal } from './utils/platform.js';
 export { detectShell } from './utils/shell-detect.js';
 export type { ShellInfo, ShellType } from './utils/shell-detect.js';
 export { toPosixPath, toWindowsPath } from './utils/windows-paths.js';
+export {
+  isSupportedImageMediaType,
+  isValidImageBuffer,
+  isValidBase64Image,
+} from './utils/image-validation.js';
+export type { SupportedImageMediaType } from './utils/image-validation.js';
 
 // ── SDK (shared message schema for @coderix/sdk & CLI --sdk) ────────
 export {

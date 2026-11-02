@@ -1,19 +1,25 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import type { ToolExecutor } from '../types.js';
+import { isValidImageBuffer, type SupportedImageMediaType } from '../../utils/image-validation.js';
 
-const IMAGE_EXTS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+const INLINE_IMAGE_EXTS = new Map<string, SupportedImageMediaType>([
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
 ]);
 
-function imageMediaType(ext: string): string {
-  switch (ext) {
-    case '.png': return 'image/png';
-    case '.jpg': case '.jpeg': return 'image/jpeg';
-    case '.gif': return 'image/gif';
-    case '.webp': return 'image/webp';
-    default: return 'image/png';
-  }
+/**
+ * Image formats the model API rejects. They used to fall through to
+ * `image/png`, which made every BMP/TIFF read fail the whole request with a
+ * 400 instead of telling the model the format is unsupported.
+ */
+const UNSUPPORTED_IMAGE_EXTS = new Set(['.bmp', '.tif', '.tiff', '.ico', '.heic', '.heif', '.avif']);
+
+function imageMediaType(ext: string): SupportedImageMediaType | null {
+  return INLINE_IMAGE_EXTS.get(ext) ?? null;
 }
 
 export const execute: ToolExecutor = async (input, opts) => {
@@ -30,17 +36,35 @@ export const execute: ToolExecutor = async (input, opts) => {
     const ext = extname(fullPath).toLowerCase();
 
     // Image files: read as base64, return as proper image content block
-    if (IMAGE_EXTS.has(ext) && !offset && !limit) {
+    const mediaType = imageMediaType(ext);
+    if (mediaType && !offset && !limit) {
       const buf = await readFile(fullPath);
-      const data = buf.toString('base64');
-      const mediaType = imageMediaType(ext);
-      const duration = Date.now() - startTime;
+      // An interrupted download leaves a file that still starts with the PNG
+      // signature but no IEND chunk; sending it as an image block makes the
+      // provider reject the entire request, so surface it as a tool error.
+      if (!isValidImageBuffer(mediaType, buf)) {
+        return {
+          content: `Error: ${fullPath} is not a valid ${mediaType} image (truncated or corrupt). Re-generate or re-download it, or convert it to PNG/JPEG.`,
+          isError: true,
+          duration: Date.now() - startTime,
+          metadata: { filePath },
+        };
+      }
       return {
         content: '',
         isError: false,
-        duration,
+        duration: Date.now() - startTime,
         metadata: { filePath },
-        image: { data, media_type: mediaType },
+        image: { data: buf.toString('base64'), media_type: mediaType },
+      };
+    }
+
+    if (UNSUPPORTED_IMAGE_EXTS.has(ext) && !offset && !limit) {
+      return {
+        content: `Error: ${ext} images are not supported by the model API (allowed: PNG, JPEG, GIF, WebP). Convert the file first.`,
+        isError: true,
+        duration: Date.now() - startTime,
+        metadata: { filePath },
       };
     }
 
