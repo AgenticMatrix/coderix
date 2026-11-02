@@ -47,6 +47,7 @@ import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
 import { deriveSessionStats } from './components/shared/status-stats';
 import { deriveAgentStatus, type AgentStatus } from './agent-status';
+import { sessionListStatusFromAgentStatus } from './session-status.js';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import { useAgentEvents } from './hooks/useAgentEvents';
 import { useSessionTitleEvents } from './hooks/useSessionTitleEvents';
@@ -1241,6 +1242,13 @@ export function App(): React.ReactElement {
   );
   prevAgentStatusRef.current = agentStatus;
 
+  // The sidebar row of the viewed conversation mirrors the bottom bar (see
+  // deriveAgentStatus) so the two badges can never disagree.
+  const viewedListStatus = useMemo(
+    () => sessionListStatusFromAgentStatus(agentStatus),
+    [agentStatus],
+  );
+
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an
   // explicit max_context carry 0 (see settingsStore), so treat a non-positive
@@ -1328,6 +1336,7 @@ export function App(): React.ReactElement {
           onNewSession={handleSidebarNewTask}
           activeView={sidebarTab}
           onNavigate={handleNavigate}
+          viewedStatus={viewedListStatus}
         />
       }
         sidebarVisible={sidebarOpen}
