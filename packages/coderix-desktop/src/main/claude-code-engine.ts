@@ -31,9 +31,9 @@ import { createTurnIdleWatchdog, TURN_IDLE_TIMEOUT_MS } from './turn-idle-watchd
 import {
   findClaudeSessionFile,
   isUnsupportedImageApiError,
-  repairClaudeSessionImagesOnce,
   repairInvalidImagesInSessionFile,
 } from './claude-session-image-repair.js';
+import { buildImageReadValidationHook } from './claude-image-guard.js';
 
 /**
  * Tracks the last Claude Code session id used by each Coderix session so
@@ -586,28 +586,6 @@ async function* runClaudeCodeQueryOnce(
     }
   }
 
-  // A replayed image that no longer decodes makes the provider reject the
-  // whole request (400 unsupported image) on every turn. Validate the resumed
-  // transcript before spending a call — the bad block is replaced with a text
-  // placeholder, which keeps the tool_result/tool_use pairing intact. Scanned
-  // once per session per process; images added later are covered by the retry
-  // path in `runClaudeCodeQuery`.
-  if (resume) {
-    try {
-      const sessionFile = findClaudeSessionFile(resume, cwd);
-      if (sessionFile) {
-        const { repaired, backupPath } = repairClaudeSessionImagesOnce(sessionFile);
-        if (repaired > 0) {
-          console.warn(
-            `[claude-code] removed ${repaired} corrupt image block(s) from ${sessionFile} (backup: ${backupPath}) — continuing without them`,
-          );
-        }
-      }
-    } catch (err) {
-      console.warn('[claude-code] preflight image repair failed; resuming as-is', err);
-    }
-  }
-
   // When there's no resumable claude session but the Coderix session has prior
   // messages, replay them so the model isn't handed a blank context. This is
   // what lets a conversation created before cross-restart persistence continue
@@ -733,6 +711,13 @@ async function* runClaudeCodeQueryOnce(
     });
     console.log('[OpenUrl] registered PreToolUse hook (matcher: Bash)');
   }
+  // Check an image file's bytes on every Read before the CLI turns it into an
+  // image block. A truncated file would otherwise be sent as-is, and the
+  // provider rejects the entire request (400 unsupported image).
+  preToolUseHooks.push({
+    matcher: 'Read',
+    hooks: [buildImageReadValidationHook(cwd)],
+  });
   if (preToolUseHooks.length > 0) {
     options.hooks = { PreToolUse: preToolUseHooks };
   }
@@ -1038,12 +1023,12 @@ function repairCorruptSessionImages(opts: ClaudeCodeQueryOptions): boolean {
 }
 
 /**
- * Run a turn, repairing corrupt transcript images and retrying once.
+ * Run a turn, recovering a transcript that already carries a corrupt image.
  *
- * A corrupt image block in the resumed session makes the provider reject the
- * request before the model runs, and the CLI replays that block every turn —
- * so retrying without repair reproduces the same 400. On the first such
- * failure we replace the bad block(s) with text and re-run the same prompt
+ * New image reads are validated by the PreToolUse guard, so a bad image can no
+ * longer enter the transcript. A session poisoned before that guard (or by an
+ * external writer) still carries a block the CLI replays on every turn; on the
+ * first such failure we replace it with text and re-run the same prompt once
  * (the failed request produced no model turn, so nothing is duplicated).
  */
 export async function* runClaudeCodeQuery(

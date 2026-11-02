@@ -13,9 +13,7 @@ import {
   encodeClaudeProjectDir,
   findClaudeSessionFile,
   isUnsupportedImageApiError,
-  repairClaudeSessionImagesOnce,
   repairInvalidImagesInSessionFile,
-  resetClaudeSessionPreflightCache,
 } from '../claude-session-image-repair.js';
 
 const PNG_1X1 =
@@ -48,7 +46,6 @@ function parsedLine(raw: string, index: number): any {
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'coderix-image-repair-'));
-  resetClaudeSessionPreflightCache();
 });
 
 afterEach(() => {
@@ -90,15 +87,6 @@ describe('claude-session-image-repair', () => {
 
     // Idempotent: nothing left to repair.
     expect(repairInvalidImagesInSessionFile(file).repaired).toBe(0);
-  });
-
-  it('scans a session once per process and leaves later repair to the retry path', () => {
-    const file = join(dir, 'session.jsonl');
-    writeFileSync(file, imageResult('bad', TRUNCATED_PNG), 'utf-8');
-
-    expect(repairClaudeSessionImagesOnce(file).repaired).toBe(1);
-    writeFileSync(file, imageResult('bad2', TRUNCATED_PNG), 'utf-8');
-    expect(repairClaudeSessionImagesOnce(file).repaired).toBe(0);
   });
 
   it('finds a session under CLAUDE_CONFIG_DIR using the encoded project dir', () => {

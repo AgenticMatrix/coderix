@@ -11,6 +11,10 @@
  * Replacing the block with a text placeholder keeps the tool_result ↔ tool_use
  * pairing intact (deleting the result would leave an orphaned tool_use), so the
  * session resumes and the model simply learns that image was unavailable.
+ *
+ * New bad blocks are prevented at read time by `claude-image-guard.ts`; this
+ * module is the last-resort path for a session that was poisoned before that
+ * guard existed (or by an external writer), and only runs after a turn failed.
  */
 
 import { copyFileSync, existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
@@ -151,23 +155,4 @@ export function repairInvalidImagesInSessionFile(filePath: string): ImageRepairR
   writeFileSync(tmpPath, lines.join('\n'), 'utf-8');
   renameSync(tmpPath, filePath);
   return { repaired, backupPath };
-}
-
-/**
- * Sessions already scanned in this process. The transcript grows on every turn,
- * so re-validating all historical images each time would burn CPU for no gain;
- * images added by the current turn are covered by the retry path instead.
- */
-const preflightScanned = new Set<string>();
-
-/** Validate a resumed session once per process, repairing any bad images. */
-export function repairClaudeSessionImagesOnce(filePath: string): ImageRepairResult {
-  if (preflightScanned.has(filePath)) return { repaired: 0 };
-  preflightScanned.add(filePath);
-  return repairInvalidImagesInSessionFile(filePath);
-}
-
-/** Test seam: forget which sessions were already preflight-scanned. */
-export function resetClaudeSessionPreflightCache(): void {
-  preflightScanned.clear();
 }

@@ -1,15 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import type { ToolExecutor } from '../types.js';
-import { isValidImageBuffer, type SupportedImageMediaType } from '../../utils/image-validation.js';
-
-const INLINE_IMAGE_EXTS = new Map<string, SupportedImageMediaType>([
-  ['.png', 'image/png'],
-  ['.jpg', 'image/jpeg'],
-  ['.jpeg', 'image/jpeg'],
-  ['.gif', 'image/gif'],
-  ['.webp', 'image/webp'],
-]);
+import { imageMediaTypeForPath, isValidImageBuffer } from '../../utils/image-validation.js';
 
 /**
  * Image formats the model API rejects. They used to fall through to
@@ -17,10 +9,6 @@ const INLINE_IMAGE_EXTS = new Map<string, SupportedImageMediaType>([
  * 400 instead of telling the model the format is unsupported.
  */
 const UNSUPPORTED_IMAGE_EXTS = new Set(['.bmp', '.tif', '.tiff', '.ico', '.heic', '.heif', '.avif']);
-
-function imageMediaType(ext: string): SupportedImageMediaType | null {
-  return INLINE_IMAGE_EXTS.get(ext) ?? null;
-}
 
 export const execute: ToolExecutor = async (input, opts) => {
   const filePath = input.file_path as string;
@@ -36,7 +24,7 @@ export const execute: ToolExecutor = async (input, opts) => {
     const ext = extname(fullPath).toLowerCase();
 
     // Image files: read as base64, return as proper image content block
-    const mediaType = imageMediaType(ext);
+    const mediaType = imageMediaTypeForPath(fullPath);
     if (mediaType && !offset && !limit) {
       const buf = await readFile(fullPath);
       // An interrupted download leaves a file that still starts with the PNG
