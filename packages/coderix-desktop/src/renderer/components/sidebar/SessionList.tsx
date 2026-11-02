@@ -12,6 +12,9 @@ export interface SessionListProps {
   activeSessionId?: string;
   onSessionSelect?: (sessionId: string) => void;
   searchQuery?: string;
+  /** Live status of the viewed conversation, projected from the bottom status
+   *  bar. The row mirrors it so the two can never disagree. */
+  viewedStatus?: SessionListStatus;
 }
 
 type ViewMode = 'flat' | 'workspace';
@@ -67,8 +70,8 @@ export function SessionStatusBadge({
       ? {
           labelKey: 'session.status.busy' as const,
           hintKey: 'session.status.busyHint' as const,
-          dot: 'bg-[var(--color-blue)]',
-          text: 'text-[var(--color-blue)]',
+          dot: 'bg-[var(--color-danger)]',
+          text: 'text-[var(--color-danger)]',
         }
       : status === 'wait'
         ? {
@@ -80,8 +83,9 @@ export function SessionStatusBadge({
         : {
             labelKey: 'session.status.idle' as const,
             hintKey: 'session.status.idleHint' as const,
-            dot: 'bg-[var(--color-text-tertiary)]',
-            text: 'text-[var(--color-text-tertiary)]',
+            // Same green as the bottom bar's idle badge.
+            dot: 'bg-[var(--color-success)]',
+            text: 'text-[var(--color-success)]',
           };
   const hint = t(meta.hintKey);
 
@@ -107,6 +111,7 @@ export function SessionList({
   activeSessionId,
   onSessionSelect,
   searchQuery = '',
+  viewedStatus,
 }: SessionListProps): React.ReactElement {
   const t = useT();
   const sessions = useSessionStore((s) => s.sessions);
@@ -183,7 +188,9 @@ export function SessionList({
   const renderSession = (session: SessionSummary, indented = false): React.ReactElement => {
     const isActive = session.id === activeSessionId;
     const isViewed = session.id === (viewedSessionId ?? activeSessionId);
-    const status = deriveSessionListStatus({
+    // The viewed conversation mirrors the bottom bar's phase. Everything else
+    // (backgrounded sessions) only has the per-session maps to go on.
+    const liveStatus = deriveSessionListStatus({
       streaming: isViewed ? viewedStreaming : Boolean(streamingBySession[session.id]),
       awaitingUser: Boolean(awaitingUserBySession[session.id]),
       compacting: Boolean(compactingBySession[session.id]),
@@ -191,6 +198,14 @@ export function SessionList({
       runningTaskCount: runningTasksBySession[session.id]?.length ?? 0,
       leaseBusy: session.busy,
     });
+    // `viewedStatus` is derived from the same flat state the bottom bar uses, so
+    // prefer it for the session actually loaded in the chat store. A lease held
+    // by another client is the one signal the local bar cannot see — it must
+    // still read busy.
+    const status =
+      session.id === viewedSessionId && viewedStatus && !session.busy
+        ? viewedStatus
+        : liveStatus;
     return (
       <motion.button
         key={session.id}

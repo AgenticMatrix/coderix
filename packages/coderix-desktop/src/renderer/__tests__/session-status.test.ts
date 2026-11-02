@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { deriveSessionListStatus } from '../session-status.js';
+import {
+  deriveSessionListStatus,
+  sessionListStatusFromAgentStatus,
+} from '../session-status.js';
 
 describe('deriveSessionListStatus', () => {
   it('is idle when nothing is in flight', () => {
@@ -30,5 +33,26 @@ describe('deriveSessionListStatus', () => {
         awaitingUser: true,
       }),
     ).toBe('wait');
+  });
+});
+
+describe('sessionListStatusFromAgentStatus', () => {
+  it('maps only a genuinely idle bar to the green idle badge', () => {
+    expect(sessionListStatusFromAgentStatus('idle')).toBe('idle');
+  });
+
+  it('maps the bar’s waiting phase to wait', () => {
+    expect(sessionListStatusFromAgentStatus('waiting')).toBe('wait');
+  });
+
+  it('maps every in-flight phase to busy', () => {
+    for (const status of ['requesting', 'thinking', 'executing', 'output', 'compacting', 'background'] as const) {
+      expect(sessionListStatusFromAgentStatus(status)).toBe('busy');
+    }
+  });
+
+  it('treats a settled error / interrupt as idle, not busy', () => {
+    expect(sessionListStatusFromAgentStatus('error')).toBe('idle');
+    expect(sessionListStatusFromAgentStatus('interrupted')).toBe('idle');
   });
 });

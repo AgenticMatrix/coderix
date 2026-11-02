@@ -4,6 +4,8 @@
  * read as `busy` — the detailed phase belongs to the status bar of the session
  * being viewed.
  */
+import type { AgentStatus } from './agent-status.js';
+
 export type SessionListStatus = 'busy' | 'wait' | 'idle';
 
 export interface SessionListStatusInput {
@@ -36,4 +38,28 @@ export function deriveSessionListStatus({
     return 'busy';
   }
   return 'idle';
+}
+
+/**
+ * Project the bottom status bar's phase onto the row badge. The two must never
+ * disagree for the conversation being viewed: the bar is the single source of
+ * truth for that session (it alone knows about the gap between model steps,
+ * compaction and background work), so the row mirrors it instead of
+ * re-deriving from the raw per-session maps.
+ *
+ * `error` and `interrupted` are outcomes, not liveness: nothing is running, so
+ * the row reads `idle`. Only in-flight work is `busy` — otherwise a failed or
+ * stopped turn would keep the row pulsing forever.
+ */
+export function sessionListStatusFromAgentStatus(status: AgentStatus): SessionListStatus {
+  switch (status) {
+    case 'waiting':
+      return 'wait';
+    case 'idle':
+    case 'interrupted':
+    case 'error':
+      return 'idle';
+    default:
+      return 'busy';
+  }
 }
