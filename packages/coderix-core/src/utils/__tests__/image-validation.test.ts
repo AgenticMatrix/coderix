@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  imageMediaTypeForPath,
   isSupportedImageMediaType,
   isValidBase64Image,
   isValidImageBuffer,
@@ -26,6 +27,18 @@ describe('image-validation', () => {
   it('rejects an empty payload', () => {
     expect(isValidImageBuffer('image/png', Buffer.alloc(0))).toBe(false);
     expect(isValidBase64Image('image/png', '')).toBe(false);
+  });
+
+  it('maps image paths to the media type they will be sent as', () => {
+    expect(imageMediaTypeForPath('/a/b.PNG')).toBe('image/png');
+    expect(imageMediaTypeForPath('shot.jpeg')).toBe('image/jpeg');
+    expect(imageMediaTypeForPath('shot.jpg')).toBe('image/jpeg');
+    expect(imageMediaTypeForPath('anim.gif')).toBe('image/gif');
+    expect(imageMediaTypeForPath('anim.webp')).toBe('image/webp');
+    expect(imageMediaTypeForPath('icon.svg')).toBeNull();
+    expect(imageMediaTypeForPath('picture.bmp')).toBeNull();
+    expect(imageMediaTypeForPath('noext')).toBeNull();
+    expect(imageMediaTypeForPath('/a.b/thing')).toBeNull();
   });
 
   it('accepts a complete PNG and rejects a truncated one', () => {

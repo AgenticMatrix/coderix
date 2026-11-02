@@ -26,6 +26,22 @@ const SUPPORTED_MEDIA_TYPES = new Set<string>([
   'image/webp',
 ]);
 
+/** Extensions that become an inline image block when read. */
+const INLINE_IMAGE_EXTS = new Map<string, SupportedImageMediaType>([
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+]);
+
+/** The media type a path will be sent as, or null when it is not an image. */
+export function imageMediaTypeForPath(filePath: string): SupportedImageMediaType | null {
+  const dot = filePath.lastIndexOf('.');
+  if (dot === -1) return null;
+  return INLINE_IMAGE_EXTS.get(filePath.slice(dot).toLowerCase()) ?? null;
+}
+
 /** True when the provider accepts this media type at all. */
 export function isSupportedImageMediaType(mediaType: string): mediaType is SupportedImageMediaType {
   return SUPPORTED_MEDIA_TYPES.has(mediaType.toLowerCase());
