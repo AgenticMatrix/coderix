@@ -945,6 +945,8 @@ export interface SubagentSummary {
   name?: string;
   agentType?: string;
   status: 'running' | 'done' | 'error' | 'stopped';
+  /** Conversation that spawned this agent (agents are tracked process-wide). */
+  sessionId?: string;
   prompt?: string;
   description?: string;
   createdAt?: number;

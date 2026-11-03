@@ -18,6 +18,9 @@ export interface SessionListProps {
 
 type ViewMode = 'flat' | 'workspace';
 
+/** Stable empty set used when every running agent already carries a session id. */
+const NO_TOOL_IDS: ReadonlySet<string> = new Set();
+
 /** Last path segment (folder name) — handles POSIX and Windows separators. */
 function folderName(p: string): string {
   return p.split(/[\\/]/).pop() || p;
@@ -267,20 +270,26 @@ export function SessionList({
     const sessionCurrent = isViewed
       ? viewedCurrentMessage
       : (currentMessageBySession[session.id] ?? null);
-    // Sub-agents are process-wide; scope them to the agent tool calls that live
-    // in this session's transcript (see countSessionRunningAgents).
+    // Sub-agents are process-wide; match them by their owning session id. Only
+    // records from engines that don't tag ownership need the transcript scan
+    // (the spawner's tool_use id — see countSessionRunningAgents).
     let runningAgentCount = 0;
-    if (Object.values(subagentAgents).some((a) => a.status === 'running')) {
-      const toolIds = new Set<string>();
-      for (const message of sessionMessages) {
-        for (const block of message.blocks) {
-          if (block.type === 'tool_use' && block.toolId) toolIds.add(block.toolId);
+    const runningAgents = Object.values(subagentAgents).filter((a) => a.status === 'running');
+    if (runningAgents.length > 0) {
+      let toolIds: ReadonlySet<string> = NO_TOOL_IDS;
+      if (runningAgents.some((a) => a.sessionId === undefined)) {
+        const ids = new Set<string>();
+        for (const message of sessionMessages) {
+          for (const block of message.blocks) {
+            if (block.type === 'tool_use' && block.toolId) ids.add(block.toolId);
+          }
         }
+        for (const block of sessionCurrent?.blocks ?? []) {
+          if (block.type === 'tool_use' && block.toolId) ids.add(block.toolId);
+        }
+        toolIds = ids;
       }
-      for (const block of sessionCurrent?.blocks ?? []) {
-        if (block.type === 'tool_use' && block.toolId) toolIds.add(block.toolId);
-      }
-      runningAgentCount = countSessionRunningAgents(subagentAgents, toolIds);
+      runningAgentCount = countSessionRunningAgents(subagentAgents, toolIds, session.id);
     }
     const status = deriveSessionRowStatus({
       isStreaming: isViewed ? viewedStreaming : Boolean(streamingBySession[session.id]),

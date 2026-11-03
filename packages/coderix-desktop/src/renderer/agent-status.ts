@@ -71,26 +71,30 @@ export function hasActiveToolInConversation(
 /**
  * Count the running sub-agents that belong to one conversation.
  *
- * The sub-agent store is process-wide — the side pane lists agents from every
- * conversation — so counting all of them would paint a finished conversation as
- * "background" while an unrelated conversation's agent drains. A sub-agent is
- * correlated to its conversation by the spawning `Agent`/`Task` tool call: the
- * store is keyed by that tool_use id (the canonical agent id), and the tool call
- * itself lives in the conversation's transcript. Agents whose spawn call is not
- * in this transcript belong to another conversation and must not leak in.
+ * The sub-agent registry is a process-wide singleton (concurrent per-session
+ * engines share it), so every agent event carries the conversation that
+ * spawned it. That `sessionId` is authoritative. Records from engines that do
+ * not tag ownership fall back to the spawner's `Agent`/`Task` tool_use id,
+ * which is the store key and also lives in the conversation's transcript.
  */
 export function countSessionRunningAgents(
-  agents: Record<string, { status?: string; toolUseId?: string } | undefined>,
+  agents: Record<
+    string,
+    { status?: string; toolUseId?: string; sessionId?: string } | undefined
+  >,
   sessionToolIds: ReadonlySet<string>,
+  sessionId?: string | null,
 ): number {
   let count = 0;
   for (const [agentId, agent] of Object.entries(agents)) {
     if (agent?.status !== 'running') continue;
-    // The key is already the canonical id; `toolUseId` is the same id carried
-    // on the record and covers stores seeded before the key was canonicalized.
-    if (sessionToolIds.has(agentId) || (agent.toolUseId && sessionToolIds.has(agent.toolUseId))) {
-      count += 1;
-    }
+    // Ownership is explicit when the event carried a session id; otherwise
+    // infer it from the spawning tool call (the key is already canonical).
+    const owned = agent.sessionId !== undefined
+      ? Boolean(sessionId) && agent.sessionId === sessionId
+      : sessionToolIds.has(agentId) ||
+        Boolean(agent.toolUseId) && sessionToolIds.has(agent.toolUseId!);
+    if (owned) count += 1;
   }
   return count;
 }

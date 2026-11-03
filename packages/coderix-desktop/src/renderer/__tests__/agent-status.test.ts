@@ -319,6 +319,7 @@ describe('hasActiveToolInConversation', () => {
 
 describe('countSessionRunningAgents', () => {
   it('counts only agents spawned by a tool call in this conversation', () => {
+    // Legacy records without an ownership tag fall back to the transcript.
     const agents = {
       'toolu_own': { status: 'running' },
       'toolu_other': { status: 'running' },
@@ -338,5 +339,19 @@ describe('countSessionRunningAgents', () => {
     expect(
       countSessionRunningAgents({ 'toolu_other': { status: 'running' } }, new Set()),
     ).toBe(0);
+  });
+
+  it('uses the owning session id when the record carries one', () => {
+    // The registry is process-wide, so an explicit tag is authoritative — even
+    // when the other session's transcript happens to contain the tool call.
+    const agents = {
+      'toolu_own': { status: 'running', sessionId: 's1' },
+      'toolu_other': { status: 'running', sessionId: 's2' },
+      'toolu_untagged': { status: 'running' },
+    };
+    const s1Tools = new Set(['toolu_own', 'toolu_other', 'toolu_untagged']);
+    expect(countSessionRunningAgents(agents, s1Tools, 's1')).toBe(2);
+    expect(countSessionRunningAgents(agents, s1Tools, 's2')).toBe(2);
+    expect(countSessionRunningAgents(agents, s1Tools, null)).toBe(1);
   });
 });

@@ -17,6 +17,12 @@ export interface SubAgentRecord {
   agentType: SubagentType;
   status: SubAgentStatus;
   prompt: string;
+  /**
+   * The conversation that spawned this agent. Agents are tracked in a
+   * process-wide registry (concurrent per-session engines share it), so every
+   * frontend needs this to scope status counts to one conversation.
+   */
+  sessionId?: string;
   /** Brief human-readable summary shown in the Agents panel. */
   description?: string;
   createdAt: number;

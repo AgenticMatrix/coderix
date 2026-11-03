@@ -313,6 +313,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     status: 'running',
     prompt,
     description,
+    sessionId: options.sessionId,
     createdAt: Date.now(),
     turnCount: 0,
     messageCount: 0,

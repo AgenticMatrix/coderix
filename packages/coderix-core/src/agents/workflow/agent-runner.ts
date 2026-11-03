@@ -487,6 +487,7 @@ export async function runWorkflowAgent(options: RunAgentOptions): Promise<string
     agentType: agentType as 'explore' | 'plan' | 'general-purpose',
     status: 'running',
     prompt,
+    sessionId: agentSpawn.sessionManager.getActive()?.id,
     createdAt: Date.now(),
     turnCount: 0,
     messageCount: 0,

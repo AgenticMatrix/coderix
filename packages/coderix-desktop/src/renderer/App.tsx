@@ -79,6 +79,9 @@ import {
 import type { SkillInfo, McpServerStatus } from './ipc-client';
 import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
 
+/** Stable empty set so the fallback memo keeps its identity between renders. */
+const EMPTY_TOOL_IDS: ReadonlySet<string> = new Set();
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -190,10 +193,14 @@ export function App(): React.ReactElement {
   // Sub-agents outlive the turn exactly like background tasks. A foreground
   // agent cannot: its spawn tool call is awaited by the turn that started it,
   // so anything still running once the turn is over is background work. The
-  // agent store is process-wide (the side pane shows every agent), so it must
-  // be scoped to this conversation via the spawning tool call — otherwise a
-  // finished conversation reads "background" while another one's agent runs.
-  const sessionToolIds = useMemo(() => {
+  // registry is process-wide, so agents carry their owning session id; the
+  // tool_use ids in this transcript are only a fallback for records that
+  // predate that tag (rare), and the scan is skipped unless one is present.
+  const needsToolIdFallback = useSubagentStore((s) =>
+    Object.values(s.agents).some((a) => a.status === 'running' && a.sessionId === undefined),
+  );
+  const sessionToolIds = useMemo<ReadonlySet<string>>(() => {
+    if (!needsToolIdFallback) return EMPTY_TOOL_IDS;
     const ids = new Set<string>();
     const collect = (blocks: readonly StreamBlock[] | undefined): void => {
       for (const block of blocks ?? []) {
@@ -203,9 +210,9 @@ export function App(): React.ReactElement {
     for (const message of messages) collect(message.blocks);
     collect(streamCurrentMessage?.blocks);
     return ids;
-  }, [messages, streamCurrentMessage]);
+  }, [needsToolIdFallback, messages, streamCurrentMessage]);
   const runningAgentCount = useSubagentStore((s) =>
-    countSessionRunningAgents(s.agents, sessionToolIds),
+    countSessionRunningAgents(s.agents, sessionToolIds, sessionId),
   );
 
   // ── Local state ─────────────────────────────────────────────────────────

@@ -192,6 +192,9 @@ function sanitizeSubAgent(agent: SubAgentRecord): Record<string, unknown> {
     status: agent.status,
     prompt: agent.prompt,
     description: agent.description,
+    // The registry is a process-wide singleton shared by every per-session
+    // engine; the renderer needs the owning conversation to scope its counts.
+    sessionId: agent.sessionId,
     createdAt: agent.createdAt,
     finishedAt: agent.finishedAt,
     turnCount: agent.turnCount,
@@ -690,6 +693,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 toolUseId: agentId,
                 agentType: meta?.agentType,
                 description: meta?.description,
+                // Synthesized claude-code sub-agents have no registry record;
+                // tag them with the conversation whose turn produced them so
+                // the renderer can scope background counts per session.
+                sessionId: streamSessionId,
                 status: finalStatus,
                 finishedAt: Date.now(),
                 transcript,
@@ -803,6 +810,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                       toolUseId: agentId,
                       agentType: meta?.agentType,
                       description: meta?.description,
+                      sessionId: streamSessionId,
                       status: 'running',
                       createdAt: Date.now(),
                       transcript,

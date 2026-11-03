@@ -972,6 +972,7 @@ export class QueryEngine {
         agentType: (diskInfo.meta.agentType as any) || 'general-purpose',
         status: 'stopped',
         prompt: diskInfo.meta.description ?? '',
+        sessionId: parentSessionId,
         createdAt: diskInfo.meta.createdAt,
         turnCount: diskInfo.transcript.filter((m: any) => m.role === 'assistant').length,
         messageCount: diskInfo.transcript.length,
