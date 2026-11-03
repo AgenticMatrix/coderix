@@ -195,8 +195,10 @@ export function chatResponseToMessages(body: Json): Json {
 
 interface ToolBlock {
   blockIndex: number;
+  id: string;
   name: string;
   args: string;
+  /** True once `content_block_start` has been emitted for this block. */
   open: boolean;
 }
 
@@ -287,21 +289,50 @@ export class ChatToMessagesSseConverter {
         const idx = (tc.index as number) ?? 0;
         let entry = this.tools.get(idx);
         if (!entry) {
-          entry = { blockIndex: this.blockIndex++, name: '', args: '', open: true };
+          entry = { blockIndex: this.blockIndex++, id: '', name: '', args: '', open: false };
           this.tools.set(idx, entry);
-          frames.push({
-            event: 'content_block_start',
-            data: JSON.stringify({ type: 'content_block_start', index: entry.blockIndex, content_block: { type: 'tool_use', id: tc.id ?? '', name: '', input: {} } }),
-          });
         }
+        if (typeof tc.id === 'string' && tc.id) entry.id = tc.id;
         const fn = (tc.function ?? {}) as Json;
         if (typeof fn.name === 'string' && fn.name) entry.name = fn.name;
-        if (typeof fn.arguments === 'string' && fn.arguments) {
-          entry.args += fn.arguments;
+        // Anthropic's stream carries the tool name ONLY in `content_block_start`
+        // — there is no name delta. OpenAI-compatible providers sometimes send
+        // the name in a later chunk than the one that opens the call, so hold
+        // the start frame until the name is known and replay any arguments that
+        // arrived first. Emitting it with an empty name makes the harness fail
+        // every call with "No such tool available: ".
+        if (!entry.open && entry.name) {
+          entry.open = true;
           frames.push({
-            event: 'content_block_delta',
-            data: JSON.stringify({ type: 'content_block_delta', index: entry.blockIndex, delta: { type: 'input_json_delta', partial_json: fn.arguments } }),
+            event: 'content_block_start',
+            data: JSON.stringify({
+              type: 'content_block_start',
+              index: entry.blockIndex,
+              content_block: { type: 'tool_use', id: entry.id, name: entry.name, input: {} },
+            }),
           });
+          if (entry.args) {
+            frames.push({
+              event: 'content_block_delta',
+              data: JSON.stringify({
+                type: 'content_block_delta',
+                index: entry.blockIndex,
+                delta: { type: 'input_json_delta', partial_json: entry.args },
+              }),
+            });
+            entry.args = '';
+          }
+        }
+        if (typeof fn.arguments === 'string' && fn.arguments) {
+          if (entry.open) {
+            frames.push({
+              event: 'content_block_delta',
+              data: JSON.stringify({ type: 'content_block_delta', index: entry.blockIndex, delta: { type: 'input_json_delta', partial_json: fn.arguments } }),
+            });
+          } else {
+            // Name not known yet — buffer the arguments until the start frame.
+            entry.args += fn.arguments;
+          }
         }
       }
     }
@@ -323,6 +354,31 @@ export class ChatToMessagesSseConverter {
       frames.push({ event: 'content_block_stop', data: JSON.stringify({ type: 'content_block_stop', index: this.textBlockIndex }) });
     }
     for (const entry of this.tools.values()) {
+      // A provider that never sent the name leaves the block unopened; open it
+      // anyway so start/stop stay paired (the harness will report the empty
+      // name, but the message is still well-formed).
+      if (!entry.open) {
+        entry.open = true;
+        frames.push({
+          event: 'content_block_start',
+          data: JSON.stringify({
+            type: 'content_block_start',
+            index: entry.blockIndex,
+            content_block: { type: 'tool_use', id: entry.id, name: entry.name, input: {} },
+          }),
+        });
+        if (entry.args) {
+          frames.push({
+            event: 'content_block_delta',
+            data: JSON.stringify({
+              type: 'content_block_delta',
+              index: entry.blockIndex,
+              delta: { type: 'input_json_delta', partial_json: entry.args },
+            }),
+          });
+          entry.args = '';
+        }
+      }
       if (entry.open) {
         entry.open = false;
         frames.push({ event: 'content_block_stop', data: JSON.stringify({ type: 'content_block_stop', index: entry.blockIndex }) });
