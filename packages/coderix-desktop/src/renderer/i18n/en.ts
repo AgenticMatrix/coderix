@@ -170,9 +170,14 @@ export const en: Record<TranslationKey, string> = {
   'session.status.busy': 'Busy',
   'session.status.wait': 'Waiting',
   'session.status.idle': 'Idle',
+  'session.status.error': 'Error',
+  'session.status.interrupted': 'Interrupted',
   'session.status.busyHint': 'This conversation is running',
   'session.status.waitHint': 'This conversation is waiting for your input',
+  'session.status.backgroundHint': 'This conversation is waiting for background work to finish',
   'session.status.idleHint': 'This conversation is idle',
+  'session.status.errorHint': 'The last turn in this conversation failed',
+  'session.status.interruptedHint': 'The last turn in this conversation was stopped',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '{n} answers needed',

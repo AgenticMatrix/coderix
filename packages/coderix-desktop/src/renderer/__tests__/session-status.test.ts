@@ -9,27 +9,55 @@ describe('deriveSessionListStatus', () => {
     expect(deriveSessionListStatus({})).toBe('idle');
   });
 
-  it('is busy while the turn is streaming', () => {
+  it('is busy while the turn is streaming or compacting', () => {
     expect(deriveSessionListStatus({ streaming: true })).toBe('busy');
-  });
-
-  it('is busy while a background task or compaction is running', () => {
-    expect(deriveSessionListStatus({ runningTaskCount: 1 })).toBe('busy');
     expect(deriveSessionListStatus({ compacting: true })).toBe('busy');
-    expect(deriveSessionListStatus({ requesting: true })).toBe('busy');
   });
 
-  it('is busy when another client holds the session lease', () => {
-    expect(deriveSessionListStatus({ leaseBusy: true })).toBe('busy');
+  it('reads as waiting — not busy — once only background work is left', () => {
+    // The turn is over and the user can type; a red "busy" badge would claim
+    // the conversation is occupied when it is only waiting for tasks to drain.
+    expect(deriveSessionListStatus({ runningTaskCount: 1 })).toBe('background');
+    // A live turn still outranks background work that started during it.
+    expect(deriveSessionListStatus({ streaming: true, runningTaskCount: 1 })).toBe('busy');
   });
 
-  it('prefers wait over any work in flight', () => {
+  it('keeps terminal outcomes distinct so the row matches the bar', () => {
+    expect(deriveSessionListStatus({ hasError: true })).toBe('error');
+    expect(deriveSessionListStatus({ interrupted: true })).toBe('interrupted');
+    // The bar ranks a failure above everything while it is still showing.
+    expect(deriveSessionListStatus({ hasError: true, streaming: true })).toBe('error');
+    // Compaction outranks a blocked prompt, like deriveAgentStatus.
+    expect(deriveSessionListStatus({ compacting: true, awaitingUser: true })).toBe('busy');
+    // An interrupt outranks the background work still draining behind it.
+    expect(deriveSessionListStatus({ interrupted: true, runningTaskCount: 1 })).toBe(
+      'interrupted',
+    );
+  });
+
+  it('ignores a settled request-start — the bar requires a live turn', () => {
+    // `requesting` is not an input at all: the bar only uses it while
+    // isStreaming is true, so it can never make a settled row busy.
+    expect(
+      // @ts-expect-error requesting is deliberately not part of the input.
+      deriveSessionListStatus({ requesting: true }),
+    ).toBe('idle');
+  });
+
+  it('ignores a write lease — ownership is not activity', () => {
+    // A live CLI holds the lease even while idle at its prompt; the badge must
+    // stay idle so it agrees with the status bar, which cannot see the lease.
+    expect(
+      // @ts-expect-error leaseBusy is deliberately not part of the input.
+      deriveSessionListStatus({ leaseBusy: true }),
+    ).toBe('idle');
+  });
+
+  it('prefers wait over work in flight', () => {
     expect(
       deriveSessionListStatus({
         streaming: true,
-        compacting: true,
         runningTaskCount: 2,
-        leaseBusy: true,
         awaitingUser: true,
       }),
     ).toBe('wait');
@@ -45,14 +73,20 @@ describe('sessionListStatusFromAgentStatus', () => {
     expect(sessionListStatusFromAgentStatus('waiting')).toBe('wait');
   });
 
-  it('maps every in-flight phase to busy', () => {
-    for (const status of ['requesting', 'thinking', 'executing', 'output', 'compacting', 'background'] as const) {
+  it('maps every live turn phase to busy', () => {
+    for (const status of ['requesting', 'thinking', 'executing', 'output', 'compacting'] as const) {
       expect(sessionListStatusFromAgentStatus(status)).toBe('busy');
     }
   });
 
-  it('treats a settled error / interrupt as idle, not busy', () => {
-    expect(sessionListStatusFromAgentStatus('error')).toBe('idle');
-    expect(sessionListStatusFromAgentStatus('interrupted')).toBe('idle');
+  it('maps the bar’s background phase to waiting, not busy', () => {
+    // The turn has landed; only background tasks are running. The row shows
+    // 等待 (yellow) just like it does for the bar's other waiting phase.
+    expect(sessionListStatusFromAgentStatus('background')).toBe('background');
+  });
+
+  it('keeps a settled error / interrupt as its own state, like the bar', () => {
+    expect(sessionListStatusFromAgentStatus('error')).toBe('error');
+    expect(sessionListStatusFromAgentStatus('interrupted')).toBe('interrupted');
   });
 });

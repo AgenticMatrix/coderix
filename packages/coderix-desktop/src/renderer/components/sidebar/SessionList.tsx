@@ -58,35 +58,104 @@ export function SessionOriginBadge({
   return null;
 }
 
-/** Live busy / wait / idle dot shown at the bottom-right of a conversation row. */
+/**
+ * Live status dot shown at the bottom-right of a conversation row. The colours
+ * mirror the bottom status bar (red = working/failed, yellow = waiting, green =
+ * idle, grey = stopped) so the row and the bar never read as two states.
+ */
+const STATUS_META: Record<
+  SessionListStatus,
+  {
+    labelKey:
+      | 'session.status.busy'
+      | 'session.status.wait'
+      | 'session.status.idle'
+      | 'session.status.error'
+      | 'session.status.interrupted';
+    hintKey:
+      | 'session.status.busyHint'
+      | 'session.status.waitHint'
+      | 'session.status.backgroundHint'
+      | 'session.status.idleHint'
+      | 'session.status.errorHint'
+      | 'session.status.interruptedHint';
+    dot: string;
+    text: string;
+    pulse: boolean;
+  }
+> = {
+  busy: {
+    labelKey: 'session.status.busy',
+    hintKey: 'session.status.busyHint',
+    dot: 'bg-[var(--color-danger)]',
+    text: 'text-[var(--color-danger)]',
+    pulse: true,
+  },
+  wait: {
+    labelKey: 'session.status.wait',
+    hintKey: 'session.status.waitHint',
+    dot: 'bg-[var(--color-warning)]',
+    text: 'text-[var(--color-warning)]',
+    pulse: true,
+  },
+  // The turn is over and only background tasks are draining: the user can keep
+  // typing, so it reads "waiting" (yellow) rather than the red busy badge, and
+  // does not pulse because nothing is waiting on the user.
+  background: {
+    labelKey: 'session.status.wait',
+    hintKey: 'session.status.backgroundHint',
+    dot: 'bg-[var(--color-warning)]',
+    text: 'text-[var(--color-warning)]',
+    pulse: false,
+  },
+  idle: {
+    labelKey: 'session.status.idle',
+    hintKey: 'session.status.idleHint',
+    // Same green as the bottom bar's idle badge.
+    dot: 'bg-[var(--color-success)]',
+    text: 'text-[var(--color-success)]',
+    pulse: false,
+  },
+  // Terminal outcomes: the bar already shows red "错误" / grey "已中断", and
+  // nothing is running, so the dot does not pulse.
+  error: {
+    labelKey: 'session.status.error',
+    hintKey: 'session.status.errorHint',
+    dot: 'bg-[var(--color-danger)]',
+    text: 'text-[var(--color-danger)]',
+    pulse: false,
+  },
+  interrupted: {
+    labelKey: 'session.status.interrupted',
+    hintKey: 'session.status.interruptedHint',
+    dot: 'bg-[var(--color-text-tertiary)]',
+    text: 'text-[var(--color-text-tertiary)]',
+    pulse: false,
+  },
+};
+
+/**
+ * Pick the status a row shows. The viewed conversation mirrors the bar
+ * unconditionally — the bar is the single source of truth for it, so no local
+ * signal (a leftover request-start, a lease held by an idle CLI) may override
+ * it. Backgrounded sessions only have their own per-session signals.
+ */
+export function resolveRowStatus(
+  sessionId: string,
+  viewedSessionId: string | null,
+  viewedStatus: SessionListStatus | undefined,
+  liveStatus: SessionListStatus,
+): SessionListStatus {
+  return sessionId === viewedSessionId && viewedStatus ? viewedStatus : liveStatus;
+}
+
 export function SessionStatusBadge({
   status,
 }: {
   status: SessionListStatus;
 }): React.ReactElement {
   const t = useT();
-  const meta =
-    status === 'busy'
-      ? {
-          labelKey: 'session.status.busy' as const,
-          hintKey: 'session.status.busyHint' as const,
-          dot: 'bg-[var(--color-danger)]',
-          text: 'text-[var(--color-danger)]',
-        }
-      : status === 'wait'
-        ? {
-            labelKey: 'session.status.wait' as const,
-            hintKey: 'session.status.waitHint' as const,
-            dot: 'bg-[var(--color-warning)]',
-            text: 'text-[var(--color-warning)]',
-          }
-        : {
-            labelKey: 'session.status.idle' as const,
-            hintKey: 'session.status.idleHint' as const,
-            // Same green as the bottom bar's idle badge.
-            dot: 'bg-[var(--color-success)]',
-            text: 'text-[var(--color-success)]',
-          };
+  const meta = STATUS_META[status];
   const hint = t(meta.hintKey);
 
   return (
@@ -98,7 +167,7 @@ export function SessionStatusBadge({
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${meta.dot} ${
-          status === 'idle' ? '' : 'animate-pulse'
+          meta.pulse ? 'animate-pulse' : ''
         }`}
         aria-hidden="true"
       />
@@ -123,7 +192,6 @@ export function SessionList({
   const viewedSessionId = useChatStore((s) => s.sessionId);
   const viewedStreaming = useChatStore((s) => s.isStreaming);
   const streamingBySession = useChatStore((s) => s.streamingBySession);
-  const requestingBySession = useStreamStore((s) => s.requestingBySession);
   const runningTasksBySession = useStreamStore((s) => s.runningTasksBySession);
   const compactingBySession = useStreamStore((s) => s.compactingBySession);
   const awaitingUserBySession = useStreamStore((s) => s.awaitingUserBySession);
@@ -194,18 +262,18 @@ export function SessionList({
       streaming: isViewed ? viewedStreaming : Boolean(streamingBySession[session.id]),
       awaitingUser: Boolean(awaitingUserBySession[session.id]),
       compacting: Boolean(compactingBySession[session.id]),
-      requesting: Boolean(requestingBySession[session.id]),
       runningTaskCount: runningTasksBySession[session.id]?.length ?? 0,
-      leaseBusy: session.busy,
     });
     // `viewedStatus` is derived from the same flat state the bottom bar uses, so
-    // prefer it for the session actually loaded in the chat store. A lease held
-    // by another client is the one signal the local bar cannot see — it must
-    // still read busy.
-    const status =
-      session.id === viewedSessionId && viewedStatus && !session.busy
-        ? viewedStatus
-        : liveStatus;
+    // the viewed row always mirrors it. In particular a session leased by
+    // another client (an idle CLI) is not "running" — its lease must not keep
+    // the badge red while the bar reads idle.
+    const status = resolveRowStatus(
+      session.id,
+      viewedSessionId,
+      viewedStatus,
+      liveStatus,
+    );
     return (
       <motion.button
         key={session.id}

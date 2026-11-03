@@ -166,9 +166,14 @@ export const zh = {
   'session.status.busy': '忙碌',
   'session.status.wait': '等待',
   'session.status.idle': '空闲',
+  'session.status.error': '错误',
+  'session.status.interrupted': '已中断',
   'session.status.busyHint': '该对话正在运行',
   'session.status.waitHint': '该对话正在等待你的输入',
+  'session.status.backgroundHint': '该对话正在等待后台任务完成',
   'session.status.idleHint': '该对话空闲',
+  'session.status.errorHint': '该对话上一轮出错了',
+  'session.status.interruptedHint': '该对话上一轮被中断',
 
   // ── 提问弹窗 ──────────────────────────────────────────
   'question.needAnswer': '需要你补充 {n} 个回答',
