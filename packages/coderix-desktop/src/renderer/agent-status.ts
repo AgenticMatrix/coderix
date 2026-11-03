@@ -50,6 +50,25 @@ function isActiveTool(block: StreamBlock): boolean {
 }
 
 /**
+ * True when a tool is still in flight for this conversation — in the message
+ * being streamed, or in the last committed assistant turn (a tool whose step
+ * already committed runs on while the turn is between model steps).
+ *
+ * Exposed because the sidebar row must read the same signal for a *backgrounded*
+ * session: it has no status bar, and its cached blocks are the only evidence a
+ * tool is executing. Without this a conversation flips from 忙碌 to 等待 the
+ * moment the user clicks away, even though the bar still reads 工具执行中.
+ */
+export function hasActiveToolInConversation(
+  currentMessage: { blocks: StreamBlock[] } | null | undefined,
+  messages: readonly ChatMessage[],
+): boolean {
+  if ((currentMessage?.blocks ?? []).some(isActiveTool)) return true;
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  return (lastAssistant?.blocks ?? []).some(isActiveTool);
+}
+
+/**
  * Count the running sub-agents that belong to one conversation.
  *
  * The sub-agent store is process-wide — the side pane lists agents from every
@@ -133,11 +152,11 @@ export function deriveAgentStatus({
   if (awaitingUser) return 'waiting';
 
   const blocks = currentMessage?.blocks ?? [];
-  if (blocks.some(isActiveTool)) return 'executing';
 
-  // Tools whose input finished streaming live in the transcript while they run.
-  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-  if (lastAssistant?.blocks.some(isActiveTool)) return 'executing';
+  // An in-flight tool outranks the turn flag: tools whose input finished
+  // streaming live in the transcript while they execute, and the row mirrors
+  // this same check for backgrounded sessions (see hasActiveToolInConversation).
+  if (hasActiveToolInConversation(currentMessage, messages)) return 'executing';
 
   if (isStreaming) {
     const last = blocks[blocks.length - 1];

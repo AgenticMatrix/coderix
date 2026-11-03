@@ -4,7 +4,9 @@ import { List, Folder, ChevronRight, Monitor, Terminal } from 'lucide-react';
 import { useSessionStore } from '../../store/sessionStore.js';
 import { useChatStore } from '../../store/chatStore.js';
 import { useStreamStore } from '../../store/streamStore.js';
-import { deriveSessionListStatus, type SessionListStatus } from '../../session-status.js';
+import { useSubagentStore } from '../../store/subagentStore.js';
+import { deriveSessionRowStatus, type SessionListStatus } from '../../session-status.js';
+import { countSessionRunningAgents } from '../../agent-status.js';
 import { useT, formatRelativeTime } from '../../i18n/index.js';
 import type { SessionSummary } from '../../store/types.js';
 
@@ -12,9 +14,6 @@ export interface SessionListProps {
   activeSessionId?: string;
   onSessionSelect?: (sessionId: string) => void;
   searchQuery?: string;
-  /** Live status of the viewed conversation, projected from the bottom status
-   *  bar. The row mirrors it so the two can never disagree. */
-  viewedStatus?: SessionListStatus;
 }
 
 type ViewMode = 'flat' | 'workspace';
@@ -135,20 +134,12 @@ const STATUS_META: Record<
 };
 
 /**
- * Pick the status a row shows. The viewed conversation mirrors the bar
- * unconditionally — the bar is the single source of truth for it, so no local
- * signal (a leftover request-start, a lease held by an idle CLI) may override
- * it. Backgrounded sessions only have their own per-session signals.
+ * The row badge is derived by the same function as the bottom status bar — see
+ * deriveSessionRowStatus. The viewed session reads the flat slots, every other
+ * session reads its own map slots, but the derivation (and therefore the badge
+ * for a given state) is identical. That is what stops a conversation changing
+ * badge merely because the user clicked away from it.
  */
-export function resolveRowStatus(
-  sessionId: string,
-  viewedSessionId: string | null,
-  viewedStatus: SessionListStatus | undefined,
-  liveStatus: SessionListStatus,
-): SessionListStatus {
-  return sessionId === viewedSessionId && viewedStatus ? viewedStatus : liveStatus;
-}
-
 export function SessionStatusBadge({
   status,
 }: {
@@ -180,21 +171,30 @@ export function SessionList({
   activeSessionId,
   onSessionSelect,
   searchQuery = '',
-  viewedStatus,
 }: SessionListProps): React.ReactElement {
   const t = useT();
   const sessions = useSessionStore((s) => s.sessions);
   const isLoading = useSessionStore((s) => s.isLoading);
   const deleteSession = useSessionStore((s) => s.deleteSession);
-  // Live status sources. The viewed session keeps its streaming flag in the
-  // flat slot; backgrounded sessions keep theirs (and all stream phases) in the
-  // per-session maps.
+  // Live status sources. The viewed session keeps its live state in the flat
+  // slots; backgrounded sessions keep theirs (and all stream phases) in the
+  // per-session maps. Both feed the same derivation (deriveSessionRowStatus).
   const viewedSessionId = useChatStore((s) => s.sessionId);
   const viewedStreaming = useChatStore((s) => s.isStreaming);
+  const viewedMessages = useChatStore((s) => s.messages);
+  const viewedError = useChatStore((s) => s.error);
+  const viewedInterrupted = useChatStore((s) => s.interrupted);
   const streamingBySession = useChatStore((s) => s.streamingBySession);
+  const messagesBySession = useChatStore((s) => s.messagesBySession);
+  const errorBySession = useChatStore((s) => s.errorBySession);
+  const interruptedBySession = useChatStore((s) => s.interruptedBySession);
+  const viewedCurrentMessage = useStreamStore((s) => s.currentMessage);
   const runningTasksBySession = useStreamStore((s) => s.runningTasksBySession);
+  const currentMessageBySession = useStreamStore((s) => s.currentMessageBySession);
+  const requestingBySession = useStreamStore((s) => s.requestingBySession);
   const compactingBySession = useStreamStore((s) => s.compactingBySession);
   const awaitingUserBySession = useStreamStore((s) => s.awaitingUserBySession);
+  const subagentAgents = useSubagentStore((s) => s.agents);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('flat');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -255,25 +255,45 @@ export function SessionList({
 
   const renderSession = (session: SessionSummary, indented = false): React.ReactElement => {
     const isActive = session.id === activeSessionId;
-    const isViewed = session.id === (viewedSessionId ?? activeSessionId);
-    // The viewed conversation mirrors the bottom bar's phase. Everything else
-    // (backgrounded sessions) only has the per-session maps to go on.
-    const liveStatus = deriveSessionListStatus({
-      streaming: isViewed ? viewedStreaming : Boolean(streamingBySession[session.id]),
+    // One derivation for every row, fed from whichever slot owns the session:
+    // flat for the viewed one, its per-session maps otherwise. A backgrounded
+    // session used to lack the blocks/terminal markers, so its badge collapsed
+    // to 等待 the moment it was clicked away from; now both slots carry every
+    // input the bar uses, including an in-flight tool (工具执行中).
+    const isViewed = session.id === viewedSessionId;
+    const sessionMessages = isViewed
+      ? viewedMessages
+      : (messagesBySession[session.id] ?? []);
+    const sessionCurrent = isViewed
+      ? viewedCurrentMessage
+      : (currentMessageBySession[session.id] ?? null);
+    // Sub-agents are process-wide; scope them to the agent tool calls that live
+    // in this session's transcript (see countSessionRunningAgents).
+    let runningAgentCount = 0;
+    if (Object.values(subagentAgents).some((a) => a.status === 'running')) {
+      const toolIds = new Set<string>();
+      for (const message of sessionMessages) {
+        for (const block of message.blocks) {
+          if (block.type === 'tool_use' && block.toolId) toolIds.add(block.toolId);
+        }
+      }
+      for (const block of sessionCurrent?.blocks ?? []) {
+        if (block.type === 'tool_use' && block.toolId) toolIds.add(block.toolId);
+      }
+      runningAgentCount = countSessionRunningAgents(subagentAgents, toolIds);
+    }
+    const status = deriveSessionRowStatus({
+      isStreaming: isViewed ? viewedStreaming : Boolean(streamingBySession[session.id]),
+      currentMessage: sessionCurrent,
+      messages: sessionMessages,
       awaitingUser: Boolean(awaitingUserBySession[session.id]),
       compacting: Boolean(compactingBySession[session.id]),
+      interrupted: isViewed ? viewedInterrupted : Boolean(interruptedBySession[session.id]),
+      hasError: isViewed ? viewedError !== null : Boolean(errorBySession[session.id]),
+      requesting: Boolean(requestingBySession[session.id]),
       runningTaskCount: runningTasksBySession[session.id]?.length ?? 0,
+      runningAgentCount,
     });
-    // `viewedStatus` is derived from the same flat state the bottom bar uses, so
-    // the viewed row always mirrors it. In particular a session leased by
-    // another client (an idle CLI) is not "running" — its lease must not keep
-    // the badge red while the bar reads idle.
-    const status = resolveRowStatus(
-      session.id,
-      viewedSessionId,
-      viewedStatus,
-      liveStatus,
-    );
     return (
       <motion.button
         key={session.id}

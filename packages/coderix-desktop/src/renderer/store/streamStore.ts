@@ -513,10 +513,11 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       if (!acceptTerminalEpoch(sid, epoch)) return;
       clearRequesting(sid);
       clearAwaitingUser(sid);
-      useChatStore.getState().setSessionStreaming(sid || undefined, false);
-      // A turn that reached its own terminal done was not cut short, even if a
-      // stop click landed a moment earlier.
+      // A clean finish settles every terminal marker: the turn was not cut
+      // short and did not fail, so neither the bar nor the row may keep one.
+      useChatStore.getState().setSessionError(sid || undefined, null);
       useChatStore.getState().clearInterrupted(sid || undefined);
+      useChatStore.getState().setSessionStreaming(sid || undefined, false);
       refreshSidebarSession(false, sid);
     });
     cleanups.push(unsubTurnDone);
@@ -566,12 +567,12 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       }
 
       // Surface the error banner only for the viewed session; a backgrounded
-      // session just stops streaming (its error is re-read from disk on switch).
-      if (sid === viewedSession()) {
-        useChatStore.getState().setError(error);
-      } else {
-        useChatStore.getState().setSessionStreaming(sid, false);
-      }
+      // session keeps the failure in its own map slot so its row can still show
+      // 错误 instead of silently reading idle. The banner and the row badge are
+      // one state: the viewed slot or the session's map slot, never both.
+      useChatStore.getState().setSessionError(sid, error);
+      useChatStore.getState().clearInterrupted(sid || undefined);
+      useChatStore.getState().setSessionStreaming(sid || undefined, false);
       writeCurrent(sid, null);
       refreshSidebarSession(false, sid);
     });
@@ -597,7 +598,13 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
 
     // ── Request Phase ──────────────────────────────────────
     const unsubPhase = onStreamPhase((sessionId?: string) => {
-      setRequesting(sessionOf(sessionId), true);
+      const sid = sessionOf(sessionId);
+      // A new request is out: the previous turn's failure/stop marker no longer
+      // describes this session. Clear it in whichever slot the session owns so
+      // the row and the bar both drop a stale 错误/已中断 badge.
+      useChatStore.getState().setSessionError(sid, null);
+      useChatStore.getState().clearInterrupted(sid);
+      setRequesting(sid, true);
     });
     cleanups.push(unsubPhase);
 

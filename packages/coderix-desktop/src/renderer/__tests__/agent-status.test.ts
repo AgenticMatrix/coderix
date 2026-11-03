@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { countSessionRunningAgents, deriveAgentStatus } from '../agent-status.js';
+import {
+  countSessionRunningAgents,
+  deriveAgentStatus,
+  hasActiveToolInConversation,
+} from '../agent-status.js';
 import type { ChatMessage } from '../store/types.js';
 import type { StreamBlock } from '../types.js';
 
@@ -287,6 +291,29 @@ describe('deriveAgentStatus', () => {
         messages: [assistant([toolUse('done'), toolUse('error')])],
       }),
     ).toBe('idle');
+  });
+});
+
+describe('hasActiveToolInConversation', () => {
+  it('detects a tool still streaming in the in-flight message', () => {
+    expect(
+      hasActiveToolInConversation({ blocks: [toolUse('executing')] }, []),
+    ).toBe(true);
+  });
+
+  it('detects a tool in the last committed assistant turn', () => {
+    expect(
+      hasActiveToolInConversation(null, [
+        assistant([toolUse('done')]),
+        assistant([toolUse('executing')]),
+      ]),
+    ).toBe(true);
+  });
+
+  it('is false once every tool settled', () => {
+    expect(
+      hasActiveToolInConversation(null, [assistant([toolUse('done'), toolUse('error')])]),
+    ).toBe(false);
   });
 });
 

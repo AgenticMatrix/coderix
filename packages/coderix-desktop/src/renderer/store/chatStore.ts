@@ -19,6 +19,15 @@ export interface ChatState {
   // flat `messages`/`isStreaming` above, so there is never a stale duplicate.
   messagesBySession: Record<string, ChatMessage[]>;
   streamingBySession: Record<string, boolean>;
+  /**
+   * Per-session terminal markers for backgrounded sessions. The viewed session
+   * keeps its own copy in the flat `error`/`interrupted` fields above; on switch
+   * the flat fields are stashed here and restored, so every row — viewed or not
+   * — can feed the same status derivation. Without them a conversation that
+   * failed or was stopped lost its badge the moment the user clicked away.
+   */
+  errorBySession: Record<string, string>;
+  interruptedBySession: Record<string, boolean>;
   // Per-session stream epoch — bumped on each sendMessage, echoed back by the
   // main process on terminal events (done/error) so a stale turn's late signal
   // can be ignored after an interrupt-and-resend.
@@ -32,6 +41,8 @@ export interface ChatState {
   clearMessages: () => void;
   setSessionId: (id: string | null) => boolean;
   setError: (error: string | null) => void;
+  /** Route a terminal error to the viewed slot or the session's map slot. */
+  setSessionError: (sessionId: string | undefined, error: string | null) => void;
 
   // Per-session routing helpers used by streamStore to land a stream event in
   // the right session (flat when it is the viewed session, else the map).
@@ -97,6 +108,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   interrupted: false,
   messagesBySession: {},
   streamingBySession: {},
+  errorBySession: {},
+  interruptedBySession: {},
   streamEpochBySession: {},
 
   sendMessage: async (content: string) => {
@@ -129,9 +142,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const viewed = get().sessionId;
     const target = resolveTarget(sessionId, viewed);
     if (target !== viewed) {
-      set((s) => ({
-        streamingBySession: { ...s.streamingBySession, [target]: false },
-      }));
+      set((s) => {
+        // Mirror the viewed-session rule: only a turn that was still running
+        // leaves an "interrupted" marker.
+        const wasStreaming = s.streamingBySession[target] === true;
+        const streamingBySession = { ...s.streamingBySession, [target]: false };
+        const interruptedBySession = { ...s.interruptedBySession };
+        if (wasStreaming) interruptedBySession[target] = true;
+        else delete interruptedBySession[target];
+        return { streamingBySession, interruptedBySession };
+      });
       return;
     }
     // Only a live turn can be interrupted. Pressing stop while idle must not
@@ -142,8 +162,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   clearInterrupted: (sessionId?: string) => {
     const viewed = get().sessionId;
-    if (resolveTarget(sessionId, viewed) !== viewed) return;
-    if (get().interrupted) set({ interrupted: false });
+    const target = resolveTarget(sessionId, viewed);
+    if (target === viewed) {
+      if (get().interrupted) set({ interrupted: false });
+      return;
+    }
+    set((s) => {
+      if (!s.interruptedBySession[target]) return s;
+      const next = { ...s.interruptedBySession };
+      delete next[target];
+      return { interruptedBySession: next };
+    });
   },
 
   clearMessages: () => {
@@ -158,11 +187,19 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     // Stash the currently-viewed session's live state into its cache slot.
     let messagesBySession = { ...state.messagesBySession };
     const streamingBySession = { ...state.streamingBySession };
+    const errorBySession = { ...state.errorBySession };
+    const interruptedBySession = { ...state.interruptedBySession };
     if (oldId) {
       // Re-insert so the newest entry sorts last and eviction drops the oldest.
       delete messagesBySession[oldId];
       messagesBySession[oldId] = state.messages;
       streamingBySession[oldId] = state.isStreaming;
+      // Terminal markers travel with the session so its row keeps explaining
+      // why the last turn ended when the user looks at it from elsewhere.
+      if (state.error) errorBySession[oldId] = state.error;
+      else delete errorBySession[oldId];
+      if (state.interrupted) interruptedBySession[oldId] = true;
+      else delete interruptedBySession[oldId];
     }
 
     // Pop the target's cached transcript (if any) into the viewed slot. A
@@ -172,9 +209,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const hadCached = id ? Object.prototype.hasOwnProperty.call(messagesBySession, id) : false;
     const nextMessages = id ? (messagesBySession[id] ?? []) : [];
     const nextStreaming = id ? (streamingBySession[id] ?? false) : false;
+    const nextError = id ? (errorBySession[id] ?? null) : null;
+    const nextInterrupted = id ? Boolean(interruptedBySession[id]) : false;
     if (id) {
       delete messagesBySession[id];
       delete streamingBySession[id];
+      delete errorBySession[id];
+      delete interruptedBySession[id];
     }
     messagesBySession = trimSessionCache(messagesBySession, streamingBySession);
 
@@ -183,16 +224,37 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       messages: nextMessages,
       isStreaming: nextStreaming,
       streamingContent: '',
-      error: null,
-      interrupted: false,
+      error: nextError,
+      interrupted: nextInterrupted,
       messagesBySession,
       streamingBySession,
+      errorBySession,
+      interruptedBySession,
     });
     return hadCached;
   },
 
   setError: (error: string | null) => {
     set({ error, isStreaming: false, interrupted: false });
+  },
+
+  setSessionError: (sessionId, error) => {
+    const viewed = get().sessionId;
+    const target = resolveTarget(sessionId, viewed);
+    if (target === viewed) {
+      // Error text only — the turn lifecycle is owned by setSessionStreaming /
+      // clearInterrupted, so clearing a stale banner at request-start cannot
+      // flip a live turn's streaming flag off.
+      if (get().error !== error) set({ error });
+      return;
+    }
+    set((s) => {
+      if ((s.errorBySession[target] ?? null) === error) return s;
+      const next = { ...s.errorBySession };
+      if (error) next[target] = error;
+      else delete next[target];
+      return { errorBySession: next };
+    });
   },
 
   commitAssistantMessage: (sessionId, message) => {

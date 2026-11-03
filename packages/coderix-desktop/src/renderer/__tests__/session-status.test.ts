@@ -1,66 +1,75 @@
 import { describe, it, expect } from 'vitest';
 import {
-  deriveSessionListStatus,
+  deriveSessionRowStatus,
   sessionListStatusFromAgentStatus,
 } from '../session-status.js';
+import type { AgentStatusInput } from '../agent-status.js';
+import type { ChatMessage } from '../store/types.js';
+import type { StreamBlock } from '../types.js';
 
-describe('deriveSessionListStatus', () => {
-  it('is idle when nothing is in flight', () => {
-    expect(deriveSessionListStatus({})).toBe('idle');
+function toolUse(state: StreamBlock['state']): StreamBlock {
+  return { type: 'tool_use', toolId: 't1', toolName: 'Bash', state };
+}
+
+function assistant(blocks: StreamBlock[]): ChatMessage {
+  return { id: 'a1', role: 'assistant', content: '', blocks, timestamp: 1 };
+}
+
+const text = (content: string): StreamBlock => ({ type: 'text', content, state: 'done' });
+
+const base: AgentStatusInput = {
+  isStreaming: false,
+  currentMessage: null,
+  messages: [assistant([text('done')])],
+};
+
+describe('deriveSessionRowStatus', () => {
+  it('is idle when the turn is over and nothing is running', () => {
+    expect(deriveSessionRowStatus(base)).toBe('idle');
   });
 
-  it('is busy while the turn is streaming or compacting', () => {
-    expect(deriveSessionListStatus({ streaming: true })).toBe('busy');
-    expect(deriveSessionListStatus({ compacting: true })).toBe('busy');
+  it('collapses every live phase to busy', () => {
+    expect(deriveSessionRowStatus({ ...base, isStreaming: true, currentMessage: { blocks: [text('x')] } })).toBe('busy');
+    expect(deriveSessionRowStatus({ ...base, requesting: true, isStreaming: true })).toBe('busy');
+    expect(deriveSessionRowStatus({ ...base, compacting: true })).toBe('busy');
   });
 
-  it('reads as waiting — not busy — once only background work is left', () => {
-    // The turn is over and the user can type; a red "busy" badge would claim
-    // the conversation is occupied when it is only waiting for tasks to drain.
-    expect(deriveSessionListStatus({ runningTaskCount: 1 })).toBe('background');
-    // A live turn still outranks background work that started during it.
-    expect(deriveSessionListStatus({ streaming: true, runningTaskCount: 1 })).toBe('busy');
-  });
-
-  it('keeps terminal outcomes distinct so the row matches the bar', () => {
-    expect(deriveSessionListStatus({ hasError: true })).toBe('error');
-    expect(deriveSessionListStatus({ interrupted: true })).toBe('interrupted');
-    // The bar ranks a failure above everything while it is still showing.
-    expect(deriveSessionListStatus({ hasError: true, streaming: true })).toBe('error');
-    // Compaction outranks a blocked prompt, like deriveAgentStatus.
-    expect(deriveSessionListStatus({ compacting: true, awaitingUser: true })).toBe('busy');
-    // An interrupt outranks the background work still draining behind it.
-    expect(deriveSessionListStatus({ interrupted: true, runningTaskCount: 1 })).toBe(
-      'interrupted',
-    );
-  });
-
-  it('ignores a settled request-start — the bar requires a live turn', () => {
-    // `requesting` is not an input at all: the bar only uses it while
-    // isStreaming is true, so it can never make a settled row busy.
+  it('stays busy while a tool executes, even with the turn flag already down', () => {
+    // The same check the bar uses: a committed in-flight tool outranks the turn
+    // flag, so clicking away cannot downgrade the badge to 等待.
     expect(
-      // @ts-expect-error requesting is deliberately not part of the input.
-      deriveSessionListStatus({ requesting: true }),
-    ).toBe('idle');
-  });
-
-  it('ignores a write lease — ownership is not activity', () => {
-    // A live CLI holds the lease even while idle at its prompt; the badge must
-    // stay idle so it agrees with the status bar, which cannot see the lease.
-    expect(
-      // @ts-expect-error leaseBusy is deliberately not part of the input.
-      deriveSessionListStatus({ leaseBusy: true }),
-    ).toBe('idle');
-  });
-
-  it('prefers wait over work in flight', () => {
-    expect(
-      deriveSessionListStatus({
-        streaming: true,
-        runningTaskCount: 2,
-        awaitingUser: true,
+      deriveSessionRowStatus({
+        ...base,
+        messages: [assistant([toolUse('executing')])],
       }),
-    ).toBe('wait');
+    ).toBe('busy');
+    expect(
+      deriveSessionRowStatus({
+        ...base,
+        currentMessage: { blocks: [toolUse('pending')] },
+      }),
+    ).toBe('busy');
+  });
+
+  it('reads background work — and only background work — as waiting', () => {
+    expect(deriveSessionRowStatus({ ...base, runningTaskCount: 1 })).toBe('background');
+    expect(deriveSessionRowStatus({ ...base, runningAgentCount: 1 })).toBe('background');
+    // A live turn still outranks background work that started during it.
+    expect(
+      deriveSessionRowStatus({ ...base, isStreaming: true, runningTaskCount: 1 }),
+    ).toBe('busy');
+  });
+
+  it('keeps waiting and terminal outcomes distinct', () => {
+    expect(deriveSessionRowStatus({ ...base, awaitingUser: true })).toBe('wait');
+    expect(deriveSessionRowStatus({ ...base, hasError: true })).toBe('error');
+    expect(deriveSessionRowStatus({ ...base, interrupted: true })).toBe('interrupted');
+    // A failure outranks everything; compaction outranks a blocked prompt.
+    expect(deriveSessionRowStatus({ ...base, hasError: true, isStreaming: true })).toBe('error');
+    expect(deriveSessionRowStatus({ ...base, compacting: true, awaitingUser: true })).toBe('busy');
+    expect(
+      deriveSessionRowStatus({ ...base, interrupted: true, runningTaskCount: 1 }),
+    ).toBe('interrupted');
   });
 });
 

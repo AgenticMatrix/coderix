@@ -3,7 +3,6 @@ import { Search, Plus, Library, Sparkles, Plug } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SessionList } from './SessionList';
 import { useT } from '../../i18n/index.js';
-import type { SessionListStatus } from '../../session-status.js';
 import './Sidebar.css';
 
 /** Which surface the main area shows. `sessions` = chat (no nav button). */
@@ -20,8 +19,6 @@ export interface SidebarProps {
   activeView: SidebarTab;
   /** Navigate to a surface (技能 / 插件 / 库). */
   onNavigate: (view: SidebarTab) => void;
-  /** Live status of the viewed conversation (mirrors the bottom status bar). */
-  viewedStatus?: SessionListStatus;
 }
 
 export function Sidebar({
@@ -30,7 +27,6 @@ export function Sidebar({
   onNewSession,
   activeView,
   onNavigate,
-  viewedStatus,
 }: SidebarProps): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState('');
   const t = useT();
@@ -109,7 +105,6 @@ export function Sidebar({
             activeSessionId={activeSessionId}
             onSessionSelect={onSessionSelect}
             searchQuery={searchQuery}
-            viewedStatus={viewedStatus}
           />
         </motion.div>
       </div>
