@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveAgentStatus } from '../agent-status.js';
+import { countSessionRunningAgents, deriveAgentStatus } from '../agent-status.js';
 import type { ChatMessage } from '../store/types.js';
 import type { StreamBlock } from '../types.js';
 
@@ -287,5 +287,29 @@ describe('deriveAgentStatus', () => {
         messages: [assistant([toolUse('done'), toolUse('error')])],
       }),
     ).toBe('idle');
+  });
+});
+
+describe('countSessionRunningAgents', () => {
+  it('counts only agents spawned by a tool call in this conversation', () => {
+    const agents = {
+      'toolu_own': { status: 'running' },
+      'toolu_other': { status: 'running' },
+      'toolu_done': { status: 'done' },
+    };
+    expect(countSessionRunningAgents(agents, new Set(['toolu_own', 'toolu_done']))).toBe(1);
+  });
+
+  it('matches a record by its toolUseId when the map key is an engine id', () => {
+    const agents = {
+      'sub-a1b2': { status: 'running', toolUseId: 'toolu_own' },
+    };
+    expect(countSessionRunningAgents(agents, new Set(['toolu_own']))).toBe(1);
+  });
+
+  it('is zero when the transcript has no spawning tool call', () => {
+    expect(
+      countSessionRunningAgents({ 'toolu_other': { status: 'running' } }, new Set()),
+    ).toBe(0);
   });
 });

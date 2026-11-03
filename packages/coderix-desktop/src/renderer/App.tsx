@@ -46,7 +46,7 @@ import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
 import { deriveSessionStats } from './components/shared/status-stats';
-import { deriveAgentStatus, type AgentStatus } from './agent-status';
+import { countSessionRunningAgents, deriveAgentStatus, type AgentStatus } from './agent-status';
 import { sessionListStatusFromAgentStatus } from './session-status.js';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import { useAgentEvents } from './hooks/useAgentEvents';
@@ -78,7 +78,7 @@ import {
   removeSkillDir,
 } from './ipc-client';
 import type { SkillInfo, McpServerStatus } from './ipc-client';
-import type { PermissionRequest, QuestionRequest } from './types';
+import type { PermissionRequest, QuestionRequest, StreamBlock } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -191,10 +191,22 @@ export function App(): React.ReactElement {
   // Sub-agents outlive the turn exactly like background tasks. A foreground
   // agent cannot: its spawn tool call is awaited by the turn that started it,
   // so anything still running once the turn is over is background work. The
-  // agent store is not session-scoped (the side pane shows every agent), so
-  // this counts running agents globally.
-  const runningAgentCount = useSubagentStore(
-    (s) => Object.values(s.agents).filter((a) => a.status === 'running').length,
+  // agent store is process-wide (the side pane shows every agent), so it must
+  // be scoped to this conversation via the spawning tool call — otherwise a
+  // finished conversation reads "background" while another one's agent runs.
+  const sessionToolIds = useMemo(() => {
+    const ids = new Set<string>();
+    const collect = (blocks: readonly StreamBlock[] | undefined): void => {
+      for (const block of blocks ?? []) {
+        if (block.type === 'tool_use' && block.toolId) ids.add(block.toolId);
+      }
+    };
+    for (const message of messages) collect(message.blocks);
+    collect(streamCurrentMessage?.blocks);
+    return ids;
+  }, [messages, streamCurrentMessage]);
+  const runningAgentCount = useSubagentStore((s) =>
+    countSessionRunningAgents(s.agents, sessionToolIds),
   );
 
   // ── Local state ─────────────────────────────────────────────────────────
