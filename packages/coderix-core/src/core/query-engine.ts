@@ -335,7 +335,17 @@ export class QueryEngine {
     this.readFileTracker.clear();
   }
 
-  async *submitMessage(userInput: string): AsyncGenerator<QueryEngineEvent> {
+  /**
+   * Run one user turn.
+   *
+   * `images` are inline (raw base64) attachments for this turn only; they are
+   * not part of the system prompt or history. They are prepended to the user
+   * message ahead of the text, which is the order vision models are trained on.
+   */
+  async *submitMessage(
+    userInput: string,
+    images?: Array<{ mediaType: string; data: string }>,
+  ): AsyncGenerator<QueryEngineEvent> {
     const eventBus = this.config.eventBus;
 
     const emitEarly = (event: QueryEngineEvent): void => {
@@ -348,7 +358,9 @@ export class QueryEngine {
     if (this.isActive) {
       const hasBlocking = this.hasBlockingToolsRunning();
       if (hasBlocking) {
-        this.messageQueue.enqueue(userInput);
+        // The queue carries the images too: a turn deferred behind a blocking
+        // tool must still arrive with its attachments, not just its text.
+        this.messageQueue.enqueue(userInput, images);
         const event: QueryEngineEvent = {
           type: 'queued',
           data: { position: this.messageQueue.length },
@@ -446,7 +458,25 @@ export class QueryEngine {
       }
     }
 
-    const userMessage: UserMessage = { role: 'user', content: effectiveInput };
+    // Images lead the message; the text (when present) trails them. A turn with
+    // only images is valid — the model answers about the pictures alone.
+    const hasText = effectiveInput.trim().length > 0;
+    const userMessage: UserMessage = images && images.length > 0
+      ? {
+          role: 'user',
+          content: [
+            ...images.map((image): ContentBlock => ({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: image.mediaType,
+                data: image.data,
+              },
+            })),
+            ...(hasText ? [{ type: 'text' as const, text: effectiveInput }] : []),
+          ],
+        }
+      : { role: 'user', content: effectiveInput };
 
     // Inject completed background agent results as system context
     if (this.config.subAgentRegistry) {
@@ -507,14 +537,17 @@ export class QueryEngine {
     this.config.sessionManager.addMessage(userMessage);
 
     if (isFirstUserTurn && !session.parentSessionId) {
-      const fallbackTitle = this.startSessionTitle(session, userInput);
+      // An image-only turn has no text to name the conversation after.
+      const titleSeed = userInput.trim() || (images && images.length > 0 ? '[图片]' : '');
+      const fallbackTitle = titleSeed ? this.startSessionTitle(session, titleSeed) : null;
       if (fallbackTitle) {
         yield { type: 'title', data: fallbackTitle };
       }
     }
 
     // Memory recall: search for relevant memories and inject as system context
-    if (this.memoryConfig.enabled && this.memoryConfig.recallEnabled) {
+    // An image-only turn has no query text to search memory with.
+    if (this.memoryConfig.enabled && this.memoryConfig.recallEnabled && effectiveInput.trim()) {
       const ac = new AbortController();
       try {
         const recalled = await findRelevantMemories(
@@ -885,8 +918,10 @@ export class QueryEngine {
 
   /** Subscribe to queue drain events. Returns unsubscribe function.
    *  When a queued message is ready to process (current turn completed),
-   *  the callback is invoked with the message text. */
-  onQueueDrain(callback: (message: string) => void): () => void {
+   *  the callback is invoked with the message text and its attached images. */
+  onQueueDrain(
+    callback: (message: string, images?: Array<{ mediaType: string; data: string }>) => void,
+  ): () => void {
     return this.messageQueue.onDrain(callback);
   }
 

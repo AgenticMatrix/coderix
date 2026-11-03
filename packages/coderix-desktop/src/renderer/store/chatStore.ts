@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ChatMessage } from './types.js';
 import { createId } from './types.js';
+import type { ImageAttachment } from '../lib/imageAttachments.js';
 
 export interface ChatState {
   // Viewed-session projection. Components select these; they always reflect the
@@ -34,7 +35,7 @@ export interface ChatState {
   streamEpochBySession: Record<string, number>;
 
   // Actions
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, images?: ImageAttachment[]) => Promise<void>;
   interruptStream: (sessionId?: string) => void;
   /** Drop the interrupt marker — a turn that finished on its own wins. */
   clearInterrupted: (sessionId?: string) => void;
@@ -112,15 +113,27 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   interruptedBySession: {},
   streamEpochBySession: {},
 
-  sendMessage: async (content: string) => {
+  sendMessage: async (content: string, images?: ImageAttachment[]) => {
     const { sessionId } = get();
-    if (!content.trim()) return;
+    // A message may carry only images — there is no text to require.
+    if (!content.trim() && !images?.length) return;
+
+    const text = content.trim();
+    const imageBlocks: ChatMessage['blocks'] = (images ?? []).map((img) => ({
+      type: 'image' as const,
+      state: 'done' as const,
+      image: { mediaType: img.mediaType, data: img.data },
+    }));
 
     const userMsg: ChatMessage = {
       id: createId(),
       role: 'user',
-      content: content.trim(),
-      blocks: [{ type: 'text', content: content.trim(), state: 'done' }],
+      content: text,
+      blocks: [
+        ...imageBlocks,
+        ...(text ? [{ type: 'text' as const, content: text, state: 'done' as const }] : []),
+      ],
+      ...(images && images.length > 0 ? { images } : {}),
       timestamp: Date.now(),
     };
 

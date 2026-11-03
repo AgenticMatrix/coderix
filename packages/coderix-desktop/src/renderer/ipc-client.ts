@@ -75,10 +75,21 @@ async function invokeWithTimeout<T>(
 //  Query & Streaming
 // ===========================================================================
 
-/** Submit a user query to the AI engine. */
-export async function submitQuery(query: string, sessionId?: string, skills?: string[]): Promise<unknown> {
+/**
+ * Submit a user query to the AI engine.
+ *
+ * `images` carry raw base64 (no `data:` prefix); the main process validates
+ * them before they reach a provider and drops anything that would make the
+ * request fail.
+ */
+export async function submitQuery(
+  query: string,
+  sessionId?: string,
+  skills?: string[],
+  images?: Array<{ mediaType: string; data: string; name?: string }>,
+): Promise<unknown> {
   return invokeWithTimeout('query:submit', () =>
-    getAPI().query.submit(query, sessionId, skills),
+    getAPI().query.submit(query, sessionId, skills, images),
   );
 }
 

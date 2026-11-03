@@ -400,11 +400,18 @@ const coderixAPI = {
   query: {
     /**
      * Submit a user query to the AI engine.
-     * @param query - The user's input message
+     * @param query - The user's input message (may be empty when images are attached)
      * @param sessionId - Optional session ID to route the query to
+     * @param skills - Optional skill filter for this turn
+     * @param images - Optional inline images (raw base64, no data: prefix)
      */
-    submit(query: string, sessionId?: string, skills?: string[]): Promise<{ status: string }> {
-      return ipcRenderer.invoke(CH.QUERY_SUBMIT, { query, sessionId, skills });
+    submit(
+      query: string,
+      sessionId?: string,
+      skills?: string[],
+      images?: Array<{ mediaType: string; data: string; name?: string }>,
+    ): Promise<{ status: string }> {
+      return ipcRenderer.invoke(CH.QUERY_SUBMIT, { query, sessionId, skills, images });
     },
 
     /**

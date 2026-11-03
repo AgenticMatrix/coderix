@@ -460,3 +460,74 @@
   font-size: 12px;
   color: var(--color-text-tertiary);
 }
+
+/* ── Inline images in a message ────────────────────── */
+
+.chat-image-thumb {
+  display: block;
+  padding: 0;
+  margin: var(--space-1) 0;
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+  cursor: zoom-in;
+  max-width: 100%;
+  transition: border-color var(--duration-fast) var(--ease-default);
+}
+
+.chat-image-thumb:hover {
+  border-color: var(--color-brand);
+}
+
+/* Cap the height so a tall screenshot can't dominate the viewport. */
+.chat-image-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Full-screen preview opened by clicking a thumbnail */
+.chat-image-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  background: rgba(0, 0, 0, 0.82);
+  cursor: zoom-out;
+}
+
+.chat-image-overlay img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.chat-image-close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default);
+}
+
+.chat-image-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}

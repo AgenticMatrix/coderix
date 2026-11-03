@@ -1,4 +1,5 @@
 import type { StreamBlock, TokenUsage } from '../types.js';
+import type { ImageAttachment } from '../lib/imageAttachments.js';
 
 /**
  * Shared types for the Coderix Desktop renderer state management.
@@ -10,6 +11,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   blocks: StreamBlock[];
+  /** Images attached to this user turn (previews only; the transcript carries the base64). */
+  images?: ImageAttachment[];
   timestamp: number;
 }
 

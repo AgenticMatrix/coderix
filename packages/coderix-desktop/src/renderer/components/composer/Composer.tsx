@@ -1,12 +1,19 @@
-import React, { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react';
-import { ArrowUp, Square } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect, type KeyboardEvent, type ClipboardEvent, type DragEvent } from 'react';
+import { ArrowUp, Square, ImagePlus, X } from 'lucide-react';
 import { useT, type TranslationKey } from '../../i18n/index.js';
+import {
+  MAX_IMAGES,
+  filesFromDataTransfer,
+  normalizeFiles,
+  type ImageAttachment,
+  type ImageAttachmentError,
+} from '../../lib/imageAttachments.js';
 import './Composer.css';
 
 export interface ComposerProps {
   value?: string;
   onChange?: (value: string) => void;
-  onSubmit?: (value: string) => void;
+  onSubmit?: (value: string, images?: ImageAttachment[]) => void;
   disabled?: boolean;
   placeholder?: string;
   isStreaming?: boolean;
@@ -32,6 +39,15 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: '/doc', labelKey: 'composer.slash.docLabel', descKey: 'composer.slash.doc', prompt: '请为以下代码添加文档注释：\n\n' },
 ];
 
+const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
+
+/** Human-readable size for the thumbnail caption. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function Composer({
   value: controlledValue,
   onChange,
@@ -44,13 +60,109 @@ export function Composer({
   const t = useT();
   const [internalValue, setInternalValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [showAtMenu, setShowAtMenu] = useState(false);
   const [atFiles, setAtFiles] = useState<string[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [images, setImages] = useState<ImageAttachment[]>([]);
+  // Mirrors `images` and is updated *before* React re-renders, so a second
+  // paste arriving in the same tick still counts the images just accepted.
+  const imagesRef = useRef<ImageAttachment[]>([]);
+
+  const commitImages = useCallback((next: ImageAttachment[]) => {
+    imagesRef.current = next;
+    setImages(next);
+  }, []);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const currentValue = controlledValue ?? internalValue;
-  const canSend = currentValue.trim().length > 0 && !disabled;
+  const canSend = (currentValue.trim().length > 0 || images.length > 0) && !disabled && !isStreaming;
+
+  // Messages for the rejected-image line; the code drives which copy to show.
+  const imageErrorText = useCallback(
+    (err: ImageAttachmentError): string => {
+      switch (err.code) {
+        case 'unsupported': return t('composer.imageUnsupported');
+        case 'too-large': return t('composer.imageTooLarge');
+        case 'too-many': return t('composer.imageTooMany');
+        default: return t('composer.imageReadFailed');
+      }
+    },
+    [t],
+  );
+
+  // Shared by paste, file picker and drop.
+  //
+  // Admission counts against the *live* list, not the render snapshot: two
+  // pastes in quick succession (before React re-renders) would otherwise both
+  // see the old length and could exceed MAX_IMAGES.
+  const addImages = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const { accepted, errors } = await normalizeFiles(files, imagesRef.current);
+      if (accepted.length > 0) {
+        // Re-read the ref: another paste may have landed during normalization.
+        commitImages([...imagesRef.current, ...accepted]);
+      }
+      setImageError(errors.length > 0 ? imageErrorText(errors[0]!) : null);
+    },
+    [imageErrorText, commitImages],
+  );
+
+  const removeImage = useCallback((id: string) => {
+    commitImages(imagesRef.current.filter((img) => img.id !== id));
+    setImageError(null);
+  }, [commitImages]);
+
+  // Send the current text + attachments and reset both. Only images (no text)
+  // is a valid turn — the model answers about the pictures alone.
+  const submit = useCallback(() => {
+    if (!canSend) return;
+    const text = currentValue.trim();
+    onSubmit?.(text, images.length > 0 ? images : undefined);
+    setInternalValue('');
+    onChange?.('');
+    commitImages([]);
+    setImageError(null);
+  }, [canSend, currentValue, images, onSubmit, onChange, commitImages]);
+
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = filesFromDataTransfer(e.clipboardData).filter((f) =>
+        f.type.startsWith('image/'),
+      );
+      // Only an image paste is intercepted; plain text keeps the native path.
+      if (files.length === 0) return;
+      e.preventDefault();
+      void addImages(files);
+    },
+    [addImages],
+  );
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    if (!Array.from(e.dataTransfer.types ?? []).includes('Files')) return;
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    // Ignore the dragenter/leave churn produced by moving over child nodes.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const files = filesFromDataTransfer(e.dataTransfer);
+      if (files.length === 0) return;
+      e.preventDefault();
+      setIsDragging(false);
+      void addImages(files);
+    },
+    [addImages],
+  );
 
   // Detect / or @ trigger
   const detectTrigger = useCallback((val: string) => {
@@ -171,14 +283,14 @@ export function Composer({
       // Send on Enter (no Shift, no Cmd)
       if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
         e.preventDefault();
-        if (canSend) { onSubmit?.(currentValue.trim()); setInternalValue(''); onChange?.(''); }
+        submit();
       }
       if (e.key === 'Enter' && e.metaKey) {
         e.preventDefault();
-        if (canSend) { onSubmit?.(currentValue.trim()); setInternalValue(''); onChange?.(''); }
+        submit();
       }
     },
-    [canSend, currentValue, onSubmit, onChange, showSlashMenu, showAtMenu, atFiles, selectedIdx],
+    [submit, currentValue, showSlashMenu, showAtMenu, atFiles, selectedIdx],
   );
 
   const filteredCommands = SLASH_COMMANDS.filter(c => {
@@ -217,8 +329,59 @@ export function Composer({
         </div>
       )}
 
+      {/* Attached image thumbnails */}
+      {images.length > 0 && (
+        <div className="composer-image-strip">
+          {images.map((img) => (
+            <div key={img.id} className="composer-image-thumb" title={img.name ?? t('composer.imageLabel')}>
+              <img src={img.previewUrl} alt={img.name ?? t('composer.imageLabel')} />
+              <button
+                type="button"
+                className="composer-image-remove"
+                onClick={() => removeImage(img.id)}
+                title={t('composer.removeImage')}
+                aria-label={t('composer.removeImage')}
+              >
+                <X size={11} />
+              </button>
+              <span className="composer-image-meta">{formatBytes(img.bytes)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {imageError && <div className="composer-error">{imageError}</div>}
+
       {/* Input */}
-      <div className="composer-input-wrapper">
+      <div
+        className={`composer-input-wrapper${isDragging ? ' dragging' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            // Reset so picking the same file twice still fires onChange.
+            e.target.value = '';
+            void addImages(files);
+          }}
+        />
+        <button
+          type="button"
+          className="composer-input-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || images.length >= MAX_IMAGES}
+          title={t('composer.addImage')}
+          aria-label={t('composer.addImage')}
+        >
+          <ImagePlus size={16} />
+        </button>
         <textarea
           ref={textareaRef}
           className="composer-input"
@@ -226,6 +389,7 @@ export function Composer({
           value={currentValue}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={disabled}
           rows={1}
           aria-label="Message input"
@@ -236,13 +400,12 @@ export function Composer({
               <Square size={14} />
             </button>
           ) : (
-            <button className="composer-input-btn send" onClick={() => {
-              if (canSend) { onSubmit?.(currentValue.trim()); setInternalValue(''); onChange?.(''); }
-            }} disabled={!canSend} title={t('composer.send')} type="button" aria-label="Send">
+            <button className="composer-input-btn send" onClick={submit} disabled={!canSend} title={t('composer.send')} type="button" aria-label="Send">
               <ArrowUp size={16} />
             </button>
           )}
         </div>
+        {isDragging && <div className="composer-drop-hint">{t('composer.dropImage')}</div>}
       </div>
     </div>
   );

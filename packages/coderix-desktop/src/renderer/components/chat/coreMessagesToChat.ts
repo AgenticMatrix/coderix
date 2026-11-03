@@ -47,12 +47,18 @@ export function coreMessagesToChatMessages(messages: unknown[]): ChatMessage[] {
           const type = RENDERABLE_TYPES.includes(b.type as string)
             ? (b.type as StreamBlock['type'])
             : 'text';
+          // Image blocks keep their payload under `source`; normalizeContent
+          // would flatten them to '' and the thumbnail would render nothing.
+          const source = b.source as { media_type?: unknown; data?: unknown } | undefined;
           return {
             type,
             content: normalizeContent(b),
             // tool_use starts as "executing"; the pairing pass below upgrades
             // it to "done" (or "error") once its tool_result is attached.
             state: (type === 'tool_use' ? 'executing' : b.is_error ? 'error' : 'done') as StreamBlock['state'],
+            ...(type === 'image' && source?.data
+              ? { image: { mediaType: String(source.media_type ?? 'image/png'), data: String(source.data) } }
+              : {}),
             ...(b.tool_use_id ? { toolId: b.tool_use_id as string } : {}),
             ...(b.id ? { toolId: b.id as string } : {}),
             ...(b.name ? { toolName: b.name as string } : {}),

@@ -53,7 +53,13 @@ export interface CallModelConfig {
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content?: string | null;
+  content?:
+    | string
+    | null
+    | Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      >;
   tool_calls?: Array<{
     id: string;
     type: 'function';
@@ -84,7 +90,7 @@ interface OpenAISSEChunk {
 // Message / tool conversion (core → OpenAI)
 // ---------------------------------------------------------------------------
 
-function toOpenAIMessages(
+export function toOpenAIMessages(
   system: string,
   messages: Array<{ role: string; content: string | ContentBlock[] }>,
 ): OpenAIMessage[] {
@@ -102,6 +108,9 @@ function toOpenAIMessages(
     }
 
     const textBlocks: string[] = [];
+    // Inline images from user turns. Kept in block order so the model sees them
+    // where the user put them (vision models are trained on image-then-text).
+    const imageBlocks: Array<{ type: 'image_url'; image_url: { url: string } }> = [];
     const toolCalls: NonNullable<OpenAIMessage['tool_calls']> = [];
     const toolResults: Array<{ tool_call_id: string; content: string }> = [];
 
@@ -109,6 +118,16 @@ function toOpenAIMessages(
       switch (block.type) {
         case 'text':
           if (block.text) textBlocks.push(block.text);
+          break;
+        case 'image':
+          if (block.source?.data) {
+            imageBlocks.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${block.source.media_type};base64,${block.source.data}`,
+              },
+            });
+          }
           break;
         case 'tool_use':
           if (block.id && block.name) {
@@ -133,9 +152,8 @@ function toOpenAIMessages(
           }
           break;
         case 'thinking':
-        case 'image':
-          // OpenAI Chat Completions does not accept thinking/image blocks in
-          // the message history — reasoning is display-only.
+          // OpenAI Chat Completions does not accept thinking blocks in the
+          // message history — reasoning is display-only.
           break;
       }
     }
@@ -158,7 +176,21 @@ function toOpenAIMessages(
       if (msg.role === 'assistant' && textBlocks.length > 0) {
         result.push({ role: 'assistant', content: textBlocks.join('\n') });
       } else if (msg.role === 'user') {
-        result.push({ role: 'user', content: textBlocks.join('\n') || '' });
+        // Images force the multi-part form; text-only turns keep the plain
+        // string so nothing changes for existing providers.
+        if (imageBlocks.length > 0) {
+          result.push({
+            role: 'user',
+            content: [
+              ...imageBlocks,
+              ...(textBlocks.length > 0
+                ? [{ type: 'text' as const, text: textBlocks.join('\n') }]
+                : []),
+            ],
+          });
+        } else {
+          result.push({ role: 'user', content: textBlocks.join('\n') || '' });
+        }
       }
     }
   }

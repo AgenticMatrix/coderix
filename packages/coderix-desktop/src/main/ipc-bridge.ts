@@ -33,7 +33,7 @@ import type {
 import type { CoderSettings, ModelItem } from '../../../../packages/coderix-core/src/index.js';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '../../../../packages/coderix-core/src/index.js';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord, TaskLifecycleEvent } from '../../../../packages/coderix-core/src/index.js';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle, platformDefaultWorkspaceDir, resolveDefaultWorkspaceDir } from '../../../../packages/coderix-core/src/index.js';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle, platformDefaultWorkspaceDir, resolveDefaultWorkspaceDir, isValidBase64Image, isSupportedImageMediaType } from '../../../../packages/coderix-core/src/index.js';
 import type { McpManager } from '../../../../packages/coderix-core/src/index.js';
 import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '../../../../packages/coderix-core/src/index.js';
 import { runClaudeCodeQuery, getClaudeSessionId, getClaudeCumulativeUsage, loadClaudeSubagentTranscript } from './claude-code-engine.js';
@@ -176,6 +176,56 @@ export const IPC_CHANNELS = {
 
 function getMainWindow(windowManager: WindowManager): BrowserWindow | null {
   return windowManager.getMainWindow() ?? null;
+}
+
+/** An image as the renderer sends it: raw base64, no `data:` prefix. */
+interface IncomingImage {
+  mediaType: string;
+  data: string;
+  name?: string;
+}
+
+/** Hard cap mirroring the Composer's `MAX_IMAGES`. */
+const MAX_IMAGES_PER_MESSAGE = 8;
+
+/**
+ * Validate images from the renderer before they reach a provider.
+ *
+ * This is the trust boundary: the renderer's own checks exist to give the user
+ * a reason, but only this copy decides what is sent. A block whose base64 does
+ * not decode as the media type it claims makes the provider reject the entire
+ * request (400 "unsupported image"), which would kill the turn — so a bad image
+ * is dropped with a warning rather than failing the message. Same reasoning as
+ * `claude-image-guard.ts`, applied to user attachments.
+ */
+function sanitizeIncomingImages(images: IncomingImage[] | undefined): IncomingImage[] {
+  if (!Array.isArray(images) || images.length === 0) return [];
+
+  const valid: IncomingImage[] = [];
+  for (const image of images) {
+    if (valid.length >= MAX_IMAGES_PER_MESSAGE) {
+      console.warn(`[IpcBridge] dropping image beyond the ${MAX_IMAGES_PER_MESSAGE}-image cap`);
+      break;
+    }
+    const mediaType = typeof image?.mediaType === 'string' ? image.mediaType.toLowerCase() : '';
+    const data = typeof image?.data === 'string' ? image.data : '';
+    if (!isSupportedImageMediaType(mediaType) || !isValidBase64Image(mediaType, data)) {
+      console.warn(`[IpcBridge] dropping invalid image attachment (${mediaType || 'unknown type'})`);
+      continue;
+    }
+    valid.push({ mediaType, data, ...(image.name ? { name: image.name } : {}) });
+  }
+  return valid;
+}
+
+/** Build the user turn's content blocks: images first, then the text (if any). */
+function buildUserContent(text: string, images: IncomingImage[]): ContentBlock[] {
+  const blocks: ContentBlock[] = images.map((image) => ({
+    type: 'image' as const,
+    source: { type: 'base64' as const, media_type: image.mediaType, data: image.data },
+  }));
+  if (text.trim()) blocks.push({ type: 'text', text });
+  return blocks;
 }
 
 /**
@@ -355,7 +405,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Query ──────────────────────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: { query: string; sessionId?: string; skills?: string[] }) => {
+  ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: { query: string; sessionId?: string; skills?: string[]; images?: IncomingImage[] }) => {
     if (!sessionManager) {
       throw new Error('SessionManager not initialized');
     }
@@ -364,6 +414,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
 
     const { query: userInput, sessionId, skills } = payload;
+    const images = sanitizeIncomingImages(payload.images);
 
     // Ensure an active session exists (the renderer normally creates one before
     // submitting; this covers the bare-submit fallback).
@@ -475,6 +526,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       engine === 'claude-code'
         ? runClaudeCodeQuery({
             prompt: userInput,
+            images,
             sessionId: streamSessionId,
             cwd: engineCwd,
             history: activeSession ? [...activeSession.messages] : [],
@@ -567,7 +619,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               safeSend(mainWindow, IPC_CHANNELS.BROWSER_OPEN_URL, { url });
             },
           })
-        : coderixEngine!.submitMessage(userInput);
+        : coderixEngine!.submitMessage(userInput, images);
 
     // The in-process Coderix engine persists the user turn itself inside
     // submitMessage(); the Claude Code SDK engine does not, so record it here
@@ -585,14 +637,22 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         // addMessage() mutates the in-memory message list.
         const isFirstMessage = session.messages.length === 0;
 
-        sessionManager.addMessage(streamSessionId, { role: 'user', content: userInput });
+        // Persist the turn with its image blocks, not just the text: the
+        // transcript is replayed to the model on later turns and re-rendered on
+        // session reload, so the pictures must survive there too.
+        sessionManager.addMessage(streamSessionId, {
+          role: 'user',
+          content: images.length > 0 ? buildUserContent(userInput, images) : userInput,
+        });
 
         // The Coderix engine derives titles inside QueryEngine; the Claude Code
         // path bypasses it, so do the same two-layer derivation here: persist
         // the deterministic fallback immediately, then refine on the session's
         // own model route in the background.
         if (isFirstMessage) {
-          const fallback = sessionManager.applyFallbackTitle(session.id, userInput);
+          // An image-only turn has no text to derive a title from.
+          const titleSeed = userInput.trim() || '[图片]';
+          const fallback = sessionManager.applyFallbackTitle(session.id, titleSeed);
           if (fallback) {
             safeSend(mainWindow, IPC_CHANNELS.SESSION_TITLE_UPDATED, {
               sessionId: session.id,
@@ -613,7 +673,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                 { ...cfg, baseUrl: baseURL, apiKey, protocol: resolved?.protocol ?? cfg.protocol },
                 model,
               );
-              const title = await summarizeSessionTitle(callModel, userInput);
+              const title = await summarizeSessionTitle(callModel, titleSeed);
               if (!title) return;
               const live = sessionManager.get(session.id);
               if (!live || live.titleSource === 'user' || live.titleSource === 'fork') return;

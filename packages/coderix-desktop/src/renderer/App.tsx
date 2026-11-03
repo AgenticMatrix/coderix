@@ -41,6 +41,7 @@ import SettingsView from './components/settings/SettingsView';
 import { BrowserPanel } from './components/browser';
 import { GlobalModal } from './components/modals';
 import { useUIStore, useChatStore, useSessionStore, useStreamStore, useBrowserStore, useSubagentStore } from './store';
+import type { ImageAttachment } from './lib/imageAttachments.js';
 import { HOME_URL } from './store/browserStore.js';
 import { useSettingsStore } from './store/settingsStore.js';
 import { useEditorStore } from './store/editorStore.js';
@@ -658,6 +659,19 @@ export function App(): React.ReactElement {
               } else if (Array.isArray(blocks)) {
                 // Normalize content blocks: backend uses 'text' field, UI expects 'content' field
                 blocks = blocks.map((b: any) => {
+                  // Image blocks carry a `source` (not `text`) — map them early so
+                  // the generic content fallback below can't flatten them to ''.
+                  if (b.type === 'image') {
+                    return {
+                      type: 'image' as const,
+                      content: typeof b.name === 'string' ? b.name : '',
+                      state: 'done' as const,
+                      ...(b.source?.data
+                        ? { image: { mediaType: String(b.source.media_type ?? 'image/png'), data: String(b.source.data) } }
+                        : {}),
+                    };
+                  }
+
                   // Backend blocks use `text` for text blocks, `thinking` for
                   // thinking/reasoning blocks, and `content` for tool results.
                   // Tool results may carry `content` as a string or as an array
@@ -1128,8 +1142,14 @@ export function App(): React.ReactElement {
   }, [workspaceValue]);
 
   const handleComposerSubmit = useCallback(
-    async (value: string) => {
-      if (!value.trim()) return;
+    async (value: string, images?: ImageAttachment[]) => {
+      // An image-only turn is valid — the model answers about the pictures.
+      if (!value.trim() && !images?.length) return;
+      const payloadImages = images?.map((img) => ({
+        mediaType: img.mediaType,
+        data: img.data,
+        ...(img.name ? { name: img.name } : {}),
+      }));
 
       // Auto-create a session if none exists yet
       let currentSid = useChatStore.getState().sessionId;
@@ -1166,12 +1186,12 @@ export function App(): React.ReactElement {
       }
 
       // Add the user message to the chat store (triggers streaming state)
-      await sendMessage(value);
+      await sendMessage(value, images);
       // Submit the query via IPC to the main process
       if (currentSid) {
         try {
-          console.log('[App] Submitting query:', value.substring(0, 30), 'session:', currentSid);
-          const submitted = (await submitQuery(value, currentSid, selectedSkills)) as
+          console.log('[App] Submitting query:', value.substring(0, 30), 'images:', images?.length ?? 0, 'session:', currentSid);
+          const submitted = (await submitQuery(value, currentSid, selectedSkills, payloadImages)) as
             | { sessionId?: string; forkedFrom?: string; epoch?: number }
             | undefined;
           // Adopt the turn id the main process assigned. It is the counter every

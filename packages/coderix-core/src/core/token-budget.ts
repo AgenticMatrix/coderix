@@ -32,6 +32,16 @@ export interface TokenBudget {
 // ---------------------------------------------------------------------------
 
 /**
+ * Flat per-image token estimate for user-attached images.
+ * Cheap and stable: an image's real cost depends on its pixels, not its bytes.
+ * `microcompact.ts` uses a lower figure for images found inside tool results;
+ * these are user attachments, which the desktop caps at a 1568px long edge and
+ * which providers bill at roughly 1600 tokens, so 1000 stays conservative
+ * without letting one screenshot dominate the budget.
+ */
+const IMAGE_TOKEN_ESTIMATE = 1000;
+
+/**
  * Estimate token count for a plain string.
  * Uses tiktoken when available, falls back to ~3.5 chars/token.
  */
@@ -51,7 +61,7 @@ export function estimateStringTokens(
  *   - tool_use: 2.5 chars/token (structured input)
  *   - tool_result: 2.0 chars/token (tool output is often code/diff-like)
  *   - thinking: 3.5 chars/token
- *   - image: 85 tokens (rough estimate)
+ *   - image: fixed estimate (see IMAGE_TOKEN_ESTIMATE)
  */
 export function estimateBlockTokens(block: ContentBlock): number {
   switch (block.type) {
@@ -96,9 +106,13 @@ export function estimateBlockTokens(block: ContentBlock): number {
     }
 
     case 'image': {
-      return block.source?.data
-        ? Math.ceil(String(block.source.data).length / 50)
-        : 85;
+      // Base64 length is a terrible proxy: a 1 MB image is ~1.3M chars, which
+      // at the old `/50` divisor claimed ~26k tokens and made auto-compact fire
+      // far too early. Vision models price an image by its pixel dimensions,
+      // not its byte size, and the desktop caps the long edge at 1568px — that
+      // lands around 1600 tokens. Use one flat estimate for every image so a
+      // large attachment can't distort the context budget.
+      return IMAGE_TOKEN_ESTIMATE;
     }
 
     default:

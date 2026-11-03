@@ -11,7 +11,9 @@
 /** A single content block in a message stream */
 export interface StreamBlock {
   /** Block type — determines how the block is rendered */
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'system';
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'system' | 'image';
+  /** Inline image payload (for image blocks). `data` is raw base64, no data: prefix. */
+  image?: { mediaType: string; data: string };
   /** Text content (for text, thinking, tool_result, system blocks) */
   content?: string;
   /** Tool name (for tool_use and tool_result blocks) */

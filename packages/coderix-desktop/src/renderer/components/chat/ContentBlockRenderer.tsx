@@ -1,6 +1,7 @@
 import React from 'react';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolRenderer } from './ToolRenderer';
+import { ImageBlockView } from './ImageBlockView';
 import { Markdown } from '../common/Markdown.js';
 import { useT } from '../../i18n/index.js';
 import type { StreamBlock } from '../../types';
@@ -48,6 +49,17 @@ export function ContentBlockRenderer({
           defaultExpanded={false}
         />
       );
+
+    case 'image':
+      // A block without a payload can only come from a malformed transcript.
+      if (!block.image?.data) {
+        return (
+          <div className="my-1 px-3 py-1.5 text-xs text-[var(--color-text-tertiary)]">
+            {t('composer.imageReadFailed')}
+          </div>
+        );
+      }
+      return <ImageBlockView data={block.image.data} mediaType={block.image.mediaType} />;
 
     case 'tool_result':
       return (

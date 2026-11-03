@@ -13,7 +13,7 @@
  */
 
 import { query as claudeQuery, getSubagentMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
-import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess, SdkPluginConfig } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess, SdkPluginConfig, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent, Message } from '../../../../packages/coderix-core/src/index.js';
 import { PermissionMode } from '../../../../packages/coderix-core/src/index.js';
 import { createRequire } from 'node:module';
@@ -105,6 +105,15 @@ const previousUsageBySession = new Map<string, PersistedUsage>();
 
 export interface ClaudeCodeQueryOptions {
   prompt: string;
+  /**
+   * Inline images for this turn (raw base64, no `data:` prefix).
+   *
+   * The SDK's `prompt` accepts either a string or an async message stream.
+   * Images require the stream form, so a turn carrying them is fed through an
+   * `AsyncIterable<SDKUserMessage>` whose single user message holds image
+   * blocks followed by the text.
+   */
+  images?: Array<{ mediaType: string; data: string }>;
   /** Coderix session id — used as the resume key across turns. */
   sessionId: string;
   cwd: string;
@@ -526,8 +535,12 @@ function buildReplayPreamble(history: Message[]): string {
               : content;
           parts.push(`[工具结果]\n${clipped}`);
         }
+      } else if (b.type === 'image') {
+        // The bytes belong to the native resume path; this text fallback can
+        // only tell the model an image was there.
+        parts.push('[图片]');
       }
-      // `thinking` and `image` blocks can't be replayed — skip.
+      // `thinking` blocks can't be replayed — skip: they are provider-signed.
     }
     const text = parts.join('\n').trim();
     if (!text) continue;
@@ -537,10 +550,42 @@ function buildReplayPreamble(history: Message[]): string {
   return lines.join('\n').trim();
 }
 
+/**
+ * One-turn SDK user message carrying images followed by the prompt.
+ *
+ * The SDK writes each streamed message to the CLI's stdin as
+ * `{ type: 'user', message: { role: 'user', content }, ... }`, the same shape a
+ * string prompt is converted into — so this is the only way to attach image
+ * blocks to the turn.
+ */
+async function* userMessageStream(
+  images: Array<{ mediaType: string; data: string }>,
+  text: string,
+): AsyncGenerator<SDKUserMessage> {
+  const content = [
+    ...images.map((image) => ({
+      type: 'image' as const,
+      source: {
+        type: 'base64' as const,
+        media_type: image.mediaType,
+        data: image.data,
+      },
+    })),
+    ...(text.trim() ? [{ type: 'text' as const, text }] : []),
+  ];
+
+  yield {
+    type: 'user',
+    message: { role: 'user', content },
+    parent_tool_use_id: null,
+    session_id: '',
+  } as SDKUserMessage;
+}
+
 async function* runClaudeCodeQueryOnce(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
-  const { prompt, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, history, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl, maxContext, compactThreshold, autoCompactEnabled } = opts;
+  const { prompt, images, sessionId, cwd, model, baseUrl, apiKey, permissionMode, protocol, skills, customSkillDirs, history, abortController, onAskUserQuestion, onPermissionRequest, onOpenUrl, maxContext, compactThreshold, autoCompactEnabled } = opts;
 
   // Restore the persisted claude session id + usage (survives a restart) when
   // the in-memory maps have no entry yet, so a resumed conversation keeps its
@@ -745,7 +790,17 @@ async function* runClaudeCodeQueryOnce(
     console.log('[Permission] canUseTool registered');
   }
 
-  const stream = claudeQuery({ prompt: effectivePrompt, options });
+  // Images force the async-stream input form: a plain string prompt can only
+  // carry text. The generator is built here (not at the callsite) because
+  // `runClaudeCodeQuery` may re-run this function to retry after repairing a
+  // corrupt transcript — an AsyncGenerator is single-use, so it must be fresh
+  // on every attempt.
+  const stream = claudeQuery({
+    prompt: images && images.length > 0
+      ? userMessageStream(images, effectivePrompt)
+      : effectivePrompt,
+    options,
+  });
 
   // Latest turn's per-call usage (captured from the assistant messages) — used
   // at `result` to report the *current* context footprint rather than the
