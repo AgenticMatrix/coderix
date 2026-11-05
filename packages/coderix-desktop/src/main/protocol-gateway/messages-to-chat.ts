@@ -47,6 +47,22 @@ function toolResultToString(content: unknown): string {
   return '';
 }
 
+/**
+ * Images carried inside a tool_result (the Read tool returns the pixels of an
+ * image file this way). Chat Completions' `role: "tool"` message accepts only a
+ * string, so these have to ride in a following user turn — otherwise a Read of
+ * a PNG reaches the model as its `[Image]` placeholder with no image attached.
+ */
+function toolResultImages(content: unknown): Json[] {
+  if (!Array.isArray(content)) return [];
+  return (content as Json[])
+    .filter((b) => b.type === 'image' && (b.source as Json | undefined)?.data)
+    .map((b) => ({
+      type: 'image_url',
+      image_url: { url: imageSourceToDataUrl(b.source) },
+    }));
+}
+
 function toolChoiceToChat(tc: unknown): unknown {
   const type = (tc as Json)?.type;
   if (type === 'none') return 'none';
@@ -84,6 +100,7 @@ export function messagesRequestToChat(body: Json): Json {
     if (role === 'user') {
       const parts: Json[] = [];
       const toolMessages: Json[] = [];
+      const toolImages: Json[] = [];
       for (const b of blocks) {
         if (b.type === 'text' && b.text) {
           parts.push({ type: 'text', text: b.text });
@@ -95,6 +112,7 @@ export function messagesRequestToChat(body: Json): Json {
             tool_call_id: b.tool_use_id,
             content: toolResultToString(b.content),
           });
+          toolImages.push(...toolResultImages(b.content));
         }
       }
       if (parts.length > 0) {
@@ -105,6 +123,11 @@ export function messagesRequestToChat(body: Json): Json {
         });
       }
       messages.push(...toolMessages);
+      // Tool messages only carry text, so any image a tool returned follows in
+      // its own user turn (see toolResultImages).
+      if (toolImages.length > 0) {
+        messages.push({ role: 'user', content: toolImages });
+      }
     } else if (role === 'assistant') {
       const text: string[] = [];
       const toolCalls: Json[] = [];

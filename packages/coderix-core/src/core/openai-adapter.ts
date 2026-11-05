@@ -21,6 +21,7 @@ import type {
 } from './types.js';
 import type { CallModelParams } from './query.js';
 import { normalizeMessagesForAPI } from './message-normalizer.js';
+import { isValidBase64Image } from '../utils/image-validation.js';
 
 // ---------------------------------------------------------------------------
 // Shared call-model configuration (also consumed by provider-adapter.ts)
@@ -113,6 +114,10 @@ export function toOpenAIMessages(
     const imageBlocks: Array<{ type: 'image_url'; image_url: { url: string } }> = [];
     const toolCalls: NonNullable<OpenAIMessage['tool_calls']> = [];
     const toolResults: Array<{ tool_call_id: string; content: string }> = [];
+    // Images a tool returned (the Read tool hands back raw pixels). A
+    // `role: "tool"` message accepts only a string, so these are emitted in a
+    // following user turn.
+    const toolResultImages: Array<{ type: 'image_url'; image_url: { url: string } }> = [];
 
     for (const block of msg.content) {
       switch (block.type) {
@@ -146,9 +151,27 @@ export function toOpenAIMessages(
             const resultContent = typeof block.content === 'string'
               ? block.content
               : Array.isArray(block.content)
-                ? block.content.map((b) => ('text' in b ? b.text : '')).join('\n')
+                ? block.content
+                    .filter((b) => b.type === 'text')
+                    .map((b) => b.text ?? '')
+                    .join('\n')
                 : '';
             toolResults.push({ tool_call_id: block.tool_use_id, content: resultContent });
+            if (Array.isArray(block.content)) {
+              for (const sub of block.content) {
+                if (sub.type !== 'image' || !sub.source?.data) continue;
+                // A corrupt (e.g. truncated-download) image makes the provider
+                // reject the whole request; skip it, exactly as the Anthropic
+                // adapter does.
+                if (!isValidBase64Image(sub.source.media_type, sub.source.data)) continue;
+                toolResultImages.push({
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${sub.source.media_type};base64,${sub.source.data}`,
+                  },
+                });
+              }
+            }
           }
           break;
         case 'thinking':
@@ -170,6 +193,10 @@ export function toOpenAIMessages(
     // tool_calls message in the history), regardless of tool_calls presence.
     for (const tr of toolResults) {
       result.push({ role: 'tool', tool_call_id: tr.tool_call_id, content: tr.content });
+    }
+
+    if (toolResultImages.length > 0) {
+      result.push({ role: 'user', content: toolResultImages });
     }
 
     if (toolCalls.length === 0 && toolResults.length === 0) {
