@@ -4,7 +4,7 @@ import type { ScrollBoxHandle, DOMElement } from '@coderix/tui';
 import { useTerminalSize } from '@coderix/tui';
 
 import type { QueryEngine } from '@coderix/core';
-import type { AppConfig, Message, ContentBlock, TokenUsage } from '../../types.js';
+import type { AppConfig, Message, ContentBlock, TokenUsage, PendingImage } from '../../types.js';
 import { getSubAgentRegistry, getAgentTranscript, sessionDir, refineSessionTitle, summarizeSessionTitle, createCallModel, resolveModelByName } from '@coderix/core';
 import type { SubAgentRecord } from '@coderix/core';
 import { HeaderLogo } from './HeaderLogo.js';
@@ -376,7 +376,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
   // ── Direct team message: @agent-name message ─────────────────
   // Intercepts messages starting with @agent-name and routes them
   // to the team mailbox instead of the main agent loop.
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, images?: PendingImage[]) => {
     const teamCtx = store.getState().teamContext;
     const dmMatch = text.match(/^@(\S+)\s+(.+)$/s);
     if (dmMatch && teamCtx) {
@@ -417,7 +417,8 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
       return;
     }
 
-    await runAgentTurn(text);
+    // Images only ride the main agent turn; a team DM is text-only.
+    await runAgentTurn(text, images?.length ? { images } : undefined);
   }, [runAgentTurn, store, dispatch, sessionManager]);
 
   // Load sub-agent transcript when entering immersive mode.
@@ -588,6 +589,8 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
     historyIndex: state.historyIndex,
     historyScratch: state.historyScratch,
     pasteBlocks: state.pasteBlocks,
+    pendingImages: state.pendingImages,
+    onImageError: (message) => dispatch({ type: 'SET_ERROR', error: message }),
     onSubAgentSend: sendToSubAgent,
     onSlashCommand: createSlashHandler({
       dispatch,
@@ -1481,6 +1484,7 @@ export function App({ config, engine, store, sessionManager, getSessionMcpServer
           cursorPosition={state.cursorPosition}
           isStreaming={state.isStreaming}
           theme={config.theme}
+          pendingImages={state.pendingImages}
         />
         <Divider padding={2} />
 

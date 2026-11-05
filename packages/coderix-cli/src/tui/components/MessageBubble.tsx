@@ -5,7 +5,7 @@ import { useState, useEffect, memo } from 'react';
 import type {
   Message, TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock,
   TodoUpdateBlock, TurnBoundary, SubagentBlock,
-  CompactionBoundary, SpeculationBlock, CompletionBoundary,
+  CompactionBoundary, SpeculationBlock, CompletionBoundary, ImageBlock,
 } from '../../types.js';
 import { MarkdownRenderer, displayWidth } from './MarkdownRenderer.js';
 import { getToolUseRenderer, getToolResultRenderer } from '../../tools/registry.js';;
@@ -146,6 +146,11 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
   // ── Determine content source ──────────────────────────────
   const hasBlocks = message.blocks && message.blocks.length > 0;
   const displayContent = hasBlocks ? blocksText(message.blocks) : (message.content || '');
+  // A terminal cannot draw the picture, so each attached image becomes a
+  // labelled row above the text — enough to confirm what was sent.
+  const imageLabels = hasBlocks
+    ? message.blocks.filter((b): b is ImageBlock => b.type === 'image').map((b) => b.label)
+    : [];
   const thinkingContent = hasBlocks
     ? (blocksThinking(message.blocks) ?? message.thinking)
     : message.thinking;
@@ -216,6 +221,20 @@ export const MessageBubble = memo(function MessageBubble({ message, contentExpan
 
     return (
       <Box flexDirection="column" marginBottom={1} width={maxWidth}>
+        {imageLabels.length > 0 && (
+          <Box flexDirection="column">
+            {imageLabels.map((label, i) => (
+              <Box key={i} flexDirection="row">
+                <Box width={2}>
+                  <Text color="#A855F7" bold>{i === 0 ? '❯' : ' '}</Text>
+                </Box>
+                <Box flexGrow={1}>
+                  <Text color="#4ECDC4">[图片 {i + 1}: {label}]</Text>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        )}
         {isTeamMsg ? (
           // Team message styling — distinct header for inter-agent communication
           displayLines.map((line, i) => {

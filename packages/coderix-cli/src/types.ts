@@ -57,6 +57,24 @@ export interface ToolResultBlock {
   image?: { data: string; media_type: string };
 }
 
+/** An image attached to a user turn (from the clipboard or a path). */
+export interface PendingImage {
+  mediaType: string;
+  /** Raw base64 — no `data:` prefix. */
+  data: string;
+  /** Pixel size — absent for images re-surfaced from the engine's queue. */
+  width?: number;
+  height?: number;
+  bytes?: number;
+}
+
+/** Rendered in the transcript where the user's image was attached. */
+export interface ImageBlock {
+  type: 'image';
+  /** One-line label — a terminal cannot draw the picture itself. */
+  label: string;
+}
+
 export interface TodoItem {
   content: string;
   status: 'pending' | 'in_progress' | 'completed';
@@ -140,7 +158,8 @@ export type ContentBlock =
   | CompactionBoundary
   | SpeculationBlock
   | CompletionBoundary
-  | SubagentBoundaryBlock;
+  | SubagentBoundaryBlock
+  | ImageBlock;
 
 // ── Message ─────────────────────────────────────────────────────────
 
@@ -227,6 +246,8 @@ export interface ChatState extends CoreState {
   historyScratch: string;
   /** Paste block contents keyed by ID (IDs embedded as markers in inputText). */
   pasteBlocks: Record<number, string>;
+  /** Images picked up from the clipboard, waiting to be sent with the next turn. */
+  pendingImages: PendingImage[];
   /** Global toggle for content-level expansion (thinking, tool results). */
   contentExpanded: boolean;
   /**
@@ -370,6 +391,10 @@ export type ChatAction =
   | { type: 'SET_HISTORY_INDEX'; index: number; scratch?: string }
   // Paste blocks
   | { type: 'ADD_PASTE_BLOCK'; text: string }
+  // Clipboard images waiting for the next turn
+  | { type: 'ADD_PENDING_IMAGE'; image: PendingImage }
+  | { type: 'REMOVE_PENDING_IMAGE'; index: number }
+  | { type: 'CLEAR_PENDING_IMAGES' }
   // Token usage
   | { type: 'UPDATE_TOKEN_USAGE'; usage: Partial<TokenUsage>; skipDisplay?: boolean }
   // Agent cache management
