@@ -495,6 +495,17 @@ export function createCallModelFromOpenAI(
       textStarted = false;
     }
 
+    // A stream that ends without ever reporting a finish_reason was cut short
+    // (socket closed, relay gave up mid-answer). Reporting that as a normal
+    // `end_turn` makes a truncated turn look like a completed one, so the
+    // caller silently stops instead of retrying or surfacing the failure.
+    // A user abort breaks the read loop the same way, and is not a failure.
+    if (!finishReason && !signal?.aborted) {
+      throw new Error(
+        `Model stream ended without a finish reason from ${url} (response was truncated)`,
+      );
+    }
+
     // Emit buffered tool calls sequentially (start → full-args delta → stop)
     const toolUses: ToolUseBlock[] = [];
     for (const [, tc] of [...toolCallBuilders.entries()].sort((a, b) => a[0] - b[0])) {

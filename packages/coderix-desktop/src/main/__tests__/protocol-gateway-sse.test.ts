@@ -63,3 +63,59 @@ describe('ChatToMessagesSseConverter tool calls', () => {
     ]);
   });
 });
+
+describe('ChatToMessagesSseConverter turn termination', () => {
+  /** A terminal chunk that carries finish_reason but no `delta`. */
+  function finishChunk(reason: string): string {
+    return JSON.stringify({ model: 'test-model', choices: [{ index: 0, finish_reason: reason }] });
+  }
+
+  function stopReasonOf(frames: Array<{ event?: string; data: string }>): string | undefined {
+    const delta = frames.find((f) => f.event === 'message_delta');
+    return delta ? JSON.parse(delta.data).delta.stop_reason : undefined;
+  }
+
+  it('keeps a tool_calls finish that arrives on a delta-less terminal chunk', () => {
+    const converter = new ChatToMessagesSseConverter();
+    const frames = collect(converter, [
+      delta({ tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'Bash', arguments: '{"command":"ls"}' } }] }),
+      finishChunk('tool_calls'),
+    ]);
+
+    // Without the reason the CLI saw `end_turn` and never ran the tool.
+    expect(stopReasonOf(frames)).toBe('tool_use');
+  });
+
+  it('does not fabricate a completion when the stream is cut mid-answer', () => {
+    const converter = new ChatToMessagesSseConverter();
+    // Text starts flowing, then the socket closes with no finish_reason.
+    const frames = collect(converter, [delta({ content: 'I will now edit the file' })]);
+
+    expect(stopReasonOf(frames)).toBeUndefined();
+    const errors = frames.filter((f) => f.event === 'error');
+    expect(errors).toHaveLength(1);
+    expect(JSON.parse(errors[0]!.data).type).toBe('error');
+    // The partial text still closes cleanly so it renders instead of vanishing.
+    expect(frames.map((f) => f.event)).toContain('content_block_stop');
+    expect(frames.map((f) => f.event)).not.toContain('message_stop');
+  });
+
+  it('reports an upstream that closed before sending anything', () => {
+    const converter = new ChatToMessagesSseConverter();
+    const frames = converter.finishSse();
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.event).toBe('error');
+  });
+
+  it('still completes normally when the upstream reports a real finish', () => {
+    const converter = new ChatToMessagesSseConverter();
+    const frames = collect(converter, [
+      delta({ content: 'done' }),
+      finishChunk('stop'),
+    ]);
+
+    expect(stopReasonOf(frames)).toBe('end_turn');
+    expect(frames.filter((f) => f.event === 'error')).toHaveLength(0);
+  });
+});

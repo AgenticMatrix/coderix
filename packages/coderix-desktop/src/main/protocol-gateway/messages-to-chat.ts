@@ -86,6 +86,22 @@ function finishReasonToStopReason(fr: string): string {
   }
 }
 
+/**
+ * An SSE `error` frame for a turn the upstream cut short.
+ *
+ * The harness treats a well-formed `message_stop` as a completed answer, so a
+ * truncated stream that still emits one looks like a clean finish: the UI goes
+ * idle with no error and the half-finished work is silently dropped. Reporting
+ * an error frame instead makes the CLI fail the turn, which surfaces in the
+ * status bar as a failure rather than a normal stop.
+ */
+function truncatedStreamFrame(message: string): SseFrame {
+  return {
+    event: 'error',
+    data: JSON.stringify({ type: 'error', error: { type: 'api_error', message } }),
+  };
+}
+
 export function messagesRequestToChat(body: Json): Json {
   const out: Json = { model: body.model };
 
@@ -238,6 +254,12 @@ export class ChatToMessagesSseConverter {
   private tools = new Map<number, ToolBlock>();
   private finishReason = 'stop';
   private usage: Json = {};
+  /**
+   * Whether the upstream ever committed to a finish_reason. Without it the
+   * stream was cut short (socket closed, relay gave up, tool stall) and must be
+   * reported as a failure — see finishSse().
+   */
+  private sawFinishReason = false;
 
   convertSse(_event: string | null, data: string): SseFrame[] {
     let payload: Json;
@@ -245,7 +267,19 @@ export class ChatToMessagesSseConverter {
 
     const choice = Array.isArray(payload.choices) ? (payload.choices as Json[])[0] : undefined;
     const delta = ((choice ?? {}) as Json).delta as Json | undefined;
-    if (!delta) return [];
+    // OpenAI sends the terminal chunk with an EMPTY delta (or none at all) and
+    // the finish_reason alongside it. Bailing out on a missing delta dropped
+    // that reason, so a `tool_calls` turn — and any relay-specific reason —
+    // silently became `end_turn` and the CLI never ran the tool.
+    const finishReason = (choice as Json | undefined)?.finish_reason;
+    if (!delta) {
+      if (typeof finishReason === 'string' && finishReason) {
+        this.finishReason = finishReason;
+        this.sawFinishReason = true;
+      }
+      if (payload.usage) this.usage = payload.usage as Json;
+      return [];
+    }
 
     const frames: SseFrame[] = [];
     if (!this.started) {
@@ -360,14 +394,22 @@ export class ChatToMessagesSseConverter {
       }
     }
 
-    if ((choice as Json)?.finish_reason) this.finishReason = (choice as Json).finish_reason as string;
+    if ((choice as Json)?.finish_reason) {
+      this.finishReason = (choice as Json).finish_reason as string;
+      this.sawFinishReason = true;
+    }
     if (payload.usage) this.usage = payload.usage as Json;
 
     return frames;
   }
 
   finishSse(): SseFrame[] {
-    if (!this.started) return [];
+    if (!this.started) {
+      // The upstream accepted the request and closed without producing a single
+      // frame. Reporting nothing here leaves the harness with a silently empty
+      // turn, which is exactly how a wedged relay looked like a finished answer.
+      return [truncatedStreamFrame('上游在返回任何内容前就关闭了连接')];
+    }
     const frames: SseFrame[] = [];
     if (this.thinkingOpen) {
       frames.push({ event: 'content_block_stop', data: JSON.stringify({ type: 'content_block_stop', index: this.thinkingBlockIndex }) });
@@ -406,6 +448,16 @@ export class ChatToMessagesSseConverter {
         entry.open = false;
         frames.push({ event: 'content_block_stop', data: JSON.stringify({ type: 'content_block_stop', index: entry.blockIndex }) });
       }
+    }
+    // The upstream closed without ever committing to a finish_reason. Emitting
+    // `message_stop` here is what made a cut-off turn indistinguishable from a
+    // completed answer (the UI simply went idle). Close the open blocks so the
+    // partial output still renders, then fail the turn instead.
+    if (!this.sawFinishReason) {
+      return [
+        ...frames,
+        truncatedStreamFrame('上游连接在完成响应前中断（已收到的部分内容可能不完整）'),
+      ];
     }
     frames.push({
       event: 'message_delta',
