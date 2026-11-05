@@ -531,3 +531,47 @@
 .chat-image-close:hover {
   background: rgba(255, 255, 255, 0.28);
 }
+
+/* --------------------------------------------------------------------------
+   Turn outcome — why the last turn stopped (under the final message)
+   -------------------------------------------------------------------------- */
+
+.turn-outcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  /* Centred in the message panel, aligned with the answer's left edge so it
+     reads as part of the turn rather than a floating banner. */
+  padding: var(--space-2) var(--space-4) 0;
+  font-size: var(--text-caption1);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  user-select: none;
+}
+
+.turn-outcome-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background-color: currentColor;
+  opacity: 0.6;
+}
+
+/* A failure reads slightly louder than a normal finish, but stays a caption —
+   the error banner owns the actual alert. */
+.turn-outcome-dot--error,
+.turn-outcome-dot--incomplete,
+.turn-outcome-dot--timeout {
+  background-color: var(--color-danger, #e5484d);
+  opacity: 1;
+}
+
+.turn-outcome-dot--max-tokens,
+.turn-outcome-dot--refusal,
+.turn-outcome-dot--paused {
+  background-color: var(--color-warning, #f5a524);
+  opacity: 1;
+}

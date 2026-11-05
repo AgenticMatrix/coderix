@@ -565,6 +565,17 @@ export const en: Record<TranslationKey, string> = {
   'chat.showEarlier': 'Show earlier messages',
   'chat.hiddenCalls': '{count} earlier calls hidden',
 
+  // ── Why the turn ended (under the final message) ────
+  'turn.complete': 'Turn completed normally',
+  'turn.running': 'Working…',
+  'turn.maxTokens': 'Hit the output limit — the turn was cut off (send "continue" to resume)',
+  'turn.refusal': 'The model declined to continue this turn on safety grounds',
+  'turn.paused': 'The model paused this turn and is waiting to resume',
+  'turn.interrupted': 'Turn stopped by you',
+  'turn.timeout': 'The model stopped responding — the turn timed out',
+  'turn.error': 'Turn ended with an error',
+  'turn.incomplete': 'Turn ended without a finish signal (network or model service interruption)',
+
   // ── 错误页 ──────────────────────────────────────────
   'error.title': 'Something went wrong',
   'error.unexpected': 'An unexpected error occurred',

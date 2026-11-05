@@ -219,6 +219,8 @@ interface StreamTurnDone {
   type: 'turnDone';
   sessionId?: string;
   epoch?: number;
+  /** Why the turn ended (`end_turn`, `tool_use`, `max_tokens`, …). */
+  stopReason?: string;
 }
 
 interface StreamPhase {
@@ -343,6 +345,7 @@ function createEventListener(
             type: 'turnDone',
             sessionId: data?.sessionId as string | undefined,
             epoch: data?.epoch as number | undefined,
+            stopReason: data?.stopReason as string | undefined,
           });
           break;
         case CH.STREAM_ERROR:

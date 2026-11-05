@@ -319,14 +319,20 @@ export function onStreamDone(callback: (stopReason?: string, sessionId?: string)
  * `onStreamDone` which fires per model step on `message_stop`.
  * Returns an unsubscribe function.
  */
-export function onStreamTurnDone(callback: (sessionId?: string, epoch?: number) => void): () => void {
+export function onStreamTurnDone(
+  callback: (sessionId?: string, epoch?: number, stopReason?: string) => void,
+): () => void {
   if (!window.coderixAPI) {
     console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
     return NOOP_UNSUB;
   }
   return window.coderixAPI.onStreamEvent((event: any) => {
     if (event.type === 'turnDone') {
-      callback(event.sessionId as string | undefined, event.epoch as number | undefined);
+      callback(
+        event.sessionId as string | undefined,
+        event.epoch as number | undefined,
+        event.stopReason as string | undefined,
+      );
     }
   });
 }

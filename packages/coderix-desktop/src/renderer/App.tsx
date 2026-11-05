@@ -48,6 +48,7 @@ import { useEditorStore } from './store/editorStore.js';
 import { useT } from './i18n/index.js';
 import { deriveSessionStats } from './components/shared/status-stats';
 import { countSessionRunningAgents, deriveAgentStatus, type AgentStatus } from './agent-status';
+import { deriveTurnOutcome, type TurnEnding, type TurnOutcome } from './turn-outcome';
 import { useStreamEvents } from './hooks/useStreamEvents';
 import { useAgentEvents } from './hooks/useAgentEvents';
 import { useSessionTitleEvents } from './hooks/useSessionTitleEvents';
@@ -154,6 +155,7 @@ export function App(): React.ReactElement {
   const isStreaming = useChatStore((s) => s.isStreaming);
   const error = useChatStore((s) => s.error);
   const interrupted = useChatStore((s) => s.interrupted);
+  const lastStopReason = useChatStore((s) => s.lastStopReason);
   const setSessionId = useChatStore((s) => s.setSessionId);
   const sessionId = useChatStore((s) => s.sessionId);
 
@@ -1280,6 +1282,23 @@ export function App(): React.ReactElement {
   );
   prevAgentStatusRef.current = agentStatus;
 
+  // ── Why the last turn stopped ───────────────────────────────────────────
+  // Shown as a quiet line under the final message. It only appears when this
+  // session actually observed a terminal signal — a transcript hydrated from
+  // disk carries no ending, and claiming "completed normally" for it would be
+  // a guess. A live turn has no ending either, so it is suppressed too.
+  const turnOutcome = useMemo<TurnOutcome | undefined>(() => {
+    if (isStreaming || trajectoryCalls.length === 0) return undefined;
+    const hasObservedEnding = Boolean(error) || interrupted || lastStopReason !== undefined;
+    if (!hasObservedEnding) return undefined;
+    const ending: TurnEnding = error
+      ? { kind: 'error' }
+      : interrupted
+        ? { kind: 'interrupted' }
+        : { kind: 'complete' };
+    return deriveTurnOutcome({ ending, stopReason: lastStopReason, isStreaming });
+  }, [isStreaming, trajectoryCalls.length, error, interrupted, lastStopReason]);
+
   // ── Context window size for the status bar ───────────────────────────────
   // Resolve the active model's max_context from settings. Models without an
   // explicit max_context carry 0 (see settingsStore), so treat a non-positive
@@ -1484,6 +1503,7 @@ export function App(): React.ReactElement {
             calls={trajectoryCalls}
             isEmpty={isEmpty}
             isStreaming={isStreaming}
+            outcome={turnOutcome}
           />
 
           {/* Permission prompt — inline above composer (Claude Code style) */}

@@ -705,6 +705,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // the renderer would otherwise stay on "thinking" until the next message,
       // so the `finally` below publishes a best-effort turn end.
       let turnEnded = false;
+      // The last stop reason the engine reported for this turn. Every model step
+      // reports one (`end_turn`, `tool_use`, `max_tokens`, …); the *last* is the
+      // one that actually ended the turn, so it is what the UI explains. Kept
+      // here because the terminal event fires per turn, not per step.
+      let lastStopReason: string | undefined;
       // Accumulate Claude Code's structured content (thinking / tool_use /
       // tool_result) across the turn so the full transcript — not just the
       // final text — can be persisted for later session reloads. The Coderix
@@ -943,6 +948,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                       (b as { type?: string }).type !== 'thinking',
                   );
                 if (stopReason && (engine !== 'claude-code' || hasNonThinkingBlock)) {
+                  lastStopReason = stopReason;
                   safeSend(mainWindow, IPC_CHANNELS.STREAM_DONE, {
                     stopReason,
                     usage: msg.message.usage,
@@ -1132,6 +1138,11 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
                   totalCost?: number;
                   lastUsage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
                 };
+                // The engine's terminal `done` carries the turn's own stop reason. The
+                // per-step assistant messages above report one too, but a turn
+                // can end without a final assistant block (a plain-text result,
+                // an error surfaced as text), so this is the dependable source.
+                if (data.stopReason) lastStopReason = data.stopReason;
                 // Persist the final LLM call. When the SDK delivered the answer as
                 // structured blocks, `flushClaudeAssistant` already wrote it; the
                 // `data.result` fallback covers a plain-text response that never
@@ -1227,6 +1238,9 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               safeSend(mainWindow, IPC_CHANNELS.STREAM_TURN_DONE, {
                 sessionId: streamSessionId,
                 epoch: streamEpoch,
+                // Why the turn ended, for the summary line under the last
+                // message. `undefined` when the engine never reported one.
+                stopReason: lastStopReason,
               });
               break;
             }

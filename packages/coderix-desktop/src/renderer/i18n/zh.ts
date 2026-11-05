@@ -561,6 +561,17 @@ export const zh = {
   'chat.showEarlier': '显示更早消息',
   'chat.hiddenCalls': '已折叠 {count} 条早期记录',
 
+  // ── 本轮结束原因（最后一轮消息下方） ────────────────
+  'turn.complete': '本轮已正常完成',
+  'turn.running': '正在执行…',
+  'turn.maxTokens': '已输出到长度上限，本轮被截断（发送「继续」可接着往下写）',
+  'turn.refusal': '模型基于内容安全策略拒绝了本轮的后续输出',
+  'turn.paused': '模型暂停了本轮，等待继续',
+  'turn.interrupted': '本轮已被手动停止',
+  'turn.timeout': '模型长时间无响应，本轮已超时中止',
+  'turn.error': '本轮因错误中断',
+  'turn.incomplete': '本轮未收到结束信号就中断了（可能是网络或模型服务中断）',
+
   // ── 错误页 ──────────────────────────────────────────
   'error.title': '出现错误',
   'error.unexpected': '发生未知错误',

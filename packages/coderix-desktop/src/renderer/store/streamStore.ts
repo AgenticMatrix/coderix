@@ -506,7 +506,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
     // The engine emitted its terminal `done` for this turn — the authoritative
     // per-turn end signal. Only now may the turn flip to idle (its ActivityLine
     // shows Done and `isStreaming` stops), no matter how many tool steps ran.
-    const unsubTurnDone = onStreamTurnDone((sessionId?: string, epoch?: number) => {
+    const unsubTurnDone = onStreamTurnDone((sessionId?: string, epoch?: number, stopReason?: string) => {
       const sid = sessionOf(sessionId);
       // Ignore a stale turn's late terminal signal: only the current (or a
       // newer, adopted) epoch may flip streaming off. See acceptTerminalEpoch.
@@ -517,6 +517,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // short and did not fail, so neither the bar nor the row may keep one.
       useChatStore.getState().setSessionError(sid || undefined, null);
       useChatStore.getState().clearInterrupted(sid || undefined);
+      useChatStore.getState().setSessionStopReason(sid || undefined, stopReason ?? null);
       useChatStore.getState().setSessionStreaming(sid || undefined, false);
       refreshSidebarSession(false, sid);
     });
@@ -544,6 +545,7 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
         // only marks a turn it saw running. (The abort can also be reported
         // here rather than by the local stop handler, e.g. another window.)
         useChatStore.getState().interruptStream(sid || undefined);
+        useChatStore.getState().setSessionStopReason(sid || undefined, 'interrupted');
         useChatStore.getState().setSessionStreaming(sid || undefined, false);
         // Complete any committed tool_use still marked "executing"/"pending".
         // A tool whose result was never attached (e.g. an answered AskUserQuestion
@@ -572,6 +574,9 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       // one state: the viewed slot or the session's map slot, never both.
       useChatStore.getState().setSessionError(sid, error);
       useChatStore.getState().clearInterrupted(sid || undefined);
+      // The turn ended without a model finish, so the summary line explains the
+      // failure rather than echoing whatever stop reason an earlier step had.
+      useChatStore.getState().setSessionStopReason(sid || undefined, code ?? 'error');
       useChatStore.getState().setSessionStreaming(sid || undefined, false);
       writeCurrent(sid, null);
       refreshSidebarSession(false, sid);

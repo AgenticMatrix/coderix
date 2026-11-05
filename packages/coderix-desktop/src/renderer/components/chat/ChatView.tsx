@@ -4,6 +4,8 @@ import { ChevronDown, Zap } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
 import type { TrajectoryCall } from './trajectory/trajectoryTypes';
 import { TrajectoryCallCard } from './trajectory/TrajectoryCallCard';
+import { TurnOutcomeLine } from './TurnOutcomeLine';
+import type { TurnOutcome } from '../../turn-outcome.js';
 import './ChatView.css';
 
 export interface ChatViewProps {
@@ -13,6 +15,8 @@ export interface ChatViewProps {
   isEmpty: boolean;
   /** Whether a message is currently streaming. */
   isStreaming: boolean;
+  /** Why the last turn stopped, shown under the final message. */
+  outcome?: TurnOutcome;
 }
 
 /** Only the tail of the conversation is mounted. Each call carries a full tool
@@ -28,7 +32,7 @@ const LOAD_MORE_CALLS = 20;
  * by default, each block summarizing to one line), and the final answer text
  * (always visible). A "C+" circle marks the start of the agent's work.
  */
-export function ChatView({ calls, isEmpty, isStreaming }: ChatViewProps): React.ReactElement {
+export function ChatView({ calls, isEmpty, isStreaming, outcome }: ChatViewProps): React.ReactElement {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -143,6 +147,10 @@ export function ChatView({ calls, isEmpty, isStreaming }: ChatViewProps): React.
             </motion.div>
           ))}
         </AnimatePresence>
+
+        {/* Why the last turn stopped — sits under the final message, quiet
+            enough to read as context rather than an alert. */}
+        {outcome && <TurnOutcomeLine outcome={outcome} />}
 
         <div ref={messagesEndRef} />
       </div>

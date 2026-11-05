@@ -14,6 +14,13 @@ export interface ChatState {
   error: string | null;
   /** The last turn was stopped by the user and nothing has started since. */
   interrupted: boolean;
+  /**
+   * The `stop_reason` the engine reported for the last settled turn, shown in
+   * the outcome line under the final message. Absent until a turn ends, and
+   * cleared when a new one starts so a fresh turn never inherits the previous
+   * explanation.
+   */
+  lastStopReason?: string;
 
   // Backgrounded sessions' state. A session's transcript is stored here only
   // while it is *not* the viewed session; on switch-in it is popped into the
@@ -29,6 +36,12 @@ export interface ChatState {
    */
   errorBySession: Record<string, string>;
   interruptedBySession: Record<string, boolean>;
+  /**
+   * Per-session twin of `lastStopReason`. A backgrounded turn settles while the
+   * user is elsewhere, so its ending has to travel with the session or the
+   * summary line would describe whichever turn happened to be viewed last.
+   */
+  stopReasonBySession: Record<string, string>;
   // Per-session stream epoch — bumped on each sendMessage, echoed back by the
   // main process on terminal events (done/error) so a stale turn's late signal
   // can be ignored after an interrupt-and-resend.
@@ -44,6 +57,8 @@ export interface ChatState {
   setError: (error: string | null) => void;
   /** Route a terminal error to the viewed slot or the session's map slot. */
   setSessionError: (sessionId: string | undefined, error: string | null) => void;
+  /** Record why a session's last turn ended (or clear it when a new turn starts). */
+  setSessionStopReason: (sessionId: string | undefined, stopReason: string | null) => void;
 
   // Per-session routing helpers used by streamStore to land a stream event in
   // the right session (flat when it is the viewed session, else the map).
@@ -111,6 +126,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   streamingBySession: {},
   errorBySession: {},
   interruptedBySession: {},
+  stopReasonBySession: {},
   streamEpochBySession: {},
 
   sendMessage: async (content: string, images?: ImageAttachment[]) => {
@@ -142,6 +158,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       isStreaming: true,
       error: null,
       interrupted: false,
+      // The previous turn's ending no longer describes this session — the new
+      // turn will report its own when it settles.
+      lastStopReason: undefined,
       streamEpochBySession: sessionId
         ? {
             ...state.streamEpochBySession,
@@ -202,6 +221,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const streamingBySession = { ...state.streamingBySession };
     const errorBySession = { ...state.errorBySession };
     const interruptedBySession = { ...state.interruptedBySession };
+    const stopReasonBySession = { ...state.stopReasonBySession };
     if (oldId) {
       // Re-insert so the newest entry sorts last and eviction drops the oldest.
       delete messagesBySession[oldId];
@@ -213,6 +233,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       else delete errorBySession[oldId];
       if (state.interrupted) interruptedBySession[oldId] = true;
       else delete interruptedBySession[oldId];
+      if (state.lastStopReason) stopReasonBySession[oldId] = state.lastStopReason;
+      else delete stopReasonBySession[oldId];
     }
 
     // Pop the target's cached transcript (if any) into the viewed slot. A
@@ -224,11 +246,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const nextStreaming = id ? (streamingBySession[id] ?? false) : false;
     const nextError = id ? (errorBySession[id] ?? null) : null;
     const nextInterrupted = id ? Boolean(interruptedBySession[id]) : false;
+    const nextStopReason = id ? stopReasonBySession[id] : undefined;
     if (id) {
       delete messagesBySession[id];
       delete streamingBySession[id];
       delete errorBySession[id];
       delete interruptedBySession[id];
+      delete stopReasonBySession[id];
     }
     messagesBySession = trimSessionCache(messagesBySession, streamingBySession);
 
@@ -239,10 +263,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       streamingContent: '',
       error: nextError,
       interrupted: nextInterrupted,
+      lastStopReason: nextStopReason,
       messagesBySession,
       streamingBySession,
       errorBySession,
       interruptedBySession,
+      stopReasonBySession,
     });
     return hadCached;
   },
@@ -267,6 +293,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       if (error) next[target] = error;
       else delete next[target];
       return { errorBySession: next };
+    });
+  },
+
+  setSessionStopReason: (sessionId, stopReason) => {
+    const viewed = get().sessionId;
+    const target = resolveTarget(sessionId, viewed);
+    if (target === viewed) {
+      if (get().lastStopReason !== (stopReason ?? undefined)) {
+        set({ lastStopReason: stopReason ?? undefined });
+      }
+      return;
+    }
+    set((s) => {
+      const current = s.stopReasonBySession[target];
+      if (!stopReason) {
+        if (current === undefined) return s;
+        const next = { ...s.stopReasonBySession };
+        delete next[target];
+        return { stopReasonBySession: next };
+      }
+      if (current === stopReason) return s;
+      return { stopReasonBySession: { ...s.stopReasonBySession, [target]: stopReason } };
     });
   },
 
