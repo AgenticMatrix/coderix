@@ -180,10 +180,14 @@ export function createCadViewerManager(windowManager: WindowManager): CadViewerM
           settled = true;
           clearTimeout(timer);
           setStatus('running');
+          // The launcher's `url` carries its startup cwd as the path (viewer/ when
+          // spawned with `--prefix`), but the renderer appends the workspace path to
+          // whatever baseUrl it gets. Keeping only the origin avoids duplicating both.
+          const port = match.port ?? CAD_VIEWER_PORT;
           resolve({
             status: 'running',
-            port: match.port ?? CAD_VIEWER_PORT,
-            baseUrl: match.url ?? `http://${CAD_VIEWER_HOST}:${CAD_VIEWER_PORT}`,
+            port,
+            baseUrl: `http://${CAD_VIEWER_HOST}:${port}`,
           });
         }
       });
