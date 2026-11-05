@@ -82,7 +82,8 @@ export { createCallModelFromClient, createCallModel, createCallModelFromOpenAI }
 export type { CallModelConfig } from './core/provider-adapter.js';
 export { Compactor, requestManualCompact } from './core/compactor.js';
 export { snipCompact, createSnipMarker, SNIP_MARKER, requestSnip, consumeSnipRequest } from './core/snip-compact.js';
-export { TokenBudget } from './core/token-budget.js';
+export type { TokenBudget } from './core/token-budget.js';
+export { createTokenBudget, createTokenBudgetFromCount, isBudgetExceeded, needsCompaction } from './core/token-budget.js';
 export { ToolExecutionQueue } from './core/tool-queue.js';
 export { MessageQueue } from './core/message-queue.js';
 export type { QueuedMessage } from './core/message-queue.js';
