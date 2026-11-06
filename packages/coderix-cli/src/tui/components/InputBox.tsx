@@ -1,21 +1,18 @@
 import { Box, Text } from '@coderix/tui';
 import { memo } from 'react';
-import { describeImage } from '../clipboard-image.js';
 
 interface InputBoxProps {
   inputText: string;
   cursorPosition: number;
   isStreaming: boolean;
   theme?: string;
-  /** Images queued with Ctrl+V, shown above the prompt until sent. */
-  pendingImages?: Array<{ mediaType: string; width?: number; height?: number; bytes?: number }>;
 }
 
 /**
  * Renders the text input at the bottom of the chat.
  * Supports multi-line input (Ctrl+Enter) with a cursor on the active line.
  */
-export const InputBox = memo(function InputBox({ inputText, cursorPosition, isStreaming, theme, pendingImages }: InputBoxProps) {
+export const InputBox = memo(function InputBox({ inputText, cursorPosition, isStreaming, theme }: InputBoxProps) {
   const PROMPT_COLOR = '#A855F7';
   const CURSOR_COLOR = theme === 'light' ? '#000000' : '#FFFFFF';
   const CURSOR_TEXT_COLOR = theme === 'light' ? '#FFFFFF' : '#000000';
@@ -43,20 +40,6 @@ export const InputBox = memo(function InputBox({ inputText, cursorPosition, isSt
         paddingY={0}
         flexDirection="column"
       >
-        {pendingImages && pendingImages.length > 0 && (
-          <Box flexDirection="column" marginBottom={0}>
-            {pendingImages.map((img, i) => (
-              <Box key={i} flexDirection="row">
-                <Box marginRight={1}>
-                  <Text color="#4ECDC4">{'⧉'}</Text>
-                </Box>
-                <Text color="#4ECDC4">
-                  {`[图片 ${i + 1}: ${describeImage(img)}]`}
-                </Text>
-              </Box>
-            ))}
-          </Box>
-        )}
         {lines.length === 0 ? (
           <Box flexDirection="row">
             <Box marginRight={1}>

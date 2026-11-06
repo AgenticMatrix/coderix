@@ -19,10 +19,7 @@ import type {
   ChatAction,
   ApprovalRequest,
   BlockDeltaType,
-  ImageBlock,
-  PendingImage,
 } from '../../types.js';
-import { describeImage } from '../clipboard-image.js';
 import type { AppState } from '../../state/AppState.js';
 import { nextMessageId } from './useChatReducer.js';
 import { useDeltaThrottle, truncateResult } from './streamHelpers.js';
@@ -178,12 +175,9 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
    * Run a single agent turn: user input → QueryEngine → dispatch → React render.
    */
   const runAgentTurn = useCallback(
-    async (text: string, options?: { fromQueue?: boolean; images?: PendingImage[] }) => {
+    async (text: string, options?: { fromQueue?: boolean }) => {
       const trimmed = text.trim();
-      const images = options?.images;
-      // An image-only turn is valid: there is nothing to trim, but there is
-      // still something to send.
-      if (trimmed.length === 0 && !images?.length) return;
+      if (trimmed.length === 0) return;
 
       // Skip ADD_USER_MESSAGE when processing from queue (already in chat)
       if (!options?.fromQueue) {
@@ -191,15 +185,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
           id: nextMessageId(),
           role: 'user',
           content: '',
-          blocks: [
-            // Images render as labels ahead of the text, matching block order
-            // sent to the model.
-            ...(images ?? []).map((img): ImageBlock => ({
-              type: 'image',
-              label: describeImage(img),
-            })),
-            ...(trimmed ? [{ type: 'text', content: trimmed } satisfies TextBlock] : []),
-          ],
+          blocks: [{ type: 'text', content: trimmed } satisfies TextBlock],
           timestamp: Date.now(),
         };
         routeDispatch({ type: 'ADD_USER_MESSAGE', message: userMsg });
@@ -213,7 +199,7 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
         let currentAssistantId: number | null = null;
         let pendingBlocks: TuiContentBlock[] = [];
 
-        for await (const event of engine.submitMessage(trimmed, images)) {
+        for await (const event of engine.submitMessage(trimmed)) {
           switch (event.type) {
             // ── Message event (stream_event | assistant | user | progress) ──
             case 'message': {
@@ -741,10 +727,8 @@ export function useAgentBridge({ engine, dispatch, setAppState, subAgentViewRef 
 
   // Subscribe to queue drain events so queued messages auto-process
   useEffect(() => {
-    const unsub = engine.onQueueDrain((message, images) => {
-      // A turn deferred behind a blocking tool must arrive with its
-      // attachments, not just its text.
-      runAgentTurnRef.current(message, { fromQueue: true, images });
+    const unsub = engine.onQueueDrain((message) => {
+      runAgentTurnRef.current(message, { fromQueue: true });
     });
     return unsub;
   }, [engine]);

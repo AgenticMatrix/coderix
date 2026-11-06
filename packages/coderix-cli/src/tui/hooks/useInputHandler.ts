@@ -1,35 +1,11 @@
 import { useRef } from 'react';
 import { useInput } from '@coderix/tui';
 
-import type { Message, ChatAction, PendingImage } from '../../types.js';
+import type { Message, ChatAction } from '../../types.js';
 import { statusPhaseOf, type AgentPhase } from '../agent-phase.js';
 import { expandPasteMarkers } from './useChatReducer.js';
 import { getSubAgentRegistry } from '@coderix/core';
 import { listCommandNames } from '../../commands/index.js';
-import { readClipboardImage, MAX_PENDING_IMAGES } from '../clipboard-image.js';
-
-/**
- * Read the clipboard and queue the image for the next turn.
- *
- * Clipboard reads are async and can fail for mundane reasons (text on the
- * clipboard, a headless session), so every failure is reported as a one-line
- * hint rather than thrown — pressing Ctrl+V on text must not break the prompt.
- */
-async function attachClipboardImage(
-  dispatch: React.Dispatch<ChatAction>,
-  onImageError?: (message: string) => void,
-): Promise<void> {
-  const result = await readClipboardImage();
-  if (result.ok) {
-    dispatch({ type: 'ADD_PENDING_IMAGE', image: result.image });
-    return;
-  }
-  if (result.error.code === 'unsupported-platform') {
-    onImageError?.(`clipboard images are not supported on this platform`);
-    return;
-  }
-  onImageError?.(result.error.message);
-}
 
 /**
  * Phases where the model itself is producing, so Ctrl+C interrupts the turn
@@ -58,7 +34,7 @@ export interface InputHandlerDeps {
   agentPhase: AgentPhase;
   messages: Message[];
   dispatch: React.Dispatch<ChatAction>;
-  onSend: (text: string, images?: PendingImage[]) => void;
+  onSend: (text: string) => void;
   /** Interrupt the running main agent (streaming/thinking). */
   onInterrupt: () => void;
   /** Kill all sub-agents and background tools. */
@@ -81,8 +57,6 @@ export interface InputHandlerDeps {
   historyScratch: string;
   /** Paste block contents for expanding markers before send. */
   pasteBlocks: Record<number, string>;
-  /** Images queued from the clipboard, sent with the next turn. */
-  pendingImages: PendingImage[];
   /** Current sub-agent view state (null = main chat). */
   subAgentView?: { agentId: string } | null;
   /** Last viewed sub-agent ID — Ctrl+T defaults to this. */
@@ -91,8 +65,6 @@ export interface InputHandlerDeps {
   commandPickerIndex: number;
   /** Callback to send a message to a sub-agent (immersive mode). */
   onSubAgentSend?: (agentId: string, text: string) => void;
-  /** Reports a clipboard problem (no image, unsupported platform) to the UI. */
-  onImageError?: (message: string) => void;
 }
 
 /**
@@ -106,8 +78,6 @@ export interface InputHandlerDeps {
  *   Ctrl+T      — view sub-agent transcript
  *   Ctrl+P      — toggle task & todo panels
  *   Ctrl+K      — toggle team picker
- *   Ctrl+V      — attach the image on the clipboard
- *   Ctrl+X      — drop the most recently attached image
    Esc         — close sub-agent view / clear input
  *   ← → Home End — cursor movement
  *   Backspace/Del — deletion
@@ -129,14 +99,12 @@ export function useInputHandler({
   historyIndex,
   historyScratch,
   pasteBlocks,
-  pendingImages,
   subAgentView,
   lastAgentViewId,
   teamPicker,
   agentCount = 0,
   commandPickerIndex,
   onSubAgentSend,
-  onImageError,
 }: InputHandlerDeps) {
   const slashRef = useRef(onSlashCommand);
   slashRef.current = onSlashCommand;
@@ -303,30 +271,6 @@ export function useInputHandler({
         return;
       }
 
-      // Ctrl+X drops the most recently attached image. Without this a mis-paste
-      // can only be undone by restarting: the images are replayed into context
-      // on every following turn, so a stray screenshot keeps costing tokens.
-      if (key.ctrl && input === 'x' && pendingImages.length > 0) {
-        dispatch({ type: 'REMOVE_PENDING_IMAGE', index: pendingImages.length - 1 });
-        return;
-      }
-
-      // Ctrl+V attaches the image on the OS clipboard.
-      //
-      // A terminal cannot deliver image bytes through stdin, so this asks the
-      // clipboard directly. Ctrl+V is free here — text paste arrives as a
-      // multi-character chunk instead, so binding it costs nothing.
-      if (key.ctrl && input === 'v') {
-        // The reducer is the real cap; checking here gives the user a reason
-        // instead of swallowing the keystroke.
-        if (pendingImages.length >= MAX_PENDING_IMAGES) {
-          onImageError?.('at most ' + MAX_PENDING_IMAGES + ' images per message');
-          return;
-        }
-        void attachClipboardImage(dispatch, onImageError);
-        return;
-      }
-
       // Ctrl+K opens team member picker overlay
       if (key.ctrl && input === 'k') {
         if (teamPicker) {
@@ -432,21 +376,18 @@ export function useInputHandler({
 
       if (key.return) {
         const cur = inputRef.current;
-        // An image-only turn is valid — the model answers about the picture
-        // alone, exactly as in the desktop composer.
-        const hasImages = pendingImages.length > 0;
-        if (cur.trim().length > 0 || hasImages) {
+        if (cur.trim().length > 0) {
           // Auto-resume following when user sends a message
           dispatch({ type: 'UNFREEZE_DISPLAY' });
           // Expand paste markers to full text before sending / saving history
           const expandedText = expandPasteMarkers(cur.trim(), pasteBlocks);
           dispatch({ type: 'ADD_HISTORY', line: expandedText });
           dispatch({ type: 'SET_HISTORY_INDEX', index: -1 });
-          // Check for slash commands first — a slash command never carries images.
+          // Check for slash commands first
           if (cur.startsWith('/') && slashRef.current?.(cur)) {
             dispatch({ type: 'SET_INPUT', text: '' });
           } else {
-            onSend(expandedText, hasImages ? pendingImages : undefined);
+            onSend(expandedText);
           }
         }
         return;

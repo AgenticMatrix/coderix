@@ -5,7 +5,6 @@ import type {
   TextBlock, ThinkingBlock,
 } from '../../types.js';
 import { truncateResult } from './streamHelpers.js';
-import { MAX_PENDING_IMAGES } from '../clipboard-image.js';
 
 let messageIdCounter = 0;
 export function nextMessageId(): number {
@@ -236,7 +235,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         cursorPosition: 0,
         error: null,
         pasteBlocks: {},
-        pendingImages: [],
         turnOutputTokens: 0,
         turnEstimatedTokens: 0,
         turnStartedAt: Date.now(),
@@ -1016,21 +1014,6 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
-    case 'ADD_PENDING_IMAGE':
-      // Four is the practical ceiling: each one is replayed into the context on
-      // every subsequent turn, so a careless Ctrl+V spree quietly burns tokens.
-      if (state.pendingImages.length >= MAX_PENDING_IMAGES) return state;
-      return { ...state, pendingImages: [...state.pendingImages, action.image] };
-
-    case 'REMOVE_PENDING_IMAGE':
-      return {
-        ...state,
-        pendingImages: state.pendingImages.filter((_, i) => i !== action.index),
-      };
-
-    case 'CLEAR_PENDING_IMAGES':
-      return state.pendingImages.length === 0 ? state : { ...state, pendingImages: [] };
-
     case 'UPDATE_TOKEN_USAGE': {
       const inputTokens = action.usage.inputTokens ?? 0;
       const outputTokens = action.usage.outputTokens ?? 0;
@@ -1129,7 +1112,6 @@ export function createInitialState(model: string, inputPrice = 0.5, outputPrice 
     historyIndex: -1,
     historyScratch: '',
     pasteBlocks: {},
-    pendingImages: [],
     contentExpanded: false,
     renderRevision: 0,
     subAgentView: null,
