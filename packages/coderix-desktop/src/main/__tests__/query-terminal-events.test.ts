@@ -133,6 +133,44 @@ beforeEach(() => {
   sessionManager.create({ title: `probe-${Date.now()}`, cwd: '/tmp', model: 'test-model' });
 });
 
+describe('query:submit retry notices', () => {
+  it('forwards a retry event as stream:retry, not stream:error', async () => {
+    engineFactory.current = stageStream([
+      { type: 'message', data: { type: 'stream_event', event: { type: 'request_start' } } },
+      {
+        type: 'retry',
+        data: { attempt: 1, maxRetries: 3, delayMs: 1000, message: '429 rate limit', errorClass: 'rate_limit' },
+      },
+      { type: 'message', data: { type: 'stream_event', event: { type: 'message_stop' } } },
+      { type: 'done', data: {} },
+    ]);
+
+    await ipcHandlers.get('query:submit')!({}, { query: 'hi' });
+    await waitFor(() => sentOn('stream:retry').length > 0);
+
+    // The retry notice takes the advisory channel...
+    expect(sentOn('stream:retry')).toHaveLength(1);
+    expect(sentOn('stream:retry')[0]).toMatchObject({ attempt: 1, maxRetries: 3 });
+    // ...and never the terminal one.
+    expect(sentOn('stream:error')).toEqual([]);
+  });
+
+  it('still reports the turn as done after a retry', async () => {
+    engineFactory.current = stageStream([
+      { type: 'retry', data: { attempt: 1, maxRetries: 3, delayMs: 0, message: '503', errorClass: 'server_error' } },
+      { type: 'message', data: { type: 'stream_event', event: { type: 'message_stop' } } },
+      { type: 'done', data: {} },
+    ]);
+
+    await ipcHandlers.get('query:submit')!({}, { query: 'hi' });
+    await waitFor(() => sentOn('stream:turnDone').length > 0);
+
+    // A retry must not end the turn: a later done still produces turnDone, and
+    // no TURN_INCOMPLETE is emitted for the gap.
+    expect(sentOn('stream:error')).toEqual([]);
+  });
+});
+
 describe('query:submit terminal events', () => {
   it('reports TURN_INCOMPLETE when the stream stops without a terminal event', async () => {
     engineFactory.current = stageStream([

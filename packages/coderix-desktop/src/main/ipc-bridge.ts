@@ -154,6 +154,7 @@ export const IPC_CHANNELS = {
   STREAM_DONE: 'stream:done',
   STREAM_TURN_DONE: 'stream:turnDone',
   STREAM_ERROR: 'stream:error',
+  STREAM_RETRY: 'stream:retry',
   STREAM_PHASE: 'stream:phase',
   STREAM_TASKS: 'stream:tasks',
   STREAM_COMPACT: 'stream:compact',
@@ -808,6 +809,18 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // Clear any stale coalescing state from a previous (possibly aborted) turn.
       discardStreamBuffer(streamSessionId);
 
+      /** Forward a retry notice as an advisory; the turn keeps running. */
+      const sendRetryNotice = (d: { attempt?: number; maxRetries?: number; delayMs?: number; message?: string; errorClass?: string } | undefined): void => {
+        safeSend(mainWindow, IPC_CHANNELS.STREAM_RETRY, {
+          attempt: d?.attempt ?? 0,
+          maxRetries: d?.maxRetries ?? 0,
+          delayMs: d?.delayMs ?? 0,
+          message: sanitizeErrorMessage(d?.message ?? ''),
+          errorClass: d?.errorClass ?? 'transient',
+          sessionId: streamSessionId,
+        });
+      };
+
       try {
         for await (const event of engineStream) {
           // Once the turn is aborted, stop consuming content — but still let a
@@ -824,6 +837,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
           }
 
           switch (event.type) {
+            case 'retry': {
+              // Advisory, not terminal: the turn is still running and the next
+              // attempt's blocks must still land. Treating this as an error
+              // would end the turn and make the renderer drop the answer that
+              // is about to arrive.
+              sendRetryNotice(event.data as { attempt?: number; maxRetries?: number; delayMs?: number; message?: string; errorClass?: string });
+              break;
+            }
             case 'message': {
               const msg = event.data as {
                 type: string;

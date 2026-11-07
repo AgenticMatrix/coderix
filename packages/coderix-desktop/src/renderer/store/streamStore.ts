@@ -5,12 +5,14 @@ import { createId } from './types.js';
 import type { ChatMessage } from './types.js';
 import { useChatStore } from './chatStore.js';
 import { useSessionStore } from './sessionStore.js';
+import { useUIStore } from './uiStore.js';
 import {
   onStreamBlock,
   onStreamDone,
   onStreamCompact,
   onStreamError,
   onStreamPhase,
+  onStreamRetry,
   onStreamTasks,
   onStreamTurnDone,
   onTokenUsage,
@@ -582,6 +584,27 @@ export const useStreamStore = create<StreamState>()((set, get) => ({
       refreshSidebarSession(false, sid);
     });
     cleanups.push(unsubError);
+
+    // ── Retry Notice ───────────────────────────────────────
+    // A retry is advisory: the call failed and is being re-issued, but the turn
+    // is still alive. Crucially it must NOT touch isStreaming, the pending
+    // message, or sessionError — the successful retry's blocks still need to
+    // land, and tearing the turn down here would silently discard the answer.
+    const unsubRetry = onStreamRetry((notice) => {
+      const sid = sessionOf(notice.sessionId);
+      // Re-assert "waiting on the model" so the status bar does not read idle
+      // during the backoff gap.
+      setRequesting(sid, true);
+      if (sid === viewedSession()) {
+        const label =
+          notice.maxRetries > 0
+            ? notice.message + '（第 ' + notice.attempt + '/' + notice.maxRetries + ' 次重试）'
+            : notice.message;
+        useUIStore.getState().addNotification({ type: 'warning', message: label, duration: 4000 });
+      }
+      refreshSidebarSession(false, sid);
+    });
+    cleanups.push(unsubRetry);
 
     // ── Token Usage ────────────────────────────────────────
     const unsubToken = onTokenUsage((stats, sessionId?: string) => {

@@ -27,7 +27,9 @@ export interface Subject<T> extends Observer<T>, Observable<T> {}
 // ── Event types ─────────────────────────────────────────────────────────
 
 export interface EngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title' | 'task';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title' | 'task'
+    /** A model call failed and is being retried; the turn is still running. */
+    | 'retry';
   data?: unknown;
   deferred?: unknown;
 }

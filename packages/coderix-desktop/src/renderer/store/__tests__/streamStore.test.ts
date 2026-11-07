@@ -7,6 +7,7 @@ vi.mock('../../ipc-client.js', () => ({
   onStreamDone: vi.fn(),
   onStreamError: vi.fn(),
   onStreamPhase: vi.fn(),
+  onStreamRetry: vi.fn(),
   onStreamTasks: vi.fn(),
   onStreamTurnDone: vi.fn(),
   onTokenUsage: vi.fn(),
@@ -22,6 +23,7 @@ import {
   onStreamDone,
   onStreamError,
   onStreamPhase,
+  onStreamRetry,
   onStreamTasks,
   onStreamTurnDone,
   onTokenUsage,
@@ -52,6 +54,7 @@ let blockCb: BlockCb;
 let doneCb: DoneCb;
 let turnDoneCb: TurnDoneCb;
 let errorCb: ErrorCb;
+let retryCb: (notice: { attempt: number; maxRetries: number; delayMs: number; message: string; errorClass: string; sessionId?: string }) => void;
 let tokenCb: TokenCb;
 let phaseCb: (sessionId?: string) => void;
 let tasksCb: (tasks: RunningTaskSummary[], sessionId?: string) => void;
@@ -84,6 +87,10 @@ describe('streamStore turn lifecycle', () => {
     });
     vi.mocked(onStreamError).mockImplementation((cb) => {
       errorCb = cb as ErrorCb;
+      return () => {};
+    });
+    vi.mocked(onStreamRetry).mockImplementation((cb) => {
+      retryCb = cb as typeof retryCb;
       return () => {};
     });
     vi.mocked(onTokenUsage).mockImplementation((cb) => {
@@ -223,6 +230,53 @@ describe('streamStore turn lifecycle', () => {
 
     blockCb({ type: 'thinking', content: 'hm', state: 'pending', sessionId: 's1' });
     expect(useStreamStore.getState().requestingBySession.s1).toBeUndefined();
+  });
+
+  it('keeps the turn alive when a retry notice arrives', () => {
+    useChatStore.getState().sendMessage('hi');
+    useChatStore.getState().setStreamEpoch('s1', 1);
+    useChatStore.getState().setSessionStreaming('s1', true);
+
+    retryCb({
+      attempt: 1,
+      maxRetries: 3,
+      delayMs: 1000,
+      message: '429 rate limit exceeded',
+      errorClass: 'rate_limit',
+      sessionId: 's1',
+    });
+
+    // A retry is advisory: the turn is still running, so nothing may be torn
+    // down and no error may be surfaced.
+    expect(useChatStore.getState().isStreaming).toBe(true);
+    expect(useChatStore.getState().errorBySession?.s1 ?? null).toBeNull();
+    // The status bar should read "waiting on the model" during the backoff gap.
+    expect(useStreamStore.getState().requestingBySession.s1).toBe(true);
+  });
+
+  it('lets the retried answer render after a retry notice', () => {
+    useChatStore.getState().sendMessage('hi');
+    useChatStore.getState().setStreamEpoch('s1', 1);
+    useChatStore.getState().setSessionStreaming('s1', true);
+
+    retryCb({
+      attempt: 1,
+      maxRetries: 3,
+      delayMs: 0,
+      message: '503 unavailable',
+      errorClass: 'server_error',
+      sessionId: 's1',
+    });
+
+    // The blocks of the successful retry must still be accepted. If the retry
+    // notice had been treated as an error, isStreaming would be false and
+    // onStreamBlock would drop this block on the floor.
+    blockCb({ type: 'text', content: 'recovered answer', state: 'done', sessionId: 's1' });
+    flushFrame();
+
+    const msg = useStreamStore.getState().currentMessage;
+    expect(msg?.blocks.length).toBe(1);
+    expect(msg?.blocks[0]).toMatchObject({ type: 'text', content: 'recovered answer' });
   });
 
   it('tracks the running background task list per session', () => {

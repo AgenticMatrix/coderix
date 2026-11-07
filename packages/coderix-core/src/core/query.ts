@@ -55,6 +55,7 @@ import {
 } from './compactor.js';
 import { collectPostCompactAttachments } from './compact/post-compact-restore.js';
 import { classifyError } from './error-recovery.js';
+import { withStreamRetry, resolveRetryConfig } from './retry-stream.js';
 import { loadCodeAgentContext } from './context-loader.js';
 import { listTasks } from '../tasks/store.js';
 import { drainTaskNotifications, listTasks as listTrackedTasks } from '../tasks/task-tracker.js';
@@ -475,6 +476,19 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
   // immediately triggering a second one (manual → auto, or reactive loops).
   let didCompactThisTurn = false;
 
+  // Read once: retry knobs should not change mid-turn, and reading env on every
+  // model call would let an operator's edit apply inconsistently.
+  const retryConfig = resolveRetryConfig();
+  // Retry notices queued by the wrapper's onRetry callback, drained on the next
+  // event so the consumer sees them in order.
+  const retryNotices: Array<{
+    attempt: number;
+    maxRetries: number;
+    errorClass: string;
+    delayMs: number;
+    message: string;
+  }> = [];
+
   while (true) {
     // ── Per-turn reset ──────────────────────────────────────────────
     didCompactThisTurn = false;
@@ -761,17 +775,48 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       // session history over the wire on every API call.
       const apiMessages = windowMessages(messages, contextBudget);
 
-      // The request is going out. Announce it before the first byte so a slow
-      // provider reads as "requesting" rather than as a stalled or empty turn.
-      yield { type: 'stream_event', event: { type: 'request_start' } as StreamEvent };
-
-      for await (const event of callModel({
-        system: systemText,
-        messages: apiMessages,
-        tools: toolDefinitions,
-        signal: abortController.signal,
-        cacheControl: config.enableCacheControl,
-      })) {
+      // A failed call that produced no output is retried with backoff. The
+      // request_start lives inside the attempt so the UI keeps showing "waiting
+      // on the model" across retries, and a failed attempt's copy is dropped
+      // with it (the wrapper only forwards content-free events once the attempt
+      // actually produces output).
+      retryNotices.length = 0;
+      for await (const event of withStreamRetry(
+        () => (async function* () {
+          yield { type: 'request_start' } as StreamEvent;
+          yield* callModel({
+            system: systemText,
+            messages: apiMessages,
+            tools: toolDefinitions,
+            signal: abortController.signal,
+            cacheControl: config.enableCacheControl,
+          });
+        })(),
+        {
+          maxRetries: retryConfig.maxRetries,
+          baseDelayMs: retryConfig.baseDelayMs,
+          maxDelayMs: retryConfig.maxDelayMs,
+          abortSignal: abortController.signal,
+          onRetry: (attempt, classified, delayMs) => {
+            console.warn(
+              `[query] retrying model call (${attempt}/${retryConfig.maxRetries}) ` +
+                `after ${classified.category}: ${classified.message}`,
+            );
+            retryNotices.push({
+              attempt,
+              maxRetries: retryConfig.maxRetries,
+              errorClass: classified.category,
+              delayMs,
+              message: classified.message,
+            });
+          },
+        },
+      )) {
+        // Surface any queued retry before the events of the fresh attempt so the
+        // UI never shows a silent gap where the failed call used to be.
+        for (const notice of retryNotices.splice(0)) {
+          yield { type: 'system', subtype: 'retry', data: notice };
+        }
         // ── Stream events ──────────────────────────────────────────
         if ('type' in event) {
           // Always yield stream events to the TUI first

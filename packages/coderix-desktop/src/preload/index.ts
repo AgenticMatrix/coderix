@@ -79,6 +79,7 @@ const CH = {
   STREAM_DONE: 'stream:done',
   STREAM_TURN_DONE: 'stream:turnDone',
   STREAM_ERROR: 'stream:error',
+  STREAM_RETRY: 'stream:retry',
   STREAM_PHASE: 'stream:phase',
   STREAM_TASKS: 'stream:tasks',
   STREAM_COMPACT: 'stream:compact',
@@ -223,6 +224,17 @@ interface StreamTurnDone {
   stopReason?: string;
 }
 
+interface StreamRetry {
+  type: 'retry';
+  attempt: number;
+  maxRetries: number;
+  delayMs: number;
+  message: string;
+  errorClass: string;
+  sessionId?: string;
+  epoch?: number;
+}
+
 interface StreamPhase {
   type: 'phase';
   phase: string;
@@ -251,6 +263,7 @@ type StreamEventData =
   | StreamDone
   | StreamTurnDone
   | StreamError
+  | StreamRetry
   | StreamPhase
   | StreamTasks
   | StreamCompact;
@@ -353,6 +366,18 @@ function createEventListener(
             type: 'error',
             message: (data?.message as string) ?? 'Unknown error',
             code: (data?.code as string) ?? 'UNKNOWN',
+            sessionId: data?.sessionId as string | undefined,
+            epoch: data?.epoch as number | undefined,
+          });
+          break;
+        case CH.STREAM_RETRY:
+          callback({
+            type: 'retry',
+            attempt: (data?.attempt as number) ?? 0,
+            maxRetries: (data?.maxRetries as number) ?? 0,
+            delayMs: (data?.delayMs as number) ?? 0,
+            message: (data?.message as string) ?? '',
+            errorClass: (data?.errorClass as string) ?? 'transient',
             sessionId: data?.sessionId as string | undefined,
             epoch: data?.epoch as number | undefined,
           });
@@ -1173,6 +1198,7 @@ const coderixAPI = {
         CH.STREAM_DONE,
         CH.STREAM_TURN_DONE,
         CH.STREAM_ERROR,
+        CH.STREAM_RETRY,
         CH.STREAM_PHASE,
         CH.STREAM_TASKS,
         CH.STREAM_COMPACT,

@@ -15,7 +15,7 @@
 import { query as claudeQuery, getSubagentMessages, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Options, HookCallback, HookCallbackMatcher, PermissionMode as SdkPermissionMode, SpawnOptions, SpawnedProcess, SdkPluginConfig, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryEngineEvent, Message } from '../../../../packages/coderix-core/src/index.js';
-import { PermissionMode } from '../../../../packages/coderix-core/src/index.js';
+import { PermissionMode, truncateSafely, resolveRetryConfig, computeRetryDelay, classifyError } from '../../../../packages/coderix-core/src/index.js';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -420,6 +420,18 @@ function createSpawnFn(
     }
     if (modelName) env.ANTHROPIC_MODEL = modelName;
 
+    // The CLI has a hard-coded "small/fast" model (claude-haiku-…) that it uses
+    // for helper work — session titles, sub-agent plumbing, token counting — and
+    // it does NOT inherit ANTHROPIC_MODEL for those. On a third-party endpoint
+    // that only serves the bound model this is a guaranteed 404 mid-turn, so
+    // pin both aliases (current + legacy name) to the bound model.
+    if (modelName) {
+      env.ANTHROPIC_DEFAULT_HAIKU_MODEL = modelName;
+      env.ANTHROPIC_SMALL_FAST_MODEL = modelName;
+      env.ANTHROPIC_DEFAULT_SONNET_MODEL = modelName;
+      env.ANTHROPIC_DEFAULT_OPUS_MODEL = modelName;
+    }
+
     // Pin the model's configured context window (the CLI otherwise assumes 200K
     // for unknown model ids) and an explicit auto-compact window — the latter is
     // what re-enables proactive compaction, which the CLI skips whenever the
@@ -531,7 +543,7 @@ function buildReplayPreamble(history: Message[]): string {
         if (content) {
           const clipped =
             content.length > REPLAY_TOOL_RESULT_MAX
-              ? content.slice(0, REPLAY_TOOL_RESULT_MAX) + '…'
+              ? truncateSafely(content, REPLAY_TOOL_RESULT_MAX) + '…'
               : content;
           parts.push(`[工具结果]\n${clipped}`);
         }
@@ -1086,10 +1098,64 @@ function repairCorruptSessionImages(opts: ClaudeCodeQueryOptions): boolean {
  * first such failure we replace it with text and re-run the same prompt once
  * (the failed request produced no model turn, so nothing is duplicated).
  */
+/** Reasons a turn may be re-run. Kept separate so budgets never overlap. */
+export type TurnRetryDecision =
+  | { action: 'retry'; reason: 'image' }
+  | { action: 'retry'; reason: 'transient'; error: Error; delayMs: number }
+  | { action: 'fail' };
+
+export interface TurnRetryState {
+  repairedImage: boolean;
+  transientRetries: number;
+  /** True once any model text or tool call reached the caller. */
+  substantive: boolean;
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+/**
+ * Decide whether a failed attempt may be re-run.
+ *
+ * A corrupt-image failure gets its own one-shot retry (repair, then re-send).
+ * Anything else is retried only while the attempt produced no output and the
+ * error classifies as transient — re-running after text or a tool call is
+ * visible would duplicate content or repeat a side effect.
+ */
+export function decideTurnRetry(
+  error: unknown,
+  state: TurnRetryState,
+): TurnRetryDecision {
+  const err = error instanceof Error ? error : new Error(String(error ?? ''));
+
+  if (!state.substantive && !state.repairedImage && isUnsupportedImageApiError(err.message)) {
+    // The caller performs the repair; this only says the retry is warranted.
+    return { action: 'retry', reason: 'image' };
+  }
+
+  if (state.substantive) return { action: 'fail' };
+  if (state.transientRetries >= state.maxRetries) return { action: 'fail' };
+
+  const classified = classifyError(err);
+  if (!classified.retryable) return { action: 'fail' };
+
+  return {
+    action: 'retry',
+    reason: 'transient',
+    error: classified.original,
+    delayMs: computeRetryDelay(state.transientRetries, state.baseDelayMs, state.maxDelayMs),
+  };
+}
+
 export async function* runClaudeCodeQuery(
   opts: ClaudeCodeQueryOptions,
 ): AsyncGenerator<QueryEngineEvent> {
   let repaired = false;
+  // Separate budget from the image-repair retry: a corrupt transcript must not
+  // consume the network-failure retries (or vice versa), or a session with one
+  // bad image would lose its ability to ride out a 429.
+  const retryConfig = resolveRetryConfig();
+  let transientRetries = 0;
   for (;;) {
     const heldErrorMessages: QueryEngineEvent[] = [];
     // A successful answer that merely quotes the provider's error text is held
@@ -1098,6 +1164,10 @@ export async function* runClaudeCodeQuery(
     let heldErrorText: string | null = null;
     let substantive = false;
     let retry = false;
+    /** Set when the attempt failed and we intend to re-spawn. */
+    let transientError: Error | null = null;
+    /** Backoff chosen when the retry decision was made. */
+    let retryDelayMs = 0;
 
     try {
       for await (const ev of runClaudeCodeQueryOnce(opts)) {
@@ -1115,12 +1185,33 @@ export async function* runClaudeCodeQuery(
             typeof data?.message === 'string' && isUnsupportedImageApiError(data.message)
               ? data.message
               : heldErrorText;
+          // `errorText` above only feeds the corrupt-image check (it prefers the
+          // held assistant text). Classification needs the engine's own message,
+          // otherwise a real 503 arrives as an empty string and never retries.
+          const failureText =
+            typeof data?.message === 'string' ? data.message : (heldErrorText ?? '');
           if (!repaired && !substantive && errorText && isUnsupportedImageApiError(errorText)) {
             if (repairCorruptSessionImages(opts)) {
               repaired = true;
               retry = true;
               break;
             }
+          }
+          // A transport-level failure before any model output is safe to
+          // re-issue: nothing reached the UI or the transcript yet. The
+          // corrupt-image case above already had its chance.
+          const decision = decideTurnRetry(new Error(failureText), {
+            repairedImage: repaired,
+            transientRetries,
+            substantive,
+            maxRetries: retryConfig.maxRetries,
+            baseDelayMs: retryConfig.baseDelayMs,
+            maxDelayMs: retryConfig.maxDelayMs,
+          });
+          if (decision.action === 'retry' && decision.reason === 'transient') {
+            transientError = decision.error;
+            retryDelayMs = decision.delayMs;
+            break;
           }
           yield ev;
           yield* heldErrorMessages;
@@ -1136,17 +1227,56 @@ export async function* runClaudeCodeQuery(
     } catch (err) {
       // Some SDK versions throw instead of yielding a terminal `result`.
       const message = err instanceof Error ? err.message : String(err);
-      if (
-        !repaired &&
-        !substantive &&
-        isUnsupportedImageApiError(message) &&
-        repairCorruptSessionImages(opts)
-      ) {
-        repaired = true;
-        retry = true;
+      const decision = decideTurnRetry(err instanceof Error ? err : new Error(message), {
+        repairedImage: repaired,
+        transientRetries,
+        substantive,
+        maxRetries: retryConfig.maxRetries,
+        baseDelayMs: retryConfig.baseDelayMs,
+        maxDelayMs: retryConfig.maxDelayMs,
+      });
+
+      if (decision.action === 'retry' && decision.reason === 'image') {
+        if (repairCorruptSessionImages(opts)) {
+          repaired = true;
+          retry = true;
+        } else {
+          throw err;
+        }
+      } else if (decision.action === 'retry') {
+        transientError = decision.error;
+        retryDelayMs = decision.delayMs;
       } else {
         throw err;
       }
+    }
+
+    if (transientError) {
+      // The retry is happening now, so the caller must see why. Drop the held
+      // error text from the abandoned attempt — it describes a request that is
+      // about to be made again.
+      transientRetries += 1;
+      console.warn(
+        `[claude-code] retrying turn (${transientRetries}/${retryConfig.maxRetries}) ` +
+          `after ${retryDelayMs}ms: ${transientError.message}`,
+      );
+      // Emit this as a `system` notice, not an `error`: the bridge treats every
+      // `error` as terminal (it ends the turn and the renderer drops the
+      // in-flight message), which would discard the successful retry that is
+      // about to arrive. Matches the in-process engine's `system/retry`.
+      yield {
+        type: 'retry',
+        data: {
+          attempt: transientRetries,
+          maxRetries: retryConfig.maxRetries,
+          errorClass: 'transient',
+          delayMs: retryDelayMs,
+          message: transientError.message,
+        },
+      };
+      await sleepAbortable(retryDelayMs, opts.abortController.signal);
+      if (opts.abortController.signal.aborted) return;
+      continue;
     }
 
     if (retry) continue;
@@ -1154,6 +1284,22 @@ export async function* runClaudeCodeQuery(
     yield* heldTerminal;
     return;
   }
+}
+
+/** Sleep that resolves early (never rejects) when the turn is aborted. */
+function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /**

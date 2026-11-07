@@ -119,7 +119,9 @@ export interface QueryEngineConfig {
 }
 
 export interface QueryEngineEvent {
-  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title' | 'task';
+  type: 'message' | 'error' | 'cost' | 'compact' | 'compact_boundary' | 'compact_summary' | 'compact_progress' | 'done' | 'permission_required' | 'question_required' | 'queued' | 'usage' | 'title' | 'task'
+    /** A model call failed and is being retried; the turn is still running. */
+    | 'retry';
   data?: unknown;
   deferred?: DeferredPermission | DeferredQuestion;
 }
@@ -699,6 +701,11 @@ export class QueryEngine {
               yield event;
             } else if (msg.subtype === 'progress' || msg.subtype === 'tool_completed') {
               const event = { type: 'message' as const, data: msg };
+              emit(event);
+              yield event;
+            } else if (msg.subtype === 'retry') {
+              // Advisory only — the turn is still running.
+              const event = { type: 'retry' as const, data: msg.data };
               emit(event);
               yield event;
             } else if (msg.subtype === 'permission_required') {

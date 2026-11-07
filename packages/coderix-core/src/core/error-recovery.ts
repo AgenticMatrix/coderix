@@ -87,23 +87,33 @@ export function classifyError(error: Error): ClassifiedError {
     message.includes('etimedout') ||
     message.includes('network') ||
     message.includes('fetch failed') ||
-    message.includes('socket hang up')
+    message.includes('socket hang up') ||
+    // The claude CLI reports a failed connect as `API Error: Connection error.`
+    // — without this it classifies as unknown and the turn dies on the first
+    // blip instead of being retried.
+    message.includes('connection error') ||
+    message.includes('connection reset') ||
+    message.includes('unable to connect')
   ) {
     return { category: 'network', retryable: true, message: error.message, original: error };
   }
 
-  // Timeout
+  // Aborted (user interrupt). Must precede the timeout check: an interrupt
+  // message often contains "aborted", which the timeout branch would otherwise
+  // claim and mark retryable — restarting a call the user just cancelled.
   if (
-    message.includes('timeout') ||
-    message.includes('timed out') ||
-    message.includes('aborted')
+    error.name === 'AbortError' ||
+    message.includes('aborted by user') ||
+    message.includes('request was aborted') ||
+    message.includes('user cancelled') ||
+    message.includes('user aborted')
   ) {
-    return { category: 'timeout', retryable: true, message: error.message, original: error };
+    return { category: 'aborted', retryable: false, message: error.message, original: error };
   }
 
-  // Aborted (user interrupt)
-  if (error.name === 'AbortError' || message.includes('abort')) {
-    return { category: 'aborted', retryable: false, message: error.message, original: error };
+  // Timeout
+  if (message.includes('timeout') || message.includes('timed out')) {
+    return { category: 'timeout', retryable: true, message: error.message, original: error };
   }
 
   // Invalid request

@@ -355,6 +355,41 @@ export function onStreamError(callback: (error: string, code?: string, sessionId
 }
 
 /**
+ * Subscribe to retry notices. A retry means the model call failed and is being
+ * re-issued — the turn is still alive, so this must not be handled like an
+ * error. Returns an unsubscribe function.
+ */
+export function onStreamRetry(
+  callback: (notice: {
+    attempt: number;
+    maxRetries: number;
+    delayMs: number;
+    message: string;
+    errorClass: string;
+    sessionId?: string;
+    epoch?: number;
+  }) => void,
+): () => void {
+  if (!window.coderixAPI) {
+    console.error('[IPC] window.coderixAPI is not available — preload may not have loaded');
+    return NOOP_UNSUB;
+  }
+  return window.coderixAPI.onStreamEvent((event: any) => {
+    if (event.type === 'retry') {
+      callback({
+        attempt: event.attempt as number,
+        maxRetries: event.maxRetries as number,
+        delayMs: event.delayMs as number,
+        message: event.message as string,
+        errorClass: event.errorClass as string,
+        sessionId: event.sessionId as string | undefined,
+        epoch: event.epoch as number | undefined,
+      });
+    }
+  });
+}
+
+/**
  * Subscribe to stream phase changes (currently only `requesting`: a request
  * was handed to the model and no tokens have come back yet).
  * Returns an unsubscribe function.

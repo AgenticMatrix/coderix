@@ -236,6 +236,7 @@ export type QueryMessage =
   | { type: 'system'; subtype: 'compact_progress'; data: { status: 'started' | 'streaming' | 'completed'; message?: string; textDelta?: string; step: 'micro' | 'session_memory' | 'llm_summarize' } }
   | { type: 'system'; subtype: 'error'; error: AgentError }
   | { type: 'system'; subtype: 'progress'; data: ToolProgress }
+  | { type: 'system'; subtype: 'retry'; data: { attempt: number; maxRetries: number; errorClass: string; delayMs: number; message: string } }
   | { type: 'system'; subtype: 'tool_completed'; data: { toolUseId: string; duration?: number; content: string; isError?: boolean; metadata?: Record<string, unknown> } }
   | { type: 'system'; subtype: 'permission_required'; deferred: DeferredPermission }
   | { type: 'system'; subtype: 'question_required'; deferred: DeferredQuestion }
