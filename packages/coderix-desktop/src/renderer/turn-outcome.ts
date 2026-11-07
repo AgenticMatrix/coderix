@@ -8,6 +8,8 @@
  * failed / cut off) is what the line explains, and the reason refines it.
  */
 
+import type { TranslationKey } from './i18n/index.js';
+
 /** How a turn ended, independent of why the model stopped generating. */
 export type TurnEnding =
   | { kind: 'complete' }
@@ -49,7 +51,7 @@ export type TurnOutcomeKind =
 export interface TurnOutcome {
   kind: TurnOutcomeKind;
   /** i18n key for the summary line. */
-  messageKey: string;
+  messageKey: TranslationKey;
 }
 
 /**
