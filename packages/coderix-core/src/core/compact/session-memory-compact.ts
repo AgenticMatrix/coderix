@@ -23,6 +23,7 @@ import { estimateMessageTokens, estimateTokens } from '../token-budget.js';
 import { createCompactBoundaryMessage } from './compact-boundary.js';
 import { getCompactUserSummaryMessage } from './compact-prompt.js';
 
+import { truncateSafely } from '../../utils/text-truncation.js';
 // ---------------------------------------------------------------------------
 // Default config
 // ---------------------------------------------------------------------------
@@ -109,7 +110,7 @@ export async function trySessionMemoryCompaction(
         memories.push({
           name: file.filename.replace(/\.md$/, ''),
           description: file.description ?? file.filename,
-          content: body.slice(0, 3000), // cap per memory
+          content: truncateSafely(body, 3000), // cap per memory
         });
       } catch {
         // skip unreadable files
@@ -127,7 +128,7 @@ export async function trySessionMemoryCompaction(
 
     for (const m of memories) {
       summaryParts.push(
-        `## ${m.description}\n${m.content.slice(0, 2000)}`,
+        `## ${m.description}\n${truncateSafely(m.content, 2000)}`,
       );
     }
 

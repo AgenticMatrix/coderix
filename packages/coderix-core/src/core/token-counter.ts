@@ -7,6 +7,7 @@
  */
 
 import type { Tiktoken } from 'tiktoken';
+import { truncateSafely, truncateMiddle } from '../utils/text-truncation.js';
 
 // ---------------------------------------------------------------------------
 // Lazy initialization
@@ -97,7 +98,9 @@ export function truncateToTokenLimit(text: string, maxTokens: number): string {
           hi = mid - 1;
         }
       }
-      return text.slice(0, lo);
+      // The cut is chosen by token count, so it can land between the halves of
+      // a surrogate pair; truncateSafely backs off to the pair boundary.
+      return truncateSafely(text, lo);
     } catch {
       // Fall through to proportional
     }
@@ -105,7 +108,7 @@ export function truncateToTokenLimit(text: string, maxTokens: number): string {
 
   // Fallback: proportional truncation (~3.5 chars/token)
   const maxChars = maxTokens * 3.5;
-  return text.length <= maxChars ? text : text.slice(0, Math.floor(maxChars));
+  return text.length <= maxChars ? text : truncateSafely(text, Math.floor(maxChars));
 }
 
 /**
@@ -134,7 +137,9 @@ export function truncateToTokenLimitFromEnd(text: string, maxTokens: number): st
           lo = mid + 1;
         }
       }
-      return text.slice(lo);
+      // Keeping the tail means the cut moves to `lo`; a low surrogate stranded
+      // at that index would be orphaned, so drop it (truncateMiddle does).
+      return truncateMiddle(text, 0, text.length - lo, '');
     } catch {
       // Fall through to proportional
     }
@@ -142,7 +147,9 @@ export function truncateToTokenLimitFromEnd(text: string, maxTokens: number): st
 
   // Fallback: proportional (~3.5 chars/token)
   const maxChars = maxTokens * 3.5;
-  return text.length <= maxChars ? text : text.slice(text.length - Math.floor(maxChars));
+  return text.length <= maxChars
+    ? text
+    : truncateMiddle(text, 0, Math.floor(maxChars), '');
 }
 
 /**

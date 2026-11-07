@@ -22,6 +22,7 @@ import type {
 import type { CallModelParams } from './query.js';
 import { normalizeMessagesForAPI } from './message-normalizer.js';
 import { isValidBase64Image } from '../utils/image-validation.js';
+import { stringifyForWire } from '../utils/text-truncation.js';
 
 // ---------------------------------------------------------------------------
 // Shared call-model configuration (also consumed by provider-adapter.ts)
@@ -415,7 +416,7 @@ export function createCallModelFromOpenAI(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${config.apiKey}`,
         },
-        body: JSON.stringify(requestBody),
+        body: stringifyForWire(requestBody),
         signal: controller.signal,
       };
       if (proxyAgent) fetchInit.dispatcher = proxyAgent;

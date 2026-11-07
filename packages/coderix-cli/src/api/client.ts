@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+import { normaliseSurrogates } from '@coderix/core';
 import type { Message, ContentBlock, TextBlock, ThinkingBlock, ToolUseBlock, StreamCallbacks } from '../types.js';
 
 /**
@@ -175,9 +176,11 @@ export function streamChatBlocks(
         {
           model,
           max_tokens: 4096,
-          system: systemPrompt,
-          messages: anthropicMessages,
-          ...(options?.tools?.length ? { tools: options.tools } : {}),
+          // The SDK serialises internally, so repair lone surrogates here — an
+          // unpaired one would be sent as `\udXXX` and rejected as invalid JSON.
+          system: systemPrompt ? normaliseSurrogates(systemPrompt) : undefined,
+          messages: normaliseSurrogates(anthropicMessages),
+          ...(options?.tools?.length ? { tools: normaliseSurrogates(options.tools) } : {}),
         },
         { signal: abortController.signal },
       );

@@ -9,6 +9,7 @@
 import type { ToolPlugin, ToolSchema, ToolResult } from '../tools/types.js';
 import type { McpManager } from './manager.js';
 import { readResource } from './discovery.js';
+import { truncateSafely } from '../utils/text-truncation.js';
 
 // ── Schemas ──────────────────────────────────────────────────────────────
 
@@ -242,7 +243,7 @@ export function createReadMcpResourcePlugin(
           parts.push('');
           const text = item.text as string;
           if (text.length > 50_000) {
-            parts.push(text.slice(0, 50_000));
+            parts.push(truncateSafely(text, 50_000));
             parts.push('');
             parts.push(
               `[Content truncated: ${text.length} total chars, showing first 50,000]`,
@@ -258,7 +259,7 @@ export function createReadMcpResourcePlugin(
           const blob = item.blob as string;
           const blobSize = blob.length;
           parts.push(`[Binary data: base64-encoded blob, ${blobSize} bytes]`);
-          parts.push(blob.slice(0, 500) + (blobSize > 500 ? '...' : ''));
+          parts.push(truncateSafely(blob, 500) + (blobSize > 500 ? '...' : ''));
         } else {
           parts.push(JSON.stringify(item));
         }

@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ToolResultBlock } from './types.js';
 import { countContentTokens, countTokens } from './token-counter.js';
+import { truncateSafely } from '../utils/text-truncation.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -284,7 +285,7 @@ function generatePreview(
   const cutPoint =
     lastNewline > maxChars * 0.5 ? lastNewline : maxChars;
 
-  return { preview: content.slice(0, cutPoint), hasMore: true };
+  return { preview: truncateSafely(content, cutPoint), hasMore: true };
 }
 
 function formatSize(bytes: number): string {

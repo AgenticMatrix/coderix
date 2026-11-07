@@ -61,6 +61,7 @@ import { drainTaskNotifications, listTasks as listTrackedTasks } from '../tasks/
 import { snipCompact, consumeSnipRequest, createSnipMarker } from './snip-compact.js';
 import { generatePlanSlug, getPlanFilePath } from './plan-files.js';
 import { getPlanModeAttachmentContent, incrementPlanModeTurn } from './plan-mode-attachment.js';
+import { truncateSafely } from '../utils/text-truncation.js';
 // Types
 // ---------------------------------------------------------------------------
 
@@ -712,12 +713,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         const messageSummaries = messages.slice(-10).map((m) => ({
           role: m.role,
           summary: typeof m.content === 'string'
-            ? m.content.slice(0, 200)
+            ? truncateSafely(m.content, 200)
             : Array.isArray(m.content)
               ? m.content
                   .map((b) =>
                     b.type === 'text'
-                      ? (b.text ?? '').slice(0, 100)
+                      ? truncateSafely(b.text ?? '', 100)
                       : `[${b.type}]`,
                   )
                   .join('; ')
@@ -1342,12 +1343,12 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       const recentMessages = messages.slice(-5).map((m) => ({
         role: m.role,
         summary: typeof m.content === 'string'
-          ? m.content.slice(0, 200)
+          ? truncateSafely(m.content, 200)
           : Array.isArray(m.content)
             ? m.content
                 .map((b) =>
                   b.type === 'text'
-                    ? (b.text ?? '').slice(0, 100)
+                    ? truncateSafely(b.text ?? '', 100)
                     : `[${b.type}]`,
                 )
                 .join('; ')
@@ -1585,7 +1586,7 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
           toolName: toolBlock?.name ?? 'unknown',
           success: !tr.is_error,
           durationMs: 0,
-          summary: typeof tr.content === 'string' ? tr.content.slice(0, 200) : JSON.stringify(tr.content).slice(0, 200),
+          summary: truncateSafely(typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content), 200),
         };
       });
       hookManager.onPostToolBatch(sessionId, cwd, batchResults).catch(() => {});
@@ -2073,11 +2074,11 @@ function buildFileRestoreContext(
 
   for (const entry of recent) {
     const capped = entry.content.length > MAX_CHARS_PER_FILE
-      ? entry.content.slice(0, MAX_CHARS_PER_FILE) + '\n... (truncated)'
+      ? truncateSafely(entry.content, MAX_CHARS_PER_FILE) + '\n... (truncated)'
       : entry.content;
     const available = MAX_TOTAL_CHARS - totalChars;
     if (available <= 0) break;
-    const toInclude = capped.length > available ? capped.slice(0, available) : capped;
+    const toInclude = capped.length > available ? truncateSafely(capped, available) : capped;
     parts.push(`## ${entry.path}\n\`\`\`\n${toInclude}\n\`\`\``);
     totalChars += toInclude.length;
   }

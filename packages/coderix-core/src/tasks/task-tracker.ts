@@ -7,6 +7,7 @@
 
 import type { ChildProcess } from 'node:child_process';
 
+import { truncateSafely } from '../utils/text-truncation.js';
 export type TrackedTaskType = 'bash' | 'agent';
 
 export interface TrackedTask {
@@ -114,7 +115,7 @@ export function notifyTaskCompletion(taskId: string): void {
   }
 
   if (task.result) {
-    lines.push(`  <result>${task.result.slice(0, 2000)}</result>`);
+    lines.push(`  <result>${truncateSafely(task.result, 2000)}</result>`);
   }
 
   lines.push('</task-notification>');

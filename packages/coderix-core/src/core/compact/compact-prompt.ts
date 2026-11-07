@@ -5,6 +5,8 @@
  * prompt, and the helpers that format the resulting summary for display.
  */
 
+import { truncateSafely } from '../../utils/text-truncation.js';
+
 // ---------------------------------------------------------------------------
 // Preamble / trailer
 // ---------------------------------------------------------------------------
@@ -216,18 +218,18 @@ export function buildCompactContext(messages: import('../types.js').Message[]): 
 
     const role = msg.role === 'assistant' ? 'ASSISTANT' : 'USER';
     if (typeof msg.content === 'string') {
-      parts.push(`[${role}] ${msg.content.slice(0, 2000)}`);
+      parts.push(`[${role}] ${truncateSafely(msg.content, 2000)}`);
     } else if (Array.isArray(msg.content)) {
       for (const block of msg.content) {
         if (block.type === 'text') {
-          parts.push(`[${role}] ${(block.text ?? '').slice(0, 2000)}`);
+          parts.push(`[${role}] ${truncateSafely(block.text ?? '', 2000)}`);
         } else if (block.type === 'tool_use') {
           parts.push(`[${role} — used tool: ${block.name}]`);
         } else if (
           block.type === 'tool_result' &&
           typeof block.content === 'string'
         ) {
-          parts.push(`[tool result] ${block.content.slice(0, 500)}`);
+          parts.push(`[tool result] ${truncateSafely(block.content, 500)}`);
         }
       }
     }

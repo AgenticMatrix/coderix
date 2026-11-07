@@ -8,6 +8,7 @@
 import type { Message } from './types.js';
 import type { ToolRequestEvent } from '../state/observable.js';
 
+import { truncateSafely } from '../utils/text-truncation.js';
 export type SubagentType = 'explore' | 'plan' | 'general-purpose' | 'verification' | 'coderix-guide' | 'statusline-setup';
 export type SubAgentStatus = 'running' | 'done' | 'error' | 'stopped';
 
@@ -193,7 +194,7 @@ export class SubAgentRegistry {
     }
 
     if (agent.result) {
-      lines.push(`  <result>${agent.result.slice(0, 32000)}</result>`);
+      lines.push(`  <result>${truncateSafely(agent.result, 32000)}</result>`);
     }
 
     if (agent.tokenUsage) {

@@ -1,6 +1,7 @@
 import { exec as execCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolExecutor } from '../types.js';
+import { truncateSafely } from '../../utils/text-truncation.js';
 
 const execAsync = promisify(execCb);
 
@@ -29,7 +30,7 @@ export const execute: ToolExecutor = async (input, opts) => {
     const trimmed = (stdout || stderr || '').trim();
     if (trimmed.length > opts.maxOutput) {
       return {
-        content: trimmed.slice(0, opts.maxOutput) + '\n... (output truncated)',
+        content: truncateSafely(trimmed, opts.maxOutput) + '\n... (output truncated)',
         isError: false,
       };
     }

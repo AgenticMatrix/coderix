@@ -265,6 +265,14 @@ export { detectShell } from './utils/shell-detect.js';
 export type { ShellInfo, ShellType } from './utils/shell-detect.js';
 export { toPosixPath, toWindowsPath } from './utils/windows-paths.js';
 export {
+  toWellFormed,
+  truncateSafely,
+  truncateMiddle,
+  normaliseSurrogates,
+  stringifyForWire,
+  LONE_SURROGATE_ESCAPE,
+} from './utils/text-truncation.js';
+export {
   imageMediaTypeForPath,
   isSupportedImageMediaType,
   isValidImageBuffer,

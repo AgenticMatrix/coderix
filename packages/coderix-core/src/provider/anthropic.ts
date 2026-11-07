@@ -20,6 +20,7 @@ import type {
 import { calculateCost } from './base.js';
 import { withRetry, classifyError } from './retry.js';
 import { normalizeMessagesForAPI } from '../core/message-normalizer.js';
+import { normaliseSurrogates } from '../utils/text-truncation.js';
 
 // ---------------------------------------------------------------------------
 // Anthropic Provider Implementation
@@ -144,13 +145,15 @@ export class AnthropicProvider implements Provider {
 
     const apiMessages = this.normalizeMessages(messages);
 
+    // The SDK serialises internally, so repair lone surrogates here — an
+    // unpaired one would be sent as `\udXXX` and rejected as invalid JSON.
     const stream = this.client.messages.stream({
       model: modelConfig.model,
-      system: system || undefined,
-      messages: apiMessages as MessageParam[],
+      system: system ? normaliseSurrogates(system) : undefined,
+      messages: normaliseSurrogates(apiMessages) as MessageParam[],
       max_tokens: modelConfig.maxTokens ?? 65536,
       temperature: modelConfig.temperature,
-      tools: anthropicTools as Anthropic.MessageCreateParams['tools'],
+      tools: normaliseSurrogates(anthropicTools) as Anthropic.MessageCreateParams['tools'],
       thinking: this.buildThinkingConfig(modelConfig),
     }, { signal });
 

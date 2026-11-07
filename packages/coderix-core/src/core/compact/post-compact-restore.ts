@@ -25,6 +25,7 @@ import {
   POST_COMPACT_SKILLS_TOKEN_BUDGET,
 } from './compact-types.js';
 import { countTokens } from '../token-counter.js';
+import { truncateSafely } from '../../utils/text-truncation.js';
 
 // ---------------------------------------------------------------------------
 // Post-compact file restoration
@@ -173,10 +174,10 @@ export function createCoderixMdAttachment(
   const parts: string[] = [];
 
   if (projectCoderixMd) {
-    parts.push(`[Project instructions from CODERIX.md:\n${projectCoderixMd.slice(0, 2000)}]`);
+    parts.push(`[Project instructions from CODERIX.md:\n${truncateSafely(projectCoderixMd, 2000)}]`);
   }
   if (userCoderixMd) {
-    parts.push(`[User instructions from ~/.coderix/CODERIX.md:\n${userCoderixMd.slice(0, 2000)}]`);
+    parts.push(`[User instructions from ~/.coderix/CODERIX.md:\n${truncateSafely(userCoderixMd, 2000)}]`);
   }
 
   if (parts.length === 0) return [];
@@ -290,7 +291,7 @@ function collectVisibleFilePaths(messages: Message[]): Set<string> {
 function truncateToTokenBudget(content: string, maxTokens: number): string {
   const maxChars = maxTokens * 4;
   if (content.length <= maxChars) return content;
-  return content.slice(0, maxChars) + '\n...[truncated]';
+  return truncateSafely(content, maxChars) + '\n...[truncated]';
 }
 
 function buildFileAttachment(

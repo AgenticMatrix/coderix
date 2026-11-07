@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import type { ToolExecutor } from '../types.js';
 import { imageMediaTypeForPath, isValidImageBuffer } from '../../utils/image-validation.js';
+import { truncateSafely } from '../../utils/text-truncation.js';
 
 /**
  * Image formats the model API rejects. They used to fall through to
@@ -70,7 +71,7 @@ export const execute: ToolExecutor = async (input, opts) => {
 
     if (result.length > opts.maxOutput) {
       return {
-        content: result.slice(0, opts.maxOutput) + '\n... (output truncated)',
+        content: truncateSafely(result, opts.maxOutput) + '\n... (output truncated)',
         isError: false,
         duration,
         metadata: { filePath },

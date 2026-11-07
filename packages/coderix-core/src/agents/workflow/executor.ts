@@ -19,6 +19,7 @@ import { ConcurrencyController, executePipeline } from '../../workflow/concurren
 import { CheckpointManager } from '../../workflow/checkpoint.js';
 import { runWorkflowAgent } from './agent-runner.js';
 
+import { truncateSafely } from '../../utils/text-truncation.js';
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -171,7 +172,7 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
         : '',
       '',
       'Results:',
-      ...result.results.slice(0, 20).map((r, i) => `${i + 1}. ${r.slice(0, 500)}`),
+      ...result.results.slice(0, 20).map((r, i) => `${i + 1}. ${truncateSafely(r, 500)}`),
     ].join('\n');
 
     return {

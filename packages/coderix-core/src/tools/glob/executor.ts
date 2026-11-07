@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { walkDir } from '../shared/glob-utils.js';
 import type { ToolExecutor } from '../types.js';
+import { truncateSafely } from '../../utils/text-truncation.js';
 
 export const execute: ToolExecutor = async (input, opts) => {
   const pattern = input.pattern as string;
@@ -16,7 +17,7 @@ export const execute: ToolExecutor = async (input, opts) => {
 
     if (output.length > opts.maxOutput) {
       return {
-        content: output.slice(0, opts.maxOutput) + '\n... (output truncated)',
+        content: truncateSafely(output, opts.maxOutput) + '\n... (output truncated)',
         isError: false,
       };
     }

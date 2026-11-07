@@ -18,6 +18,7 @@ import {
 import type { DiskAgentInfo } from '../../../agents/agent-persistence.js';
 import { sessionDir as getSessionDir } from '../../../core/session-store.js';
 import { truncateToTokenLimit, countTokens } from '../../../core/token-counter.js';
+import { truncateSafely } from '../../../utils/text-truncation.js';
 
 const MAX_RESUME_TURNS = 200;
 const CONTEXT_BUDGET = 120_000;
@@ -79,10 +80,10 @@ function trimTranscriptForResume(messages: Message[]): Message[] {
         if (b.type !== 'tool_result') return b;
         const content = (b as { content?: unknown }).content;
         if (typeof content === 'string' && content.length > MAX_TOOL_OUTPUT) {
+          const head = truncateSafely(content, MAX_TOOL_OUTPUT);
           return {
             ...b,
-            content: content.slice(0, MAX_TOOL_OUTPUT)
-              + `\n... [trimmed ${content.length - MAX_TOOL_OUTPUT} chars]`,
+            content: head + `\n... [trimmed ${content.length - head.length} chars]`,
           };
         }
         return b;

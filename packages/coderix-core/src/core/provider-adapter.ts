@@ -19,6 +19,7 @@ import type { CallModelParams } from './query.js';
 import { normalizeMessagesForAPI } from './message-normalizer.js';
 import { detectProtocol } from '../config.js';
 import { isValidBase64Image } from '../utils/image-validation.js';
+import { normaliseSurrogates } from '../utils/text-truncation.js';
 import { createCallModelFromOpenAI, type CallModelConfig } from './openai-adapter.js';
 
 export { createCallModelFromOpenAI } from './openai-adapter.js';
@@ -228,9 +229,11 @@ export function createCallModelFromClient(
       const stream = await client.messages.create({
         model,
         max_tokens: maxTokens ?? 65536,
-        system: systemParam,
-        messages: apiMessages,
-        ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
+        // The SDK serialises internally, so repair lone surrogates here — an
+        // unpaired one would be sent as `\udXXX` and rejected as invalid JSON.
+        system: systemParam ? normaliseSurrogates(systemParam) : undefined,
+        messages: normaliseSurrogates(apiMessages),
+        ...(anthropicTools?.length ? { tools: normaliseSurrogates(anthropicTools) } : {}),
         stream: true,
         thinking: thinkingConfig ?? defaultThinking,
       });

@@ -17,6 +17,7 @@ import { rankMemories, type MemoryWithText } from './scorer.js';
 import { memoryAge, memoryFreshnessText } from './staleness.js';
 import type { MemoryConfig, MemoryEntry } from './types.js';
 
+import { truncateSafely } from '../utils/text-truncation.js';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -118,7 +119,7 @@ export async function findRelevantMemories(
         config.stalenessThresholdDays,
       );
 
-      let content = parsed.body.slice(0, 4000); // Cap content size
+      let content = truncateSafely(parsed.body, 4000); // Cap content size
       if (freshnessNote) {
         content = `${freshnessNote}\n\n${content}`;
       }
@@ -202,7 +203,7 @@ export function formatRecalledMemories(memories: RecalledMemory[]): string {
     return [
       m.header,
       '',
-      m.content.slice(0, 2000), // Truncate each memory to 2000 chars max
+      truncateSafely(m.content, 2000), // Truncate each memory to 2000 chars max
     ].join('\n');
   });
 

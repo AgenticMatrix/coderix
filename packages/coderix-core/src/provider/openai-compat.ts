@@ -20,6 +20,7 @@ import type {
 } from './base.js';
 import { withRetry, classifyError } from './retry.js';
 import { normalizeMessagesForAPI } from '../core/message-normalizer.js';
+import { stringifyForWire } from '../utils/text-truncation.js';
 
 // ---------------------------------------------------------------------------
 // OpenAI API Types (minimal)
@@ -246,7 +247,7 @@ export class OpenAICompatProvider implements Provider {
       const fetchInit: Record<string, unknown> = {
         method: 'POST',
         headers: this.buildRequestHeaders(),
-        body: JSON.stringify(requestBody),
+        body: stringifyForWire(requestBody),
         signal,
       };
       if (this.proxyAgent) {

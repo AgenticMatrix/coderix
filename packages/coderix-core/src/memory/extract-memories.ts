@@ -17,6 +17,7 @@ import { getMemoryDir, ensureMemoryDirExists } from './memory-directory.js';
 import { scanMemoryFiles, formatMemoryManifest } from './frontmatter.js';
 import { loadIndex } from './memory-index.js';
 
+import { truncateSafely } from '../utils/text-truncation.js';
 function createAbortController(): AbortController {
   return new AbortController();
 }
@@ -193,7 +194,7 @@ async function runExtraction(
                 .map(b => (b as { text: string }).text)
                 .join('\n')
             : '';
-      return `[${role}] ${content.slice(0, 2000)}`;
+      return `[${role}] ${truncateSafely(content, 2000)}`;
     })
     .join('\n\n');
 

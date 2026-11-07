@@ -5,6 +5,8 @@
  * old messages, recently read files are re-injected so the model doesn't
  * lose awareness of the codebase it was working with.
  */
+
+import { truncateSafely } from '../utils/text-truncation.js';
 export interface ReadFileEntry {
   path: string;
   content: string;
@@ -23,7 +25,7 @@ export class ReadFileTracker {
   record(path: string, content: string): void {
     this.entries.push({
       path,
-      content: content.length > 10_000 ? content.slice(0, 10_000) : content,
+      content: truncateSafely(content, 10_000),
       timestamp: Date.now(),
     });
     if (this.entries.length > this.maxEntries) {

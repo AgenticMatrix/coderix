@@ -15,6 +15,7 @@ import { CommandCategory, type ClassificationResult } from './command-classifier
 import { registerProcess, killProcess } from './process-registry.js';
 import { IS_WINDOWS } from '../../utils/platform.js';
 import { toPosixPath } from '../../utils/windows-paths.js';
+import { truncateMiddle } from '../../utils/text-truncation.js';
 import { detectShell } from '../../utils/shell-detect.js';
 
 // ── Shell resolution (cached at module load) ─────────────────────────────
@@ -181,10 +182,10 @@ function appendBounded(current: string, chunk: string, limit: number): string {
   const next = current + chunk;
   if (next.length <= limit) return next;
   // Too small to hold both ends and the marker: keep the newest bytes.
-  if (limit <= TRUNCATION_MARKER.length * 2) return next.slice(-limit);
+  if (limit <= TRUNCATION_MARKER.length * 2) return truncateMiddle(next, 0, limit, '');
   const tailLength = Math.floor(limit * 0.75);
   const headLength = limit - tailLength - TRUNCATION_MARKER.length;
-  return next.slice(0, headLength) + TRUNCATION_MARKER + next.slice(-tailLength);
+  return truncateMiddle(next, headLength, tailLength, TRUNCATION_MARKER);
 }
 
 function isErrorStatus(status: number | null): boolean {
