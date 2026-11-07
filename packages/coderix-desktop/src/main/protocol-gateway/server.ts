@@ -20,14 +20,16 @@
 
 import { createServer, type Server, type IncomingMessage } from 'node:http';
 import type { ServerResponse } from 'node:http';
-import { fetch as undiciFetch } from 'undici';
-import { gatewayPort, GATEWAY_HOST } from './config.js';
+import { fetch as undiciFetch, Agent } from 'undici';
+import { gatewayPort, GATEWAY_HOST, upstreamTimeouts } from './config.js';
 import type { Protocol, ProtocolConverter, SseFrame } from './types.js';
 import { buildUpstreamUrl, headersFor } from './shared.js';
+import { stringifyForWire } from '../../../../../packages/coderix-core/src/utils/text-truncation.js';
 import { createMessagesToChatConverter } from './messages-to-chat.js';
 import { detectProtocol } from '../../../../../packages/coderix-core/src/config.js';
 
 type Json = Record<string, unknown>;
+
 
 /** Which inbound protocol a `/gw/<baseUrl>/<rest>` path represents. */
 function inboundProtocol(rest: string): Protocol | null {
@@ -95,6 +97,10 @@ function extractApiKey(req: IncomingMessage): string {
 }
 
 export function startProtocolGateway(): Server {
+  // One dispatcher for every upstream call, so the timeout overrides apply
+  // instead of undici's 300s default (which killed long-thinking turns).
+  const dispatcher = new Agent(upstreamTimeouts());
+
   const server = createServer(async (req, res) => {
     const pathname = (req.url || '').split('?')[0];
 
@@ -127,9 +133,14 @@ export function startProtocolGateway(): Server {
       return;
     }
 
-    // The request body is always JSON (small); buffer it to transform.
-    let raw = '';
-    for await (const chunk of req) raw += chunk;
+    // Buffer the whole body before decoding. Concatenating the chunk Buffers
+    // into a string decodes each TCP segment independently, which splits any
+    // multi-byte character that straddles a boundary into U+FFFD — silently
+    // corrupting CJK/emoji in prompts and tool results (a 1.5MB image-bearing
+    // request always spans several segments).
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const raw = Buffer.concat(chunks).toString('utf8');
     let body: Json = {};
     try { body = raw ? (JSON.parse(raw) as Json) : {}; } catch {
       json(res, 400, { error: { message: 'invalid JSON request body' } });
@@ -150,6 +161,9 @@ export function startProtocolGateway(): Server {
     const upstreamHeaders = headersFor(upstreamProtocol, apiKey);
 
     let requestBody = raw;
+    // stringifyForWire only reparses for a repair pass when the serialised body
+    // actually contains a lone-surrogate escape, so image-bearing requests
+    // (tens of megabytes) pay nothing in the common case.
     if (converter) {
       const convertedBody = converter.convertRequest(body);
 
@@ -164,7 +178,11 @@ export function startProtocolGateway(): Server {
       } else if (tokenLimit > cap) {
         convertedBody.max_tokens = cap;
       }
-      requestBody = JSON.stringify(convertedBody);
+      requestBody = stringifyForWire(convertedBody);
+    } else {
+      // Relayed unchanged (an anthropic upstream): still normalise, since the
+      // body was decoded from the wire and may carry a lone surrogate.
+      requestBody = stringifyForWire(body);
     }
 
     let upstreamRes: Awaited<ReturnType<typeof undiciFetch>>;
@@ -173,6 +191,7 @@ export function startProtocolGateway(): Server {
         method: 'POST',
         headers: { ...upstreamHeaders, 'content-type': 'application/json' },
         body: requestBody,
+        dispatcher,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -214,9 +233,23 @@ export function startProtocolGateway(): Server {
     });
     const upstreamBody = upstreamRes.body;
     if (!upstreamBody) {
+      if (converter) {
+        for (const frame of converter.finishSse()) writeSseFrame(res, frame);
+      } else {
+        writeSseFrame(res, {
+          event: 'error',
+          data: JSON.stringify({
+            type: 'error',
+            error: { type: 'api_error', message: '上游响应没有可读取的内容' },
+          }),
+        });
+      }
       res.end();
       return;
     }
+    // A relay that just stops writing looks exactly like a completed turn: the
+    // harness goes idle with a half-written answer and no error. Always tell it
+    // the stream broke so the turn is reported as failed (and retried) instead.
     try {
       await pumpSse(upstreamBody as unknown as AsyncIterable<Uint8Array>, (event, data) => {
         if (converter) {
@@ -231,6 +264,23 @@ export function startProtocolGateway(): Server {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[gateway] stream error for ${baseUrl}:`, msg);
+      if (converter) {
+        // Close whatever blocks the upstream left open, then report the break.
+        // finishSse() appends the truncation error frame when no finish_reason
+        // arrived, so the turn fails without also being malformed.
+        for (const frame of converter.finishSse()) writeSseFrame(res, frame);
+      } else {
+        writeSseFrame(res, {
+          event: 'error',
+          data: JSON.stringify({
+            type: 'error',
+            error: {
+              type: 'api_error',
+              message: `上游连接在完成响应前中断（${msg}）——已收到的部分内容可能不完整`,
+            },
+          }),
+        });
+      }
     }
     res.end();
   });
@@ -250,6 +300,11 @@ export function startProtocolGateway(): Server {
 
   server.listen(gatewayPort(), GATEWAY_HOST, () => {
     console.log(`[gateway] protocol conversion listening on http://${GATEWAY_HOST}:${gatewayPort()}`);
+  });
+
+  // Release the upstream connection pool along with the listener.
+  server.on('close', () => {
+    void dispatcher.close();
   });
 
   return server;

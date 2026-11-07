@@ -21,3 +21,18 @@ export function gatewayPort(): number {
 export function gatewayUrl(): string {
   return `http://${GATEWAY_HOST}:${gatewayPort()}`;
 }
+
+/**
+ * Upstream idle timeouts for the gateway's outbound fetch.
+ *
+ * undici defaults both to 300s. A reasoning model can sit silent for minutes
+ * before its first token, and a timeout there must NOT be reported as a normal
+ * end of stream — the relay now emits an error frame on failure, but a 5-minute
+ * ceiling still cut off legitimate long-thinking turns. Raise it and allow an
+ * override for unusually slow models.
+ */
+export function upstreamTimeouts(): { headersTimeout: number; bodyTimeout: number } {
+  const fromEnv = parseInt(process.env.GATEWAY_UPSTREAM_TIMEOUT_MS || '', 10);
+  const ms = Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 15 * 60 * 1000;
+  return { headersTimeout: ms, bodyTimeout: ms };
+}

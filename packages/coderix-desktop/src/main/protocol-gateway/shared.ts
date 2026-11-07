@@ -44,3 +44,7 @@ export function syntheticId(prefix: string): string {
   seq = (seq + 1) % 0x7fffffff;
   return `${prefix}${Date.now().toString(36)}${seq.toString(36)}`;
 }
+
+// Re-exported so the gateway and the core providers repair surrogates with the
+// same implementation — two copies would drift.
+export { normaliseSurrogates } from '../../../../../packages/coderix-core/src/utils/text-truncation.js';
