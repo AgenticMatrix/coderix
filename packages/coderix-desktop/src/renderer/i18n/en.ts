@@ -173,8 +173,6 @@ export const en: Record<TranslationKey, string> = {
   'session.groupByFlat': 'Single list',
   'session.groupByWorkspace': 'By workspace',
   'session.ungrouped': 'Ungrouped',
-  'session.origin.desktop': 'Desktop',
-  'session.origin.cli': 'CLI',
   'session.status.busy': 'Busy',
   'session.status.wait': 'Waiting',
   'session.status.idle': 'Idle',

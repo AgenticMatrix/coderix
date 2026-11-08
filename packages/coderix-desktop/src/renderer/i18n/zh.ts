@@ -169,8 +169,6 @@ export const zh = {
   'session.groupByFlat': '单列表',
   'session.groupByWorkspace': '按工作区',
   'session.ungrouped': '未分组',
-  'session.origin.desktop': '桌面',
-  'session.origin.cli': 'CLI',
   'session.status.busy': '忙碌',
   'session.status.wait': '等待',
   'session.status.idle': '空闲',
