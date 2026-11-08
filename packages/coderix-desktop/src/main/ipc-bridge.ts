@@ -3224,6 +3224,11 @@ function sanitizeErrorMessage(raw: string): string {
     return '🔌 无法连接到 API 服务器，请检查 Base URL 和网络连接。';
   if (raw.includes('timeout') || raw.includes('ETIMEDOUT'))
     return '⏰ API 请求超时，请检查网络或稍后重试。';
+  // A degraded model can end the turn properly while emitting nothing at all.
+  // The raw message names the finish reason and token count, which reads as
+  // jargon; say what it means and what to do about it.
+  if (raw.includes('empty response'))
+    return '⚠️ 模型返回了空响应（没有输出任何内容就结束了本轮）。这通常是模型服务侧的临时问题，可以重试；如果反复出现，请换用其他模型。';
 
   // Truncate long raw messages
   if (stripped.length > 300) return stripped.slice(0, 300) + '...';

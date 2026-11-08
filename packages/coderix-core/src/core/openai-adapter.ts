@@ -523,6 +523,20 @@ export function createCallModelFromOpenAI(
       yield { type: 'content_block_stop', index: idx };
     }
 
+    // A degraded model can end a turn correctly — `finish_reason: stop`, valid
+    // usage — while emitting nothing at all: no text, no thinking, no tool call.
+    // Reporting that as `end_turn` tells the caller the answer is complete, so
+    // the loop stops and the user sees a conversation that just went quiet with
+    // no explanation. Treat it as a failed call instead: `withStreamRetry`
+    // re-issues it (nothing was emitted, so nothing would be duplicated) and a
+    // turn that keeps coming back empty surfaces a real error.
+    if (!streamedText && !streamedReasoning && toolUses.length === 0) {
+      throw new Error(
+        `Model returned an empty response from ${url} ` +
+          `(finish_reason: ${finishReason ?? 'none'}, ${outputTokens} output tokens)`,
+      );
+    }
+
     const stopReason = mapStopReason(finishReason);
     const usage: CompletionUsage = { input_tokens: inputTokens, output_tokens: outputTokens };
 

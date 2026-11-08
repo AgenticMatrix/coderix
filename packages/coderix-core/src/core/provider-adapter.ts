@@ -403,6 +403,19 @@ export function createCallModelFromClient(
               content.push(tu);
             }
 
+            // A degraded model can end a turn correctly while emitting nothing
+            // at all: no text, no thinking, no tool call. Reporting that as
+            // `end_turn` tells the caller the answer is complete, so the loop
+            // stops and the conversation goes quiet with no explanation. Treat
+            // it as a failed call so the retry wrapper re-issues it and a turn
+            // that keeps coming back empty surfaces a real error.
+            if (content.length === 0) {
+              throw new Error(
+                `Model returned an empty response ` +
+                  `(stop_reason: ${stopReason || 'none'}, ${finalUsage.output_tokens ?? 0} output tokens)`,
+              );
+            }
+
             const assistantMsg: AssistantMessage = {
               role: 'assistant',
               content,

@@ -24,6 +24,7 @@ export type ErrorCategory =
   | 'context_too_large'
   | 'timeout'
   | 'aborted'
+  | 'empty_response'
   | 'unknown';
 
 export interface ClassifiedError {
@@ -39,6 +40,10 @@ const RETRYABLE_CATEGORIES = new Set<ErrorCategory>([
   'overloaded',
   'network',
   'timeout',
+  // A degraded model can answer with a well-formed but completely empty
+  // completion. Re-issuing the call is the only remedy, and it costs nothing
+  // because the failed attempt produced no output to duplicate.
+  'empty_response',
 ]);
 
 /**
@@ -46,6 +51,12 @@ const RETRYABLE_CATEGORIES = new Set<ErrorCategory>([
  */
 export function classifyError(error: Error): ClassifiedError {
   const message = error.message.toLowerCase();
+
+  // Empty completion. Checked first: the message deliberately says nothing that
+  // the branches below would claim (no HTTP status, no "invalid", no "auth").
+  if (message.includes('empty response')) {
+    return { category: 'empty_response', retryable: true, message: error.message, original: error };
+  }
 
   // Rate limiting
   if (
