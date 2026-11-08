@@ -167,6 +167,9 @@ export class QueryEngine {
   /** When the in-flight turn began. Background work older than this predates
    *  the current turn and must survive a stop. */
   private turnStartedAt = 0;
+  /** Identifies the turn that currently owns the engine. Bumped on every turn so
+   *  a superseded turn's callbacks cannot write into the live turn's state. */
+  private turnEpoch = 0;
   /** Resolved when the in-flight turn has fully unwound (`finally` reached). */
   private turnSettled: Promise<void> = Promise.resolve();
   private resolveTurnSettled: (() => void) | null = null;
@@ -406,8 +409,13 @@ export class QueryEngine {
 
     this.isActive = true;
     this.turnStartedAt = Date.now();
+    // Bumped for every turn. A turn that lost the engine (aborted and reclaimed,
+    // or superseded) must not write its state into the new turn's bookkeeping.
+    const epoch = ++this.turnEpoch;
     this.turnSettled = new Promise<void>((resolve) => {
-      this.resolveTurnSettled = resolve;
+      this.resolveTurnSettled = () => {
+        if (this.turnEpoch === epoch) resolve();
+      };
     });
 
     const session = this.config.sessionManager.getActive();
@@ -683,7 +691,15 @@ export class QueryEngine {
       emitToolRequest: eventBus
         ? (req) => eventBus.toolRequests.next(req)
         : undefined,
-      onToolQueueChange: (count) => { this.runningToolCount = count; },
+      onToolQueueChange: (count) => {
+        // Each turn's query() owns its own tool queue, but the count it reports
+        // lands on this shared engine. A reclaimed turn's queue can still settle
+        // later and report 0 — which would erase the *live* turn's count and
+        // make its blocking tool look idle (the next send would then abort it).
+        // Ignore any write that does not come from the turn holding the engine.
+        if (this.turnEpoch !== epoch) return;
+        this.runningToolCount = count;
+      },
     };
 
     // Dual-write helper: yields the event AND emits to EventBus (if configured)
@@ -695,6 +711,11 @@ export class QueryEngine {
 
     try {
       for await (const msg of query(queryConfig)) {
+        // A reclaimed turn keeps producing events until its stuck tool finally
+        // settles. Persisting those now would interleave two turns' messages in
+        // one session — the new turn already owns the transcript.
+        if (this.turnEpoch !== epoch) break;
+
         switch (msg.type) {
           case 'stream_event': {
             const event = { type: 'message' as const, data: msg };
@@ -776,15 +797,25 @@ export class QueryEngine {
       yield errorEvent;
       throw error;
     } finally {
-      this.isActive = false;
-      // A tool that was still running when the turn unwound must not keep the
-      // engine looking busy — the next turn's blocking-tool check reads this.
-      this.runningToolCount = 0;
+      // A turn that was force-reclaimed (its tools ignored the abort, a new turn
+      // took the engine) unwinds here *after* the replacement started. Clearing
+      // the shared flags then would wipe the live turn's state — its blocking
+      // tool would look idle and the next message would abort it. Only the
+      // turn that still owns the engine may reset it.
+      const ownsEngine = this.turnEpoch === epoch;
+      if (ownsEngine) {
+        this.isActive = false;
+        // A tool that was still running when the turn unwound must not keep the
+        // engine looking busy — the next turn's blocking-tool check reads this.
+        this.runningToolCount = 0;
+      }
       this.config.sessionManager.saveSession(session);
-      this.resolveTurnSettled?.();
-      // Release the next sender *after* the run flag is cleared, so a message
-      // queued while busy is not enqueued again by the submit guard.
-      this.messageQueue.drainNext();
+      if (ownsEngine) {
+        this.resolveTurnSettled?.();
+        // Release the next sender *after* the run flag is cleared, so a message
+        // queued while busy is not enqueued again by the submit guard.
+        this.messageQueue.drainNext();
+      }
     }
   }
 
@@ -897,6 +928,10 @@ export class QueryEngine {
     // Block new submissions while compaction runs
     this.isActive = true;
     this.runningToolCount = 1;
+    // Compaction takes the engine over, so it must own it: without bumping the
+    // epoch, a still-unwinding turn's `finally` would look like the owner and
+    // clear these flags mid-compaction (and drain the queue too early).
+    const epoch = ++this.turnEpoch;
 
     // Trim session messages before compacting (same as submitMessage)
     const trimBudget = this.config.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
@@ -967,11 +1002,15 @@ export class QueryEngine {
       const errMsg = error instanceof Error ? error.message : String(error);
       yield { type: 'error', data: { message: `Compaction failed: ${errMsg}` } };
     } finally {
-      this.runningToolCount = 0;
-      this.isActive = false;
       this.config.sessionManager.saveSession(session);
-      // Drain any messages queued during compaction
-      this.messageQueue.drainNext();
+      // Only release the engine if compaction still owns it — a submit that
+      // reclaimed it must not have its flags cleared from under it.
+      if (this.turnEpoch === epoch) {
+        this.runningToolCount = 0;
+        this.isActive = false;
+        // Drain any messages queued during compaction
+        this.messageQueue.drainNext();
+      }
     }
   }
 
