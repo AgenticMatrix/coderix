@@ -66,6 +66,7 @@ import {
 } from '../memory/recall.js';
 import { ReadFileTracker } from './read-file-tracker.js';
 import { MessageQueue } from './message-queue.js';
+import { stopTasksSince } from '../tasks/task-tracker.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -144,6 +145,13 @@ export interface TaskLifecycleEvent {
 // max_context and no budget is otherwise derived from model_list.
 const DEFAULT_CONTEXT_BUDGET = 512 * 1024;
 
+/**
+ * How long a new turn waits for an interrupted one to unwind before taking the
+ * engine over. Long enough for an in-flight tool to honour its abort, short
+ * enough that the user never stares at a dead input.
+ */
+const ABORT_UNWIND_GRACE_MS = 3000;
+
 export class QueryEngine {
   private config: QueryEngineConfig;
   private permissionEngine: PermissionEngine;
@@ -156,6 +164,12 @@ export class QueryEngine {
   private isActive = false;
   private messageQueue = new MessageQueue();
   private runningToolCount = 0;
+  /** When the in-flight turn began. Background work older than this predates
+   *  the current turn and must survive a stop. */
+  private turnStartedAt = 0;
+  /** Resolved when the in-flight turn has fully unwound (`finally` reached). */
+  private turnSettled: Promise<void> = Promise.resolve();
+  private resolveTurnSettled: (() => void) | null = null;
 
   constructor(config: QueryEngineConfig) {
     this.config = {
@@ -358,8 +372,21 @@ export class QueryEngine {
 
     // Decision tree: if already active, enqueue or abort based on running tools
     if (this.isActive) {
-      const hasBlocking = this.hasBlockingToolsRunning();
-      if (hasBlocking) {
+      // An interrupted turn no longer has a consumer, so queueing would strand
+      // this message forever: the renderer has moved on, nothing drains the
+      // queue, and the user just sees "no end signal" on every following send.
+      // Wait for that turn to unwind instead, and reclaim the engine outright
+      // if it does not (a tool can still ignore its abort signal).
+      if (this.abortController?.signal.aborted) {
+        await Promise.race([
+          this.turnSettled,
+          new Promise((resolve) => setTimeout(resolve, ABORT_UNWIND_GRACE_MS)),
+        ]);
+        if (this.isActive) {
+          this.isActive = false;
+          this.runningToolCount = 0;
+        }
+      } else if (this.hasBlockingToolsRunning()) {
         // The queue carries the images too: a turn deferred behind a blocking
         // tool must still arrive with its attachments, not just its text.
         this.messageQueue.enqueue(userInput, images);
@@ -370,15 +397,18 @@ export class QueryEngine {
         emitEarly(event);
         yield event;
         return;
-      }
-      // All running tools are cancel-safe — abort and proceed
-      if (this.abortController) {
+      } else if (this.abortController) {
+        // All running tools are cancel-safe — abort and proceed
         this.abortController.abort();
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
 
     this.isActive = true;
+    this.turnStartedAt = Date.now();
+    this.turnSettled = new Promise<void>((resolve) => {
+      this.resolveTurnSettled = resolve;
+    });
 
     const session = this.config.sessionManager.getActive();
     // Capture this before any synthetic user messages (tool-result repair, team
@@ -747,7 +777,13 @@ export class QueryEngine {
       throw error;
     } finally {
       this.isActive = false;
+      // A tool that was still running when the turn unwound must not keep the
+      // engine looking busy — the next turn's blocking-tool check reads this.
+      this.runningToolCount = 0;
       this.config.sessionManager.saveSession(session);
+      this.resolveTurnSettled?.();
+      // Release the next sender *after* the run flag is cleared, so a message
+      // queued while busy is not enqueued again by the submit guard.
       this.messageQueue.drainNext();
     }
   }
@@ -809,9 +845,25 @@ export class QueryEngine {
     }
   }
 
+  /**
+   * Stop the current turn — the model call, its sub-agents, and the background
+   * work this turn started.
+   *
+   * Aborting the top-level controller only reaches code that listens to it. A
+   * sub-agent owns its own controller and a backgrounded command deliberately
+   * detaches from the turn's signal, so both have to be stopped explicitly.
+   * Tasks created before this turn started are left alone: they belong to an
+   * earlier turn (a dev server the user still wants).
+   */
   interrupt(): void {
-    if (this.abortController) {
-      this.abortController.abort();
+    this.abortController?.abort();
+
+    const sessionId = this.config.sessionManager.getActive()?.id;
+    if (sessionId) {
+      this.config.subAgentRegistry?.abortAllInSession(sessionId);
+    }
+    if (this.turnStartedAt > 0) {
+      stopTasksSince(this.turnStartedAt, sessionId);
     }
   }
 

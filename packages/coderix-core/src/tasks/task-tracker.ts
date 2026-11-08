@@ -7,6 +7,7 @@
 
 import type { ChildProcess } from 'node:child_process';
 
+import { killProcess } from '../tools/bash/process-registry.js';
 import { truncateSafely } from '../utils/text-truncation.js';
 export type TrackedTaskType = 'bash' | 'agent';
 
@@ -15,6 +16,8 @@ export interface TrackedTask {
   type: TrackedTaskType;
   status: 'running' | 'done' | 'error' | 'stopped';
   description: string;
+  /** The conversation that started this task, so a stop can be scoped to it. */
+  sessionId?: string;
   /** For bash tasks: the child process handle for stop/kill. */
   process?: ChildProcess;
   /** For agent tasks: the abort controller for cancellation. */
@@ -83,6 +86,37 @@ export function listTasks(): TrackedTask[] {
 
 export function unregisterTask(id: string): void {
   tasks.delete(id);
+}
+
+/**
+ * Stop the background work a turn started, leaving earlier turns' tasks alone.
+ *
+ * A background command is deliberately allowed to outlive its turn (a dev
+ * server, a render job), so stopping the conversation must not reap everything
+ * the session ever launched. `sinceMs` is the turn's start time; only tasks
+ * created after it are in scope. Without that bound, hitting stop would kill a
+ * server an earlier turn set up and the user still expects to be running.
+ */
+export function stopTasksSince(sinceMs: number, sessionId?: string): string[] {
+  const stopped: string[] = [];
+  for (const task of tasks.values()) {
+    if (task.status !== 'running') continue;
+    if (task.createdAt < sinceMs) continue;
+    if (sessionId && task.sessionId && task.sessionId !== sessionId) continue;
+
+    if (task.type === 'bash' && task.process) {
+      killProcess(task.process);
+    }
+    task.abortController?.abort();
+
+    task.status = 'stopped';
+    task.finishedAt = Date.now();
+    stopped.push(task.id);
+    // Reuse the normal completion path so the tracker's notification and the
+    // frontend's `background_task_update` both report the kill.
+    notifyTaskCompletion(task.id);
+  }
+  return stopped;
 }
 
 // ── Background task notification queue ──────────────────────

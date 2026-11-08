@@ -300,6 +300,23 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
     }
     const engine = await createEngineForSession(session);
     engineBySession.set(session.id, engine);
+    // The engine queues a message instead of rejecting it when a previous turn
+    // is still running. Nothing else drains that queue on the desktop side, so
+    // without this subscription a queued message is simply lost — the user sees
+    // their input vanish and the next one fail with "no end signal".
+    engine.onQueueDrain((message, images) => {
+      void startTurn({
+        query: message,
+        sessionId: session.id,
+        images: images?.map((img) => ({ mediaType: img.mediaType, data: img.data })),
+      }).catch((err: unknown) => {
+        safeSend(getMainWindow(windowManager), IPC_CHANNELS.STREAM_ERROR, {
+          message: sanitizeErrorMessage(err instanceof Error ? err.message : String(err)),
+          code: 'RUNTIME',
+          sessionId: session.id,
+        });
+      });
+    });
     return engine;
   };
 
@@ -406,7 +423,20 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
 
   // ── Query ──────────────────────────────────────────────────────────────
 
-  ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: { query: string; sessionId?: string; skills?: string[]; images?: IncomingImage[] }) => {
+  interface TurnSubmission {
+    query: string;
+    sessionId?: string;
+    skills?: string[];
+    images?: IncomingImage[];
+  }
+
+  /**
+   * Start one turn. Extracted from the IPC handler so a message the engine
+   * queued while busy can be started from `onQueueDrain` through the exact same
+   * path — without this, an engine-side queue would be a place messages go to
+   * disappear.
+   */
+  const startTurn = async (payload: TurnSubmission) => {
     if (!sessionManager) {
       throw new Error('SessionManager not initialized');
     }
@@ -1123,6 +1153,24 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               }
               break;
             }
+            case 'queued': {
+              // The engine refused this turn because a previous one is still
+              // running. The message is parked in the engine's queue and now
+              // starts from `onQueueDrain` when that turn unwinds — tell the
+              // renderer so the input does not silently look accepted and dead.
+              const queued = event.data as { position?: number } | undefined;
+              safeSend(mainWindow, IPC_CHANNELS.STREAM_RETRY, {
+                message: `上一条任务仍在结束中，你的消息已排队（第 ${queued?.position ?? 1} 位），稍后自动发送`,
+                attempt: 0,
+                maxRetries: 0,
+                delayMs: 0,
+                errorClass: 'queued',
+                sessionId: streamSessionId,
+              });
+              // The turn did not start; the queue owns it from here.
+              turnEnded = true;
+              break;
+            }
             case 'cost': {
               const costData = event.data as { totalCost?: number; currency?: string };
               safeSend(mainWindow, IPC_CHANNELS.STATE_COST_UPDATE, costData);
@@ -1327,6 +1375,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // both sides agree on which `done`/`error` belongs to the current turn.
       epoch: streamEpoch,
     };
+  };
+
+  ipcMain.handle(IPC_CHANNELS.QUERY_SUBMIT, async (_event, payload: TurnSubmission) => {
+    return startTurn(payload);
   });
 
   ipcMain.handle(IPC_CHANNELS.QUERY_INTERRUPT, async (_event, sessionId?: string) => {

@@ -553,11 +553,12 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
       const taskId = `bash-${result.pid}`;
 
       // Register with tracker for TaskOutput / TaskStop
-      const trackedTask = {
+      const trackedTask: TrackedTask = {
         id: taskId,
         type: 'bash' as const,
         status: 'running' as const,
         description: command.slice(0, 120),
+        sessionId: opts.sessionId,
         process: result.child,
         createdAt: startTime,
       };
@@ -631,6 +632,7 @@ export const execute: ToolExecutor = async (input, opts): Promise<ToolResult> =>
         type: 'bash' as const,
         status: 'running' as const,
         description: command.slice(0, 120),
+        sessionId: opts.sessionId,
         process: result.child,
         createdAt: startTime,
       };

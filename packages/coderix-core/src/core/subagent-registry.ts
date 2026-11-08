@@ -130,6 +130,24 @@ export class SubAgentRegistry {
   }
 
   /**
+   * Abort the running agents that belong to one conversation.
+   *
+   * The registry is process-wide (concurrent per-session engines share it), so
+   * `abortAll` would stop another conversation's work when the user hits stop
+   * in just one. Records are scoped by the `sessionId` they were spawned from.
+   */
+  abortAllInSession(sessionId: string): number {
+    let aborted = 0;
+    for (const agent of this.agents.values()) {
+      if (agent.status === 'running' && agent.sessionId === sessionId) {
+        agent.abortController.abort();
+        aborted++;
+      }
+    }
+    return aborted;
+  }
+
+  /**
    * Send a running foreground agent to the background.
    * Resolves the background signal so the foreground executor returns early,
    * while the agent continues running in the background.

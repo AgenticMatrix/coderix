@@ -1430,6 +1430,11 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
     // tool timers promptly, rather than waiting until every tool is done.
     const POLL_INTERVAL = 200;
     while (queue.runningCount > 0 || queue.pendingCount > 0) {
+      // A tool that ignores the abort signal (a sub-agent whose loop is blocked
+      // on the model, a backgrounded command) must not hold the turn open: the
+      // consumer already stopped reading, and the engine's `finally` would never
+      // run, leaving `isActive` stuck for every later turn in this session.
+      if (abortController.signal.aborted) break;
       for (const pe of queue.drainProgress()) {
         yield { type: 'system', subtype: 'progress', data: pe };
       }
@@ -1459,9 +1464,17 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       yield { type: 'system', subtype: 'progress', data: pe };
     }
 
-    // Assemble results in original parse order
+    // Assemble results in original parse order. Every tool_use must get a
+    // tool_result or the next request is rejected for an unanswered tool call,
+    // so an interrupted turn still writes a synthetic one for each tool that
+    // never settled.
+    const interrupted = abortController.signal.aborted;
     let toolResults: ToolResultBlock[] = orderedBlocks.map((block) =>
-      queue.getResult(block.id) ?? createToolErrorResult(block.id, 'Tool execution skipped'),
+      queue.getResult(block.id) ??
+      createToolErrorResult(
+        block.id,
+        interrupted ? 'Interrupted by user' : 'Tool execution skipped',
+      ),
     );
 
     // Apply per-result and per-message size limits
@@ -1553,6 +1566,9 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
         }
 
         for (let attemptNum = 1; attemptNum <= MAX_AUTO_LISTEN_RETRIES + 1; attemptNum++) {
+          // Auto-retry exists to keep waiting on background work. Once the user
+          // stops the turn there is nothing left to wait for.
+          if (abortController.signal.aborted) break;
           if (attemptNum > 1) {
             const registry = config.subAgentRegistry;
             const hasRunningSubAgents = registry

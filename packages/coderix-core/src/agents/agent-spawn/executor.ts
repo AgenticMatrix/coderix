@@ -48,6 +48,29 @@ function isForkSubagentEnabled(): boolean {
   return true;
 }
 
+/**
+ * Make a foreground sub-agent inherit the turn's abort signal.
+ *
+ * A sub-agent runs its own `query()` loop with its own controller, so aborting
+ * the parent's controller never reaches it: the agent keeps calling the model
+ * after the user pressed stop, and the turn cannot unwind until it finishes.
+ * Background agents are deliberately left unlinked (they outlive the turn) and
+ * are stopped through the registry when the user interrupts.
+ */
+function linkParentAbort(
+  parentSignal: AbortSignal | undefined,
+  subAbortController: AbortController,
+): void {
+  if (!parentSignal) return;
+  if (parentSignal.aborted) {
+    subAbortController.abort();
+    return;
+  }
+  // `once` keeps the parent signal from accumulating listeners across the
+  // many sub-agents a single turn can spawn.
+  parentSignal.addEventListener('abort', () => subAbortController.abort(), { once: true });
+}
+
 // ---------------------------------------------------------------------------
 // Fork helpers
 // ---------------------------------------------------------------------------
@@ -243,7 +266,7 @@ async function handleBackgroundedAgentCompletion(
 async function executeStandardSubagent(
   input: Record<string, unknown>,
   agentSpawn: AgentSpawnContext,
-  options: { cwd?: string; sessionId?: string; agentId?: string; toolUseId?: string },
+  options: { cwd?: string; sessionId?: string; agentId?: string; toolUseId?: string; signal?: AbortSignal },
 ): Promise<ToolResult> {
   const agentTypeInput = input.agent_type as string;
   const prompt = input.prompt as string;
@@ -265,6 +288,10 @@ async function executeStandardSubagent(
   const agentId = options.agentId ?? `sub-${shortId()}`;
   const subAbortController = new AbortController();
   const isBackground = backgroundOverride ?? false;
+  // A foreground agent belongs to the turn that spawned it; stopping the turn
+  // must stop this agent too. Background agents outlive the turn by design and
+  // are stopped through the registry when the user interrupts.
+  if (!isBackground) linkParentAbort(options.signal, subAbortController);
 
   // Build filtered tool registry from the agent definition
   const parentDefs = agentSpawn.toolRegistry.getDefinitions();
@@ -558,11 +585,13 @@ async function executeFork(
   agentSpawn: AgentSpawnContext,
   toolUseId?: string,
   bgSessionId?: string,
+  signal?: AbortSignal,
 ): Promise<ToolResult> {
   const agentType = 'fork';
   const agentId = `fork-${shortId()}`;
   const subAbortController = new AbortController();
   const isBackground = background ?? false;
+  if (!isBackground) linkParentAbort(signal, subAbortController);
 
   // ── Recursion guard (defense-in-depth; primary defense is tool filtering) ──
   const parentSession = agentSpawn.sessionManager.getActive();
@@ -833,7 +862,7 @@ async function executeResume(
   agentId: string,
   prompt: string,
   agentSpawn: AgentSpawnContext,
-  options: { cwd?: string; sessionId?: string; toolUseId?: string },
+  options: { cwd?: string; sessionId?: string; toolUseId?: string; signal?: AbortSignal },
 ): Promise<ToolResult> {
   const resumeSessionId = agentSpawn.sessionManager.getActive()?.id;
   const resumeSessionDir = resumeSessionId ? getSessionDir(resumeSessionId) : undefined;
@@ -964,6 +993,7 @@ async function executeResume(
 
   const cwd = options.cwd ?? process.cwd();
   const subAbortController = new AbortController();
+  linkParentAbort(options.signal, subAbortController);
 
   // ── Update registry status ──────────────────────────────────────────
   // Re-tag with this resume call's tool_use id so the renderer correlates the
@@ -1071,12 +1101,16 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
       cwd: options.cwd,
       sessionId: options.sessionId,
       toolUseId: options.toolUseId,
+      signal: options.signal,
     });
   }
 
   // ── Path 2: Fork mode — no agent_type (or "fork_main") → inherit parent context ────
   if ((!agentTypeInput || agentTypeInput === 'fork_main') && isForkSubagentEnabled()) {
-    return executeFork(prompt, description, modelOverride, isolation, backgroundOverride, agentSpawn, options.toolUseId, options.sessionId);
+    return executeFork(
+      prompt, description, modelOverride, isolation, backgroundOverride,
+      agentSpawn, options.toolUseId, options.sessionId, options.signal,
+    );
   }
 
   // ── Path 3: Standard subagent — explicit agent_type ───────────────
@@ -1085,5 +1119,6 @@ export const execute: ToolExecutor = async (input, options): Promise<ToolResult>
     sessionId: options.sessionId,
     agentId: options.agentId,
     toolUseId: options.toolUseId,
+    signal: options.signal,
   });
 };

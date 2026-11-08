@@ -25,6 +25,23 @@ export const execute: ToolExecutor = async (input, opts) => {
   const CHECK_INTERVAL = 500;
   let elapsed = 0;
   while (elapsed < ms) {
+    // Stop waiting as soon as the turn is interrupted — nothing will deliver a
+    // notification for a turn the user already killed, and the poll would hold
+    // the turn open for up to `duration` seconds.
+    if (opts.signal?.aborted) {
+      return {
+        content: 'Interrupted by user',
+        isError: false,
+        duration: Date.now() - start,
+        metadata: {
+          reason,
+          requestedDuration: duration,
+          actualDuration: (Date.now() - start) / 1000,
+          wokeEarly: true,
+          interrupted: true,
+        },
+      };
+    }
     await new Promise(r => setTimeout(r, Math.min(CHECK_INTERVAL, ms - elapsed)));
     elapsed += CHECK_INTERVAL;
 
