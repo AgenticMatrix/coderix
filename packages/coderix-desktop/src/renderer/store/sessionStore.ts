@@ -49,6 +49,19 @@ type RawSessionInfo = {
   firstUserText?: string;
 };
 
+/**
+ * The sidebar shows only conversations started in the desktop app.
+ *
+ * The main process already filters on `origin` before its `limit` slice (see
+ * SessionManager.list). This is a second gate for the paths that bypass that
+ * list call — `refreshSession` fetches a single session by id, so without it a
+ * CLI conversation could be upserted back into the sidebar. Sessions recorded
+ * before `origin` existed have no client recorded and stay hidden.
+ */
+function isDesktopSession(s: SessionSummary): boolean {
+  return s.origin === 'desktop';
+}
+
 /** Normalize the preload's untyped payload into the renderer's summary shape. */
 function normalizeSession(s: RawSessionInfo): SessionSummary {
   return {
@@ -102,7 +115,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     }
     try {
       const sessions = await listSessions();
-      const normalized = (sessions as unknown as RawSessionInfo[]).map(normalizeSession);
+      const normalized = (sessions as unknown as RawSessionInfo[])
+        .map(normalizeSession)
+        .filter(isDesktopSession);
       set({ sessions: sortByRecency(normalized), isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load sessions';
@@ -116,6 +131,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       const s = await getSession(id);
       if (!s) return;
       const normalized = normalizeSession(s as unknown as RawSessionInfo);
+      // A conversation this sidebar does not show must not be patched in either
+      // — `session:get` reads any session by id, including CLI ones.
+      if (!isDesktopSession(normalized)) return;
       // Patch the matching entry, or insert it when the conversation is not in
       // the list yet. A full list reload between "session created" and "first
       // message persisted" can drop an in-progress conversation; this upsert

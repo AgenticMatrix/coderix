@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { execSync, spawnSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, resolve, normalize, relative, isAbsolute, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
@@ -1456,23 +1456,22 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
   ipcMain.handle(IPC_CHANNELS.SESSION_LIST, async () => {
     // Strict: if the sessions root cannot be read, reject the IPC so the
     // renderer keeps its last good list instead of wiping the sidebar with [].
-    if (sessionManager) return sessionManager.listSessions(undefined, { strict: true });
-    // Disk fallback before QueryEngine is ready
-    try {
-      const sessionsDir = join(homedir(), '.coderix', 'sessions');
-      if (!existsSync(sessionsDir)) return [];
-      return readdirSync(sessionsDir, { withFileTypes: true })
-        .filter(e => e.isDirectory())
-        .map(e => {
-          const f = join(sessionsDir, e.name, 'session.json');
-          if (!existsSync(f)) return null;
-          try {
-            const d = JSON.parse(readFileSync(f, 'utf-8'));
-            return { id: d.id, title: d.title, turnCount: d.turnCount || 0, model: d.model || '', updatedAt: new Date(d.updatedAt).getTime(), createdAt: new Date(d.createdAt).getTime() };
-          } catch { return null; }
-        })
-        .filter(Boolean);
-    } catch { return []; }
+    //
+    // Only conversations started here: the sidebar is the desktop's own list,
+    // and CLI sessions are resumed from the CLI. The core applies this before
+    // its `limit` slice — filtering afterwards would return fewer rows than
+    // asked for and hide older desktop conversations behind CLI ones.
+    if (sessionManager) {
+      return sessionManager.listSessions(undefined, {
+        strict: true,
+        origin: ['desktop'],
+      });
+    }
+    // Disk fallback before QueryEngine is ready. It reads the legacy
+    // session.json shape, which carries no origin, so nothing here can be
+    // proven to be a desktop conversation — return an empty list rather than
+    // let unfiltered rows through.
+    return [];
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_GET, async (_event, sessionId: string) => {

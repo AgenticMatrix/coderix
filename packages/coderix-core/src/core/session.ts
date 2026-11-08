@@ -1430,10 +1430,19 @@ export class SessionManager {
     // Sort by most recently updated (session IDs are random, use dir mtime)
     list.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
+    // Filtering runs after sorting but before the limit, so `limit` counts rows
+    // the caller will actually see. Slicing first would return fewer than
+    // `limit` rows and let filtered-out sessions push older matching ones out.
+    const filtered = filter?.origin
+      ? list.filter(
+          (s) => s.origin !== undefined && filter.origin!.includes(s.origin),
+        )
+      : list;
+
     if (filter?.limit) {
-      return list.slice(filter.offset ?? 0, (filter.offset ?? 0) + filter.limit);
+      return filtered.slice(filter.offset ?? 0, (filter.offset ?? 0) + filter.limit);
     }
-    return list;
+    return filtered;
   }
 
   /**
@@ -1458,9 +1467,9 @@ export class SessionManager {
    */
   listSessions(
     limit?: number,
-    options: { strict?: boolean } = {},
+    options: { strict?: boolean; origin?: SessionClient[] } = {},
   ): SessionSummary[] {
-    return this.list({ limit: limit ?? 50 }, options);
+    return this.list({ limit: limit ?? 50, origin: options.origin }, options);
   }
 
   /**

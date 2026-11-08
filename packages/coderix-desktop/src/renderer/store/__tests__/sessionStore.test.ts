@@ -23,6 +23,9 @@ function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
     model: 'deepseek-flash',
     updatedAt: 1,
     createdAt: 1,
+    // The sidebar only lists conversations this client created, so the default
+    // fixture has to carry the desktop origin.
+    origin: 'desktop',
     ...overrides,
   };
 }
@@ -98,6 +101,30 @@ describe('sessionStore', () => {
     expect(sessions.map((s) => s.id)).toEqual(['a', 'b']);
     expect(sessions[0]?.title).toBe('A2');
     expect(sessions[0]?.turnCount).toBe(4);
+  });
+
+  it('loadSessions drops CLI and pre-origin conversations', async () => {
+    vi.mocked(listSessions).mockResolvedValue([
+      sessionInfo({ id: 'desktop', updatedAt: 3 }),
+      sessionInfo({ id: 'cli', origin: 'cli', updatedAt: 2 }),
+      // Legacy rows recorded before `origin` existed carry no client at all.
+      sessionInfo({ id: 'legacy', origin: undefined, updatedAt: 1 }),
+    ]);
+
+    await useSessionStore.getState().loadSessions();
+
+    expect(useSessionStore.getState().sessions.map((s) => s.id)).toEqual(['desktop']);
+  });
+
+  it('refreshSession never patches a CLI conversation into the sidebar', async () => {
+    useSessionStore.setState({ sessions: [sessionInfo({ id: 'desktop' })] });
+    vi.mocked(getSession).mockResolvedValue(
+      sessionInfo({ id: 'cli-session', origin: 'cli' }),
+    );
+
+    await useSessionStore.getState().refreshSession('cli-session');
+
+    expect(useSessionStore.getState().sessions.map((s) => s.id)).toEqual(['desktop']);
   });
 
   it('setSessionWorkDir patches the workspace in place', () => {

@@ -476,6 +476,14 @@ export interface SessionFilter {
   status?: SessionStatus;
   model?: string;
   provider?: string;
+  /**
+   * Only return sessions created by these clients. Absent = no filter.
+   *
+   * Sessions recorded before `origin` existed carry no client and are never
+   * matched by this filter — an unknown origin cannot be proven to belong to
+   * any of the requested clients.
+   */
+  origin?: SessionClient[];
   since?: Date;
   limit?: number;
   offset?: number;

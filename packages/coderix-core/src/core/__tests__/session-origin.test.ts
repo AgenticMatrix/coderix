@@ -76,3 +76,74 @@ describe('session origin', () => {
     expect(unknown.getSummary(session.id)?.origin).toBeUndefined();
   });
 });
+
+describe('session list origin filter', () => {
+  it('keeps only the requested origins', async () => {
+    const writer = new SessionManager(false, 'desktop');
+    const desktopSession = writer.create({ title: 'desktop one', cwd: root });
+    writer.addMessage(desktopSession.id, { role: 'user', content: 'desktop' });
+    await writer.flush();
+
+    const cli = new SessionManager(false, 'cli');
+    const cliSession = cli.create({ title: 'cli one', cwd: root });
+    cli.addMessage(cliSession.id, { role: 'user', content: 'cli' });
+    await cli.flush();
+
+    const listed = writer.list({ origin: ['desktop'], limit: 1000 });
+
+    expect(listed.some((s) => s.id === desktopSession.id)).toBe(true);
+    expect(listed.some((s) => s.id === cliSession.id)).toBe(false);
+    expect(listed.every((s) => s.origin === 'desktop')).toBe(true);
+  });
+
+  it('never matches a session whose origin is unknown', async () => {
+    const unknown = new SessionManager(false);
+    const session = unknown.create({ title: 'legacy shaped', cwd: root });
+    unknown.addMessage(session.id, { role: 'user', content: 'no origin' });
+    await unknown.flush();
+
+    const reader = new SessionManager(false, 'desktop');
+    expect(reader.list({ origin: ['desktop'], limit: 1000 }).some((s) => s.id === session.id)).toBe(false);
+    // ...nor to an explicitly requested 'unknown' client, which is not a real
+    // creation client — those sessions predate the field entirely.
+    expect(reader.list({ origin: ['unknown'], limit: 1000 }).some((s) => s.id === session.id)).toBe(false);
+  });
+
+  it('applies the limit after filtering, not before', async () => {
+    // Three CLI conversations are newer than the desktop ones, so a
+    // filter-after-slice implementation would return fewer than `limit` rows.
+    const cli = new SessionManager(false, 'cli');
+    for (let i = 0; i < 3; i++) {
+      const s = cli.create({ title: `cli ${i}`, cwd: root });
+      cli.addMessage(s.id, { role: 'user', content: `cli ${i}` });
+    }
+    await cli.flush();
+
+    const writer = new SessionManager(false, 'desktop');
+    for (let i = 0; i < 3; i++) {
+      const s = writer.create({ title: `desktop ${i}`, cwd: root });
+      writer.addMessage(s.id, { role: 'user', content: `desktop ${i}` });
+    }
+    await writer.flush();
+
+    const listed = writer.list({ origin: ['desktop'], limit: 2 });
+    expect(listed).toHaveLength(2);
+    expect(listed.every((s) => s.origin === 'desktop')).toBe(true);
+  });
+
+  it('returns every session when no origin filter is given', async () => {
+    const writer = new SessionManager(false, 'desktop');
+    const desktopSession = writer.create({ title: 'd', cwd: root });
+    writer.addMessage(desktopSession.id, { role: 'user', content: 'd' });
+    await writer.flush();
+
+    const cli = new SessionManager(false, 'cli');
+    const cliSession = cli.create({ title: 'c', cwd: root });
+    cli.addMessage(cliSession.id, { role: 'user', content: 'c' });
+    await cli.flush();
+
+    const ids = writer.list({ limit: 1000 }).map((s) => s.id);
+    expect(ids).toContain(desktopSession.id);
+    expect(ids).toContain(cliSession.id);
+  });
+});
