@@ -170,6 +170,8 @@ export class QueryEngine {
   /** Identifies the turn that currently owns the engine. Bumped on every turn so
    *  a superseded turn's callbacks cannot write into the live turn's state. */
   private turnEpoch = 0;
+  /** True while `compact()` owns the engine. */
+  private compacting = false;
   /** Resolved when the in-flight turn has fully unwound (`finally` reached). */
   private turnSettled: Promise<void> = Promise.resolve();
   private resolveTurnSettled: (() => void) | null = null;
@@ -375,12 +377,16 @@ export class QueryEngine {
 
     // Decision tree: if already active, enqueue or abort based on running tools
     if (this.isActive) {
-      // An interrupted turn no longer has a consumer, so queueing would strand
-      // this message forever: the renderer has moved on, nothing drains the
-      // queue, and the user just sees "no end signal" on every following send.
-      // Wait for that turn to unwind instead, and reclaim the engine outright
-      // if it does not (a tool can still ignore its abort signal).
-      if (this.abortController?.signal.aborted) {
+      // Compaction has a live consumer and drains the queue when it finishes, so
+      // a message sent meanwhile is parked (immediately) rather than waiting out
+      // the abort grace below — the last turn's controller is still the aborted
+      // one, which would otherwise send this message down the 3s wait.
+      if (!this.compacting && this.abortController?.signal.aborted) {
+        // An interrupted turn no longer has a consumer, so queueing would strand
+        // this message forever: the renderer has moved on, nothing drains the
+        // queue, and the user just sees "no end signal" on every following send.
+        // Wait for that turn to unwind instead, and reclaim the engine outright
+        // if it does not (a tool can still ignore its abort signal).
         await Promise.race([
           this.turnSettled,
           new Promise((resolve) => setTimeout(resolve, ABORT_UNWIND_GRACE_MS)),
@@ -932,6 +938,10 @@ export class QueryEngine {
     // epoch, a still-unwinding turn's `finally` would look like the owner and
     // clear these flags mid-compaction (and drain the queue too early).
     const epoch = ++this.turnEpoch;
+    // Set here, not before the try, so the `finally` below is guaranteed to
+    // clear it on every exit path — a stuck `compacting` would make every later
+    // submit skip the abort-grace guard.
+    this.compacting = true;
 
     // Trim session messages before compacting (same as submitMessage)
     const trimBudget = this.config.contextBudget ?? DEFAULT_CONTEXT_BUDGET;
@@ -1002,10 +1012,16 @@ export class QueryEngine {
       const errMsg = error instanceof Error ? error.message : String(error);
       yield { type: 'error', data: { message: `Compaction failed: ${errMsg}` } };
     } finally {
+      this.compacting = false;
       this.config.sessionManager.saveSession(session);
       // Only release the engine if compaction still owns it — a submit that
       // reclaimed it must not have its flags cleared from under it.
       if (this.turnEpoch === epoch) {
+        // `compact()` begins by interrupting the previous turn, which leaves its
+        // controller aborted. Without a fresh one, the next submit would take the
+        // "previous turn was aborted" branch and wait out the grace window even
+        // though nothing is running any more.
+        this.abortController = new AbortController();
         this.runningToolCount = 0;
         this.isActive = false;
         // Drain any messages queued during compaction
