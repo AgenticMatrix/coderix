@@ -170,6 +170,12 @@ export function App(): React.ReactElement {
   const currentPluginId = useSessionStore((s) =>
     s.sessions.find((x) => x.id === s.currentSessionId)?.pluginId,
   );
+  // The active conversation's bound agent identity. A plugin session owns its
+  // skill set (the manifest's skills), so the built-in default below must not
+  // overwrite it.
+  const currentAgentType = useSessionStore((s) =>
+    s.sessions.find((x) => x.id === s.currentSessionId)?.agentType,
+  );
   // The active conversation's own workspace (persisted on the session). This is
   // the authoritative directory for the right-hand app panel — it tracks the
   // conversation automatically, unlike the manually-synced `projectPath`.
@@ -349,14 +355,20 @@ export function App(): React.ReactElement {
   // stay enabled unless the user unchecks them in the picker. Applied once per
   // session id; sessions selected via the sidebar set their own authoritative
   // selection (which the `defaultedSkillsFor` ref guards against overriding).
+  //
+  // Plugin sessions (cad-harness, blender-harness, …) are excluded: their skill
+  // set comes from the plugin manifest, and this effect runs right after
+  // `handleCreatePluginSession` switches the view to the new id — overwriting
+  // both the picker and meta.json with the built-ins dropped every cad skill.
   useEffect(() => {
     if (!sessionId) return;
     if (defaultedSkillsFor.current === sessionId) return;
+    if (currentAgentType || currentPluginId) return;
     if (builtinSkillNames.length === 0) return;
     defaultedSkillsFor.current = sessionId;
     setSelectedSkills(builtinSkillNames);
     setSessionSkills(builtinSkillNames, sessionId ?? undefined).catch(() => {});
-  }, [sessionId, builtinSkillNames, setSessionSkills]);
+  }, [sessionId, currentAgentType, currentPluginId, builtinSkillNames, setSessionSkills]);
 
   // ── Custom skill directory management ───────────────────────────────────
   const handleAddSkillDir = () => {

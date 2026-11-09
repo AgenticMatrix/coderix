@@ -117,6 +117,12 @@ export interface QueryEngineConfig {
   autoCompactEnabled?: boolean;
   /** Selected skill names for the current session (empty = no skills enabled). */
   skills?: string[];
+  /**
+   * Skills the bound agent definition declares (a plugin manifest's `skills`).
+   * Always enabled alongside the session's own selection — `setSkills()` only
+   * replaces the session part, so a per-turn skill sync cannot drop them.
+   */
+  agentSkills?: string[];
 }
 
 export interface QueryEngineEvent {
@@ -282,7 +288,7 @@ export class QueryEngine {
       memorySettings: this.config.settings?.memory,
       briefMode: this.config.briefMode ?? false,
       agentRegistry: this.config.agentRegistry,
-      skillFilter: this.config.skills,
+      skillFilter: this.enabledSkills(),
     });
 
     // Persist system prompt to session directory for debugging / auditing
@@ -317,6 +323,10 @@ export class QueryEngine {
    * Set the selected skills for the current session. Forces system prompt
    * rebuild only when the selection actually changes, so the "Available Skills"
    * section reflects the per-session selection on the next turn.
+   *
+   * Only the session's own selection is replaced — the bound agent's declared
+   * skills (`agentSkills`) stay enabled, since they are part of the agent's
+   * identity rather than a per-session choice.
    */
   setSkills(skills: string[] | undefined): void {
     const next = Array.isArray(skills) ? [...skills] : [];
@@ -328,6 +338,20 @@ export class QueryEngine {
     if (same) return;
     this.config.skills = next;
     this.systemPrompt = null; // force reassembly on next submitMessage
+  }
+
+  /**
+   * The skill set the prompt is built from: the session's selection unioned with
+   * the bound agent's declared skills. Deduplicated, session order first.
+   *
+   * Returns undefined when the caller never narrowed the selection, so the
+   * assembler keeps injecting every discoverable skill (CLI/ACP behaviour).
+   */
+  private enabledSkills(): string[] | undefined {
+    const session = this.config.skills;
+    const agent = this.config.agentSkills;
+    if (session === undefined && agent === undefined) return undefined;
+    return Array.from(new Set([...(session ?? []), ...(agent ?? [])]));
   }
 
   /**

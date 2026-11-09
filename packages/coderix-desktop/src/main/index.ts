@@ -461,8 +461,10 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
   const model = override?.model ?? sessionModel;
   const callModel = makeCallModelSafe(appConfig, override, model);
 
-  // Union of the session's selected skills and the agent's declared skills.
-  const skills = Array.from(new Set([...(session.skills ?? []), ...(agentDef?.skills ?? [])]));
+  // The session's own selection and the agent's declared skills are kept apart:
+  // `setSkills()` on each turn replaces the session part only, so a per-turn
+  // sync cannot wipe out the plugin manifest's skills (the engine unions them).
+  const sessionSkills = session.skills ?? [];
 
   const perSessionManager = new SessionManager(false, 'desktop');
   perSessionManager.adopt(session);
@@ -479,7 +481,8 @@ async function createEngineForSession(session: Session): Promise<QueryEngine> {
     sessionManager: perSessionManager,
     toolRegistry,
     callModel,
-    skills,
+    skills: sessionSkills,
+    agentSkills: agentDef?.skills,
     eventBus: sharedEventBus,
     subAgentRegistry: agentRuntime.subAgentRegistry,
     systemPromptAssembler: agentRuntime.systemPromptAssembler,
