@@ -163,3 +163,54 @@ describe('QueryEngine — a stop does not swallow the next message', () => {
     expect(events).toContain('done');
   });
 });
+
+describe('QueryEngine — a stop during the model call is not a failure', () => {
+  let cwd: string;
+  let sessionManager: SessionManager;
+
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), 'coderix-engine-abort-'));
+    sessionManager = new SessionManager(true, 'desktop');
+    sessionManager.create({ title: 't', cwd, model: 'test-model' });
+  });
+
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it('does not report an aborted model call as an API error', async () => {
+    // Pressing stop while the reply is still streaming surfaces inside query()
+    // as the adapter's throw. Treating that as API_ERROR showed an error banner
+    // and — once a terminal error withholds the turn's closing `done` — ended the
+    // turn as a failure instead of a deliberate stop. The stop must unwind as an
+    // ordinary end so the bridge can label it INTERRUPTED.
+    const engine = new QueryEngine({
+      cwd,
+      toolRegistry: new ToolRegistry(),
+      sessionManager,
+      model: 'test-model',
+      callModel: (async function* (params: { signal?: AbortSignal }) {
+        yield { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'call_x', name: 'Quick', input: {} } };
+        yield { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{}' } };
+        yield { type: 'content_block_stop', index: 0 };
+        // Stall past the interrupt, then fail the way an aborted fetch does.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (params.signal?.aborted) {
+          throw new DOMException('The operation was aborted.', 'AbortError');
+        }
+      }) as never,
+      settings: {},
+    } as never);
+    engine.setPermissionMode(PermissionMode.AUTO);
+
+    const events: string[] = [];
+    const turn = (async () => {
+      for await (const event of engine.submitMessage('go')) events.push(event.type);
+    })();
+    setTimeout(() => engine.interrupt(), 250);
+    await turn;
+
+    expect(events).not.toContain('error');
+    expect(events).toContain('done');
+  }, 15000);
+});

@@ -329,6 +329,23 @@ describe('streamStore turn lifecycle', () => {
     expect(useChatStore.getState().interrupted).toBe(false);
   });
 
+  it('ignores a superseded turn\u2019s late interrupt', () => {
+    // Sending a second message aborts the first turn's controller in the main
+    // process, and that aborted turn reports INTERRUPTED even though the user
+    // never pressed stop. Its signal carries the OLD epoch, so it must not
+    // clear the marker or the streaming state of the turn now running.
+    useChatStore.getState().sendMessage('first');
+    useChatStore.getState().setStreamEpoch('s1', 1);
+    useChatStore.getState().sendMessage('second');
+    useChatStore.getState().setStreamEpoch('s1', 2);
+
+    errorCb('Query interrupted by user', 'INTERRUPTED', 's1', 1);
+
+    expect(useChatStore.getState().isStreaming).toBe(true);
+    expect(useChatStore.getState().interrupted).toBe(false);
+    expect(useChatStore.getState().errorBySession?.s1 ?? null).toBeNull();
+  });
+
   it('adopts a live context footprint without touching billable totals', () => {
     tokenCb({ inputTokens: 10, outputTokens: 5, contextTokens: 42000 }, 's1');
     expect(useStreamStore.getState().tokenUsage.contextTokens).toBe(42000);

@@ -1316,6 +1316,13 @@ export async function* query(config: QueryConfig): AsyncGenerator<QueryMessage> 
       }
 
       const errMsg = err.message;
+      // A user stop surfaces here as an aborted fetch (AbortError, or whatever
+      // the adapter throws when its signal fires). That is not a failure: the
+      // turn was told to stop, and reporting it as API_ERROR would both show an
+      // error banner and — now that a terminal error withholds the turn's
+      // closing `done` — end the turn as a failure instead of a stop.
+      if (abortController.signal.aborted) return;
+
       for (const block of orderedBlocks) {
         const errorMsg = createUserMessage([createToolErrorResult(block.id, errMsg)]);
         messages.push(errorMsg);
