@@ -238,8 +238,24 @@ function ScrollBox({
       {/* The scroll offset lives on this wrapper rather than on the measured
           content box, so that `contentRef` measures the content's NATURAL
           height — a pure function of the children, unaffected by the offset or
-          by anything derived from the measurement itself. */}
-      <Box flexDirection="column" flexShrink={0} width="100%" marginTop={-scrollTop}>
+          by anything derived from the measurement itself.
+
+          `paddingBottom` cancels `marginTop`. Without it the wrapper's margin
+          box is `content - scrollTop`, so an auto-sized (flex-mode) viewport
+          shrinks by exactly the offset it is supposed to be scrolling, and
+          `maxScroll = content - viewportHeight = scrollTop`: every offset
+          becomes a fixed point, sticky scroll keeps it, and the top rows stay
+          clipped even after the content shrinks to fit. Cancelling the shift
+          leaves the margin box at the content's natural height, so an
+          unconstrained viewport always reports "everything fits" and only a
+          parent that actually grants less than that produces room to scroll. */}
+      <Box
+        flexDirection="column"
+        flexShrink={0}
+        width="100%"
+        marginTop={-scrollTop}
+        paddingBottom={scrollTop}
+      >
         <Box ref={attachContent} flexDirection="column" flexShrink={0} width="100%">
           {children}
         </Box>
