@@ -230,4 +230,71 @@ describe('query:submit terminal events', () => {
     expect(sentOn('stream:error')[0].code).toBe('INTERRUPTED');
     expect(sentOn('stream:turnDone')).toEqual([]);
   });
+
+  it('does not turn a failure into a clean finish when `done` follows it', async () => {
+    // The in-process engine reports a dead endpoint as `error` and then its
+    // generator completes normally, so a `done` arrives right after. Forwarding
+    // both would let turnDone erase the error banner and label a timeout
+    // "completed" — the failure must stay the turn's ending.
+    engineFactory.current = stageStream([
+      { type: 'message', data: { type: 'stream_event', event: { type: 'request_start' } } },
+      { type: 'error', data: { message: 'Model request timed out after 120000ms with no data', code: 'API_ERROR' } },
+      { type: 'done', data: { sessionId: 's1' } },
+    ]);
+
+    await ipcHandlers.get('query:submit')!({}, { query: 'hi' });
+    await waitFor(() => sentOn('stream:error').length > 0);
+    await wait(100);
+
+    expect(sentOn('stream:error')).toHaveLength(1);
+    // A dead endpoint is a timeout, not a generic failure: the code the summary
+    // line reads must say so.
+    expect(sentOn('stream:error')[0].code).toBe('IDLE_TIMEOUT');
+    expect(sentOn('stream:turnDone')).toEqual([]);
+  });
+
+  it('reports a user stop as interrupted, not as a clean finish', async () => {
+    // A stopped turn aborts the controller, yet the in-process engine still
+    // finishes its generator normally and reports `done` afterwards. Forwarding
+    // that as a completion wipes the interrupted marker the renderer set on
+    // stop, so a deliberate stop was shown as "completed". The generator below
+    // must therefore emit `done` *after* the abort — that ordering is the whole
+    // point, and a stream that merely ends would be the easier case.
+    engineFactory.current = (opts: any) =>
+      (async function* () {
+        yield { type: 'message', data: { type: 'stream_event', event: { type: 'request_start' } } };
+        await new Promise<void>((resolve) =>
+          opts.abortController.signal.addEventListener('abort', () => resolve(), { once: true }),
+        );
+        yield { type: 'done', data: { sessionId: 's1' } };
+      })() as AsyncGenerator<any>;
+
+    const submit = ipcHandlers.get('query:submit')!({}, { query: 'hi' });
+    await waitFor(() => sentOn('stream:phase').length > 0);
+    await ipcHandlers.get('query:interrupt')!({}, undefined);
+    await submit;
+    await wait(100);
+
+    expect(sentOn('stream:error')).toHaveLength(1);
+    expect(sentOn('stream:error')[0].code).toBe('INTERRUPTED');
+    expect(sentOn('stream:turnDone')).toEqual([]);
+  });
+
+  it('keeps the engine\u2019s own reason instead of calling every failure a timeout', async () => {
+    // Only a transport stall is promoted to IDLE_TIMEOUT. A turn that ended for
+    // its own stated reason must keep that reason, or the user is told "timed
+    // out" when the real cause was the turn budget or a hook.
+    engineFactory.current = stageStream([
+      { type: 'message', data: { type: 'stream_event', event: { type: 'request_start' } } },
+      { type: 'error', data: { message: 'Exceeded maximum of 50 turns', code: 'MAX_TURNS' } },
+      { type: 'done', data: { sessionId: 's1' } },
+    ]);
+
+    await ipcHandlers.get('query:submit')!({}, { query: 'hi' });
+    await waitFor(() => sentOn('stream:error').length > 0);
+    await wait(100);
+
+    expect(sentOn('stream:error')[0].code).toBe('MAX_TURNS');
+    expect(sentOn('stream:turnDone')).toEqual([]);
+  });
 });

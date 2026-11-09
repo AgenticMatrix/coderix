@@ -193,6 +193,28 @@ describe('withStreamRetry', () => {
     await drain(gen);
     expect(calls).toBe(1);
   });
+
+  it('registers every retry with the consumer when the endpoint never answers', async () => {
+    // An endpoint that accepts the connection and then goes silent produces no
+    // output. With nothing yielded, the caller could not drain the retry notice
+    // it queued, so the UI sat silent for the whole backoff (3 x idle timeout).
+    // Each retry must re-announce the request so the notice can be shown.
+    const requestStart = (): StreamEvent => ({ type: 'request_start' });
+    let calls = 0;
+    const gen = withStreamRetry(
+      () => { calls++; return failingAfter([requestStart()], new Error('429 rate limit'), 1); },
+      { maxRetries: 3, baseDelayMs: 0 },
+    );
+
+    const { events, error } = await drain(gen);
+
+    expect(error).not.toBeNull();
+    expect(calls).toBe(4); // first attempt + 3 retries
+    // One announcement per *retried* attempt, so the UI learns about each one.
+    // The final attempt fails for good and is reported by the thrown error, not
+    // by another announcement.
+    expect(events.filter((e) => (e as StreamEvent).type === 'request_start')).toHaveLength(3);
+  });
 });
 
 describe('resolveRetryConfig', () => {

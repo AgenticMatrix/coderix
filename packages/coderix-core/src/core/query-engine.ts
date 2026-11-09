@@ -739,12 +739,26 @@ export class QueryEngine {
       }
     };
 
+    // A terminal `system:error` is followed by a plain `return` inside query(),
+    // so the generator still completes normally. Emitting the turn's closing
+    // `done` at that point would tell every consumer the turn finished cleanly —
+    // on the desktop it wipes the error banner that was just shown and relabels
+    // a timeout as "completed". Track whether the last thing the turn produced
+    // was an error, and only then withhold `done`.
+    let endedOnError = false;
+
     try {
       for await (const msg of query(queryConfig)) {
         // A reclaimed turn keeps producing events until its stuck tool finally
         // settles. Persisting those now would interleave two turns' messages in
         // one session — the new turn already owns the transcript.
         if (this.turnEpoch !== epoch) break;
+
+        // Compaction failures are reported as errors too, but they are
+        // recoverable: the turn keeps going and produces further messages, which
+        // clears this flag. Only an error that is the *last* message means the
+        // turn itself ended in failure.
+        endedOnError = msg.type === 'system' && msg.subtype === 'error';
 
         switch (msg.type) {
           case 'stream_event': {
@@ -807,6 +821,10 @@ export class QueryEngine {
           }
         }
       }
+      // The turn failed: the error above already told every consumer how it
+      // ended, and a `done` here would overwrite that with a clean finish.
+      if (endedOnError) return;
+
       const doneEvent: QueryEngineEvent = { type: 'done', data: { sessionId: session.id } };
       emit(doneEvent);
       yield doneEvent;

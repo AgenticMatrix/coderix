@@ -195,6 +195,17 @@ export async function* withStreamRetry(
       attempt += 1;
       onRetry?.(attempt, classified, delayMs);
 
+      // Make the retry observable. An endpoint that accepts the connection and
+      // then never sends a byte produces no output at all, so the held events
+      // are dropped with the attempt and the consumer hears nothing for the
+      // whole backoff — minutes of a UI that looks dead. Re-emitting the
+      // content-free `request_start` re-asserts "waiting on the model" and gives
+      // the caller the event it needs to drain the retry notice it just queued.
+      for (const held of pending) {
+        if ('type' in held && held.type === 'request_start') yield held;
+      }
+      pending.length = 0;
+
       await abortableSleep(delayMs, abortSignal);
       // Aborted while waiting: stop quietly rather than starting another call.
       if (abortSignal?.aborted) throw err;

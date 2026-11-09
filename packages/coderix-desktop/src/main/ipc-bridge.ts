@@ -736,6 +736,10 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // the renderer would otherwise stay on "thinking" until the next message,
       // so the `finally` below publishes a best-effort turn end.
       let turnEnded = false;
+      // Set when this turn reported an error. A later `done` must not clear it:
+      // the renderer treats turnDone as "clean finish" and drops the error
+      // banner, so forwarding both would report a failure as a completed turn.
+      let failedTurn = false;
       // The last stop reason the engine reported for this turn. Every model step
       // reports one (`end_turn`, `tool_use`, `max_tokens`, …); the *last* is the
       // one that actually ended the turn, so it is what the UI explains. Kept
@@ -1132,9 +1136,13 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // An engine-reported error is terminal for the turn; without this
               // the `finally` below would also publish a turn end.
               turnEnded = true;
+              failedTurn = true;
+              const code = classifyTurnErrorCode(err?.code, err?.message);
+              // No epoch: a guard mismatch would drop the error entirely, and a
+              // turn that failed must always be able to say so.
               safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
                 message: sanitizeErrorMessage(err?.message ?? 'Unknown error'),
-                code: err?.code ?? 'UNKNOWN',
+                code,
                 sessionId: streamSessionId,
               });
               break;
@@ -1303,6 +1311,28 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
               // the renderer to move the session's turn status to 'idle'. This
               // is the authoritative per-turn signal (unlike `message_stop`,
               // which fires per model step and whose stop reason is unreliable).
+              //
+              // Unless the turn already failed: an engine that reports an error
+              // and then completes its generator normally must not be allowed to
+              // erase that error with a clean finish. The renderer clears the
+              // error banner on turnDone, so forwarding both turns a timeout
+              // back into "completed".
+              if (failedTurn) break;
+              // A user stop aborts this turn's controller, but the in-process
+              // engine still finishes its generator normally and reports `done`.
+              // Forwarding that as a clean finish wipes the interrupted marker
+              // the renderer set on stop, so a deliberate stop reads as a
+              // completed turn. The stop is the ending; say so.
+              if (controller.signal.aborted) {
+                turnEnded = true;
+                safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, {
+                  message: 'Query interrupted by user',
+                  code: 'INTERRUPTED',
+                  sessionId: streamSessionId,
+                  epoch: streamEpoch,
+                });
+                break;
+              }
               turnEnded = true;
               safeSend(mainWindow, IPC_CHANNELS.STREAM_TURN_DONE, {
                 sessionId: streamSessionId,
@@ -1317,10 +1347,14 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
         }
       } catch (err) {
         discardStreamBuffer(streamSessionId);
-        turnEnded = true;
-        const rawMessage = err instanceof Error ? err.message : String(err);
-        const message = sanitizeErrorMessage(rawMessage);
-        safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: streamSessionId, epoch: streamEpoch });
+        // An error the engine already reported is the informative one; a
+        // follow-up throw from the same turn must not replace it.
+        if (!failedTurn) {
+          turnEnded = true;
+          const rawMessage = err instanceof Error ? err.message : String(err);
+          const message = sanitizeErrorMessage(rawMessage);
+          safeSend(mainWindow, IPC_CHANNELS.STREAM_ERROR, { message, code: 'RUNTIME', sessionId: streamSessionId, epoch: streamEpoch });
+        }
       } finally {
         // Cancel any dangling flush timer and drop buffered deltas — a normal
         // completion has already flushed via message_stop, and an aborted turn's
@@ -3259,6 +3293,22 @@ function findGitRoot(startDir: string): string {
 // ---------------------------------------------------------------------------
 // Error message sanitization — strip HTML, friendlier messages
 // ---------------------------------------------------------------------------
+
+/** Codes the renderer's turn-outcome line understands as a specific ending. */
+function classifyTurnErrorCode(code: string | undefined, message: string | undefined): string {
+  if (code === 'INTERRUPTED' || code === 'IDLE_TIMEOUT' || code === 'TURN_INCOMPLETE') {
+    return code;
+  }
+  // A specific code the engine chose (MAX_TURNS, BUDGET, HOOK_STOP, …) already
+  // says why the turn ended; leave it alone.
+  if (code && code !== 'API_ERROR' && code !== 'UNKNOWN') return code;
+  // Otherwise the in-process engine reported a dead endpoint as API_ERROR and
+  // the adapter's timeout text is the only evidence. Promote it to the timeout
+  // ending the user actually saw, rather than a generic failure.
+  const text = (message ?? '').toLowerCase();
+  if (text.includes('timed out') || text.includes('timeout')) return 'IDLE_TIMEOUT';
+  return code ?? 'UNKNOWN';
+}
 
 function sanitizeErrorMessage(raw: string): string {
   // Strip HTML tags (some APIs return HTML error pages)
