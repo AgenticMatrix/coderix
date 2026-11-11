@@ -97,10 +97,40 @@ let protocolGateway: ReturnType<typeof startProtocolGateway> | null = null;
 const sharedEventBus: EventBus = createEventBus();
 
 // ---------------------------------------------------------------------------
+// Application icon
+// ---------------------------------------------------------------------------
+
+// `electron-vite dev` runs the stock Electron.app from node_modules, whose Dock
+// icon is Electron's own. Packaged builds take theirs from the bundle
+// (electron-builder.yml `mac.icon`), so this only fills the dev gap.
+function resolveApplicationIcon(): string | null {
+  const candidates = [
+    resolve(__dirname, '../../assets/icon.png'),
+    resolve(app.getAppPath(), 'assets/icon.png'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function applyDockIcon(): void {
+  if (app.isPackaged || process.platform !== 'darwin') return;
+  const icon = resolveApplicationIcon();
+  if (icon) app.dock.setIcon(icon);
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap sequence — create window FIRST before any heavy init
 // ---------------------------------------------------------------------------
 
 async function bootstrap(): Promise<void> {
+  applyDockIcon();
+
   try {
     // First-launch config bootstrap — ensure ~/.coderix/{settings.json,skills,…}
     // exists before loadConfig() reads it. On a fresh install the core can't
