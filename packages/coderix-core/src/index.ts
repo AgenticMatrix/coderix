@@ -18,6 +18,7 @@ export type { SystemPrompt } from './core/system-prompt.js';
 export { SessionManager } from './core/session.js';
 export {
   sessionDir,
+  SESSIONS_DIR,
   sessionJsonlPath,
   sessionSystemPromptPath,
   sessionMetaPath,
@@ -67,7 +68,9 @@ export type {
 export {
   acquireLeaseSync,
   inspectLease,
+  processStartTime,
   readLease,
+  releaseAllProcessLeases,
   releaseLeaseSync,
   renewLeaseSync,
   SessionBusyError,

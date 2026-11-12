@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, hostname } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -12,13 +12,20 @@ let SessionManager: typeof import('../session.js').SessionManager;
 let acquireLeaseSync: typeof import('../session-lease.js').acquireLeaseSync;
 let inspectLease: typeof import('../session-lease.js').inspectLease;
 let releaseLeaseSync: typeof import('../session-lease.js').releaseLeaseSync;
+let releaseAllProcessLeases: typeof import('../session-lease.js').releaseAllProcessLeases;
+let processStartTime: typeof import('../session-lease.js').processStartTime;
 let leasePath: typeof import('../session-lease.js').leasePath;
 
 beforeAll(async () => {
   ({ SessionManager } = await import('../session.js'));
-  ({ acquireLeaseSync, inspectLease, releaseLeaseSync, leasePath } = await import(
-    '../session-lease.js'
-  ));
+  ({
+    acquireLeaseSync,
+    inspectLease,
+    releaseLeaseSync,
+    releaseAllProcessLeases,
+    processStartTime,
+    leasePath,
+  } = await import('../session-lease.js'));
 });
 
 afterAll(() => {
@@ -99,6 +106,66 @@ describe('session lease', () => {
     acquireLeaseSync(sessionDir, { sessionId: 's1', client: 'cli', force: true });
     releaseLeaseSync(sessionDir, 's1');
     expect(inspectLease(sessionDir).holder).toBeNull();
+  });
+
+  it('treats a foreign-owned pid as dead instead of busy', () => {
+    // A pid that exists but belongs to another user. Coderix only ever runs as
+    // the current user, so EPERM means the lease's writer died and the pid was
+    // recycled — the case that locked sessions forever after a reboot.
+    const foreign = 1; // launchd/init, owned by root
+    let errno: string | undefined;
+    try {
+      process.kill(foreign, 0);
+    } catch (err) {
+      errno = (err as NodeJS.ErrnoException).code;
+    }
+    if (errno !== 'EPERM') return; // running as root — nothing to assert
+
+    writeLeaseAt(sessionDir, foreign);
+    expect(inspectLease(sessionDir).busy).toBe(false);
+    expect(acquireLeaseSync(sessionDir, { sessionId: 's1', client: 'cli' }).acquired).toBe(true);
+  });
+
+  it('treats a live pid with a different start time as recycled', () => {
+    const actual = processStartTime(process.ppid);
+    if (actual === null) return; // ps unavailable — cannot exercise this path
+
+    // Same pid is alive, but it started a minute later than the lease says,
+    // so it is a different process that inherited the pid.
+    writeLeaseAt(sessionDir, process.ppid, { procStart: actual - 60_000 });
+    expect(inspectLease(sessionDir).busy).toBe(false);
+
+    // Within the tolerance it is the same process and must still block.
+    writeLeaseAt(sessionDir, process.ppid, { procStart: actual });
+    expect(inspectLease(sessionDir).busy).toBe(true);
+  });
+
+  it('does not resurrect a deleted session from a heartbeat', async () => {
+    const { renewLeaseSync } = await import('../session-lease.js');
+    const goneDir = join(root, 'deleted-session');
+    mkdirSync(goneDir, { recursive: true });
+    acquireLeaseSync(goneDir, { sessionId: 'gone', client: 'cli' });
+
+    rmSync(goneDir, { recursive: true, force: true });
+    expect(renewLeaseSync(goneDir, 'gone', 'cli')).toBe(false);
+    // acquireLeaseSync would have recreated the directory; the heartbeat must not.
+    expect(existsSync(goneDir)).toBe(false);
+  });
+
+  it('releases every lease this process holds, and none owned by others', () => {
+    const mine = join(root, 'lease-own-1');
+    const mineToo = join(root, 'lease-own-2');
+    const foreign = join(root, 'lease-foreign');
+    for (const dir of [mine, mineToo, foreign]) mkdirSync(dir, { recursive: true });
+
+    acquireLeaseSync(mine, { sessionId: 'own-1', client: 'cli' });
+    acquireLeaseSync(mineToo, { sessionId: 'own-2', client: 'cli' });
+    writeLeaseAt(foreign, process.ppid);
+
+    expect(releaseAllProcessLeases(root)).toBeGreaterThanOrEqual(2);
+    expect(inspectLease(mine).holder).toBeNull();
+    expect(inspectLease(mineToo).holder).toBeNull();
+    expect(inspectLease(foreign).busy).toBe(true);
   });
 });
 
