@@ -561,6 +561,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.emptySubtitle': 'I can help with code review, debugging, refactoring, and more. Start by typing a message below.',
   'chat.scrollToBottom': 'Scroll to bottom',
   'chat.showEarlier': 'Show earlier messages',
+  'chat.loadingEarlier': 'Loading…',
   'chat.hiddenCalls': '{count} earlier calls hidden',
 
   // ── Why the turn ended (under the final message) ────

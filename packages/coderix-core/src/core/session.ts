@@ -34,6 +34,7 @@ import {
   appendEntry,
   appendEntrySync,
   readEntriesSync,
+  readMessagePageSync,
   rewriteEntries,
   entriesToMessages,
   readTailMetadata,
@@ -443,6 +444,39 @@ export class SessionManager {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * Read one page of a session's persisted transcript from the tail, for
+   * conversation display.
+   *
+   * This reads the JSONL directly and never touches the cached
+   * `session.messages` working copy. That separation matters: the working copy
+   * is deliberately bounded (see `MAX_MESSAGES` and `trimMessages`) because it
+   * is the engine's context, whereas the transcript on disk is the complete
+   * record. Serving the view from the capped array is what made long
+   * conversations appear to lose their earlier turns.
+   *
+   * @param sessionId - session to read.
+   * @param beforeUuid - exclusive cursor from a previous page; omit for the tail.
+   * @param maxMessages - soft page size, aligned up to a turn boundary.
+   * @returns that page plus the cursor and `hasMore` for loading older pages.
+   */
+  readMessagePage(
+    sessionId: string,
+    beforeUuid: string | undefined,
+    maxMessages: number,
+    maxBytes?: number,
+    beforeOffset?: number,
+  ): {
+    messages: Message[];
+    uuids: string[];
+    oldestUuid: string | null;
+    oldestOffset: number | null;
+    hasMore: boolean;
+  } {
+    const filePath = sessionJsonlPath(getSessionDir(sessionId));
+    return readMessagePageSync(filePath, beforeUuid, maxMessages, maxBytes, beforeOffset);
   }
 
   /**

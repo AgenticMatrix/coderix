@@ -47,6 +47,34 @@ export interface ChatState {
   // can be ignored after an interrupt-and-resend.
   streamEpochBySession: Record<string, number>;
 
+  /**
+   * The cursor for loading older history, per session.
+   *
+   * The chat view renders the *tail* page of a transcript and pages backwards
+   * on demand, so a long conversation never loads (or serializes) whole. This
+   * holds the oldest message id currently loaded — the exclusive cursor the
+   * main process expects — plus whether anything older actually remains.
+   * `undefined` means "not known yet" (a live session that never hydrated).
+   */
+  historyCursorBySession: Record<string, string | undefined>;
+  /**
+   * Byte offset of `historyCursorBySession`, so the next page seeks to it
+   * instead of re-reading the file tail. Purely a seek hint — paging stays
+   * correct without it, only slower on deep scrolls.
+   */
+  historyOffsetBySession: Record<string, number | undefined>;
+  hasMoreHistoryBySession: Record<string, boolean>;
+  loadingHistoryBySession: Record<string, boolean>;
+
+  /**
+   * Whether the viewed transcript is still being read from disk.
+   *
+   * Distinct from `isStreaming`: opening a conversation is a load, not a turn.
+   * The view uses this to hold its empty state instead of flashing "no
+   * messages" before the tail page arrives.
+   */
+  loadingHistory: boolean;
+
   // Actions
   sendMessage: (content: string, images?: ImageAttachment[]) => Promise<void>;
   interruptStream: (sessionId?: string) => void;
@@ -59,6 +87,27 @@ export interface ChatState {
   setSessionError: (sessionId: string | undefined, error: string | null) => void;
   /** Record why a session's last turn ended (or clear it when a new turn starts). */
   setSessionStopReason: (sessionId: string | undefined, stopReason: string | null) => void;
+
+  /**
+   * Install the tail page of a session's transcript, replacing whatever the
+   * viewed slot held. Carries the paging cursor so the view knows whether an
+   * older page exists.
+   */
+  setSessionTranscript: (
+    sessionId: string,
+    messages: ChatMessage[],
+    options: { oldestUuid: string | null; oldestOffset?: number | null; hasMore: boolean },
+  ) => void;
+  /** Prepend one older page and advance the cursor. */
+  prependSessionMessages: (
+    sessionId: string,
+    messages: ChatMessage[],
+    options: { oldestUuid: string | null; oldestOffset?: number | null; hasMore: boolean },
+  ) => void;
+  /** Toggle the "reading history from disk" flag for the viewed session. */
+  setLoadingHistory: (loading: boolean) => void;
+  /** Toggle the "loading an older page" flag for one session. */
+  setLoadingOlderHistory: (sessionId: string, loading: boolean) => void;
 
   // Per-session routing helpers used by streamStore to land a stream event in
   // the right session (flat when it is the viewed session, else the map).
@@ -128,6 +177,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   interruptedBySession: {},
   stopReasonBySession: {},
   streamEpochBySession: {},
+  historyCursorBySession: {},
+  historyOffsetBySession: {},
+  hasMoreHistoryBySession: {},
+  loadingHistoryBySession: {},
+  loadingHistory: false,
 
   sendMessage: async (content: string, images?: ImageAttachment[]) => {
     const { sessionId } = get();
@@ -247,6 +301,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const nextError = id ? (errorBySession[id] ?? null) : null;
     const nextInterrupted = id ? Boolean(interruptedBySession[id]) : false;
     const nextStopReason = id ? stopReasonBySession[id] : undefined;
+    // Paging cursors are keyed by session and survive the swap, so returning to
+    // a conversation keeps the exact history window the user had scrolled to
+    // rather than silently reloading just the tail again.
+    const nextCursor = id ? state.historyCursorBySession[id] : undefined;
+    const nextOffset = id ? state.historyOffsetBySession[id] : undefined;
+    const nextHasMore = id ? (state.hasMoreHistoryBySession[id] ?? false) : false;
     if (id) {
       delete messagesBySession[id];
       delete streamingBySession[id];
@@ -269,6 +329,21 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       errorBySession,
       interruptedBySession,
       stopReasonBySession,
+      // `loadingHistory` always resets: the view re-reads from disk for a cold
+      // session, so it must not inherit a stale spinner from the last one.
+      loadingHistory: false,
+      hasMoreHistoryBySession: {
+        ...state.hasMoreHistoryBySession,
+        ...(id ? { [id]: nextHasMore } : {}),
+      },
+      historyCursorBySession: {
+        ...state.historyCursorBySession,
+        ...(id ? { [id]: nextCursor } : {}),
+      },
+      historyOffsetBySession: {
+        ...state.historyOffsetBySession,
+        ...(id ? { [id]: nextOffset } : {}),
+      },
     });
     return hadCached;
   },
@@ -367,6 +442,46 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         streamingBySession: { ...s.streamingBySession, [target]: streaming },
       }));
     }
+  },
+
+  setSessionTranscript: (sessionId, messages, options) => {
+    set((s) => ({
+      ...(s.sessionId === sessionId
+        ? { messages }
+        : { messagesBySession: trimSessionCache({ ...s.messagesBySession, [sessionId]: messages }, s.streamingBySession) }),
+      historyCursorBySession: { ...s.historyCursorBySession, [sessionId]: options.oldestUuid ?? undefined },
+      historyOffsetBySession: { ...s.historyOffsetBySession, [sessionId]: options.oldestOffset ?? undefined },
+      hasMoreHistoryBySession: { ...s.hasMoreHistoryBySession, [sessionId]: options.hasMore },
+      loadingHistory: false,
+      loadingHistoryBySession: { ...s.loadingHistoryBySession, [sessionId]: false },
+    }));
+  },
+
+  prependSessionMessages: (sessionId, messages, options) => {
+    set((s) => {
+      const merge = (existing: ChatMessage[]): ChatMessage[] => [...messages, ...existing];
+      return {
+        ...(s.sessionId === sessionId
+          ? { messages: merge(s.messages) }
+          : { messagesBySession: trimSessionCache({ ...s.messagesBySession, [sessionId]: merge(s.messagesBySession[sessionId] ?? []) }, s.streamingBySession) }),
+        historyCursorBySession: { ...s.historyCursorBySession, [sessionId]: options.oldestUuid ?? undefined },
+        historyOffsetBySession: { ...s.historyOffsetBySession, [sessionId]: options.oldestOffset ?? undefined },
+        hasMoreHistoryBySession: { ...s.hasMoreHistoryBySession, [sessionId]: options.hasMore },
+        loadingHistoryBySession: { ...s.loadingHistoryBySession, [sessionId]: false },
+      };
+    });
+  },
+
+  setLoadingHistory: (loading) => {
+    set({ loadingHistory: loading });
+  },
+
+  setLoadingOlderHistory: (sessionId, loading) => {
+    set((s) =>
+      s.loadingHistoryBySession[sessionId] === loading
+        ? s
+        : { loadingHistoryBySession: { ...s.loadingHistoryBySession, [sessionId]: loading } },
+    );
   },
 
   setStreamEpoch: (sessionId, epoch) => {

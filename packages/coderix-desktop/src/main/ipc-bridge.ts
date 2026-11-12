@@ -104,6 +104,7 @@ export const IPC_CHANNELS = {
   SESSION_LIST: 'session:list',
   SESSION_GET: 'session:get',
   SESSION_LOAD: 'session:load',
+  SESSION_HISTORY: 'session:history',
   SESSION_CLAIM: 'session:claim',
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
@@ -195,6 +196,17 @@ interface IncomingImage {
 
 /** Hard cap mirroring the Composer's `MAX_IMAGES`. */
 const MAX_IMAGES_PER_MESSAGE = 8;
+
+/**
+ * Conversation window sizes for the renderer.
+ *
+ * The chat view loads a tail page and pages backwards on demand, so opening a
+ * long conversation never serializes its whole transcript across IPC (the
+ * largest real sessions are >100 MB). A page is a soft limit — the core aligns
+ * it up to a user-turn boundary so a turn's tool calls never split across pages.
+ */
+const CHAT_PAGE_MESSAGES = 60;
+const MAX_CHAT_PAGE_MESSAGES = 500;
 
 /**
  * Validate images from the renderer before they reach a provider.
@@ -1577,10 +1589,26 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       await config.reloadQueryEngine(reloadWorkDir, reloadModel);
     }
 
+    // Serve the conversation from the transcript on disk, not from
+    // `session.messages`: that array is the engine's bounded context working
+    // copy (capped by MAX_MESSAGES / trimMessages for heap safety), so using it
+    // as the display source made long conversations silently lose their
+    // earlier turns. Only the tail page is sent; older pages arrive on demand
+    // through SESSION_HISTORY as the user scrolls up.
+    const tailPage = sessionManager.readMessagePage(sessionId, undefined, CHAT_PAGE_MESSAGES);
+
     return {
       id: session.id,
       title: session.title,
-      messages: session.messages,
+      messages: tailPage.messages,
+      // Parallel to `messages`: stable identities the renderer keys rows by,
+      // and the cursor a later `session:history` call pages before.
+      messageUuids: tailPage.uuids,
+      historyCursor: tailPage.oldestUuid,
+      // Byte offset of that cursor, so the next page seeks straight to it
+      // instead of re-reading from the end of the file.
+      historyOffset: tailPage.oldestOffset,
+      hasMoreHistory: tailPage.hasMore,
       turnCount: session.turnCount,
       cwd: session.cwd,
       model: session.model,
@@ -1597,6 +1625,24 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       // Another live client is writing it; the renderer must not send here.
       busy: sessionManager.isBusy(sessionId),
     };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_HISTORY, async (_event, payload: {
+    sessionId: string;
+    beforeUuid?: string;
+    limit?: number;
+    beforeOffset?: number;
+  }) => {
+    if (!sessionManager) throw new Error('SessionManager not initialized');
+    const sessionId = payload?.sessionId;
+    if (!sessionId) throw new Error('sessionId is required');
+    const limit = typeof payload.limit === 'number' && payload.limit > 0
+      ? Math.min(payload.limit, MAX_CHAT_PAGE_MESSAGES)
+      : CHAT_PAGE_MESSAGES;
+    const beforeOffset = typeof payload.beforeOffset === 'number' && payload.beforeOffset >= 0
+      ? payload.beforeOffset
+      : undefined;
+    return sessionManager.readMessagePage(sessionId, payload.beforeUuid, limit, undefined, beforeOffset);
   });
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CLAIM, async (_event, sessionId: string) => {
@@ -3281,6 +3327,7 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LIST);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_GET);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_LOAD);
+      ipcMain.removeHandler(IPC_CHANNELS.SESSION_HISTORY);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_CLAIM);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_FORK);
       ipcMain.removeHandler(IPC_CHANNELS.SESSION_DELETE);

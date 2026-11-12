@@ -142,6 +142,329 @@ export function readEntriesSync(filePath: string): SessionEntry[] {
   return parseJsonlLines(raw, filePath);
 }
 
+/**
+ * Read one page of transcript messages from the tail of a JSONL file,
+ * newest-page-first.
+ *
+ * Pages are cut by `beforeUuid` (exclusive) so a caller can walk backwards
+ * through the transcript without ever holding it whole: the first call passes
+ * no cursor and gets the tail page, and each older page passes the oldest uuid
+ * it has seen. Unlike a count-based cap this never *drops* history — it only
+ * decides how much of it is loaded.
+ *
+ * The page boundary is aligned to a user turn where possible: a page that
+ * would begin mid-turn extends back to the start of that turn, so a call is
+ * never split between two pages (its tool calls and results stay together).
+ * A single turn can still be enormous (one CAD render command with megabytes
+ * of output), so `maxBytes` bounds the page independently of entry count —
+ * that trim happens *inside* a turn and never between a tool call and its
+ * result.
+ *
+ * Only the region just above the cursor is read, so cost tracks the page size
+ * rather than how far the reader has scrolled. `beforeOffset` is that region's
+ * anchor: it is the byte offset the previous page reported as `oldestOffset`,
+ * letting a deep page start from there instead of re-reading from the file
+ * tail (which would grow with every page the user loads).
+ *
+ * @param filePath - session JSONL path.
+ * @param beforeUuid - exclusive cursor; omit to start at the newest message.
+ * @param maxMessages - soft cap on transcript entries in this page.
+ * @param maxBytes - soft cap on serialized message bytes in this page.
+ * @param beforeOffset - byte offset of `beforeUuid`, from the previous page's
+ *   `oldestOffset`; a seek hint that keeps deep pages cheap.
+ * @returns the page's `Message`s in file order, the oldest uuid and byte offset
+ *   for the next call, and whether anything older still remains.
+ */
+export function readMessagePageSync(
+  filePath: string,
+  beforeUuid: string | undefined,
+  maxMessages: number,
+  maxBytes = 2 * 1024 * 1024,
+  beforeOffset?: number,
+): {
+  messages: Message[];
+  uuids: string[];
+  oldestUuid: string | null;
+  oldestOffset: number | null;
+  hasMore: boolean;
+} {
+  const empty = {
+    messages: [] as Message[],
+    uuids: [] as string[],
+    oldestUuid: null,
+    oldestOffset: null,
+    hasMore: false,
+  };
+  if (!existsSync(filePath)) return empty;
+
+  let size: number;
+  try {
+    size = statSync(filePath).size;
+  } catch {
+    return empty;
+  }
+  if (size === 0) return empty;
+
+  // A cursor offset is only safe while the file is append-only: trust it when
+  // the line there still carries the expected uuid, else fall back to scanning
+  // from the tail (a rewritten/compacted transcript invalidates old offsets).
+  let anchor: number | undefined;
+  if (beforeOffset !== undefined && beforeOffset > 0 && beforeOffset < size) {
+    const atOffset = readEntryUuidAt(filePath, beforeOffset);
+    if (beforeUuid === undefined || atOffset === beforeUuid) anchor = beforeOffset;
+  }
+
+  // Grow the window until the page is satisfied (or the file start).
+  let windowBytes = Math.max(256 * 1024, maxMessages * 8 * 1024);
+  for (;;) {
+    const windowEnd = anchor ?? size;
+    const start = Math.max(0, windowEnd - windowBytes);
+    const buffer = Buffer.alloc(windowEnd - start);
+    let fd: number | null = null;
+    try {
+      fd = openSync(filePath, 'r');
+      readSync(fd, buffer, 0, buffer.length, start);
+    } catch {
+      return empty;
+    } finally {
+      if (fd !== null) {
+        try { closeSync(fd); } catch { /* ignore */ }
+      }
+    }
+
+    // Parse on the byte buffer so each entry's absolute offset is exact — a
+    // string round-trip would confuse bytes with UTF-16 units.
+    let lineStart = 0;
+    if (start > 0) {
+      // Skip the first (possibly partial) line.
+      const newline = buffer.indexOf(0x0a);
+      if (newline < 0) {
+        // Not even one complete line fits in the window — the tail line alone
+        // is larger (a single tool result can be several MB). Widen; a
+        // non-growing window would return an empty page and strand the user
+        // with no history at all.
+        if (start === 0) return empty;
+        windowBytes *= 2;
+        continue;
+      }
+      lineStart = newline + 1;
+    }
+
+    const entries: TranscriptEntry[] = [];
+    const entryOffsets: number[] = [];
+    for (let i = lineStart; i <= buffer.length; i++) {
+      if (i !== buffer.length && buffer[i] !== 0x0a) continue;
+      let from = lineStart;
+      let to = i;
+      // Leading/trailing ASCII whitespace only — JSON never needs more.
+      while (from < to && (buffer[from] === 0x20 || buffer[from] === 0x09 || buffer[from] === 0x0d)) from++;
+      while (to > from && (buffer[to - 1] === 0x20 || buffer[to - 1] === 0x09 || buffer[to - 1] === 0x0d)) to--;
+      if (to > from) {
+        try {
+          const entry = JSON.parse(buffer.toString('utf-8', from, to)) as SessionEntry;
+          if (isTranscriptEntry(entry)) {
+            entries.push(entry);
+            entryOffsets.push(start + from);
+          }
+        } catch {
+          /* partial or corrupted line — skipped; broadening the window covers it */
+        }
+      }
+      lineStart = i + 1;
+    }
+    // A window that starts inside one oversized line yields only that line's
+    // tail (or nothing at all). Widen until a whole entry is readable rather
+    // than reporting "no more history" over a transcript that has plenty.
+    if (entries.length === 0 && start > 0) {
+      windowBytes *= 2;
+      continue;
+    }
+
+    // Apply the cursor (exclusive). With a byte anchor the page is everything
+    // before it; otherwise find the cursor's entry in the window.
+    let end = entries.length;
+    if (anchor === undefined && beforeUuid !== undefined) {
+      const idx = entries.findIndex((e) => e.uuid === beforeUuid);
+      if (idx < 0) {
+        // The cursor is older than this window: widen until it is visible so
+        // the page is never cut at the wrong place.
+        if (start === 0) return empty;
+        windowBytes *= 2;
+        continue;
+      }
+      // A cursor at the very start of the window has nothing readable before
+      // it *in this window*; widen rather than returning an empty page.
+      if (idx === 0 && start > 0) {
+        windowBytes *= 2;
+        continue;
+      }
+      end = idx;
+    }
+    if (end === 0) return empty;
+
+    // Walk backwards to the page cut, then extend to a user-turn boundary.
+    let cut = end;
+    let counted = 0;
+    let bytes = 0;
+    let hitByteBudget = false;
+    for (let i = end - 1; i >= 0; i--) {
+      const entry = entries[i]!;
+      // Measure the serialized message, not the raw line, so the budget
+      // reflects what actually crosses IPC.
+      bytes += JSON.stringify(entry.message).length;
+      counted++;
+      cut = i;
+      if (counted >= maxMessages) break;
+      // A tool_result must never be separated from the call it answers, so the
+      // byte budget stops the page only at messages that begin a unit.
+      if (bytes >= maxBytes && i > 0 && !isToolResultCarrier(entry)) {
+        hitByteBudget = true;
+        break;
+      }
+    }
+
+    // Paging normally begins on a real user prompt. A single turn can be far
+    // larger than the byte budget though (one tool call with a multi-MB
+    // result), and pulling the whole turn in would defeat the purpose — so the
+    // alignment yields to the budget in that case. The cut still never splits
+    // a tool_result from its call, which is what keeps the turn renderable.
+    if (!hitByteBudget) {
+      while (cut > 0 && !startsUserTurn(entries[cut]!)) cut--;
+      // The window may not contain the turn's opening message; widen for it.
+      if (cut === 0 && start > 0 && !startsUserTurn(entries[0]!)) {
+        windowBytes *= 2;
+        continue;
+      }
+    } else {
+      // Never start a page on a bare tool result.
+      while (cut > 0 && isToolResultCarrier(entries[cut]!)) cut--;
+    }
+
+    // Turn-boundary alignment can still land between a tool_use and the
+    // tool_result answering it, when a synthetic user message (a background-task
+    // notification, say) sits between the two. Rendering page by page would then
+    // show a result with no card. Pull the cut back over every call the page's
+    // results depend on; widen the window if such a call is older still.
+    const alignedCut = pullCutBeforeToolCalls(entries, cut, end, start > 0);
+    if (alignedCut === null) {
+      windowBytes *= 2;
+      continue;
+    }
+    cut = alignedCut;
+
+    const page = entries.slice(cut, end);
+    const pageOffsets = entryOffsets.slice(cut, end);
+    const hasMore = cut > 0 || start > 0;
+    return {
+      messages: page.map((e) => e.message),
+      // The reading order of `messages` is preserved; uuids give the renderer
+      // stable identities and the next page's cursor. `oldestOffset` is that
+      // cursor's byte position, so the next page seeks straight there instead
+      // of re-reading from the tail.
+      uuids: page.map((e) => e.uuid),
+      oldestUuid: page.length > 0 ? page[0]!.uuid : null,
+      oldestOffset: pageOffsets.length > 0 ? pageOffsets[0]! : null,
+      hasMore,
+    };
+  }
+}
+
+/**
+ * The uuid of the transcript entry whose line starts at `offset`, or null when
+ * no entry starts there (the file was rewritten, or the offset is stale).
+ *
+ * The offset is used as the *exclusive end* of the next page's read window, so
+ * a value that is not exactly a line start would cut the final entry in half
+ * and silently drop it. The byte before the offset must therefore be a newline.
+ */
+function readEntryUuidAt(filePath: string, offset: number): string | null {
+  let fd: number | null = null;
+  try {
+    fd = openSync(filePath, 'r');
+    const prev = Buffer.alloc(1);
+    if (readSync(fd, prev, 0, 1, offset - 1) !== 1 || prev[0] !== 0x0a) return null;
+    // The uuid field sits near the front of every transcript line, well inside
+    // this window; the whole line is never needed to validate the offset.
+    const buf = Buffer.alloc(1024);
+    const read = readSync(fd, buf, 0, buf.length, offset);
+    if (read <= 0) return null;
+    const head = buf.toString('utf-8', 0, read);
+    const match = /"uuid"\s*:\s*"([0-9a-fA-F-]{8,})"/.exec(head);
+    return match ? match[1]! : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+/** A message that opens a conversation turn (not a tool-result carrier). */
+function startsUserTurn(entry: TranscriptEntry): boolean {
+  if (entry.type !== 'user') return false;
+  const content = entry.message.content;
+  if (typeof content === 'string') return true;
+  if (!Array.isArray(content)) return false;
+  return content.some((b) => b.type !== 'tool_result');
+}
+
+/** A user message that exists only to carry tool results for a prior call. */
+function isToolResultCarrier(entry: TranscriptEntry): boolean {
+  if (entry.type !== 'user') return false;
+  const content = entry.message.content;
+  return Array.isArray(content) && content.every((b) => b.type === 'tool_result');
+}
+
+/**
+ * Move a page cut back so the page owns every tool call its results answer.
+ *
+ * Turn alignment assumes a result directly follows its call, but a synthetic
+ * user message can be appended in between (a background-task notification, for
+ * instance). The page would then start on the result of a call that lives on
+ * the previous page, and the renderer — which folds a result into the card that
+ * produced it, one page at a time — would show a result with no card.
+ *
+ * @returns the adjusted cut, or null when a required call is older than the
+ *   window (the caller widens and retries); a call that is absent from the
+ *   whole file is a pre-existing orphan and cannot be recovered.
+ */
+function pullCutBeforeToolCalls(
+  entries: TranscriptEntry[],
+  cut: number,
+  end: number,
+  windowStartsMidFile: boolean,
+): number | null {
+  const callIndex = new Map<string, number>();
+  for (let i = 0; i < end; i++) {
+    const content = entries[i]!.message.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (b.type === 'tool_use' && typeof b.id === 'string' && !callIndex.has(b.id)) {
+        callIndex.set(b.id, i);
+      }
+    }
+  }
+
+  let next = cut;
+  let missing = false;
+  for (let i = cut; i < end; i++) {
+    const content = entries[i]!.message.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (b.type !== 'tool_result' || typeof b.tool_use_id !== 'string') continue;
+      const at = callIndex.get(b.tool_use_id);
+      if (at === undefined) {
+        missing = true;
+        continue;
+      }
+      if (at < next) next = at;
+    }
+  }
+  if (missing && windowStartsMidFile) return null;
+  return next;
+}
+
 function parseJsonlLines(raw: string, filePath: string): SessionEntry[] {
   const entries: SessionEntry[] = [];
   const lines = raw.split('\n');

@@ -21,6 +21,7 @@ const CH = {
   SESSION_LIST: 'session:list',
   SESSION_GET: 'session:get',
   SESSION_LOAD: 'session:load',
+  SESSION_HISTORY: 'session:history',
   SESSION_CLAIM: 'session:claim',
   SESSION_FORK: 'session:fork',
   SESSION_DELETE: 'session:delete',
@@ -489,6 +490,22 @@ const coderixAPI = {
     /** Load a session by ID and set it as active. */
     load(sessionId: string): Promise<unknown> {
       return ipcRenderer.invoke(CH.SESSION_LOAD, sessionId);
+    },
+
+    /**
+     * Load one older page of a session's transcript, for the chat view's
+     * scroll-up paging. `beforeUuid` is the cursor of the oldest message the
+     * renderer already holds, and `beforeOffset` that message's byte position
+     * (so a deep page seeks instead of re-reading the file tail); omit both for
+     * the tail page.
+     */
+    history(
+      sessionId: string,
+      beforeUuid?: string,
+      limit?: number,
+      beforeOffset?: number,
+    ): Promise<unknown> {
+      return ipcRenderer.invoke(CH.SESSION_HISTORY, { sessionId, beforeUuid, limit, beforeOffset });
     },
 
     /**

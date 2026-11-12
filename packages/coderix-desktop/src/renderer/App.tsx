@@ -26,6 +26,7 @@ import { OfficeHarnessPanel } from './components/apps/OfficeHarnessPanel';
 import { BLENDER_ICON, FREECAD_ICON } from './components/apps/icons';
 import { APPS, type AppDefinition } from './components/apps/registry';
 import { ChatView } from './components/chat/ChatView';
+import { transcriptToChatMessages } from './components/chat/transcriptToChatMessages';
 import { SubagentPane } from './components/chat/SubagentPane';
 import { buildTrajectoryCalls } from './components/chat/trajectory';
 import type { TrajectoryCall } from './components/chat/trajectory';
@@ -105,20 +106,6 @@ function getFolderName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
 }
 
-/**
- * Strip the Claude Code SDK's continuation/auto-compact wrapper from a user
- * message string. When a session is resumed, the SDK prepends a summary of the
- * earlier conversation, ending with a "[Latest message]" line. We keep only
- * that final line — the actual text the user typed.
- */
-function stripCompactWrapper(content: string): string {
-  const marker = '[Latest message]';
-  const idx = content.lastIndexOf(marker);
-  if (idx < 0) return content;
-  const after = content.slice(idx + marker.length).trim();
-  return after || content;
-}
-
 // ---------------------------------------------------------------------------
 // App Shell
 // ---------------------------------------------------------------------------
@@ -158,6 +145,11 @@ export function App(): React.ReactElement {
   const lastStopReason = useChatStore((s) => s.lastStopReason);
   const setSessionId = useChatStore((s) => s.setSessionId);
   const sessionId = useChatStore((s) => s.sessionId);
+  // Paging state for the history window (see handleLoadOlderHistory). Selected
+  // as booleans so unrelated session map churn does not re-render App.
+  const hasMoreHistoryBySession = useChatStore((s) => s.hasMoreHistoryBySession);
+  const loadingHistoryBySession = useChatStore((s) => s.loadingHistoryBySession);
+  const loadingHistory = useChatStore((s) => s.loadingHistory);
 
   // ── Session State ───────────────────────────────────────────────────────
   const currentSessionId = useSessionStore((s) => s.currentSessionId);
@@ -627,6 +619,9 @@ export function App(): React.ReactElement {
       // The session's own persisted skills are authoritative — don't let the
       // built-in default effect override them when this session is re-opened.
       defaultedSkillsFor.current = id;
+      // Mark the read as in flight so the view holds its empty state instead of
+      // flashing "no messages" while the tail page is on the wire.
+      if (!hadCached) useChatStore.getState().setLoadingHistory(true);
       // Load session messages from backend
       try {
         if (window.coderixAPI?.session?.load) {
@@ -664,122 +659,23 @@ export function App(): React.ReactElement {
           }
 
           if (session?.messages) {
-            const chatMsgs = session.messages.map((m: any) => {
-              let blocks = m.content || [];
-              // Convert string content to text block (strip the SDK's auto-compact
-              // continuation wrapper so only the user's actual input is shown).
-              if (typeof blocks === 'string') {
-                blocks = [{ type: 'text', content: stripCompactWrapper(blocks), state: 'done' }];
-              } else if (Array.isArray(blocks)) {
-                // Normalize content blocks: backend uses 'text' field, UI expects 'content' field
-                blocks = blocks.map((b: any) => {
-                  // Image blocks carry a `source` (not `text`) — map them early so
-                  // the generic content fallback below can't flatten them to ''.
-                  if (b.type === 'image') {
-                    return {
-                      type: 'image' as const,
-                      content: typeof b.name === 'string' ? b.name : '',
-                      state: 'done' as const,
-                      ...(b.source?.data
-                        ? { image: { mediaType: String(b.source.media_type ?? 'image/png'), data: String(b.source.data) } }
-                        : {}),
-                    };
-                  }
-
-                  // Backend blocks use `text` for text blocks, `thinking` for
-                  // thinking/reasoning blocks, and `content` for tool results.
-                  // Tool results may carry `content` as a string or as an array
-                  // of text blocks — flatten the latter so the tool card always
-                  // receives plain text.
-                  let content: unknown = b.text ?? b.thinking ?? b.content ?? '';
-                  if (Array.isArray(content)) {
-                    content = content
-                      .map((c: any) =>
-                        typeof c === 'string' ? c : (c?.text ?? ''),
-                      )
-                      .join('\n');
-                  }
-
-                  return {
-                    type: b.type || 'text',
-                    content: typeof content === 'string' ? content : '',
-                    state: b.is_error ? 'error' : 'done',
-                    ...(b.tool_use_id ? { toolId: b.tool_use_id } : {}),
-                    ...(b.id ? { toolId: b.id } : {}),
-                    ...(b.name ? { toolName: b.name } : {}),
-                    ...(b.input ? { toolInput: b.input } : {}),
-                    ...(b.metadata ? { toolMetadata: b.metadata } : {}),
-                    ...(typeof b.startedAt === 'number' ? { startedAt: b.startedAt } : {}),
-                    ...(typeof b.endedAt === 'number' ? { endedAt: b.endedAt } : {}),
-                  };
-                });
-              }
-              return {
-                id: m.id || `${Date.now()}-${Math.random()}`,
-                role: m.role as 'user' | 'assistant',
-                blocks,
-                timestamp: m.timestamp || Date.now(),
-              };
-            });
-
-            // Pair tool_result blocks with their matching tool_use blocks.
-            // Tool results live in user messages but should render inside the
-            // preceding assistant message's tool card.
-            for (let i = chatMsgs.length - 1; i >= 0; i--) {
-              const msg = chatMsgs[i];
-              if (!msg || msg.role !== 'user') continue;
-
-              const toolResults: typeof msg.blocks = [];
-              const others: typeof msg.blocks = [];
-              for (const b of msg.blocks) {
-                if (b.type === 'tool_result' && b.toolId) {
-                  toolResults.push(b);
-                } else {
-                  others.push(b);
-                }
-              }
-
-              // Attach each tool_result to its matching tool_use
-              for (const tr of toolResults) {
-                let attached = false;
-                for (let j = i - 1; j >= 0; j--) {
-                  const prev = chatMsgs[j];
-                  if (!prev || prev.role !== 'assistant') continue;
-                  const idx = prev.blocks.findIndex(
-                    (b: { type: string; toolId?: string }) => b.type === 'tool_use' && b.toolId === tr.toolId,
-                  );
-                  if (idx >= 0) {
-                    prev.blocks[idx] = {
-                      ...prev.blocks[idx],
-                      toolResult: tr.content,
-                      toolMetadata: tr.toolMetadata,
-                      // An errored tool_result marks its tool_use as errored too,
-                      // so the card renders an error state rather than "Done".
-                      ...(tr.state === 'error' ? { state: 'error' as const } : {}),
-                    };
-                    attached = true;
-                    break;
-                  }
-                }
-                // If unmatched, keep as standalone in its current message
-                if (!attached) {
-                  others.push(tr);
-                }
-              }
-
-              // Remove messages that are now empty (all tool_results were paired)
-              if (others.length === 0) {
-                chatMsgs.splice(i, 1);
-              } else if (others.length !== msg.blocks.length) {
-                chatMsgs[i] = { ...msg, blocks: others };
-              }
-            }
+            const chatMsgs = transcriptToChatMessages(
+              session.messages,
+              Array.isArray(session.messageUuids) ? (session.messageUuids as string[]) : undefined,
+            );
 
             // A session that was streaming in the background already has an
             // up-to-date transcript in memory; only hydrate a cold session from
             // disk, so a just-streamed turn isn't clobbered by a stale read.
             if (!hadCached) {
-              useChatStore.setState({ messages: chatMsgs, isStreaming: false });
+              // Install the tail page plus its paging cursor. Older pages load
+              // on demand when the user scrolls up — the transcript is never
+              // read whole, and nothing is capped away.
+              useChatStore.getState().setSessionTranscript(id, chatMsgs, {
+                oldestUuid: typeof session?.historyCursor === 'string' ? session.historyCursor : null,
+                oldestOffset: typeof session?.historyOffset === 'number' ? session.historyOffset : null,
+                hasMore: session?.hasMoreHistory === true,
+              });
 
               // Hydrate the status bar's token/cost state from the persisted
               // snapshot so a reloaded session doesn't show 0 until its next turn.
@@ -804,11 +700,18 @@ export function App(): React.ReactElement {
                   });
                 }
               }
+            } else {
+              // Cached transcript wins, but the loading flag still has to drop.
+              useChatStore.getState().setLoadingHistory(false);
             }
+          } else {
+            useChatStore.getState().setLoadingHistory(false);
           }
         }
       } catch (err) {
         console.error('[App] Failed to load session:', err);
+        // Never leave the view stuck on the loading state if the read failed.
+        useChatStore.getState().setLoadingHistory(false);
       }
     },
     [setSessionId],
@@ -1242,6 +1145,54 @@ export function App(): React.ReactElement {
     [sendMessage, createSession, setSessionId, selectedSkills, handleSessionSelect, loadSessions, t],
   );
 
+  // ── Load one older page of history ──────────────────────────────────────
+  // The chat view holds only the tail page; scrolling up asks for the page
+  // before the oldest message already loaded. The main process reads it from
+  // the transcript on disk and aligns the cut to a turn boundary, so a turn's
+  // tool calls never split across pages. Nothing is ever discarded here — the
+  // window only grows.
+  const handleLoadOlderHistory = useCallback(async () => {
+    const sid = useSessionStore.getState().currentSessionId;
+    if (!sid) return;
+    const store = useChatStore.getState();
+    if (store.loadingHistoryBySession[sid]) return;
+    if (store.hasMoreHistoryBySession[sid] !== true) return;
+
+    // The cursor is the id of the oldest loaded message, and its byte offset
+    // lets the next page seek there instead of re-reading from the file tail —
+    // without it, each deeper page would scan everything already loaded.
+    const cursor = store.historyCursorBySession[sid];
+    if (!cursor) return;
+    const cursorOffset = store.historyOffsetBySession[sid];
+
+    store.setLoadingOlderHistory(sid, true);
+    try {
+      const page = (await window.coderixAPI?.session?.history?.(
+        sid,
+        cursor,
+        undefined,
+        cursorOffset,
+      )) as
+        | {
+            messages?: unknown[];
+            uuids?: string[];
+            oldestUuid?: string | null;
+            oldestOffset?: number | null;
+            hasMore?: boolean;
+          }
+        | undefined;
+      const older = transcriptToChatMessages(page?.messages ?? [], page?.uuids);
+      useChatStore.getState().prependSessionMessages(sid, older, {
+        oldestUuid: typeof page?.oldestUuid === 'string' ? page.oldestUuid : null,
+        oldestOffset: typeof page?.oldestOffset === 'number' ? page.oldestOffset : null,
+        hasMore: page?.hasMore === true,
+      });
+    } catch (err) {
+      console.error('[App] Failed to load older history:', err);
+      useChatStore.getState().setLoadingOlderHistory(sid, false);
+    }
+  }, []);
+
   // ── Build trajectory calls for the trajectory view ───────────────────────
   // Group the flat message list (plus the in-flight streaming message) into
   // ZCode-style calls — one user turn (INPUT) followed by the assistant
@@ -1512,10 +1463,18 @@ export function App(): React.ReactElement {
           )}
 
           <ChatView
+            // Remount per conversation so the render window, scroll position
+            // and "show earlier" state start fresh instead of leaking across
+            // sessions. The loaded history window itself lives in the store.
+            key={sessionId ?? 'no-session'}
             calls={trajectoryCalls}
             isEmpty={isEmpty}
             isStreaming={isStreaming}
             outcome={turnOutcome}
+            hasMoreHistory={sessionId ? hasMoreHistoryBySession[sessionId] === true : false}
+            loadingOlder={sessionId ? loadingHistoryBySession[sessionId] === true : false}
+            onLoadOlder={handleLoadOlderHistory}
+            loadingHistory={loadingHistory}
           />
 
           {/* Permission prompt — inline above composer (Claude Code style) */}

@@ -557,6 +557,7 @@ export const zh = {
   'chat.emptySubtitle': '我可以协助代码审查、调试、重构等。在下方输入消息开始。',
   'chat.scrollToBottom': '滚动到底部',
   'chat.showEarlier': '显示更早消息',
+  'chat.loadingEarlier': '加载中…',
   'chat.hiddenCalls': '已折叠 {count} 条早期记录',
 
   // ── 本轮结束原因（最后一轮消息下方） ────────────────
