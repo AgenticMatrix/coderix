@@ -15,7 +15,6 @@
 import { existsSync, mkdirSync, readdirSync, statSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { IS_WINDOWS } from '../utils/platform.js';
 import type {
   Session,
   SessionFilter,
@@ -91,7 +90,6 @@ export class SessionManager {
   private activeSession: Session | null = null;
   private sessions: Map<string, Session> = new Map();
   private pendingWrites = new Set<Promise<void>>();
-  private exitHandlerRegistered = false;
   private readonly diskless: boolean;
   private readonly client: SessionClient;
   /** Stops the per-session lease heartbeat (desktop/CLI hold different leases). */
@@ -1203,26 +1201,6 @@ export class SessionManager {
     await this.flush();
     this.releaseAllLeases();
     process.exit(code);
-  }
-
-  /**
-   * Register SIGINT/SIGTERM handlers to flush writes before exit.
-   */
-  private registerExitHandler(): void {
-    if (this.exitHandlerRegistered) return;
-    this.exitHandlerRegistered = true;
-
-    if (IS_WINDOWS) {
-      process.on('beforeExit', () => {
-        this.flushAndExit(0);
-      });
-    } else {
-      const handler = () => {
-        this.flushAndExit(0);
-      };
-      process.once('SIGINT', handler);
-      process.once('SIGTERM', handler);
-    }
   }
 
   /**

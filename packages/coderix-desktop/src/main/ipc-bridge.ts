@@ -33,7 +33,7 @@ import type {
 import type { CoderSettings, ModelItem } from '../../../../packages/coderix-core/src/index.js';
 import { QueryEngine, SessionManager, PermissionMode, SkillRegistry, setSkillRegistry } from '../../../../packages/coderix-core/src/index.js';
 import type { QueryEngineEvent, AgentEngine, EventBus, ToolRequestEvent, SubAgentRecord, TaskLifecycleEvent } from '../../../../packages/coderix-core/src/index.js';
-import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle, platformDefaultWorkspaceDir, resolveDefaultWorkspaceDir, isValidBase64Image, isSupportedImageMediaType } from '../../../../packages/coderix-core/src/index.js';
+import { loadSettings, saveSettings, loadDesktopConfig, writeSessionMeta, sessionDir, SESSIONS_DIR, releaseAllProcessLeases, testModelConnection, resolvePermissionMode, resolveModelByName, getAgentTranscript, saveAgentTranscript, loadPluginManifests, createCallModel, summarizeSessionTitle, platformDefaultWorkspaceDir, resolveDefaultWorkspaceDir, isValidBase64Image, isSupportedImageMediaType } from '../../../../packages/coderix-core/src/index.js';
 import type { McpManager } from '../../../../packages/coderix-core/src/index.js';
 import { testMcpServer, getMcpConfig, addMcpConfig, removeServerPermanently, restoreServer, setSecret, clearServerSecrets } from '../../../../packages/coderix-core/src/index.js';
 import { runClaudeCodeQuery, getClaudeSessionId, getClaudeCumulativeUsage, loadClaudeSubagentTranscript } from './claude-code-engine.js';
@@ -84,6 +84,13 @@ export interface IpcBridge {
   setEngine(engine: AgentEngine): void;
   readonly engine: AgentEngine;
   destroy(): void;
+  /**
+   * Graceful teardown: unwind every in-flight turn and drain pending transcript
+   * writes. Unlike {@link destroy}, this is async and must be awaited before the
+   * app exits. Leases are released in {@link destroy}, so they are freed even
+   * when this times out.
+   */
+  shutdown(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -3219,7 +3226,48 @@ export function createIpcBridge(config: IpcBridgeConfig): IpcBridge {
       engineBySession.clear();
     },
 
+    // Ends every in-flight turn and lands the transcripts. `destroy()` is the
+    // synchronous teardown that runs afterwards; this is the part that must be
+    // awaited, because it waits on the engine and the on-disk writes.
+    async shutdown(): Promise<void> {
+      // 1. Stop the turns. Aborting the bridge controller unwinds the renderer
+      // stream; interrupting the engine ends the model call / tool loop it owns
+      // so the generator returns instead of being orphaned mid-step.
+      for (const controller of abortControllers.values()) {
+        controller.abort();
+      }
+      for (const engine of engineBySession.values()) {
+        try {
+          engine.interrupt();
+        } catch {
+          /* best-effort — a broken engine must not block shutdown */
+        }
+      }
+      // Let the aborted generators settle so no write is queued behind us.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // 2. Land the transcripts. Skipping this is what truncated the final turn
+      // of a conversation that was still streaming when the window closed.
+      try {
+        await sessionManager?.flush();
+      } catch (err) {
+        console.error('[IpcBridge] Failed to flush sessions on shutdown:', err);
+      }
+    },
+
     destroy(): void {
+      // Hand the conversations back before anything else. This runs even when
+      // `shutdown()` timed out, so a stalled engine can never leave this run's
+      // sessions leased to a pid the next launch will see as a live writer
+      // (which is what made every message fork a copy of the conversation).
+      try {
+        const released = releaseAllProcessLeases(SESSIONS_DIR);
+        if (released > 0) {
+          console.log(`[IpcBridge] Released ${released} session lease(s)`);
+        }
+      } catch (err) {
+        console.error('[IpcBridge] Failed to release session leases:', err);
+      }
       unsubAgentEvents?.();
       unsubTitleEvents?.();
       ipcMain.removeHandler(IPC_CHANNELS.AGENT_TRANSCRIPT);

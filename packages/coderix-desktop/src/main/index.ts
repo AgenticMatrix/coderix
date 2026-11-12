@@ -632,27 +632,39 @@ app.on('before-quit', (event) => {
 
   console.log('[Coderix] Shutting down...');
   windowManager?.saveWindowState();
-  ipcBridge?.destroy();
-  browserViewManager?.destroy();
-  cadViewerManager?.destroy();
-  officeHarnessManager?.destroy();
-  blenderPreviewManager?.destroy();
-  freecadPreviewManager?.destroy();
-  fileWatcher?.destroy();
-  terminalManager?.destroyAll();
-  trayManager?.destroy();
-  protocolGateway?.close();
 
-  // Reap every tracked bash tree, including explicit background tasks.
-  killAllProcesses();
-
+  // End the in-flight turns and release the session leases BEFORE tearing the
+  // bridge down — `shutdown()` is the only step that waits on the engine, and
+  // the leases it releases are what keep the next launch from treating a
+  // finished conversation as still in use (and forking a copy of it).
   void Promise.race([
-    shutdownMcpManagers(),
-    new Promise<void>((resolve) => setTimeout(resolve, 3000)),
-  ]).finally(() => {
-    console.log('[Coderix] Shutdown complete');
-    app.exit(0);
-  });
+    ipcBridge?.shutdown() ?? Promise.resolve(),
+    new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+  ])
+    .catch((err) => console.error('[Coderix] Bridge shutdown failed:', err))
+    .finally(() => {
+      ipcBridge?.destroy();
+      browserViewManager?.destroy();
+      cadViewerManager?.destroy();
+      officeHarnessManager?.destroy();
+      blenderPreviewManager?.destroy();
+      freecadPreviewManager?.destroy();
+      fileWatcher?.destroy();
+      terminalManager?.destroyAll();
+      trayManager?.destroy();
+      protocolGateway?.close();
+
+      // Reap every tracked bash tree, including explicit background tasks.
+      killAllProcesses();
+
+      void Promise.race([
+        shutdownMcpManagers(),
+        new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+      ]).finally(() => {
+        console.log('[Coderix] Shutdown complete');
+        app.exit(0);
+      });
+    });
 });
 
 // ---------------------------------------------------------------------------
