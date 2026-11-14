@@ -5,7 +5,7 @@
  * the plugin registry (no hardcoded cad_harness paths).
  *
  * Produces:
- *   ~/Documents/apps/cad_project/cad_plugins/cad-harness/
+ *   ~/Documents/codeagent/agentstation_hub/plugins/cad/cad-harness/
  *     plugin.json   prompt.md   .env   skills/*   mcp/cad-control/*
  * and appends the plugin to ~/.coderix/plugin-registry.json.
  *
@@ -27,8 +27,20 @@ import os from 'node:os';
 import path from 'node:path';
 
 const HOME = os.homedir();
-const CAD_HARNESS = process.env.CAD_HARNESS_SRC ?? path.join(HOME, 'Documents', 'apps', 'cad_project', 'cad_harness');
-const PLUGIN_DIR = path.join(HOME, 'Documents', 'apps', 'cad_project', 'cad_plugins', 'cad-harness');
+// The upstream cad_harness checkout (contains claude_dir/ + services/cad-control).
+// `cad_harness` was renamed during the hub migration; `cad_harness_copy` is the
+// surviving full copy. Prefer `cad_harness` when it is present again.
+function defaultCadSource() {
+  const base = path.join(HOME, 'Documents', 'apps', 'cad_project');
+  for (const name of ['cad_harness', 'cad_harness_copy']) {
+    if (existsSync(path.join(base, name, 'claude_dir', 'skills'))) return path.join(base, name);
+  }
+  return path.join(base, 'cad_harness_copy');
+}
+const CAD_HARNESS_SRC = process.env.CAD_HARNESS_SRC ?? defaultCadSource();
+const PLUGIN_DIR =
+  process.env.CAD_PLUGIN_DIR ??
+  path.join(HOME, 'Documents', 'codeagent', 'agentstation_hub', 'plugins', 'cad', 'cad-harness');
 const REGISTRY_PATH = path.join(HOME, '.coderix', 'plugin-registry.json');
 
 const EXCLUDES = new Set(['.DS_Store', '__pycache__', 'node_modules', '.git']);
@@ -60,7 +72,7 @@ function skillNames(root) {
 }
 
 // ── 1. Skills ───────────────────────────────────────────────────────────
-const srcSkills = path.join(CAD_HARNESS, 'claude_dir', 'skills');
+const srcSkills = path.join(CAD_HARNESS_SRC, 'claude_dir', 'skills');
 const skills = skillNames(srcSkills);
 for (const name of skills) {
   copyTree(path.join(srcSkills, name), path.join(PLUGIN_DIR, 'skills', name));
@@ -68,16 +80,16 @@ for (const name of skills) {
 console.log(`[setup] copied ${skills.length} skills: ${skills.join(', ')}`);
 
 // ── 2. Prompt ───────────────────────────────────────────────────────────
-copyTree(path.join(CAD_HARNESS, 'claude_dir', 'CLAUDE_cad.md'), path.join(PLUGIN_DIR, 'prompt.md'));
+copyTree(path.join(CAD_HARNESS_SRC, 'claude_dir', 'CLAUDE_cad.md'), path.join(PLUGIN_DIR, 'prompt.md'));
 console.log('[setup] copied prompt.md');
 
 // ── 3. Env ──────────────────────────────────────────────────────────────
-copyTree(path.join(CAD_HARNESS, '.env'), path.join(PLUGIN_DIR, '.env'));
+copyTree(path.join(CAD_HARNESS_SRC, '.env'), path.join(PLUGIN_DIR, '.env'));
 console.log('[setup] copied .env');
 
 // ── 4. MCP server ───────────────────────────────────────────────────────
-copyTree(path.join(CAD_HARNESS, 'services', 'cad-control', 'server.py'), path.join(PLUGIN_DIR, 'mcp', 'cad-control', 'server.py'));
-copyTree(path.join(CAD_HARNESS, 'services', 'cad-control', 'requirements.txt'), path.join(PLUGIN_DIR, 'mcp', 'cad-control', 'requirements.txt'));
+copyTree(path.join(CAD_HARNESS_SRC, 'services', 'cad-control', 'server.py'), path.join(PLUGIN_DIR, 'mcp', 'cad-control', 'server.py'));
+copyTree(path.join(CAD_HARNESS_SRC, 'services', 'cad-control', 'requirements.txt'), path.join(PLUGIN_DIR, 'mcp', 'cad-control', 'requirements.txt'));
 console.log('[setup] copied mcp/cad-control');
 
 // ── 5. Manifest ─────────────────────────────────────────────────────────

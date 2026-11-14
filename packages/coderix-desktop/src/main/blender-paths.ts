@@ -4,35 +4,55 @@
  * stdio MCP server) and the addon's TCP endpoint (driven directly for live
  * render previews).
  *
- * Everything defaults to this machine's known checkouts, overridable via env
- * (`BLENDER_MCP_DIR` / `BLENDER_UV` / `BLENDER_MCP_HOST` / `BLENDER_MCP_PORT`)
- * so the integration isn't pinned to one machine.
+ * The `blender-harness` plugin is self-contained and lives in the agentstation
+ * hub (`~/Documents/codeagent/agentstation_hub/plugins/blender`). Resolution
+ * order: registry → `BLENDER_PLUGIN_ROOT` env → hub checkout. Everything stays
+ * overridable via env (`BLENDER_MCP_DIR` / `BLENDER_UV` / `BLENDER_MCP_HOST` /
+ * `BLENDER_MCP_PORT`) so the integration isn't pinned to one machine.
  */
 
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readPluginRegistry } from '../../../../packages/coderix-core/src/plugins/registry.js';
+import { hubPluginDir, readPluginEnvValue } from './plugin-paths.js';
+
+/** The blender-harness plugin root: registry first, then env override, then hub. */
+export function resolveBlenderPluginRoot(): string {
+  for (const entry of readPluginRegistry()) {
+    const isBlender =
+      entry.name === 'blender-harness' ||
+      (path.basename(entry.path) === 'blender' && existsSync(path.join(entry.path, 'mcp', 'blender')));
+    if (isBlender) return entry.path;
+  }
+
+  const override = process.env.BLENDER_PLUGIN_ROOT?.trim();
+  if (override) return override;
+  return hubPluginDir('blender');
+}
 
 /**
  * The official Blender MCP server dir (`mcp/blender`, containing `pyproject.toml`
- * with the `blender-mcp = blmcp:main` entry point) — now self-contained under the
- * registered `blender_plugins` plugin. Prefers an explicit `BLENDER_MCP_DIR` env
- * var, then the self-contained checkout under `~/Documents/apps/`.
+ * with the `blender-mcp = blmcp:main` entry point) — shipped with the plugin.
+ * Prefers an explicit `BLENDER_MCP_DIR` env var.
  */
 export function resolveBlenderMcpDir(): string {
   const override = process.env.BLENDER_MCP_DIR?.trim();
   if (override) return override;
-  return path.join(os.homedir(), 'Documents', 'apps', 'blender_plugins', 'mcp', 'blender');
+  return path.join(resolveBlenderPluginRoot(), 'mcp', 'blender');
 }
 
 /**
  * `uv` interpreter used to launch the MCP server. Must be an absolute path: the
  * MCP SDK's stdio subprocess only inherits a whitelist of env vars (PATH may be
- * absent), so a bare `uv` would not resolve. Mirrors `resolveCadPython()`.
+ * absent), so a bare `uv` would not resolve. Mirrors `resolveCadPython()`:
+ * env → plugin `.env` → `~/.local/bin/uv` → PATH lookup.
  */
 export function resolveBlenderUv(): string {
   const override = process.env.BLENDER_UV?.trim();
   if (override) return override;
+  const fromPlugin = readPluginEnvValue(resolveBlenderPluginRoot(), 'BLENDER_UV');
+  if (fromPlugin) return fromPlugin;
   const local = path.join(os.homedir(), '.local', 'bin', 'uv');
   if (existsSync(local)) return local;
   return 'uv';
@@ -69,5 +89,7 @@ export function resolveBlenderBin(): string {
 /** Fixed preview render path — Blender is single-instance/single-scene, so all
  *  conversations share one preview image (mirrors blender-harness's shared workspace). */
 export function resolveBlenderPreviewPath(): string {
+  const override = process.env.BLENDER_PREVIEW_PATH?.trim();
+  if (override) return override;
   return path.join(os.homedir(), '.coderix', 'blender', 'preview.png');
 }
