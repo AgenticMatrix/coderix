@@ -354,19 +354,119 @@ export function readMessagePageSync(
 
     const page = entries.slice(cut, end);
     const pageOffsets = entryOffsets.slice(cut, end);
+    // `cut`/`end` are file positions: they decide what belongs to this page and
+    // anchor the next cursor (a byte offset). The *display order* inside the
+    // page must instead follow parentUuid, matching a whole-file read — see
+    // orderPageByChain.
+    const displayOrder = orderPageByChain(page);
     const hasMore = cut > 0 || start > 0;
     return {
-      messages: page.map((e) => e.message),
-      // The reading order of `messages` is preserved; uuids give the renderer
-      // stable identities and the next page's cursor. `oldestOffset` is that
-      // cursor's byte position, so the next page seeks straight there instead
-      // of re-reading from the tail.
-      uuids: page.map((e) => e.uuid),
+      messages: displayOrder.map((i) => page[i]!.message),
+      // Parallel to `messages`; ids are transcript uuids so rows keep identity
+      // across a reload or an older-page prepend.
+      uuids: displayOrder.map((i) => page[i]!.uuid),
+      // The cursor stays the file-oldest entry of the page, which is what the
+      // next read must page before — display order is irrelevant to seeking.
       oldestUuid: page.length > 0 ? page[0]!.uuid : null,
       oldestOffset: pageOffsets.length > 0 ? pageOffsets[0]! : null,
       hasMore,
     };
   }
+}
+
+/**
+ * Order one page by parentUuid chain, returning indices into `page`.
+ *
+ * A transcript line's position is when it was written, not when it happened:
+ * concurrent writers can append lines out of order — a tool_result above the
+ * tool_use that spawned it, or successive assistant messages swapped (57 of 316
+ * local transcripts show this; 534 inversions, most one line apart). A
+ * whole-file read resolves it by walking the parent link (see
+ * `entriesToMessages`); a page has to resolve it the same way, or the reader
+ * sees results that never attach to their card and turns in the wrong order.
+ *
+ * Only display order uses this. Page membership and the cursor stay on file
+ * order: reordering *and* seeking by byte offset would re-read or skip the
+ * neighbours that the reorder moved across the boundary.
+ */
+function orderPageByChain(page: TranscriptEntry[]): number[] {
+  const n = page.length;
+  if (n <= 1) return n > 0 ? [0] : [];
+
+  const indexOfUuid = new Map<string, number>();
+  for (let i = 0; i < n; i++) indexOfUuid.set(page[i]!.uuid, i);
+
+  const hasChild = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const parent = page[i]!.parentUuid;
+    if (!parent) continue;
+    const at = indexOfUuid.get(parent);
+    if (at !== undefined) hasChild[at] = 1;
+  }
+
+  const chainFrom = (leafIdx: number): number[] => {
+    const chain: number[] = [];
+    const seen = new Set<number>();
+    let current: number | undefined = leafIdx;
+    while (current !== undefined && !seen.has(current)) {
+      seen.add(current);
+      chain.push(current);
+      const parent: string | null = page[current]!.parentUuid ?? null;
+      current = parent ? indexOfUuid.get(parent) : undefined;
+    }
+    return chain.reverse();
+  };
+
+  // The longest chain inside the page is the trunk; shorter ones are concurrent
+  // branches whose parent lies outside the page.
+  let best: number[] = [];
+  for (let i = 0; i < n; i++) {
+    if (hasChild[i]) continue;
+    const chain = chainFrom(i);
+    if (chain.length > best.length) best = chain;
+  }
+  if (best.length === 0) best = chainFrom(n - 1);
+
+  const emitted = new Uint8Array(n);
+  const order: number[] = [];
+  for (const idx of best) {
+    if (emitted[idx]) continue;
+    emitted[idx] = 1;
+    order.push(idx);
+  }
+
+  // A concurrent writer's branch is not part of the trunk. `entriesToMessages`
+  // appends it after the main line, ordered by timestamp within the branch;
+  // doing the same here keeps a page's tail identical to a whole-file read
+  // instead of interleaving two branches by raw write position.
+  const branches: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    if (hasChild[i]) continue;
+    const chain = chainFrom(i);
+    if (best.includes(i)) continue;
+    branches.push(chain);
+  }
+  const byTime = (a: number, b: number): number => {
+    const dt = (page[a]!.timestamp ?? 0) - (page[b]!.timestamp ?? 0);
+    return dt !== 0 ? dt : a - b;
+  };
+  branches.sort((a, b) => byTime(a[0] ?? 0, b[0] ?? 0));
+  for (const branch of branches) {
+    for (const idx of branch) {
+      if (emitted[idx]) continue;
+      emitted[idx] = 1;
+      order.push(idx);
+    }
+  }
+
+  // Anything still unreached (a cycle, or a parent outside the page) keeps its
+  // file position — nothing is dropped, since dropping one would lose a message.
+  for (let i = 0; i < n; i++) {
+    if (emitted[i]) continue;
+    emitted[i] = 1;
+    order.push(i);
+  }
+  return order;
 }
 
 /**

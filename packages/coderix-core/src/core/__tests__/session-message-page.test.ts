@@ -261,4 +261,50 @@ describe('readMessagePageSync', () => {
       }
     }
   });
+
+  it('emits a page in parentUuid order when the file was written out of order', () => {
+    // A transcript line records when it was *written*, not when it happened:
+    // concurrent writers can land a tool_result above its tool_use, or swap two
+    // assistant messages. A whole-file read repairs this by walking parentUuid;
+    // a page must repair it the same way, or the renderer cannot fold a result
+    // into its card and the reader sees turns out of order.
+    const push = (
+      type: 'user' | 'assistant',
+      uuid: string,
+      parentUuid: string | null,
+      content: Message['content'],
+      timestamp: number,
+    ): void => {
+      appendEntrySync(filePath, {
+        type,
+        uuid,
+        parentUuid,
+        timestamp,
+        message: { role: type, content },
+      } as SessionEntry);
+    };
+
+    push('user', 'u1', null, [{ type: 'text', text: 'root' }], 10);
+    // The result is appended before the assistant message that carries the call
+    // it answers (an interleaved write), and the call's parent is already there.
+    push('user', 'u2', 'a1', [{ type: 'tool_result', tool_use_id: 'c1', content: 'ok' }], 20);
+    push('assistant', 'a1', 'u1', [
+      { type: 'text', text: 'calling' },
+      { type: 'tool_use', id: 'c1', name: 'bash', input: {} },
+    ], 20);
+
+    const whole = entriesToMessages(readEntriesSync(filePath));
+    // Sanity: the whole-file read puts the call before its result.
+    expect(whole.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+
+    for (const limit of [1, 2, 3]) {
+      expect(readAllPages(filePath, limit)).toEqual(whole);
+      expect(readAllPages(filePath, limit, undefined, true)).toEqual(whole);
+    }
+
+    // The tail page alone must already be internally ordered, not just after a
+    // full backward walk — the UI renders the tail first.
+    const tail = readMessagePageSync(filePath, undefined, 10);
+    expect(tail.messages).toEqual(whole);
+  });
 });

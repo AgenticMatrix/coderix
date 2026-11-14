@@ -102,8 +102,12 @@ export function transcriptToChatMessages(messages: unknown[], uuids?: string[]):
     };
   });
 
-  // Walk backwards so a late tool_result finds the assistant turn that spawned
-  // it (results always follow their call).
+  // Attach each result to the card that produced it. A result normally follows
+  // its call, so look backwards first — but a transcript's line order is
+  // *append* order, and an out-of-order write can land a result above the call
+  // that spawned it. Searching forwards as a fallback keeps such a result
+  // attached instead of leaving a stray block beside a card with no output.
+  // Tool-use ids are unique within a session, so either direction finds one.
   for (let i = chatMsgs.length - 1; i >= 0; i--) {
     const msg = chatMsgs[i];
     if (!msg || msg.role !== 'user') continue;
@@ -117,23 +121,23 @@ export function transcriptToChatMessages(messages: unknown[], uuids?: string[]):
 
     for (const tr of toolResults) {
       let attached = false;
-      for (let j = i - 1; j >= 0; j--) {
-        const prev = chatMsgs[j];
-        if (!prev || prev.role !== 'assistant') continue;
+      const attachTo = (prev: ChatMessage | undefined): boolean => {
+        if (!prev || prev.role !== 'assistant') return false;
         const idx = prev.blocks.findIndex((b) => b.type === 'tool_use' && b.toolId === tr.toolId);
-        if (idx >= 0) {
-          prev.blocks[idx] = {
-            ...prev.blocks[idx],
-            toolResult: tr.content,
-            toolMetadata: tr.toolMetadata,
-            // An errored result marks its call errored too, so the card does
-            // not render "Done" over a failure.
-            ...(tr.state === 'error' ? { state: 'error' as const } : {}),
-          };
-          attached = true;
-          break;
-        }
-      }
+        if (idx < 0) return false;
+        prev.blocks[idx] = {
+          ...prev.blocks[idx],
+          toolResult: tr.content,
+          toolMetadata: tr.toolMetadata,
+          // An errored result marks its call errored too, so the card does
+          // not render "Done" over a failure.
+          ...(tr.state === 'error' ? { state: 'error' as const } : {}),
+        };
+        return true;
+      };
+
+      for (let j = i - 1; j >= 0 && !attached; j--) attached = attachTo(chatMsgs[j]);
+      for (let j = i + 1; j < chatMsgs.length && !attached; j++) attached = attachTo(chatMsgs[j]);
       // Unmatched results stay visible in their own message.
       if (!attached) others.push(tr);
     }
