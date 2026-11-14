@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Loader2, RefreshCw } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
 import type { AppDefinition } from './registry';
@@ -8,10 +8,13 @@ import type { CadStep } from '../../types.js';
 /**
  * AppDisplayPanel — the right-hand "app display page" for an attached app.
  *
- * For the `cad-viewer` kind: spawns the self-contained 3D viewer (port 3245),
- * embeds it as a native WebContentsView over a measured container, and lists the
- * CAD artifacts below it using cad_harness's native form — two rows (装配体 /
- * 零件), each a name `<select>` + a 版本 `<select>` of that name's versions.
+ * For the `cad-viewer` kind: spawns the self-contained 3D viewer (port 3245) and
+ * embeds it as a native WebContentsView over a measured container.
+ *
+ * The 装配体 / 零件 version selectors are NOT drawn here — the viewer renders them
+ * itself now (dist/assets/cad-step-selector.js, in its sidebar), so every host that
+ * embeds it gets them. This panel only decides which file the viewer opens first and
+ * keeps re-pointing it at the newest artifact while the agent works.
  */
 
 const TAB_ID = 'app-display';
@@ -40,9 +43,6 @@ const FRAME_RE = /^frame_\d+$/i;
 function isFrameStep(step: CadStep): boolean {
   return step.kind === 'frame' || FRAME_RE.test(step.baseName ?? step.name);
 }
-function baseNameOf(step: CadStep): string {
-  return step.baseName ?? step.name;
-}
 function versionOf(step: CadStep): number {
   return step.version ?? 1;
 }
@@ -55,35 +55,6 @@ function versionOf(step: CadStep): number {
  * own `gen` run.
  */
 const FOLLOW_DEBOUNCE_MS = 20_000;
-
-interface StepGroup {
-  baseName: string;
-  versions: CadStep[];
-}
-
-/** Keep versions of the same part adjacent: baseName asc, latest first, versions asc. */
-function sortSteps(steps: CadStep[]): CadStep[] {
-  return [...steps].sort((a, b) => {
-    const an = baseNameOf(a);
-    const bn = baseNameOf(b);
-    if (an !== bn) return an.localeCompare(bn);
-    if (!!a.isLatest !== !!b.isLatest) return a.isLatest ? -1 : 1;
-    return versionOf(a) - versionOf(b);
-  });
-}
-
-function groupSteps(steps: CadStep[]): StepGroup[] {
-  const map = new Map<string, CadStep[]>();
-  for (const step of steps) {
-    const key = baseNameOf(step);
-    const list = map.get(key);
-    if (list) list.push(step);
-    else map.set(key, [step]);
-  }
-  return [...map.entries()]
-    .map(([baseName, versions]) => ({ baseName, versions }))
-    .sort((a, b) => a.baseName.localeCompare(b.baseName));
-}
 
 export function AppDisplayPanel({
   app,
@@ -213,10 +184,6 @@ export function AppDisplayPanel({
     }
   }, [steps, selectedStepId]);
 
-  const ordered = useMemo(() => sortSteps(steps).filter((s) => !isFrameStep(s)), [steps]);
-  const assemblyGroups = useMemo(() => groupSteps(ordered.filter((s) => s.kind !== 'part')), [ordered]);
-  const partGroups = useMemo(() => groupSteps(ordered.filter((s) => s.kind === 'part')), [ordered]);
-
   const selectedStep = steps.find((s) => s.id === selectedStepId);
   const url =
     status === 'running' && baseUrl && workspaceDir
@@ -283,68 +250,6 @@ export function AppDisplayPanel({
     browserAPI()?.navigate(TAB_ID, url).catch(() => {});
   }, [created, url]);
 
-  const statusLabel = (s: CadStep['status']): string =>
-    s === 'generated' ? t('apps.status.generated') : t('apps.status.generating');
-  const versionLabel = (step: CadStep): string =>
-    step.isLatest
-      ? `${t('apps.latest')} · ${statusLabel(step.status)}`
-      : `${t('apps.version', { n: step.version })} · ${statusLabel(step.status)}`;
-
-  const renderGroupSelect = (label: string, groups: StepGroup[], selectPlaceholder: string): React.ReactElement => {
-    let selectedBase = '';
-    for (const group of groups) {
-      if (group.versions.some((v) => v.id === selectedStepId)) {
-        selectedBase = group.baseName;
-        break;
-      }
-    }
-    const selectedGroup = groups.find((g) => g.baseName === selectedBase);
-
-    const selectBase = (base: string): void => {
-      const group = groups.find((g) => g.baseName === base);
-      if (!group || group.versions.length === 0) return;
-      const live = group.versions.find((v) => v.isLatest);
-      setSelectedStepId((live ?? group.versions[group.versions.length - 1]).id);
-    };
-
-    return (
-      <div className="flex items-center gap-2">
-        <span className="w-11 shrink-0 text-[11px] font-medium text-[var(--color-text-tertiary)]">{label}</span>
-        <select
-          value={selectedBase}
-          onChange={(e) => selectBase(e.target.value)}
-          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-separator)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none"
-        >
-          <option value="">{groups.length === 0 ? t('apps.none') : selectPlaceholder}</option>
-          {groups.map((group) => (
-            <option key={group.baseName} value={group.baseName}>
-              {group.baseName}
-            </option>
-          ))}
-        </select>
-        <span className="shrink-0 text-[11px] font-medium text-[var(--color-text-tertiary)]">{t('apps.versionLabel')}</span>
-        <select
-          value={selectedStepId}
-          onChange={(e) => {
-            if (e.target.value) setSelectedStepId(e.target.value);
-          }}
-          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-separator)] bg-[var(--color-bg-primary)] px-2 py-1 text-xs text-[var(--color-text-primary)] focus:outline-none disabled:opacity-50"
-          disabled={!selectedGroup}
-        >
-          {selectedGroup ? (
-            selectedGroup.versions.map((v) => (
-              <option key={v.id} value={v.id}>
-                {versionLabel(v)}
-              </option>
-            ))
-          ) : (
-            <option value="">{t('apps.selectVersion')}</option>
-          )}
-        </select>
-      </div>
-    );
-  };
-
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg-secondary)]">
       {/* Header */}
@@ -380,12 +285,6 @@ export function AppDisplayPanel({
             )}
           </div>
         )}
-      </div>
-
-      {/* Artifact selector — cad_harness's native form: 装配体 / 零件 rows, each name + 版本 selects */}
-      <div className="shrink-0 border-t border-[var(--color-separator)] flex flex-col gap-1.5 px-3 py-2 bg-[var(--color-bg-primary)]">
-        {renderGroupSelect(t('apps.assembly'), assemblyGroups, t('apps.selectAssembly'))}
-        {renderGroupSelect(t('apps.part'), partGroups, t('apps.selectPart'))}
       </div>
     </div>
   );
