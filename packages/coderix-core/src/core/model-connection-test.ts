@@ -98,8 +98,21 @@ function probeBody(protocol: Protocol, model: string): string {
  *  `/anthropic` alias (mirrors the adapters' `/chat/completions` path). */
 function probeUrl(baseUrl: string, protocol: Protocol): string {
   const base = baseUrl.trim().replace(/\/+$/, '');
-  if (protocol === 'anthropic') return `${base}/v1/messages`;
-  const openaiBase = base.replace(/\/anthropic\/?$/i, '').replace(/\/+$/, '');
+  if (protocol === 'anthropic') {
+    // A base already ending in `/v1` (or the endpoint itself) must not produce
+    // `…/v1/v1/messages`. Only the trailing version/endpoint is dropped — a
+    // provider path like `/api/paas/v4` keeps its own segments.
+    const root = base
+      .replace(/\/(v1\/)?messages$/i, '')
+      .replace(/\/v1$/i, '');
+    return `${root}/v1/messages`;
+  }
+  const openaiBase = base
+    .replace(/\/anthropic\/?$/i, '')
+    // A pasted endpoint must not be extended — `…/v1/messages` + `/v1/chat/
+    // completions` is a 404 on every gateway.
+    .replace(/\/(v\d+\/)?(messages|chat\/completions|responses)$/i, '')
+    .replace(/\/+$/, '');
   // A bare `host:port` relay omits `/v1`; append it so the probe hits the API
   // rather than a 200 HTML dashboard page (mirrors the openai-adapter fix).
   return /\/v\d+$/.test(openaiBase)
@@ -136,38 +149,61 @@ async function detectProtocolByProbe(
   return undefined;
 }
 
-/** Model-listing paths to try, most likely first. For an Anthropic `/anthropic`
- *  path we additionally probe the same host's OpenAI root — several providers
- *  (deepseek, minimax, moonshot, …) expose both protocols on one host but only
- *  serve `/v1/models` on the OpenAI root. */
-function buildModelListCandidates(baseUrl: string): { url: string; auth: Auth }[] {
+/**
+ * Roots to build listing URLs from, in priority order.
+ *
+ * A pasted completion endpoint (`…/v1/messages`, `…/chat/completions`) is not a
+ * base URL — it is turned back into the root it hangs off, otherwise probing
+ * appends another `/v1/models` onto the endpoint and 404s. Version segments are
+ * deliberately NOT stripped: `https://open.bigmodel.cn/api/paas/v4` ends in one
+ * but mounting `/models` there is correct, and rewriting it to `/api/paas`
+ * would lose the real endpoint. Doubled versions are avoided by ordering the
+ * candidate paths instead (see buildModelListCandidates).
+ *
+ * For an `/anthropic` base the origin is added too — several providers
+ * (deepseek, minimax, moonshot, …) expose both protocols on one host but only
+ * serve a model list on the OpenAI root.
+ */
+function apiRoots(baseUrl: string): string[] {
   const base = baseUrl.trim().replace(/\/+$/, '');
-  if (detectProtocol(baseUrl) === 'anthropic') {
-    const candidates: { url: string; auth: Auth }[] = [
-      { url: `${base}/v1/models`, auth: 'anthropic' },
-      { url: `${base}/v1/models/`, auth: 'anthropic' },
-      { url: `${base}/models`, auth: 'anthropic' },
-      { url: `${base}/models/`, auth: 'anthropic' },
-    ];
-    if (base.toLowerCase().includes('/anthropic')) {
-      try {
-        const origin = new URL(base).origin;
-        candidates.push(
-          { url: `${origin}/v1/models`, auth: 'openai' },
-          { url: `${origin}/models`, auth: 'openai' },
-        );
-      } catch {
-        // base isn't a parseable URL — skip the root probe.
-      }
+  const endpoint = /\/(v\d+\/)?(messages|chat\/completions|responses)$/i;
+  const roots = [endpoint.test(base) ? base.replace(endpoint, '') : base];
+  if (base.toLowerCase().includes('/anthropic')) {
+    try {
+      roots.push(new URL(base).origin);
+    } catch {
+      // base isn't a parseable URL — skip the root probe.
     }
-    return candidates;
   }
-  return [
-    { url: `${base}/models`, auth: 'openai' },
-    { url: `${base}/models/`, auth: 'openai' },
-    { url: `${base}/v1/models`, auth: 'openai' },
-    { url: `${base}/v1/models/`, auth: 'openai' },
-  ];
+  return Array.from(new Set(roots)).filter(Boolean);
+}
+
+/** Model-listing paths to try, most likely first. A root that already carries
+ *  a version segment takes `/models` (appending `/v1` would double it); a bare
+ *  root takes `/v1/models`, the standard for OpenAI-compatible servers. The
+ *  trailing-slash variants cover gateways that insist on them.
+ *
+ *  Every URL is paired with BOTH auth schemes. The listing endpoint's auth does
+ *  not always match the inference endpoint's: api.tensoris.ai serves
+ *  `POST /v1/messages` to `x-api-key` but its `GET /v1/models` only accepts
+ *  `Authorization: Bearer`, so probing one scheme reported a bogus "check your
+ *  API key" failure for a perfectly good key. */
+function buildModelListCandidates(baseUrl: string): { url: string; auth: Auth }[] {
+  const candidates: { url: string; auth: Auth }[] = [];
+  const seen = new Set<string>();
+  const order: Auth[] = detectProtocol(baseUrl) === 'anthropic' ? ['anthropic', 'openai'] : ['openai', 'anthropic'];
+  for (const root of apiRoots(baseUrl)) {
+    const paths = /\/v\d+$/i.test(root)
+      ? ['/models', '/models/', '/v1/models', '/v1/models/']
+      : ['/v1/models', '/v1/models/', '/models', '/models/'];
+    for (const path of paths) {
+      const url = `${root}${path}`;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      for (const auth of order) candidates.push({ url, auth });
+    }
+  }
+  return candidates;
 }
 
 export async function testModelConnection(input: ConnectionTestInput): Promise<ConnectionTestResult> {
