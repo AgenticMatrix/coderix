@@ -131,6 +131,12 @@ export function messagesRequestToChat(body: Json): Json {
           toolImages.push(...toolResultImages(b.content));
         }
       }
+      // `tool` messages MUST directly follow the assistant turn that made the
+      // calls. Pushing the user text first separates them, and strict
+      // OpenAI-compatible relays (e.g. api.tensoris.ai) then reject the whole
+      // request with "Message role 'tool' is not supported by this model"
+      // even though the tool role is fine — it is the ordering they object to.
+      messages.push(...toolMessages);
       if (parts.length > 0) {
         const hasImage = parts.some((p) => p.type === 'image_url');
         messages.push({
@@ -138,7 +144,6 @@ export function messagesRequestToChat(body: Json): Json {
           content: hasImage ? parts : parts.map((p) => p.text).join(''),
         });
       }
-      messages.push(...toolMessages);
       // Tool messages only carry text, so any image a tool returned follows in
       // its own user turn (see toolResultImages).
       if (toolImages.length > 0) {
