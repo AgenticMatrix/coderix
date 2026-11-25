@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, ChevronDown, ExternalLink, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ExternalLink, Plus, Search, Trash2, X } from 'lucide-react';
 import {
   PROVIDER_CATALOG,
   getProviderModels,
@@ -31,6 +31,18 @@ const EMPTY_FIELDS: ModelConfig = {
   inputPrice: 0,
   outputPrice: 0,
   currency: 'USD',
+};
+
+/** Compact badge text for a detected model's wire protocol. */
+const PROTOCOL_SHORT_LABEL: Record<'anthropic' | 'openai', string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+};
+
+/** Full protocol name shown next to the connection test result. */
+const PROTOCOL_LABEL: Record<'anthropic' | 'openai', string> = {
+  anthropic: 'Anthropic Messages',
+  openai: 'OpenAI Chat',
 };
 
 // Inline form-control styles (mirrors SettingsView's warm Coderix tokens).
@@ -78,10 +90,18 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
   const [testOk, setTestOk] = useState<boolean | null>(null);
   const [testMessage, setTestMessage] = useState('');
   const [testModels, setTestModels] = useState<string[]>([]);
+  const [testProtocol, setTestProtocol] = useState<'anthropic' | 'openai' | null>(null);
+  const [modelSearch, setModelSearch] = useState('');
 
   const slug = (isNew ? name : provider.name).trim().toLowerCase();
   const selected = selectedIndex !== null ? models[selectedIndex] ?? null : null;
   const adding = selectedIndex === null;
+
+  const filteredTestModels = useMemo(() => {
+    const q = modelSearch.trim().toLowerCase();
+    if (!q) return testModels;
+    return testModels.filter((m) => m.toLowerCase().includes(q));
+  }, [testModels, modelSearch]);
 
   const emit = (next: Partial<ProviderConfig>) => {
     onChange({ ...provider, name: slug, baseUrl, apiKey, proxy: proxy.trim() || undefined, protocol, models, ...next });
@@ -119,17 +139,22 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
       setTestOk(false);
       setTestMessage(t('provider.needBaseUrl'));
       setTestModels([]);
+      setTestProtocol(null);
+      setModelSearch('');
       return;
     }
     setTestState('testing');
     setTestOk(null);
     setTestMessage(t('provider.testingConn'));
     setTestModels([]);
+    setTestProtocol(null);
+    setModelSearch('');
     try {
       const result = await testConnection(baseUrl, apiKey);
       setTestOk(result.ok);
       setTestMessage(result.message);
       setTestModels(result.models ?? []);
+      setTestProtocol(result.protocol ?? null);
       // The probe determines the endpoint's real wire protocol; persist it so
       // sends route direct (anthropic) or via the gateway (openai) instead of
       // re-guessing from the URL each time.
@@ -158,6 +183,8 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
     setTestOk(null);
     setTestMessage('');
     setTestModels([]);
+    setTestProtocol(null);
+    setModelSearch('');
   };
 
   const deleteModel = (index: number) => {
@@ -170,6 +197,17 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
       setFields(next.length > 0 ? next[Math.min(index, next.length - 1)] : { ...EMPTY_FIELDS });
     } else if (selectedIndex !== null && selectedIndex > index) {
       setSelectedIndex(selectedIndex - 1);
+    }
+  };
+
+  // Double-click a detected model to toggle it: add when missing, remove it
+  // again when it is already in the provider's model list.
+  const toggleDetectedModel = (modelName: string) => {
+    const existingIndex = models.findIndex((m) => m.name === modelName);
+    if (existingIndex >= 0) {
+      deleteModel(existingIndex);
+    } else {
+      addDetectedModel(modelName);
     }
   };
 
@@ -383,37 +421,85 @@ export default function ProviderEditor({ provider, isNew, onChange, onBack, onDe
                   {testMessage}
                 </span>
               )}
+              {testProtocol && testOk && testState === 'done' && (
+                <span style={{ fontSize: 'var(--text-xs)', color: '#22c55e' }}>
+                  {t('provider.protocolPrefix', { protocol: PROTOCOL_LABEL[testProtocol] })}
+                </span>
+              )}
             </div>
 
             {testModels.length > 0 && (
-              <div style={{ marginTop: '14px' }}>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search
+                    size={14}
+                    style={{
+                      position: 'absolute',
+                      left: 10,
+                      color: 'var(--color-text-tertiary)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  <input
+                    style={{ ...inputStyle, paddingLeft: 30 }}
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    placeholder={t('provider.searchModels')}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                   {t('provider.detectedModels', { n: testModels.length })}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {testModels.map((m) => {
-                    const added = models.some((x) => x.name === m);
-                    return (
-                      <span
-                        key={m}
-                        title={added ? t('provider.alreadyAdded') : t('provider.dblclickAdd')}
-                        onDoubleClick={() => addDetectedModel(m)}
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '999px',
-                          border: '1px solid var(--color-separator)',
-                          background: added ? 'var(--color-bg-tertiary)' : 'var(--color-input-bg)',
-                          color: added ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
-                          fontSize: 'var(--text-xs)',
-                          fontFamily: 'var(--font-mono)',
-                          cursor: added ? 'default' : 'pointer',
-                          userSelect: 'none',
-                        }}
-                      >
-                        {m}{added ? ' ✓' : ''}
-                      </span>
-                    );
-                  })}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: 160, overflowY: 'auto' }}>
+                  {filteredTestModels.length === 0 ? (
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
+                      {t('provider.noModelMatch')}
+                    </div>
+                  ) : (
+                    filteredTestModels.map((m) => {
+                      const added = models.some((x) => x.name === m);
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          title={added ? t('provider.modelRemoveHint') : t('provider.dblclickAdd')}
+                          onDoubleClick={() => toggleDetectedModel(m)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '4px 10px',
+                            borderRadius: '999px',
+                            border: `1px solid ${added ? '#2da44e' : 'var(--color-separator)'}`,
+                            background: 'var(--color-input-bg)',
+                            color: added ? '#2da44e' : 'var(--color-text-primary)',
+                            fontSize: 'var(--text-xs)',
+                            fontFamily: 'var(--font-mono)',
+                            cursor: added ? 'default' : 'pointer',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {added ? '✓ ' : ''}
+                          {m}
+                          {!added && testProtocol && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                padding: '1px 5px',
+                                borderRadius: '999px',
+                                background: 'var(--color-bg-tertiary)',
+                                color: 'var(--color-text-tertiary)',
+                                fontSize: 10,
+                              }}
+                            >
+                              {PROTOCOL_SHORT_LABEL[testProtocol]}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}
